@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("bruv")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8715d15aee03a721d39959da865d1752ab534238")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b88674c7908e25dc5f23161c20a14302f36adc61")]
 [assembly: System.Reflection.AssemblyProductAttribute("bruv")]
 [assembly: System.Reflection.AssemblyTitleAttribute("bruv")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

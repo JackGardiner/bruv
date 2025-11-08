@@ -1,3 +1,6 @@
 [submodule "PicoGK"]
 	path = PicoGK
 	url = https://github.com/leap71/PicoGK.git
+[submodule "LEAP71_ShapeKernel"]
+	path = LEAP71_ShapeKernel
+	url = https://github.com/leap71/LEAP71_ShapeKernel.git
