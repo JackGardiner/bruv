@@ -1,0 +1,15 @@
+C:\Users\jack7\Documents\ARES Git\bruv\bin\Debug\net9.0\bruv.exe
+C:\Users\jack7\Documents\ARES Git\bruv\bin\Debug\net9.0\bruv.deps.json
+C:\Users\jack7\Documents\ARES Git\bruv\bin\Debug\net9.0\bruv.runtimeconfig.json
+C:\Users\jack7\Documents\ARES Git\bruv\bin\Debug\net9.0\bruv.dll
+C:\Users\jack7\Documents\ARES Git\bruv\bin\Debug\net9.0\bruv.pdb
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.AssemblyInfoInputs.cache
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.AssemblyInfo.cs
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.csproj.CoreCompileInputs.cache
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.sourcelink.json
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.dll
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\refint\bruv.dll
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.pdb
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\bruv.genruntimeconfig.cache
+C:\Users\jack7\Documents\ARES Git\bruv\obj\Debug\net9.0\ref\bruv.dll
