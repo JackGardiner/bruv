@@ -4,3 +4,6 @@
 [submodule "LEAP71_ShapeKernel"]
 	path = LEAP71_ShapeKernel
 	url = https://github.com/leap71/LEAP71_ShapeKernel.git
+[submodule "LEAP71_LatticeLibrary"]
+	path = LEAP71_LatticeLibrary
+	url = https://github.com/leap71/LEAP71_LatticeLibrary.git
