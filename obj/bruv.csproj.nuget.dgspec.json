@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {}
+    "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {}
   },
   "projects": {
-    "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {
+    "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
+        "projectUniqueName": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
         "projectName": "bruv",
-        "projectPath": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
+        "projectPath": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
         "packagesPath": "C:\\Users\\jack7\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\obj\\",
+        "outputPath": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\jack7\\AppData\\Roaming\\NuGet\\NuGet.Config",
