@@ -36,7 +36,6 @@ public class HelixCooling
     {
         Library.Log("Starting Task.");
 
-
         HelixCooling oCoolChannels = new HelixCooling();
         Voxels voxCoolChannels = oCoolChannels.voxConstruct();
 
@@ -68,62 +67,6 @@ public class HelixCooling
         return fRadius;
     }
 
-    ///
-    public float RaoProfile(float fHeight)
-    {
-        var s = m_oConfig;
-        float x0 = s.NLF * (1.8660254037844386f * s.D_exit
-                         - 1.8408797767452460f * s.D_tht);
-        float y0 = s.D_exit * 0.5f;
-        float x1 = s.D_tht * 0.191f * Sin(s.theta_div);
-        float y1 = s.D_tht * (0.691f - 0.191f * Sin(s.theta_div));
-        float x2 = 0.0f;
-        float y2 = s.D_tht * 0.5f;
-        float x3 = s.D_tht * 0.75f * Sin(s.theta_conv);
-        float y3 = s.D_tht * (1.25f - 0.75f * Cos(s.theta_conv));
-        float x4 = s.D_c * 0.5f / Tan(s.theta_conv)
-               + s.D_tht * (0.75f / Sin(s.theta_conv)
-                           - 1.25f / Tan(s.theta_conv));
-        float y4 = s.D_c * 0.5f;
-        float x5 = x4 - 0.6f * s.D_c;
-        float y5 = s.D_c * 0.5f;
-        float xC = (Tan(s.theta_exit) * x0 - Tan(s.theta_div) * x1 + y1 - y0)
-               / (Tan(s.theta_exit) - Tan(s.theta_div));
-        float yC = Tan(s.theta_exit) * (xC - x0) + y0;
-
-        Debug.Assert(x0 > x1, $"x0={x0}, x1={x1}");
-        Debug.Assert(x1 > x2, $"x1={x1}, x2={x2}");
-        Debug.Assert(x2 > x3, $"x2={x2}, x3={x3}");
-        Debug.Assert(x3 > x4, $"x3={x3}, x4={x4}");
-        Debug.Assert(xC > x1, $"xC={xC}, x1={x1}");
-        Debug.Assert(xC < x0, $"xC={xC}, x0={x0}");
-
-        Debug.Assert(y0 > y1, $"y0={y0}, y1={y1}");
-        Debug.Assert(y1 > y2, $"y1={y1}, y2={y2}");
-        Debug.Assert(y2 < y3, $"y2={y2}, y3={y3}");
-        Debug.Assert(y3 < y4, $"y3={y3}, y4={y4}");
-        Debug.Assert(yC > y1, $"yC={yC}, y1={y1}");
-        Debug.Assert(yC < y0, $"yC={yC}, y0={y0}");
-
-        float ax = x1 - 2f * xC + x0;
-        float bx = -2f * x1 + 2f * xC;
-        float cx = x1;
-        float ay = y1 - 2f * yC + y0;
-        float by = -2f * y1 + 2f * yC;
-        float cy = y1;
-
-        float x = fHeight;
-        float p = (-bx + Sqrt(bx * bx - 4.0f * ax * (cx - x))) / (2.0f * ax);
-        float y = ay * p * p + by * p + cy;
-        // s.nzl_contour_x[i] = x;
-        // s.nzl_contour_y[i] = y;
-        // ++i;
-        //     }
-
-        float fRadius = y;
-        return fRadius;
-    }
-
     public List<Vector3> GetProfilePoints(float fPhiOffset)
     {
         List<Vector3> aPoints = new List<Vector3>();
@@ -140,14 +83,8 @@ public class HelixCooling
             float fDelHeight = 1 / fSampleDensity;
             float fDelPhi = fDelHeight / (fRadius * (float)Math.Tan(fHelixAngle)) % 2f * (float)Math.PI;
 
-            // Vector3 vecPoint = new Vector3(0, fRadius, fHeight);
-            // vecPoint = VecOperations.vecRotateAroundZ(vecPoint, fPhi);
-            // aPoints.Add(vecPoint);
-
-            // rao!
-            Vector3 vecPoint = new Vector3(0, RaoProfile(fHeight), fHeight);
-            // float fDebugRad = RaoProfile(fHeight);
-            // Library.Log($"{fDebugRad}");
+            Vector3 vecPoint = new Vector3(0, fRadius, fHeight);
+            vecPoint = VecOperations.vecRotateAroundZ(vecPoint, fPhi);
             aPoints.Add(vecPoint);
 
             fPhi += fDelPhi;
@@ -174,8 +111,6 @@ public class HelixCooling
             voxChannels += oChannel.voxConstruct();
         }
         
-        
-        // Sh.PreviewVoxels(voxGasCylinder, Cp.clrBlue, 0.5f);
         Sh.PreviewVoxels(voxChannels, Cp.clrRacingGreen);
 
         return voxChannels;
