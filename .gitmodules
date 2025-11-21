@@ -1,3 +1,9 @@
 [submodule "geom/PicoGK"]
 	path = geom/PicoGK
 	url = https://github.com/leap71/PicoGK.git
+[submodule "geom/LEAP71_ShapeKernel"]
+	path = geom/LEAP71_ShapeKernel
+	url = https://github.com/leap71/LEAP71_ShapeKernel.git
+[submodule "geom/LEAP71_LatticeLibrary"]
+	path = geom/LEAP71_LatticeLibrary
+	url = https://github.com/leap71/LEAP71_LatticeLibrary.git
