@@ -1,4 +1,6 @@
-/exports/
-
 **/.*
 !.gitignore
+
+/exports/
+/obj/
+/bin/
