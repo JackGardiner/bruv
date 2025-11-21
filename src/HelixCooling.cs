@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -90,7 +91,19 @@ public class HelixCooling
                / (Tan(s.theta_exit) - Tan(s.theta_div));
         float yC = Tan(s.theta_exit) * (xC - x0) + y0;
 
+        Debug.Assert(x0 > x1, $"x0={x0}, x1={x1}");
+        Debug.Assert(x1 > x2, $"x1={x1}, x2={x2}");
+        Debug.Assert(x2 > x3, $"x2={x2}, x3={x3}");
+        Debug.Assert(x3 > x4, $"x3={x3}, x4={x4}");
+        Debug.Assert(xC > x1, $"xC={xC}, x1={x1}");
+        Debug.Assert(xC < x0, $"xC={xC}, x0={x0}");
 
+        Debug.Assert(y0 > y1, $"y0={y0}, y1={y1}");
+        Debug.Assert(y1 > y2, $"y1={y1}, y2={y2}");
+        Debug.Assert(y2 < y3, $"y2={y2}, y3={y3}");
+        Debug.Assert(y3 < y4, $"y3={y3}, y4={y4}");
+        Debug.Assert(yC > y1, $"yC={yC}, y1={y1}");
+        Debug.Assert(yC < y0, $"yC={yC}, y0={y0}");
 
         float ax = x1 - 2f * xC + x0;
         float bx = -2f * x1 + 2f * xC;
@@ -99,10 +112,7 @@ public class HelixCooling
         float by = -2f * y1 + 2f * yC;
         float cy = y1;
 
-        int i = 1; // change this obviously
-        int start = 1;
-        int count_1_0 = 1;
-        float x = x1 + (x0 - x1) * (i - start) / (float)(count_1_0 - 1);
+        float x = fHeight;
         float p = (-bx + Sqrt(bx * bx - 4.0f * ax * (cx - x))) / (2.0f * ax);
         float y = ay * p * p + by * p + cy;
         // s.nzl_contour_x[i] = x;
@@ -110,7 +120,7 @@ public class HelixCooling
         // ++i;
         //     }
 
-        float fRadius = 1f;
+        float fRadius = y;
         return fRadius;
     }
 
@@ -130,8 +140,14 @@ public class HelixCooling
             float fDelHeight = 1 / fSampleDensity;
             float fDelPhi = fDelHeight / (fRadius * (float)Math.Tan(fHelixAngle)) % 2f * (float)Math.PI;
 
-            Vector3 vecPoint = new Vector3(0, fRadius, fHeight);
-            vecPoint = VecOperations.vecRotateAroundZ(vecPoint, fPhi);
+            // Vector3 vecPoint = new Vector3(0, fRadius, fHeight);
+            // vecPoint = VecOperations.vecRotateAroundZ(vecPoint, fPhi);
+            // aPoints.Add(vecPoint);
+
+            // rao!
+            Vector3 vecPoint = new Vector3(0, RaoProfile(fHeight), fHeight);
+            // float fDebugRad = RaoProfile(fHeight);
+            // Library.Log($"{fDebugRad}");
             aPoints.Add(vecPoint);
 
             fPhi += fDelPhi;

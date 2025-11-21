@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {}
+    "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {}
   },
   "projects": {
-    "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {
+    "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
+        "projectUniqueName": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
         "projectName": "bruv",
-        "projectPath": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
+        "projectPath": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\bruv.csproj",
         "packagesPath": "C:\\Users\\jack7\\.nuget\\packages\\",
-        "outputPath": "c:\\Users\\jack7\\Documents\\ARES Git\\bruv\\obj\\",
+        "outputPath": "C:\\Users\\jack7\\Documents\\ARES Git\\bruv\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\jack7\\AppData\\Roaming\\NuGet\\NuGet.Config",
@@ -61,7 +61,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.307/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

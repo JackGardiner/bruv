@@ -5,11 +5,11 @@
   "chamberLength": 0.28,
   "throatAngleDeg": 28,
   "exitAngleDeg": 10,
-  "NLF": 1.0,
-  "D_exit": 0.22,
-  "D_tht": 0.03,
-  "D_c": 0.09,
-  "theta_div": 0.4886921905584123,
-  "theta_conv": 0.4,
+  "NLF": 100,
+  "D_exit": 100,
+  "D_tht": 35.9,
+  "D_c": 90,
+  "theta_div": 45,
+  "theta_conv": -45,
   "theta_exit": 0.17453292519943295
 }
