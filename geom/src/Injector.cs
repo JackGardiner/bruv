@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection.Metadata.Ecma335;
 using Leap71.ShapeKernel;
 using PicoGK;
 using static System.MathF;
@@ -117,9 +118,42 @@ public class Injector
         }
     }
 
+    public class ImplicitParaboloid : IImplicit
+    {
+        protected float m_fA;
+        protected float m_fB;
+        protected float m_fThickness;
+        public ImplicitParaboloid(float fA, float fB, float fThickness)
+        {
+            m_fA = fA;
+            m_fB = fB;
+            m_fThickness = fThickness;
+        }
+
+        public float fSignedDistance(in Vector3 vecPt)
+        {
+            float dX = vecPt.X;
+            float dY = vecPt.Y;
+            float dZ = vecPt.Z;
+
+            float fDist = dX*dX/(m_fA*m_fA) + dY*dY/(m_fB*m_fB) - dZ;
+
+            // add thickness
+            return (float)(Math.Abs(fDist) - 0.5f * m_fThickness);  // note not ACTUAL thickness! change dis l8r
+        }
+    }
+
     public Voxels voxConstruct()
     {
         
+        // messin around with implicit parabola thing
+        IImplicit sdfCone = new ImplicitParaboloid(1f, 1f, 1f);
+        BBox3 oBBox = new BBox3(new Vector3(-10f,-10f,-10f), new Vector3(10f, 10f, 10f));
+
+        Voxels voxCone = new Voxels(sdfCone, oBBox);
+
+        return voxCone;
+
         Voxels voxLOxManifold = new Voxels();
 
         List<Vector3> aInjectorLocations = InjectorPattern(oInj.aElementCount, oInj.aElementRadii, oInj.aElementClocking);
