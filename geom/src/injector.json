@@ -1,6 +1,6 @@
 {
     "aElementCount": [1, 5, 8],
-    "aElementRadii": [0, 10, 20],
+    "aElementRadii": [0, 15, 30],
     "aElementClocking": [0, 0, 0],
     "fLOxPostFluidRad": 2.5,
     "fLOxPostLength": 8.0,
@@ -8,5 +8,8 @@
     "fLOxSwirlMfldAngleDeg": 45.0,
     "fLOxSwirlMfldLength": 12.0,
 
-    "fLOxSwirlWallThickness": 1.0
+    "fLOxPostWT": 1.0,
+    "fInjectorPlateThickness": 2.0,
+    "fPrintAngle": 0.785398163397,
+    "FuelAnnulusOR": 4.5
 }
