@@ -23,10 +23,17 @@ public static class Br {
         }
     }
 
+    public static float INF => float.PositiveInfinity;
+    public static float NAN => float.NaN;
+
+    public static float min(float x, float y) => (y < x) ? y : x;
+    public static float max(float x, float y) => (y > x) ? y : x;
+    public static float abs(float x) => (x < 0.0) ? -x : x;
+
     public static float pow(float x, float y) => MathF.Pow(x, y);
     public static float exp(float x) => MathF.Exp(x);
+    public static float log(float x) => MathF.Log(x);
     public static float log(float x, float b) => MathF.Log(x, b);
-    public static float ln(float x) => MathF.Log(x);
     public static float log2(float x) => MathF.Log10(x);
     public static float log10(float x) => MathF.Log10(x);
 
@@ -34,6 +41,8 @@ public static class Br {
     public static float cbrt(float x) => MathF.Cbrt(x);
 
     public const float PI = MathF.PI;
+    public const float TWOPI = 2f*MathF.PI;
+    public const float PI_2 = MathF.PI/2f;
     public static float torad(float deg) => deg * (MathF.PI / 180.0f);
     public static float todeg(float rad) => rad * (180.0f / MathF.PI);
 

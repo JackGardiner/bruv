@@ -1,15 +1,14 @@
-﻿using PicoGK;
-using Leap71.ShapeKernel;
+﻿
+try {
+    string exports = PicoGK.Utils.strProjectRootFolder();
+    exports = Path.Combine(exports, "exports");
+    Directory.CreateDirectory(exports);
 
-try
-{
-    Library.Go(
-        0.1f,
-        HelixCooling.Task);
-}
-catch (Exception e)
-{
-    Library.Log("Failed to run Task.");
-    Library.Log(e.ToString());
-    Library.oViewer().SetBackgroundColor(Cp.clrWarning);
+    PicoGK.Library.Go(
+        1f,
+        Chamber.Task
+    );
+} catch (Exception e) {
+    Console.WriteLine("Failed to run Task.");
+    Console.WriteLine(e.ToString());
 }
