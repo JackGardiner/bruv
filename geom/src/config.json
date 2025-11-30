@@ -1,0 +1,37 @@
+{
+    "inj": {
+        "aElementCount": [1, 5, 8],
+        "aElementRadii": [0, 15, 30],
+        "aElementClocking": [0, 0, 0],
+        "aFilmHoleCount": [30],
+        "aFilmHoleRadii": [40],
+        "aFilmHoleClocking": [0],
+        "fLOxPostFluidRad": 2.5,
+        "fLOxPostLength": 8.0,
+        "fLOxSwirlMflFluidRad": 3.5,
+        "fLOxSwirlMfldAngleDeg": 45.0,
+        "fLOxSwirlMfldLength": 12.0,
+        "fLOxPostWT": 1.0,
+        "fInjectorPlateThickness": 2.0,
+        "FuelAnnulusOR": 4.5
+    },
+    "slm": {
+        "fPrintAngle": 0.785398163397
+    },
+    "eng": {
+    
+    },
+    "mat": {
+        "sName": "CuCr1Zr-NHT",
+        "fTensileStrengthHorizontal": 255e6,
+        "fTensileStrengthVertical": 225e6,
+        "fYieldStrengthHorizontal": 180e6,
+        "fYieldStrengthVertical": 175e6,
+        "fElongationAtBreakHorizontal": 37.0,
+        "fElongationAtBreakVertical": 39.0,
+        "fHardnessVickers": 75,
+        "fRoughnessAverageRa": 24e-6,
+        "fMeanRoughnessDepthRz": 135e-6,
+        "fElectricalConductivity": 11.5e6
+    }
+}
