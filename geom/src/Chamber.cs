@@ -1,19 +1,19 @@
 
 using static Br;
+using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
-using BBox3 = PicoGK.BBox3;
 using Lattice = PicoGK.Lattice;
-using PolyLine = PicoGK.PolyLine;
+using IBoundedImplicit = PicoGK.IBoundedImplicit;
+using BBox3 = PicoGK.BBox3;
 
 using Frames = Leap71.ShapeKernel.Frames;
-using LocalFrame = Leap71.ShapeKernel.LocalFrame;
 using BaseBox = Leap71.ShapeKernel.BaseBox;
-using BaseCylinder = Leap71.ShapeKernel.BaseCylinder;
-using LineModulation = Leap71.ShapeKernel.LineModulation;
 
 public class Chamber {
+
+    public bool sectionview = false;
 
     // Bit how ya going.
     //
@@ -182,7 +182,7 @@ public class Chamber {
     }
 
 
-    private float axial_extra = 10f; // trimmed in final step.
+    protected float axial_extra = 10f; // trimmed in final step.
 
     public void check_realisable() {
         // Easiest way to determine if the parameters create a realisable nozzle.
@@ -232,7 +232,7 @@ public class Chamber {
         divs[5] = divisions - divs[0] - divs[1] - divs[2] - divs[3] - divs[4];
     }
 
-    private List<Vec3> points_interior(int divisions=100) {
+    protected List<Vec3> points_interior(int divisions=100) {
         List<Vec3> points = new();
 
         void push_point(float z) {
@@ -256,7 +256,7 @@ public class Chamber {
         return points;
     }
 
-    private List<Vec3> points_web(float theta0=0f, int divisions=100) {
+    protected List<Vec3> points_web(float theta0=0f, int divisions=100) {
         List<Vec3> points = new();
         for (int i=0; i<=divisions; ++i) {
             float z = nzl_z0 + i * (nzl_z6 - nzl_z0) / divisions;
@@ -269,7 +269,7 @@ public class Chamber {
         return points;
     }
 
-    private Voxels voxels_interior(int divisions=100) {
+    protected Voxels voxels_interior(int divisions=100) {
         Lattice lattice = new();
 
         void push_beam(float za, float zb) {
@@ -300,7 +300,7 @@ public class Chamber {
         return new Voxels(lattice);
     }
 
-    private Voxels voxels_webs() {
+    protected Voxels voxels_webs() {
         Voxels webs = new();
         for (int i=0; i<no_web; ++i) {
             float theta0 = i * TWOPI / no_web;
@@ -310,49 +310,71 @@ public class Chamber {
             points.Insert(0, points[0] - axial_extra*Vec3.UnitZ);
             points.Add(points[^1] + axial_extra*Vec3.UnitZ);
             Frames frames = new(points, Frames.EFrameType.CYLINDRICAL);
+            Leap71.ShapeKernel.Sh.PreviewFrame(frames.oGetLocalFrame(0f), 3f);
             BaseBox web = new(frames, th, wi);
             webs += web.voxConstruct();
         }
         return webs;
     }
 
-    public Voxels voxels_iface_bolt(float theta=0f) {
 
-        Vec3 at = new(r_itrb*cos(theta), r_itrb*sin(theta), 0f);
-        BaseCylinder hole = new(
-            new LocalFrame(at),
+    protected Voxels voxels_iface_bolt_hole(float theta=0f) {
+        Vec3 at = rejxy(tocart(r_itrb, theta));
+        Pipe hole = new(
+            at,
             L_itfb,
             Bsz_itfb/2f
         );
-        BaseCylinder surrounding = new(
-            new LocalFrame(at),
+        Leap71.ShapeKernel.Sh.PreviewBoxWireframe(hole.bounds, COLOUR_CYAN);
+        return hole.voxels();
+    }
+
+    protected Voxels voxels_iface_bolt(float theta=0f) {
+        Vec2 at2 = tocart(r_itrb, theta);
+        Vec3 at = rejxy(at2);
+        Pipe disc = new(
+            at,
             L_itfb,
             Bsz_itfb/2f + th_itfb
         );
-        LocalFrame frame = new LocalFrame(
-            at + new Vec3(0f, 0f, L_itfb/2f),
-            new Vec3(-cos(theta), -sin(theta), 0f),
-            new Vec3(sin(theta), -cos(theta), 0f)
-        );
-        Leap71.ShapeKernel.Sh.PreviewFrame(frame, 5f);
-        BaseBox flange = new(
-            frame,
-            r_itrb,
-            NAN,
-            L_itfb
-        );
-        float width(float t) => Bsz_itfb + 2f*th_itfb * (1f + t / (r_itrb - r_cc) * r_itrb);
-        flange.SetWidth(new LineModulation(width));
 
-        Voxels vox;
-        vox = surrounding.voxConstruct();
-        vox += flange.voxConstruct();
-        vox -= hole.voxConstruct();
+        float ang_off = torad(10f);
+        List<Vec2> corners = new List<Vec2>(4){
+            at2 + tocart(Bsz_itfb/2f + th_itfb, theta - PI_2 + ang_off),
+            at2 + tocart(Bsz_itfb/2f + th_itfb, theta + PI_2 - ang_off)
+        };
+        float x2;
+        float y2;
+        float x3;
+        float y3;
+        if (abs(theta - ang_off - PI_2) < 1e-5 ||
+                abs(theta - ang_off - 3*PI_2) < 1e-5) {
+            // m = vertical.
+            x2 = corners[1].X;
+            y2 = 0f;
+        } else {
+            float m = tan(theta - ang_off);
+            // m * (x - corners[*].X) + corners[*].Y = -1/m x
+            x2 = (-m*corners[1].X + corners[1].Y) / (-m - 1/m);
+            y2 = -x2/m;
+        }
+        if (abs(theta + ang_off - PI_2) < 1e-5 ||
+                abs(theta + ang_off - 3*PI_2) < 1e-5) {
+            x3 = corners[0].X;
+            y3 = 0f;
+        } else {
+            float m = tan(theta + ang_off);
+            x3 = (-m*corners[0].X + corners[0].Y) / (-m - 1/m);
+            y3 = -x2/m;
+        }
+        corners.Add(new Vec2(x2, y2));
+        corners.Add(new Vec2(x3, y3));
+        Polygon flange = new(corners, 0f, L_itfb);
 
-        return vox;
+        return disc.voxels() + flange.voxels();
     }
 
-    public Voxels voxels_iface() {
+    protected Voxels voxels_iface() {
         Voxels iface = new();
         for (int i=0; i<no_itfb; ++i) {
             float theta = i * TWOPI / no_itfb;
@@ -368,7 +390,15 @@ public class Chamber {
         return iface;
     }
 
-    public Voxels voxels(bool crosssectioned = false) {
+    protected Voxels voxels_iface_holes() {
+        Voxels iface = new();
+        for (int i=0; i<no_itfb; ++i) {
+            float theta = i * TWOPI / no_itfb;
+            iface += voxels_iface_bolt_hole(theta);
+        }
+        return iface;
+    }
+    public Voxels voxels() {
 
         // Order of construction is this:
         // - construct webs.
@@ -384,11 +414,16 @@ public class Chamber {
         // - combine all.
         // These steps are interleaved however to reduce operations.
 
-        Voxels webs = voxels_webs();
+        Voxels iface_holes = voxels_iface_holes();
         Voxels iface = voxels_iface();
+        geez(iface);
+        Voxels webs = voxels_webs();
+        geez(webs);
 
         Voxels inner_enclosure = voxels_interior();
         inner_enclosure.TripleOffset(-0.01f); // smooth.
+
+        geez(inner_enclosure);
 
         Voxels outer_enclosure = inner_enclosure.voxOffset(th_iw + th_web);
 
@@ -396,8 +431,9 @@ public class Chamber {
         Voxels vox;
 
         // Add outer wall.
-        vox = outer_enclosure.voxOffset(th_ow + 0.5f);
-        vox.Offset(-0.5f); // round sharp concave corner.
+        vox = outer_enclosure.voxOffset(th_ow);
+
+        geez(vox, pop: 1);
 
         // Now: vox = outer filled, so do some operations.
         webs.BoolIntersect(vox);
@@ -406,22 +442,33 @@ public class Chamber {
         // Make: vox = outer walls.
         vox.BoolSubtract(outer_enclosure);
 
+        geez(vox, pop: 1);
+
+        // Add interface and fillet this now complete outer surface.
+        vox.BoolAdd(iface);
+        vox.Fillet(3f);
+
+        geez(vox, pop: 1);
+
         // Add inner walls and combine all.
         vox.BoolAdd(inner_enclosure.voxOffset(th_iw));
         vox.BoolAdd(webs);
-        vox.BoolAdd(iface);
 
         // Add chamber cavity.
         vox.BoolSubtract(inner_enclosure);
 
+        // Remove holes.
+        vox.BoolSubtract(iface_holes);
+
+        geez(vox, pop: 3);
 
         // Clip axial excess.
         BBox3 bounds = vox.oCalculateBoundingBox();
         bounds.vecMin.Z = 0f;
         bounds.vecMax.Z = L_part;
-        if (crosssectioned)
-            bounds.vecMin.X = 0f;
         vox.Trim(bounds);
+
+        geez(vox, pop: 1);
 
         return vox;
     }
@@ -435,7 +482,7 @@ public class Chamber {
             r_itrb = 72f,
             L_itfb = 5f,
             Bsz_itfb = 6f,
-            th_itfb = 3.5f,
+            th_itfb = 4.5f,
             no_itfb = 6,
 
             AEAT = 4f,
@@ -455,32 +502,307 @@ public class Chamber {
             wi_web = 1.5f,
         };
         chamber.check_realisable();
+        chamber.sectionview = true;
 
-        Voxels voxels = chamber.voxels(crosssectioned: true);
+        Voxels vox = chamber.voxels();
         PicoGK.Library.Log("Baby made.");
 
+        string path = PicoGK.Utils.strProjectRootFolder();
+        path = Path.Combine(path, "exports/chamber.stl");
+        Leap71.ShapeKernel.Sh.ExportVoxelsToSTLFile(vox, path);
+
+        PicoGK.Library.Log("Don.");
+    }
+
+
+    protected List<Voxels> _viewed = new();
+    protected void geez(in Voxels vox, int pop=0) {
+        // Cross section if requested.
+        Voxels avox;
+        if (sectionview) {
+            BBox3 bounds = vox.oCalculateBoundingBox();
+            bounds.vecMin.X = 0f;
+            // dont trim the original.
+            Voxels box = new(PicoGK.Utils.mshCreateCube(bounds));
+            avox = vox.voxBoolIntersect(box);
+        } else avox = vox;
         Leap71.ShapeKernel.Sh.PreviewVoxels(
-            voxels,
+            avox,
             new PicoGK.ColorFloat("#501f14"),
             fTransparency: 0.5f,
             fMetallic: 0.4f,
             fRoughness: 0.3f
         );
 
-        PolyLine polyline_interior = new("#FF0000");
-        polyline_interior.Add(chamber.points_interior());
-        PicoGK.Library.oViewer().Add(polyline_interior);
+        while (pop --> 0) // so glad down-to operator made it into c#.
+            pop_geez();
 
-        for (int i=0; i<chamber.no_web; ++i) {
-            PolyLine polyline_web = new("#00FF00");
-            polyline_web.Add(chamber.points_web(i * TWOPI / chamber.no_web));
-            PicoGK.Library.oViewer().Add(polyline_web);
-        }
-
-        string path = PicoGK.Utils.strProjectRootFolder();
-        path = Path.Combine(path, "exports/chamber.stl");
-        Leap71.ShapeKernel.Sh.ExportVoxelsToSTLFile(voxels, path);
-
-        PicoGK.Library.Log("Don.");
+        _viewed.Add(avox);
+    }
+    protected void pop_geez() {
+        Voxels vox = _viewed[_viewed.Count - 1];
+        _viewed.RemoveAt(_viewed.Count - 1);
+        PicoGK.Library.oViewer().Remove(vox);
     }
 }
+
+
+
+public abstract class SDF : IBoundedImplicit {
+    public abstract float signed_dist(in Vec3 p);
+
+    public Voxels voxels() {
+        return new Voxels(this);
+    }
+
+
+    public float fSignedDistance(in Vec3 p) => signed_dist(p);
+    protected BBox3 bounds_fr;
+    protected bool has_bounds = false;
+    public BBox3 bounds => bounds_fr;
+    public BBox3 oBounds => bounds_fr;
+
+    protected void set_bounds(Vec3 min, Vec3 max) {
+        bounds_fr = new BBox3(min, max);
+        has_bounds = true;
+    }
+    protected void include_in_bounds(Vec3 p) {
+        if (!has_bounds) {
+            bounds_fr = new BBox3(p, p);
+        } else {
+            bounds_fr.Include(p);
+        }
+        has_bounds = true;
+    }
+}
+
+
+public class Pipe : SDF {
+    public int axis { get; }
+    public Vec3 centre { get; }
+    public float L { get; }
+    public float rlo { get; }
+    public float rhi { get; }
+    protected float axial_lo;
+    protected float axial_hi;
+    protected Vec2 centre_proj;
+
+    public Pipe(in Vec3 centre, float L, float rhi, int axis=2)
+        : this(centre, L, 0f, rhi, axis) {}
+    public Pipe(in Vec3 centre, float L, float rlo, float rhi, int axis=2) {
+        assertx(rhi >= rlo, "rlo={0}, rhi={1}", rlo, rhi);
+        assertx(rlo >= 0f, "rlo={0}, rhi={1}", rlo, rhi);
+        assertx(0 <= axis && axis <= 2, "axis={0}", axis);
+        this.axis = axis;
+        this.centre = centre;
+        this.L = L;
+        this.rlo = rlo;
+        this.rhi = rhi;
+        Vec3 pmin = centre - rhi*ONE3;
+        Vec3 pmax = centre + rhi*ONE3;
+        pmin[axis] = centre[axis] + min(0f, L);
+        pmax[axis] = centre[axis] + max(0f, L);
+
+        axial_lo = pmin[axis];
+        axial_hi = pmax[axis];
+        centre_proj = projection(centre, axis);
+        set_bounds(pmin, pmax);
+    }
+
+    public override float signed_dist(in Vec3 p) {
+        float r = mag(projection(p, axis) - centre_proj);
+
+        float dist_radial = max(rlo - r, r - rhi);
+
+        float dist_axial = max(axial_lo - p[axis], p[axis] - axial_hi);
+
+        float dist;
+        if (dist_radial <= 0f || dist_axial <= 0f) {
+            dist = max(dist_radial, dist_axial);
+        } else {
+            dist = hypot(dist_radial, dist_axial);
+        }
+        return dist;
+    }
+
+    public Pipe filled() {
+        if (rlo == 0f)
+            return this;
+        return new Pipe(centre, L, rhi, axis);
+    }
+    public Pipe hole() {
+        return new Pipe(centre, L, rlo, axis);
+    }
+}
+
+
+public class Polygon : SDF {
+    public int axis { get; }
+    public List<Vec2> points { get; }
+    public float axial_lo { get; }
+    public float axial_hi { get; }
+
+    public Polygon(in List<Vec2> points, float axial_lo, float axial_hi,
+            int axis=2) {
+        assert(is_simple_polygon(points));
+        assertx(points.Count >= 3, "length={0}", points.Count);
+        assertx(axial_hi >= axial_lo, "lo={0}, hi={1}", axial_lo, axial_hi);
+        this.axis = axis;
+        this.points = points;
+        this.axial_lo = axial_lo;
+        this.axial_hi = axial_hi;
+        for (int i=0; i<points.Count; ++i) {
+            float axial = ((i % 2) == 0) ? axial_lo : axial_hi;
+            Vec3 p = rejection(points[i], axis, axial);
+            include_in_bounds(p);
+        }
+    }
+
+    public override float signed_dist(in Vec3 p) {
+        Vec2 p_proj = projection(p, axis);
+
+        int N = points.Count;
+        int winding = 0;
+
+        float dist_proj = INF;
+        for (int i=0; i<N; ++i) {
+            Vec2 a = points[i];
+            Vec2 b = points[(i + 1 == N) ? 0 : i + 1];
+
+            Vec2 ab = b - a;
+            Vec2 ap = p_proj - a;
+
+            if (a.Y <= p_proj.Y) {
+                if (b.Y > p_proj.Y && cross(ab, ap) > 0)
+                    winding += 1;
+            } else {
+                if (b.Y <= p_proj.Y && cross(ab, ap) < 0)
+                    winding -= 1;
+            }
+
+            float t = dot(ap, ab) / dot(ab, ab);
+            t = clamp(t, 0f, 1f); // clamp to segment
+            Vec2 closest = a + t*ab;
+
+            float d = mag(p_proj - closest);
+            dist_proj = min(dist_proj, d);
+        }
+
+        if (winding != 0)
+            dist_proj = -dist_proj;
+
+        float dist_axial = max(axial_lo - p[axis], p[axis] - axial_hi);
+
+        float dist;
+        if (dist_proj <= 0f || dist_axial <= 0f) {
+            dist = max(dist_proj, dist_axial);
+        } else {
+            dist = hypot(dist_proj, dist_axial);
+        }
+        return dist;
+    }
+
+
+
+    protected static bool is_simple_polygon(in List<Vec2> points) {
+        int N = points.Count;
+        if (N < 3) return false;
+
+        for (int i=0; i<N; ++i) {
+            int i_1 = (i + 1 == N) ? 0 : i + 1;
+            Vec2 a0 = points[i];
+            Vec2 a1 = points[i_1];
+
+            for (int j=i + 1; j<N; ++j) {
+                int j_1 = (j + 1 == N) ? 0 : j + 1;
+                Vec2 b0 = points[j];
+                Vec2 b1 = points[j_1];
+
+                // Skip adjacent edges.
+                if (i == j || i_1 == j || j_1 == i)
+                    continue;
+
+                float o1 = cross(a1 - a0, b0 - a0);
+                float o2 = cross(a1 - a0, b1 - a0);
+                float o3 = cross(b1 - b0, a0 - b0);
+                float o4 = cross(b1 - b0, a1 - b0);
+                if ((o1*o2 < 0) && (o3*o4 < 0))
+                    return false;
+            }
+        }
+        return true;
+    }
+}
+
+
+
+// public class Web : SDF {
+//     public List<Vec3> points { get; }
+//     public float Ltheta { get; }
+//     public float Lr { get; }
+//     protected float zlo;
+//     protected float zhi;
+
+//     public Web(in List<Vec3> points, float Ltheta, float Lr) {
+//         assertx(points.Count >= 2, "length={0}", points.Count);
+//         this.points = points;
+//         this.Ltheta = Ltheta;
+//         this.Lr = Lr;
+
+//         zlo = +INF;
+//         zhi = -INF;
+//         float prevz = -INF;
+//         for (int i=0; i<points.Count; ++i) {
+//             float z = points[i].Z;
+//             assertx(z > prevz, "prevz={0}, z={1}", prevz, z);
+//             prevz = z;
+//             zlo = min(zlo, z);
+//             zhi = max(zhi, z);
+
+//             Vec2 p = projxy(points[i]);
+//             float r = mag(p);
+//             float theta = arg(p);
+//             float rmin = r - Lr/2f;
+//             float rmax = r + Lr/2f;
+//             float thetamin = theta - Ltheta/2f;
+//             float thetamax = theta - Ltheta/2f;
+//             Vec2 corner0 = tocart(rmin, thetamin);
+//             Vec2 corner1 = tocart(rmin, thetamax);
+//             Vec2 corner2 = tocart(rmax, thetamin);
+//             Vec2 corner3 = tocart(rmax, thetamax);
+//             Vec2 pmin = min(corner0, corner1, corner2, corner3);
+//             Vec2 pmax = max(corner0, corner1, corner2, corner3);
+//             include_in_bounds(rejxy(pmin, z));
+//             include_in_bounds(rejxy(pmax, z));
+//         }
+//     }
+
+//     public override float signed_dist(in Vec3 p) {
+//         int N = points.Count;
+
+//         float dist_proj = INF;
+//         float angle = 0f;
+//         for (int i=1; i<N; ++i) {
+//             Vec3 a = points[i - 1];
+//             Vec3 b = points[i];
+
+//             Vec3 ab = b - a;
+//             Vec3 ap = p - a;
+
+//             float t = dot(ap, ab) / dot(ab, ab);
+//             t = clamp(t, 0f, 1f); // clamp to segment
+//             Vec3 closest = a + t*ab;
+
+//             float d = mag(p - closest);
+//             if (d < dist_proj) {
+//                 dist_proj = d;
+//                 angle = acos(dot(ab, p - closest) / mag(ab) / d);
+//             }
+//         }
+
+//         float dist_z = max(zlo - p.Z, p.Z - zhi);
+//         float dist_along = dist_z *
+//         float dist = hypot(dist_proj, dist_along);
+//         return dist;
+//     }
+// }
