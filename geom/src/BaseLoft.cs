@@ -60,7 +60,7 @@ class BaseLoft
 
     public Mesh mshConstruct()
     {
-        // Move the edges to top and bottom of the cylinder, respectively 
+        // Move the edges to top and bottom of the cylinder, respectively
         // LocalFrame frmTop = m_frm.frmTranslatedZ(m_fHeight / 2);
         LocalFrame frmTop = LocalFrame.oGetTranslatedFrame(m_frm, new Vector3(0f, 0f, m_fHeight / 2));
 
@@ -157,15 +157,13 @@ class BaseLoft
         return msh;
     }
 
-    
+
     LocalFrame m_frm;
 
     INormalizedContour2d m_oEdgeBtm;
     INormalizedContour2d m_oEdgeTop;
 
     float m_fHeight;
-    int m_nUSubDiv = 0;
-    int m_nVSubDiv = 0;
 
     ISurfaceModulation m_xModulation = new SurfaceModulationNoop();
     float m_fModulationHeight = 0f;

@@ -1,10 +1,11 @@
-
 using static Br;
 using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using Mesh = PicoGK.Mesh;
 using Lattice = PicoGK.Lattice;
+using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
@@ -25,8 +26,10 @@ public class Chamber {
     // AEAT = nozzle exit area to throat area ratio.
     // Bsz = bolt size (i.e. M4 for M4x10).
     // Bln = bolt length (i.e. 10e-3 for M4x10).
+    // D_ = discrete change in this variable.
     // Ir = inner radius.
     // L = length.
+    // L_ = length along this coordinate path.
     // NLF = nozzle length as a fraction of the length of a 15deg cone.
     // no = number of things.
     // r = radial coordinate.
@@ -187,23 +190,23 @@ public class Chamber {
     public void check_realisable() {
         // Easiest way to determine if the parameters create a realisable nozzle.
 
-        assertx(nzl_z0 < nzl_z1, "z0={0}, z1={1}", nzl_z0, nzl_z1);
-        assertx(nzl_z1 < nzl_z2, "z1={0}, z2={1}", nzl_z1, nzl_z2);
-        assertx(nzl_z2 < nzl_z3, "z2={0}, z3={1}", nzl_z2, nzl_z3);
-        assertx(nzl_z3 < nzl_z4, "z3={0}, z4={1}", nzl_z3, nzl_z4);
-        assertx(nzl_z4 < nzl_z5, "z4={0}, z5={1}", nzl_z4, nzl_z5);
-        assertx(nzl_z5 < nzl_z6, "z5={0}, z6={1}", nzl_z5, nzl_z6);
-        assertx(nzl_zP > nzl_z5, "zP={0}, z5={1}", nzl_zP, nzl_z5);
-        assertx(nzl_zP < nzl_z6, "zP={0}, z6={1}", nzl_zP, nzl_z6);
+        assert(nzl_z0 < nzl_z1, $"z0={nzl_z0}, z1={nzl_z1}");
+        assert(nzl_z1 < nzl_z2, $"z1={nzl_z1}, z2={nzl_z2}");
+        assert(nzl_z2 < nzl_z3, $"z2={nzl_z2}, z3={nzl_z3}");
+        assert(nzl_z3 < nzl_z4, $"z3={nzl_z3}, z4={nzl_z4}");
+        assert(nzl_z4 < nzl_z5, $"z4={nzl_z4}, z5={nzl_z5}");
+        assert(nzl_z5 < nzl_z6, $"z5={nzl_z5}, z6={nzl_z6}");
+        assert(nzl_zP > nzl_z5, $"zP={nzl_zP}, z5={nzl_z5}");
+        assert(nzl_zP < nzl_z6, $"zP={nzl_zP}, z6={nzl_z6}");
 
-        // assertx(nzl_r0 == nzl_r1, "r0={0}, r1={1}", nzl_r0, nzl_r1);
-        assertx(nzl_r1 > nzl_r2, "r1={0}, r2={1}", nzl_r1, nzl_r2);
-        assertx(nzl_r2 > nzl_r3, "r2={0}, r3={1}", nzl_r2, nzl_r3);
-        assertx(nzl_r3 > nzl_r4, "r3={0}, r4={1}", nzl_r3, nzl_r4);
-        assertx(nzl_r4 < nzl_r5, "r4={0}, r5={1}", nzl_r4, nzl_r5);
-        assertx(nzl_r5 < nzl_r6, "r5={0}, r6={1}", nzl_r5, nzl_r6);
-        assertx(nzl_rP > nzl_r5, "rC={0}, r5={1}", nzl_rP, nzl_r5);
-        assertx(nzl_rP < nzl_r6, "rC={0}, r6={1}", nzl_rP, nzl_r6);
+        assert(nzl_r0 == nzl_r1, $"r0={nzl_r0}, r1={nzl_r1}");
+        assert(nzl_r1 > nzl_r2, $"r1={nzl_r1}, r2={nzl_r2}");
+        assert(nzl_r2 > nzl_r3, $"r2={nzl_r2}, r3={nzl_r3}");
+        assert(nzl_r3 > nzl_r4, $"r3={nzl_r3}, r4={nzl_r4}");
+        assert(nzl_r4 < nzl_r5, $"r4={nzl_r4}, r5={nzl_r5}");
+        assert(nzl_r5 < nzl_r6, $"r5={nzl_r5}, r6={nzl_r6}");
+        assert(nzl_rP > nzl_r5, $"rP={nzl_rP}, r5={nzl_r5}");
+        assert(nzl_rP < nzl_r6, $"rP={nzl_rP}, r6={nzl_r6}");
     }
 
 
@@ -211,7 +214,7 @@ public class Chamber {
         assert(divs.Length == 6);
         // 0-1 and 2-3 are each one beam element. each other one gets a differing
         // number.
-        assertx(divisions >= 20, "divisions={0}", divisions);
+        assert(divisions >= 20, $"divisions={divisions}");
         float weight_12 = 1.5f * (nzl_z2 - nzl_z1);
         float weight_34 = 1.5f * (nzl_z4 - nzl_z3);
         float weight_45 = 4.0f * (nzl_z5 - nzl_z4);
@@ -310,7 +313,7 @@ public class Chamber {
             points.Insert(0, points[0] - axial_extra*Vec3.UnitZ);
             points.Add(points[^1] + axial_extra*Vec3.UnitZ);
             Frames frames = new(points, Frames.EFrameType.CYLINDRICAL);
-            Leap71.ShapeKernel.Sh.PreviewFrame(frames.oGetLocalFrame(0f), 3f);
+            Geez.frame(frames.oGetLocalFrame(0f), 3f);
             BaseBox web = new(frames, th, wi);
             webs += web.voxConstruct();
         }
@@ -325,7 +328,7 @@ public class Chamber {
             L_itfb,
             Bsz_itfb/2f
         );
-        Leap71.ShapeKernel.Sh.PreviewBoxWireframe(hole.bounds, COLOUR_CYAN);
+        Geez.bbox(hole.bounds, COLOUR_CYAN);
         return hole.voxels();
     }
 
@@ -338,40 +341,40 @@ public class Chamber {
             Bsz_itfb/2f + th_itfb
         );
 
-        float ang_off = torad(10f);
-        List<Vec2> corners = new List<Vec2>(4){
-            at2 + tocart(Bsz_itfb/2f + th_itfb, theta - PI_2 + ang_off),
-            at2 + tocart(Bsz_itfb/2f + th_itfb, theta + PI_2 - ang_off)
-        };
-        float x2;
-        float y2;
-        float x3;
-        float y3;
-        if (abs(theta - ang_off - PI_2) < 1e-5 ||
-                abs(theta - ang_off - 3*PI_2) < 1e-5) {
-            // m = vertical.
-            x2 = corners[1].X;
-            y2 = 0f;
-        } else {
-            float m = tan(theta - ang_off);
-            // m * (x - corners[*].X) + corners[*].Y = -1/m x
-            x2 = (-m*corners[1].X + corners[1].Y) / (-m - 1/m);
-            y2 = -x2/m;
-        }
-        if (abs(theta + ang_off - PI_2) < 1e-5 ||
-                abs(theta + ang_off - 3*PI_2) < 1e-5) {
-            x3 = corners[0].X;
-            y3 = 0f;
-        } else {
-            float m = tan(theta + ang_off);
-            x3 = (-m*corners[0].X + corners[0].Y) / (-m - 1/m);
-            y3 = -x2/m;
-        }
-        corners.Add(new Vec2(x2, y2));
-        corners.Add(new Vec2(x3, y3));
-        Polygon flange = new(corners, 0f, L_itfb);
+        // float ang_off = torad(10f);
+        // List<Vec2> corners = new List<Vec2>(4){
+        //     at2 + tocart(Bsz_itfb/2f + th_itfb, theta - PI_2 + ang_off),
+        //     at2 + tocart(Bsz_itfb/2f + th_itfb, theta + PI_2 - ang_off)
+        // };
+        // float x2;
+        // float y2;
+        // float x3;
+        // float y3;
+        // if (abs(theta - ang_off - PI_2) < 1e-5 ||
+        //         abs(theta - ang_off - 3*PI_2) < 1e-5) {
+        //     // m = vertical.
+        //     x2 = corners[1].X;
+        //     y2 = 0f;
+        // } else {
+        //     float m = tan(theta - ang_off);
+        //     // m * (x - corners[*].X) + corners[*].Y = -1/m x
+        //     x2 = (-m*corners[1].X + corners[1].Y) / (-m - 1/m);
+        //     y2 = -x2/m;
+        // }
+        // if (abs(theta + ang_off - PI_2) < 1e-5 ||
+        //         abs(theta + ang_off - 3*PI_2) < 1e-5) {
+        //     x3 = corners[0].X;
+        //     y3 = 0f;
+        // } else {
+        //     float m = tan(theta + ang_off);
+        //     x3 = (-m*corners[0].X + corners[0].Y) / (-m - 1/m);
+        //     y3 = -x2/m;
+        // }
+        // corners.Add(new Vec2(x2, y2));
+        // corners.Add(new Vec2(x3, y3));
+        // Polygon flange = new(corners, 0f, L_itfb);
 
-        return disc.voxels() + flange.voxels();
+        return disc.voxels();// + flange.voxels();
     }
 
     protected Voxels voxels_iface() {
@@ -380,13 +383,7 @@ public class Chamber {
             float theta = i * TWOPI / no_itfb;
             iface += voxels_iface_bolt(theta);
         }
-        Lattice flange = new();
-        flange.AddBeam(
-            Vec3.Zero, r_cc + th_iw + th_web + th_ow + 8f,
-            new Vec3(0f, 0f, L_itfb), r_cc + th_iw + th_web + th_ow + 8f,
-            false
-        );
-        iface += new Voxels(flange);
+        iface += new Pipe(ZERO3, L_itfb, r_itrb).voxels();
         return iface;
     }
 
@@ -399,6 +396,16 @@ public class Chamber {
         return iface;
     }
     public Voxels voxels() {
+        Geez.frame(new(), 2.5f);
+        Vec3 A = rejxy(tocart(5f, 0.1f), 1f);
+        Vec3 B = rejxy(tocart(5f, 0.5f), 5f);
+        Geez.point(A, 0.3f, COLOUR_RED);
+        Geez.point(B, 0.3f, COLOUR_BLUE);
+
+        TwistedPlane tp = new(A, B, false);
+        Geez.voxels(tp.voxels());
+
+        return new();
 
         // Order of construction is this:
         // - construct webs.
@@ -416,14 +423,14 @@ public class Chamber {
 
         Voxels iface_holes = voxels_iface_holes();
         Voxels iface = voxels_iface();
-        geez(iface);
+        int key_iface = Geez.voxels(iface);
         Voxels webs = voxels_webs();
-        geez(webs);
+        int key_webs = Geez.voxels(webs);
 
         Voxels inner_enclosure = voxels_interior();
         inner_enclosure.TripleOffset(-0.01f); // smooth.
 
-        geez(inner_enclosure);
+        Geez.voxels(inner_enclosure);
 
         Voxels outer_enclosure = inner_enclosure.voxOffset(th_iw + th_web);
 
@@ -433,7 +440,8 @@ public class Chamber {
         // Add outer wall.
         vox = outer_enclosure.voxOffset(th_ow);
 
-        geez(vox, pop: 1);
+        Geez.voxels(vox);
+        Geez.pop(1, ignore: 1);
 
         // Now: vox = outer filled, so do some operations.
         webs.BoolIntersect(vox);
@@ -442,13 +450,16 @@ public class Chamber {
         // Make: vox = outer walls.
         vox.BoolSubtract(outer_enclosure);
 
-        geez(vox, pop: 1);
+        Geez.voxels(vox);
+        Geez.pop(1, ignore: 1);
 
         // Add interface and fillet this now complete outer surface.
         vox.BoolAdd(iface);
         vox.Fillet(3f);
 
-        geez(vox, pop: 1);
+        Geez.voxels(vox);
+        Geez.pop(1, ignore: 1);
+        Geez.remove(key_iface);
 
         // Add inner walls and combine all.
         vox.BoolAdd(inner_enclosure.voxOffset(th_iw));
@@ -460,7 +471,10 @@ public class Chamber {
         // Remove holes.
         vox.BoolSubtract(iface_holes);
 
-        geez(vox, pop: 3);
+
+        Geez.voxels(vox);
+        Geez.pop(1, ignore: 1);
+        Geez.remove(key_webs);
 
         // Clip axial excess.
         BBox3 bounds = vox.oCalculateBoundingBox();
@@ -468,7 +482,8 @@ public class Chamber {
         bounds.vecMax.Z = L_part;
         vox.Trim(bounds);
 
-        geez(vox, pop: 1);
+        Geez.voxels(vox);
+        Geez.pop(1, ignore: 1);
 
         return vox;
     }
@@ -479,7 +494,7 @@ public class Chamber {
         PicoGK.Library.Log("whas good");
 
         Chamber chamber = new Chamber{
-            r_itrb = 72f,
+            r_itrb = 67f,
             L_itfb = 5f,
             Bsz_itfb = 6f,
             th_itfb = 4.5f,
@@ -502,307 +517,297 @@ public class Chamber {
             wi_web = 1.5f,
         };
         chamber.check_realisable();
-        chamber.sectionview = true;
+        chamber.sectionview = false;
 
         Voxels vox = chamber.voxels();
         PicoGK.Library.Log("Baby made.");
 
-        string path = PicoGK.Utils.strProjectRootFolder();
-        path = Path.Combine(path, "exports/chamber.stl");
+        string path = Path.Combine(PATH_ROOT, "exports/chamber.stl");
         Leap71.ShapeKernel.Sh.ExportVoxelsToSTLFile(vox, path);
 
         PicoGK.Library.Log("Don.");
     }
-
-
-    protected List<Voxels> _viewed = new();
-    protected void geez(in Voxels vox, int pop=0) {
-        // Cross section if requested.
-        Voxels avox;
-        if (sectionview) {
-            BBox3 bounds = vox.oCalculateBoundingBox();
-            bounds.vecMin.X = 0f;
-            // dont trim the original.
-            Voxels box = new(PicoGK.Utils.mshCreateCube(bounds));
-            avox = vox.voxBoolIntersect(box);
-        } else avox = vox;
-        Leap71.ShapeKernel.Sh.PreviewVoxels(
-            avox,
-            new PicoGK.ColorFloat("#501f14"),
-            fTransparency: 0.5f,
-            fMetallic: 0.4f,
-            fRoughness: 0.3f
-        );
-
-        while (pop --> 0) // so glad down-to operator made it into c#.
-            pop_geez();
-
-        _viewed.Add(avox);
-    }
-    protected void pop_geez() {
-        Voxels vox = _viewed[_viewed.Count - 1];
-        _viewed.RemoveAt(_viewed.Count - 1);
-        PicoGK.Library.oViewer().Remove(vox);
-    }
 }
 
 
+public class Web : SDF {
+    public List<Vec3> points { get; }
+    public float Ltheta { get; }
+    public float Lr { get; }
+    protected float zlo;
+    protected float zhi;
 
-public abstract class SDF : IBoundedImplicit {
-    public abstract float signed_dist(in Vec3 p);
-
-    public Voxels voxels() {
-        return new Voxels(this);
-    }
-
-
-    public float fSignedDistance(in Vec3 p) => signed_dist(p);
-    protected BBox3 bounds_fr;
-    protected bool has_bounds = false;
-    public BBox3 bounds => bounds_fr;
-    public BBox3 oBounds => bounds_fr;
-
-    protected void set_bounds(Vec3 min, Vec3 max) {
-        bounds_fr = new BBox3(min, max);
-        has_bounds = true;
-    }
-    protected void include_in_bounds(Vec3 p) {
-        if (!has_bounds) {
-            bounds_fr = new BBox3(p, p);
-        } else {
-            bounds_fr.Include(p);
-        }
-        has_bounds = true;
-    }
-}
-
-
-public class Pipe : SDF {
-    public int axis { get; }
-    public Vec3 centre { get; }
-    public float L { get; }
-    public float rlo { get; }
-    public float rhi { get; }
-    protected float axial_lo;
-    protected float axial_hi;
-    protected Vec2 centre_proj;
-
-    public Pipe(in Vec3 centre, float L, float rhi, int axis=2)
-        : this(centre, L, 0f, rhi, axis) {}
-    public Pipe(in Vec3 centre, float L, float rlo, float rhi, int axis=2) {
-        assertx(rhi >= rlo, "rlo={0}, rhi={1}", rlo, rhi);
-        assertx(rlo >= 0f, "rlo={0}, rhi={1}", rlo, rhi);
-        assertx(0 <= axis && axis <= 2, "axis={0}", axis);
-        this.axis = axis;
-        this.centre = centre;
-        this.L = L;
-        this.rlo = rlo;
-        this.rhi = rhi;
-        Vec3 pmin = centre - rhi*ONE3;
-        Vec3 pmax = centre + rhi*ONE3;
-        pmin[axis] = centre[axis] + min(0f, L);
-        pmax[axis] = centre[axis] + max(0f, L);
-
-        axial_lo = pmin[axis];
-        axial_hi = pmax[axis];
-        centre_proj = projection(centre, axis);
-        set_bounds(pmin, pmax);
-    }
-
-    public override float signed_dist(in Vec3 p) {
-        float r = mag(projection(p, axis) - centre_proj);
-
-        float dist_radial = max(rlo - r, r - rhi);
-
-        float dist_axial = max(axial_lo - p[axis], p[axis] - axial_hi);
-
-        float dist;
-        if (dist_radial <= 0f || dist_axial <= 0f) {
-            dist = max(dist_radial, dist_axial);
-        } else {
-            dist = hypot(dist_radial, dist_axial);
-        }
-        return dist;
-    }
-
-    public Pipe filled() {
-        if (rlo == 0f)
-            return this;
-        return new Pipe(centre, L, rhi, axis);
-    }
-    public Pipe hole() {
-        return new Pipe(centre, L, rlo, axis);
-    }
-}
-
-
-public class Polygon : SDF {
-    public int axis { get; }
-    public List<Vec2> points { get; }
-    public float axial_lo { get; }
-    public float axial_hi { get; }
-
-    public Polygon(in List<Vec2> points, float axial_lo, float axial_hi,
-            int axis=2) {
-        assert(is_simple_polygon(points));
-        assertx(points.Count >= 3, "length={0}", points.Count);
-        assertx(axial_hi >= axial_lo, "lo={0}, hi={1}", axial_lo, axial_hi);
-        this.axis = axis;
+    public Web(in List<Vec3> points, float Ltheta, float Lr) {
+        assert(points.Count >= 2, $"numel={points.Count}");
         this.points = points;
-        this.axial_lo = axial_lo;
-        this.axial_hi = axial_hi;
+        this.Ltheta = Ltheta;
+        this.Lr = Lr;
+
+        float prevz = -INF;
         for (int i=0; i<points.Count; ++i) {
-            float axial = ((i % 2) == 0) ? axial_lo : axial_hi;
-            Vec3 p = rejection(points[i], axis, axial);
-            include_in_bounds(p);
+            float z = points[i].Z;
+            assert(z > prevz, $"prevz={prevz}, z={z}");
+            prevz = z;
+
+            float r = magxy(points[i]);
+            float theta = argxy(points[i]);
+            float rmin = r - Lr/2f;
+            float rmax = r + Lr/2f;
+            float thetamin = theta - Ltheta/2f;
+            float thetamax = theta + Ltheta/2f;
+            Vec2 corner0 = tocart(rmin, thetamin);
+            Vec2 corner1 = tocart(rmin, thetamax);
+            Vec2 corner2 = tocart(rmax, thetamin);
+            Vec2 corner3 = tocart(rmax, thetamax);
+            List<Vec3> ps = [
+                rejxy(corner0, z),
+                rejxy(corner1, z),
+                rejxy(corner2, z),
+                rejxy(corner3, z)
+            ];
+            Leap71.ShapeKernel.Sh.PreviewPointCloud(ps, 0.02f, COLOUR_RED);
+            Vec2 pmin = min(corner0, corner1, corner2, corner3);
+            Vec2 pmax = max(corner0, corner1, corner2, corner3);
+            include_in_bounds(rejxy(pmin, z));
+            include_in_bounds(rejxy(pmax, z));
         }
+        this.zlo = points[0].Z;
+        this.zhi = points[^1].Z;
     }
 
     public override float signed_dist(in Vec3 p) {
-        Vec2 p_proj = projection(p, axis);
-
-        int N = points.Count;
-        int winding = 0;
-
-        float dist_proj = INF;
-        for (int i=0; i<N; ++i) {
-            Vec2 a = points[i];
-            Vec2 b = points[(i + 1 == N) ? 0 : i + 1];
-
-            Vec2 ab = b - a;
-            Vec2 ap = p_proj - a;
-
-            if (a.Y <= p_proj.Y) {
-                if (b.Y > p_proj.Y && cross(ab, ap) > 0)
-                    winding += 1;
-            } else {
-                if (b.Y <= p_proj.Y && cross(ab, ap) < 0)
-                    winding -= 1;
-            }
-
-            float t = dot(ap, ab) / dot(ab, ab);
-            t = clamp(t, 0f, 1f); // clamp to segment
-            Vec2 closest = a + t*ab;
-
-            float d = mag(p_proj - closest);
-            dist_proj = min(dist_proj, d);
-        }
-
-        if (winding != 0)
-            dist_proj = -dist_proj;
-
-        float dist_axial = max(axial_lo - p[axis], p[axis] - axial_hi);
-
-        float dist;
-        if (dist_proj <= 0f || dist_axial <= 0f) {
-            dist = max(dist_proj, dist_axial);
-        } else {
-            dist = hypot(dist_proj, dist_axial);
-        }
-        return dist;
+        return 1f;
     }
 
 
-
-    protected static bool is_simple_polygon(in List<Vec2> points) {
-        int N = points.Count;
-        if (N < 3) return false;
-
-        for (int i=0; i<N; ++i) {
-            int i_1 = (i + 1 == N) ? 0 : i + 1;
-            Vec2 a0 = points[i];
-            Vec2 a1 = points[i_1];
-
-            for (int j=i + 1; j<N; ++j) {
-                int j_1 = (j + 1 == N) ? 0 : j + 1;
-                Vec2 b0 = points[j];
-                Vec2 b1 = points[j_1];
-
-                // Skip adjacent edges.
-                if (i == j || i_1 == j || j_1 == i)
-                    continue;
-
-                float o1 = cross(a1 - a0, b0 - a0);
-                float o2 = cross(a1 - a0, b1 - a0);
-                float o3 = cross(b1 - b0, a0 - b0);
-                float o4 = cross(b1 - b0, a1 - b0);
-                if ((o1*o2 < 0) && (o3*o4 < 0))
-                    return false;
-            }
-        }
-        return true;
+    protected float sdf_plane(Vec3 c, Vec3 n, Vec3 p) {
+        return dot(p - c, normalise(n));
     }
 }
 
 
 
-// public class Web : SDF {
-//     public List<Vec3> points { get; }
-//     public float Ltheta { get; }
-//     public float Lr { get; }
-//     protected float zlo;
-//     protected float zhi;
 
-//     public Web(in List<Vec3> points, float Ltheta, float Lr) {
-//         assertx(points.Count >= 2, "length={0}", points.Count);
-//         this.points = points;
-//         this.Ltheta = Ltheta;
-//         this.Lr = Lr;
+public class TwistedPlane : SDF {
+    protected float Dtheta { get; }
+    protected float Dz { get; }
+    protected float bracket_lo { get; }
+    protected float bracket_hi { get; }
+    protected bool positive { get; }
+    protected float slope { get; } // slope of surface, as dy/dz, at x=1.
+    protected float slope2 { get; } // slope^2.
+    protected float slope3 { get; } // slope^3.
+    protected float slope4 { get; } // slope^4.
 
-//         zlo = +INF;
-//         zhi = -INF;
-//         float prevz = -INF;
-//         for (int i=0; i<points.Count; ++i) {
-//             float z = points[i].Z;
-//             assertx(z > prevz, "prevz={0}, z={1}", prevz, z);
-//             prevz = z;
-//             zlo = min(zlo, z);
-//             zhi = max(zhi, z);
+    static protected int MAX_ITERS => 12;
+    static protected float TOL => 1e-3f;
 
-//             Vec2 p = projxy(points[i]);
-//             float r = mag(p);
-//             float theta = arg(p);
-//             float rmin = r - Lr/2f;
-//             float rmax = r + Lr/2f;
-//             float thetamin = theta - Ltheta/2f;
-//             float thetamax = theta - Ltheta/2f;
-//             Vec2 corner0 = tocart(rmin, thetamin);
-//             Vec2 corner1 = tocart(rmin, thetamax);
-//             Vec2 corner2 = tocart(rmax, thetamin);
-//             Vec2 corner3 = tocart(rmax, thetamax);
-//             Vec2 pmin = min(corner0, corner1, corner2, corner3);
-//             Vec2 pmax = max(corner0, corner1, corner2, corner3);
-//             include_in_bounds(rejxy(pmin, z));
-//             include_in_bounds(rejxy(pmax, z));
-//         }
-//     }
+    static protected float radius = 10f;
 
-//     public override float signed_dist(in Vec3 p) {
-//         int N = points.Count;
+    public TwistedPlane(in Vec3 a, in Vec3 b, bool positive)
+            : this(argxy(a), argxy(b), a.Z, b.Z, positive) {
+        float a_r = magxy(a);
+        float b_r = magxy(b);
+        // Check they have equal radius.
+        assert(abs(a_r - b_r) < 1e-5f, $"a_r={a_r}, b_r={b_r}");
+        assert(abs(a_r / b_r) < 1f + 1e-5f, $"a_r={a_r}, b_r={b_r}");
+    }
+    public TwistedPlane(float theta0, float theta1, float z0, float z1,
+            bool positive) {
+        // Check this isnt a horizontal plane.
+        assert(abs(z1 - z0) > 1e-5f, $"z0={z0}, z1={z1}");
+        this.Dtheta = theta0;
+        this.Dz = z0;
+        this.positive = positive;
+        // Recall:
+        //  surf(t, s) = (t, s*t*slope, s)
+        // We know that (1,0,0) lies on the surface (trivial), need to find
+        // `slope` s.t. (cos(theta1 - theta0), sin(theta1 - theta0), z1 - z0)
+        // lies on the surface.
+        // => t = cos(theta1 - theta0)
+        // => s = z1 - z0
+        // => slope = sin(theta1 - theta0) / t / s
+        //  slope = tan(theta1 - theta0) / (z1 - z0)
+        this.slope = tan(theta1 - theta0) / (z1 - z0);
+        assert(this.slope < 2f, "too unstable at extreme pringle shapes");
+        this.slope2 = this.slope*this.slope;
+        this.slope3 = this.slope2*this.slope;
+        this.slope4 = this.slope3*this.slope;
 
-//         float dist_proj = INF;
-//         float angle = 0f;
-//         for (int i=1; i<N; ++i) {
-//             Vec3 a = points[i - 1];
-//             Vec3 b = points[i];
+        include_in_bounds(new(-radius, -radius, -radius));
+        include_in_bounds(new(radius, radius, radius));
 
-//             Vec3 ab = b - a;
-//             Vec3 ap = p - a;
+        this.bracket_lo = 2f*bounds.vecMin.Z;
+        this.bracket_hi = 2f*bounds.vecMax.Z;
+    }
 
-//             float t = dot(ap, ab) / dot(ab, ab);
-//             t = clamp(t, 0f, 1f); // clamp to segment
-//             Vec3 closest = a + t*ab;
+    protected Vec3 closest(in Vec3 p) {
+        // The surface is:
+        Vec3 surf(float s, float t) => new(t, s*t*slope, s);
 
-//             float d = mag(p - closest);
-//             if (d < dist_proj) {
-//                 dist_proj = d;
-//                 angle = acos(dot(ab, p - closest) / mag(ab) / d);
-//             }
-//         }
+        // Trying to find the closest point (on the surface) to p:
+        //  P = surf(s, t) s.t. mag(P - p) is minimised over s,t.
+        // Equivalent to minimising:
+        //  f(s,t) = dot(surf(s, t) - p, surf(s, t) - p)
+        //  f(s,t) = (t - p.X)^2 + (s*t*slope - p.Y)^2 + (s - p.Z)^2
+        // This is a multivariable problem (for now....).
+        // The minimum will occur at zero gradient:
+        //  df/ds = 2*t*slope*(s*t*slope - p.Y) + 2*(s - p.Z)
+        //  df/dt = 2*s*slope*(s*t*slope - p.Y) + 2*(t - p.X)
+        //  df/ds = df/dt = 0 @ minimum.
+        // f_s=0:
+        //  0 = 2*t*slope*(s*t*slope - p.Y) + 2*(s - p.Z)
+        //  0 = s*t^2*slope^2 - p.Y*t*slope + s - p.Z
+        //  s*(t^2*slope^2 + 1) = t*slope*p.Y + p.Z
+        // f_t=0:
+        //  0 = 2*s*slope*(s*t*slope - p.Y) + 2*(t - p.X)
+        //  0 = s^2*t*slope^2 - p.Y*s*slope + t - p.X
+        //  t*(s^2*slope^2 + 1) = s*slope*p.Y + p.X
+        // Either of these can be used to reduce the problem to a single
+        // variable. We'll eliminate t.
+        //  t*(s^2*slope^2 + 1) = s*slope*p.Y + p.X
+        // => t = (s*slope*p.Y + p.X) / (s^2*slope^2 + 1)
+        // With a lot of pain (aka wolfram alpha queries/sympy scripts) this
+        // reduces grad(f)=0 to:
+        //  0 = eff(s)
+        //  eff(s) = s^5 * (slope^4)
+        //         + s^4 * (-p.Z*slope^4)
+        //         + s^3 * (2*slope^2)
+        //         + s^2 * (p.X*p.Y*slope^3 - 2*p.Z*slope^2)
+        //         + s   * (p.X^2*slope^2 - p.Y^2*slope^2 + 1)
+        //         + 1   * (-p.X*p.Y*slope - p.Z)
+        //  eff(s) = s^5 * A
+        //         + s^4 * B
+        //         + s^3 * C
+        //         + s^2 * D
+        //         + s   * E
+        //         + 1   * F
+        // ayyy a simple polynomial root. fifth order so no closed form but no
+        // worries.
+        float A = slope4;
+        float B = -p.Z*slope4;
+        float C = 2f*slope2;
+        float D = p.X*p.Y*slope3 - 2f*p.Z*slope2;
+        float E = p.X*p.X*slope2 - p.Y*p.Y*slope2 + 1f;
+        float F = -p.X*p.Y*slope - p.Z;
 
-//         float dist_z = max(zlo - p.Z, p.Z - zhi);
-//         float dist_along = dist_z *
-//         float dist = hypot(dist_proj, dist_along);
-//         return dist;
-//     }
-// }
+        float eff(float s)
+            => ((((A*s + B)*s + C)*s + D)*s + E)*s + F;
+        float eff_s(float s)
+            => (((5f*A*s + 4f*B)*s + 3f*C)*s + 2f*D)*s + E;
+        float eff_ss(float s)
+            => ((20f*A*s + 12f*B)*s + 6f*C)*s + 2f*D;
+
+        // Initial guess, which is close if slope is small (common). Otherwise
+        // its pretty average but its also very difficult to get an easy accurate
+        // guess.
+        float s = p.Z;
+        float f = eff(s);
+
+        // Bounds for bracketed search. These will be enlarged until a root is
+        // found.
+        float lo = bracket_lo;
+        float hi = bracket_hi;
+
+        // Try gradient descent initially, but its not always stable.
+        for (int _=0; _<MAX_ITERS; ++_) {
+            // Check solution.
+            if (abs(f) < TOL)
+                goto ROOTED;
+            // Halley's method (second order gradient descent).
+            float f_s = eff_s(s);
+            float f_ss = eff_ss(s);
+            float ds = -f*f_s / (f_s*f_s - 0.5f*f*f_ss);
+            // Check stagnation (and dont assume its a solution :().
+            if (s + ds == s) {
+                lo = s - 0.1f;
+                hi = s + 0.1f;
+                goto BRACKETED;
+            }
+            // Descend the gradient.
+            s += ds;
+            f = eff(s);
+            // Check instability (roughly).
+            if (s < bracket_lo || s > bracket_hi)
+                goto BRACKETED;
+        }
+        lo = s - 2f;
+        hi = s + 2f;
+
+      BRACKETED:;
+        // FIIIINE lets do bisection.
+
+        // Expand bounds until a root is bracketed.
+        float flo = eff(lo);
+        while (flo * eff(hi) > 0f) {
+            // Double search range if no sign change.
+            float mid = 0.5f*(lo + hi);
+            assert((mid != lo) && (mid != hi));
+            lo = mid + 2f*(lo - mid);
+            hi = mid + 2f*(hi - mid);
+            assert((lo != -INF) && (hi != +INF));
+            flo = eff(lo);
+        }
+
+        assert(flo * eff(hi) <= 0f, "cooked");
+        for (;;) {
+            float mid = 0.5f*(lo + hi);
+            float fmid = eff(mid);
+            // Check solution (or precision limit).
+            if (abs(fmid) < TOL || (mid == lo) || (mid == hi)) {
+                s = mid;
+                f = fmid;
+                goto ROOTED;
+            }
+            // Iterate brackets.
+            if (flo*fmid < 0f) {
+                hi = mid;
+            } else {
+                lo = mid;
+                flo = fmid;
+            }
+        }
+
+      ROOTED:;
+        // Relax a bit in case f32 precision shit on our balls.
+        assert(abs(f) < 10*TOL);
+
+        // Find the corresponding t value.
+        float t = (s*slope*p.Y + p.X) / (s*s*slope2 + 1f);
+
+        // Return the point on the surface which we have found to be the closest.
+        return surf(s, t);
+    }
+
+    public override float signed_dist(in Vec3 p) {
+        Vec3 P = rotxy(p, Dtheta) - uZ3*Dz;
+        Vec3 C = closest(P);
+        float dist = mag(P - C);
+        if ((P.Y > C.Y) == positive) // solid on either pos or neg side.
+           dist = -dist;
+
+        dist = max(dist, mag(p) - radius);
+        return dist;
+    }
+}
+
+
+public class RunningStats {
+    public int N = 0;
+    public float mean = 0f;
+    public float maximum = 0f;
+    public double stddev => sqrt((N > 1) ? M2/(N - 1) : 0f);
+
+    private float M2 = 0f; // sum of squared diffs
+
+    public RunningStats() {}
+
+    public void add(float x) {
+        N += 1;
+        maximum = max(maximum, x);
+        float delta = x - mean;
+        mean += delta / N;
+        float delta2 = x - mean;
+        M2 += delta * delta2;
+    }
+}

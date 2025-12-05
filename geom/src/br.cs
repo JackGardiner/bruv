@@ -5,38 +5,71 @@ using Colour = PicoGK.ColorFloat;
 
 public static class Br {
 
-    public static void assert(bool expression) {
+    public class AssertionFailed : Exception {
+        public AssertionFailed(string message) : base(message) {}
+    }
+    public static void assert(bool expression, string? extra=null) {
         if (!expression) {
-            var stackFrame = new System.Diagnostics.StackTrace(true).GetFrame(1);
-            string file = stackFrame?.GetFileName() ?? "unknown file";
-            int line = stackFrame?.GetFileLineNumber() ?? 0;
+            var caller = new System.Diagnostics.StackTrace(true).GetFrame(1);
+            int line = caller?.GetFileLineNumber() ?? -1;
+            string? file = caller?.GetFileName();
+            if (file != null)
+                file = Path.GetRelativePath(PATH_ROOT, file);
+            file = file ?? "<unknown file?>";
 
-            throw new InvalidOperationException($"{file}:{line}");
+            string msg = $"file: {file}, line: {line}";
+            if (extra != null)
+                msg += $", extra: {extra}";
+            throw new AssertionFailed(msg);
         }
     }
 
-    public static void assertx(bool expression, string message,
-            params object[] args) {
-        if (!expression) {
-            var stackFrame = new System.Diagnostics.StackTrace(true).GetFrame(1);
-            string file = stackFrame?.GetFileName() ?? "unknown file";
-            int line = stackFrame?.GetFileLineNumber() ?? 0;
+    public static string PATH_ROOT
+            => Directory.GetParent(AppContext.BaseDirectory)
+                !.Parent
+                !.Parent
+                !.Parent
+                !.FullName;
 
-            string extra = string.Format(message, args);
-            throw new InvalidOperationException($"{file}:{line} - {extra}");
-        }
-    }
+    public static Colour COLOUR_RED => new("#FF0000");
+    public static Colour COLOUR_GREEN => new("#00FF00");
+    public static Colour COLOUR_BLUE => new("#0000FF");
+    public static Colour COLOUR_CYAN => new("#00FFFF");
+    public static Colour COLOUR_PINK => new("#FF00FF");
+    public static Colour COLOUR_YELLOW => new("#FFFF00");
 
-    public static float INF => float.PositiveInfinity;
-    public static float NAN => float.NaN;
+    public const float INF = float.PositiveInfinity;
+    public const float NAN = float.NaN;
 
-    public static float PI => MathF.PI;
-    public static float TWOPI => 2f*MathF.PI;
-    public static float PI_2 => MathF.PI/2f;
+    public static bool isinf(float a) => float.IsInfinity(a);
+    public static bool isinf(Vec2 a) => isinf(a.X) || isinf(a.Y);
+    public static bool isinf(Vec3 a)
+            => isinf(a.X) || isinf(a.Y) || isinf(a.Z);
+    public static bool noninf(float a) => !isinf(a);
+    public static bool noninf(Vec2 a) => !isinf(a);
+    public static bool noninf(Vec3 a) => !isinf(a);
 
-    public static int AXISX => 0;
-    public static int AXISY => 1;
-    public static int AXISZ => 2;
+    public static bool isnan(float a) => float.IsNaN(a);
+    public static bool isnan(Vec2 a) => isnan(a.X) || isnan(a.Y);
+    public static bool isnan(Vec3 a)
+            => isnan(a.X) || isnan(a.Y) || isnan(a.Z);
+    public static bool nonnan(float a) => !isnan(a);
+    public static bool nonnan(Vec2 a) => !isnan(a);
+    public static bool nonnan(Vec3 a) => !isnan(a);
+
+    public static bool isgood(float a) => !isnan(a) && !isinf(a);
+    public static bool isgood(Vec2 a) => !isnan(a) && !isinf(a);
+    public static bool isgood(Vec3 a) => !isnan(a) && !isinf(a);
+
+    public const float PI = MathF.PI;
+    public const float TWOPI = 2f*PI;
+    public const float PI_2 = PI/2f;
+
+    public const int AXISX = 0;
+    public const int AXISY = 1;
+    public const int AXISZ = 2;
+    public static bool isaxis(int axis)
+            => (axis == AXISX) || (axis == AXISY) || (axis == AXISZ);
 
     public static Vec2 ZERO2 => Vec2.Zero;
     public static Vec3 ZERO3 => Vec3.Zero;
@@ -49,29 +82,76 @@ public static class Br {
     public static Vec3 uY3 => Vec3.UnitY;
     public static Vec3 uZ3 => Vec3.UnitZ;
 
-    public static float abs(float a) => (a < 0.0) ? -a : a;
+    public static int abs(int a) => (a < 0) ? -a : a;
+    public static int min(int a, int b) => (b < a) ? b : a;
+    public static int max(int a, int b) => (b > a) ? b : a;
+    public static int clamp(int a, int lo, int hi)
+            => (a > hi) ? hi : (a < lo) ? lo : a;
 
-    public static float min(params float[] v) {
-        assertx(v.Length > 0, "length={0}", v.Length);
-        float m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i] < m)
-                m = v[i];
-        }
-        return m;
-    }
-    public static float max(params float[] v) {
-        assertx(v.Length > 0, "length={0}", v.Length);
-        float m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i] > m)
-                m = v[i];
-        }
-        return m;
-    }
-
+    public static float abs(float a) => (a < 0f) ? -a : a;
+    public static float min(float a, float b) => ((b < a) || isnan(a)) ? b : a;
+    public static float max(float a, float b) => ((b > a) || isnan(a)) ? b : a;
     public static float clamp(float a, float lo, float hi)
             => (a > hi) ? hi : (a < lo) ? lo : a;
+
+    public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
+    public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
+
+    public static Vec3 min(Vec3 a, Vec3 b)
+        => new(min(a.X, b.X), min(a.Y, b.Y), min(a.Z, b.Z));
+    public static Vec3 max(Vec3 a, Vec3 b)
+        => new(max(a.X, b.X), max(a.Y, b.Y), max(a.Z, b.Z));
+
+    public static float min(float a, params float[] bs) {
+        float m = a;
+        foreach (float b in bs)
+            m = min(m, b);
+        return m;
+    }
+    public static Vec2 min(Vec2 a, params Vec2[] bs) {
+        Vec2 m = a;
+        foreach (Vec2 b in bs)
+            m = min(m, b);
+        return m;
+    }
+    public static Vec3 min(Vec3 a, params Vec3[] bs) {
+        Vec3 m = a;
+        foreach (Vec3 b in bs)
+            m = min(m, b);
+        return m;
+    }
+
+    public static float max(float a, params float[] bs) {
+        float m = a;
+        foreach (float b in bs)
+            m = max(m, b);
+        return m;
+    }
+    public static Vec2 max(Vec2 a, params Vec2[] bs) {
+        Vec2 m = a;
+        foreach (Vec2 b in bs)
+            m = max(m, b);
+        return m;
+    }
+    public static Vec3 max(Vec3 a, params Vec3[] bs) {
+        Vec3 m = a;
+        foreach (Vec3 b in bs)
+            m = max(m, b);
+        return m;
+    }
+
+    public static float sum(params float[] vs) {
+        float m = 0f;
+        foreach (float v in vs)
+            m += isnan(v) ? 0f : v;
+        return m;
+    }
+    public static float prod(params float[] vs) {
+        float m = 1f;
+        foreach (float v in vs)
+            m *= isnan(v) ? 1f : v;
+        return m;
+    }
 
     public static float pow(float a, float b) => MathF.Pow(a, b);
     public static float exp(float a) => MathF.Exp(a);
@@ -101,29 +181,55 @@ public static class Br {
     public static float mag(Vec3 a) => a.Length();
     public static float arg(Vec2 a) => atan2(a.Y, a.X);
 
-    public static Vec2 tocart(float r, float theta)
-            => new Vec2(r*cos(theta), r*sin(theta));
+    public static float magxy(Vec3 a) => hypot(a.X, a.Y);
+    public static float magxz(Vec3 a) => hypot(a.X, a.Z);
+    public static float magyz(Vec3 a) => hypot(a.Y, a.Z);
 
-    public static Vec2 projxy(Vec3 a) => new Vec2(a.X, a.Y);
-    public static Vec2 projxz(Vec3 a) => new Vec2(a.X, a.Z);
-    public static Vec2 projyz(Vec3 a) => new Vec2(a.Y, a.Z);
+    public static float argxy(Vec3 a) => atan2(a.Y, a.X); // angle from +x.
+    public static float argxz(Vec3 a) => atan2(a.Z, a.X); // angle from +x.
+    public static float argyz(Vec3 a) => atan2(a.Z, a.Y); // angle from +y.
+
+    public static Vec2 tocart(float r, float theta)
+            => new(r*cos(theta), r*sin(theta));
+
+    public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
+    public static Vec2 projxz(Vec3 a) => new(a.X, a.Z);
+    public static Vec2 projyz(Vec3 a) => new(a.Y, a.Z);
     public static Vec2 projection(Vec3 a, int axis)
         => axis switch
         {
-            0 => projyz(a),
-            1 => projxz(a),
-            2 => projxy(a),
+            AXISX => projyz(a),
+            AXISY => projxz(a),
+            AXISZ => projxy(a),
             _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
         };
-    public static Vec3 rejxy(Vec2 a, float b=0f) => new Vec3(a.X, a.Y, b);
-    public static Vec3 rejxz(Vec2 a, float b=0f) => new Vec3(a.X, b, a.Y);
-    public static Vec3 rejyz(Vec2 a, float b=0f) => new Vec3(b, a.X, a.Y);
+
+    public static Vec3 rejxy(Vec2 a, float b=0f) => new(a.X, a.Y, b);
+    public static Vec3 rejxz(Vec2 a, float b=0f) => new(a.X, b, a.Y);
+    public static Vec3 rejyz(Vec2 a, float b=0f) => new(b, a.X, a.Y);
     public static Vec3 rejection(Vec2 a, int axis, float b=0f)
         => axis switch
         {
-            0 => rejyz(a, b),
-            1 => rejxz(a, b),
-            2 => rejxy(a, b),
+            AXISX => rejyz(a, b),
+            AXISY => rejxz(a, b),
+            AXISZ => rejxy(a, b),
+            _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
+        };
+
+    public static Vec2 rot(Vec2 a, float b)
+            => new(a.X*cos(b) + a.Y*sin(b), a.X*-sin(b) + a.Y*cos(b));
+    public static Vec3 rotxy(Vec3 a, float b)
+            => rejxy(rot(projxy(a), b), a.Z);
+    public static Vec3 rotxz(Vec3 a, float b)
+            => rejxz(rot(projxz(a), b), a.Y);
+    public static Vec3 rotyz(Vec3 a, float b)
+            => rejyz(rot(projyz(a), b), a.X);
+    public static Vec3 rotation(Vec3 a, int axis, float b)
+        => axis switch
+        {
+            AXISX => rotyz(a, b),
+            AXISY => rotxz(a, b),
+            AXISZ => rotxy(a, b),
             _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
         };
 
@@ -133,65 +239,6 @@ public static class Br {
     public static float dot(Vec2 a, Vec2 b) => Vec2.Dot(a, b);
     public static float dot(Vec3 a, Vec3 b) => Vec3.Dot(a, b);
 
-    public static float cross(Vec2 a, Vec2 b) => a.X * b.Y - a.Y * b.X;
+    public static float cross(Vec2 a, Vec2 b) => a.X*b.Y - a.Y*b.X;
     public static Vec3 cross(Vec3 a, Vec3 b) => Vec3.Cross(a, b);
-
-
-    public static Vec2 min(params Vec2[] v) { // element-wise.
-        assertx(v.Length > 0, "length={0}", v.Length);
-        Vec2 m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i].X < m.X)
-                m.X = v[i].X;
-            if (v[i].Y < m.Y)
-                m.Y = v[i].Y;
-        }
-        return m;
-    }
-    public static Vec2 max(params Vec2[] v) { // element-wise.
-        assertx(v.Length > 0, "length={0}", v.Length);
-        Vec2 m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i].X > m.X)
-                m.X = v[i].X;
-            if (v[i].Y > m.Y)
-                m.Y = v[i].Y;
-        }
-        return m;
-    }
-
-    public static Vec3 min(params Vec3[] v) { // element-wise.
-        assertx(v.Length > 0, "length={0}", v.Length);
-        Vec3 m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i].X < m.X)
-                m.X = v[i].X;
-            if (v[i].Y < m.Y)
-                m.Y = v[i].Y;
-            if (v[i].Z < m.Z)
-                m.Z = v[i].Z;
-        }
-        return m;
-    }
-    public static Vec3 max(params Vec3[] v) { // element-wise.
-        assertx(v.Length > 0, "length={0}", v.Length);
-        Vec3 m = v[0];
-        for (int i=1; i<v.Length; ++i) {
-            if (v[i].X > m.X)
-                m.X = v[i].X;
-            if (v[i].Y > m.Y)
-                m.Y = v[i].Y;
-            if (v[i].Z > m.Z)
-                m.Z = v[i].Z;
-        }
-        return m;
-    }
-
-
-    public static Colour COLOUR_RED => new Colour("#FF0000");
-    public static Colour COLOUR_GREEN => new Colour("#00FF00");
-    public static Colour COLOUR_BLUE => new Colour("#0000FF");
-    public static Colour COLOUR_CYAN => new Colour("#00FFFF");
-    public static Colour COLOUR_PINK => new Colour("#FF00FF");
-    public static Colour COLOUR_YELLOW => new Colour("#FFFF00");
 }
