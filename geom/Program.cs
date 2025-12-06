@@ -1,12 +1,20 @@
 ﻿
-var voxel_size_mm = 0.1f;
+var voxel_size_mm = 0.7f;
 var task = Chamber.Task;
+bool sectioned = true; // only affects viewing.
+bool transparent = true; // also only affects viewing (whats the alternative?).
 
 
 // Task wrapper to configure some things and have nicer exception handling.
 void wrapped_task() {
     try {
-        PicoGK.Library.oViewer().SetBackgroundColor(new("#282B2E"));
+        // Configure some viewing options.
+        PicoGK.Library.oViewer().SetBackgroundColor(new("#202020"));
+        Geez.dflt_colour = new PicoGK.ColorFloat("#AB331A"); // copperish.
+        Geez.dflt_alpha = transparent ? 0.8f : 1f;
+        Geez.dflt_metallic = 0.35f;
+        Geez.dflt_roughness = 0.8f;
+        Geez.dflt_sectioned = sectioned;
 
         task();
 

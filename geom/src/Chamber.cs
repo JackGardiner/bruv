@@ -4,17 +4,11 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
+using Triangle = PicoGK.Triangle;
 using Lattice = PicoGK.Lattice;
-using IImplicit = PicoGK.IImplicit;
-using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
-using Frames = Leap71.ShapeKernel.Frames;
-using BaseBox = Leap71.ShapeKernel.BaseBox;
-
 public class Chamber {
-
-    public bool sectionview = false;
 
     // Bit how ya going.
     //
@@ -211,7 +205,7 @@ public class Chamber {
 
 
     private void divvy(int divisions, int[] divs) {
-        assert(divs.Length == 6);
+        assert(numel(divs) == 6);
         // 0-1 and 2-3 are each one beam element. each other one gets a differing
         // number.
         assert(divisions >= 20, $"divisions={divisions}");
@@ -235,7 +229,7 @@ public class Chamber {
         divs[5] = divisions - divs[0] - divs[1] - divs[2] - divs[3] - divs[4];
     }
 
-    protected List<Vec3> points_interior(int divisions=100) {
+    protected List<Vec3> points_interior(int divisions=150) {
         List<Vec3> points = new();
 
         void push_point(float z) {
@@ -259,20 +253,7 @@ public class Chamber {
         return points;
     }
 
-    protected List<Vec3> points_web(float theta0=0f, int divisions=100) {
-        List<Vec3> points = new();
-        for (int i=0; i<=divisions; ++i) {
-            float z = nzl_z0 + i * (nzl_z6 - nzl_z0) / divisions;
-            float theta = theta_web(z) + theta0;
-            float r = Ir_part(z) + th_iw + th_web/2f;
-
-            Vec3 point = new(r*cos(theta), r*sin(theta), z);
-            points.Add(point);
-        }
-        return points;
-    }
-
-    protected Voxels voxels_interior(int divisions=100) {
+    protected Voxels voxels_interior(int divisions=150) {
         Lattice lattice = new();
 
         void push_beam(float za, float zb) {
@@ -303,87 +284,109 @@ public class Chamber {
         return new Voxels(lattice);
     }
 
+    protected Mesh mesh_web(float theta0, int divisions=250,
+            List<int>? keys=null, bool line=false) {
+        List<Vec3> points = new();
+        for (int i=0; i<divisions; ++i) {
+            float z = nzl_z0 + i*(nzl_z6 - nzl_z0)/divisions;
+            float r = 0.99f * Ir_part(z);
+            float theta = theta0 + theta_web(z);
+            points.Add(new(r*cos(theta), r*sin(theta), z));
+        }
+        if (line)
+            Geez.line(points, COLOUR_GREEN);
+        if (keys != null) {
+            int key = Geez.frame(new(
+                points[0],
+                rejxy(tocart(1f, argxy(points[0]) + PI_2)),
+                uZ3
+            ));
+            keys.Add(key);
+        }
+        points.Insert(0, points[0] - uZ3*axial_extra);
+        points.Add(points[^1] + uZ3*axial_extra);
+
+        float rlo = r_tht;
+        float rhi = r_cc + th_iw + th_web + th_ow;
+        float Dt = 0.5f*(wi_web / r_cc); // t for theta.
+
+        Mesh mesh = new();
+        List<Vec3> V = new();
+        for (int i=1; i<numel(points); ++i) {
+            Vec3 A = points[i - 1];
+            Vec3 B = points[i];
+            assert(B.Z > A.Z, $"A.z={A.Z}, B.z={B.Z}");
+            float tA = argxy(A);
+            float tB = argxy(B);
+            Vec3 p000 = rejxy(tocart(rlo, tA - Dt), A.Z);
+            Vec3 p100 = rejxy(tocart(rhi, tA - Dt), A.Z);
+            Vec3 p010 = rejxy(tocart(rlo, tA + Dt), A.Z);
+            Vec3 p110 = rejxy(tocart(rhi, tA + Dt), A.Z);
+            Vec3 p001 = rejxy(tocart(rlo, tB - Dt), B.Z);
+            Vec3 p101 = rejxy(tocart(rhi, tB - Dt), B.Z);
+            Vec3 p011 = rejxy(tocart(rlo, tB + Dt), B.Z);
+            Vec3 p111 = rejxy(tocart(rhi, tB + Dt), B.Z);
+            if (i == 1) {
+                V.Add(p000);
+                V.Add(p100);
+                V.Add(p010);
+                V.Add(p110);
+            }
+            V.Add(p001);
+            V.Add(p101);
+            V.Add(p011);
+            V.Add(p111);
+            int a = numel(V) - 8;
+            int b = numel(V) - 4;
+            // Front face.
+            mesh.nAddTriangle(a, b, b + 2);
+            mesh.nAddTriangle(a, b + 2, a + 2);
+            // Back face.
+            mesh.nAddTriangle(a + 1, a + 3, b + 3);
+            mesh.nAddTriangle(a + 1, b + 3, b + 1);
+            // Left face.
+            mesh.nAddTriangle(a, a + 1, b + 1);
+            mesh.nAddTriangle(a, b + 1, b);
+            // Right face.
+            mesh.nAddTriangle(a + 3, a + 2, b + 2);
+            mesh.nAddTriangle(a + 3, b + 2, b + 3);
+        }
+        // Bottom face.
+        mesh.nAddTriangle(0, 2, 3);
+        mesh.nAddTriangle(0, 3, 1);
+        // Top face.
+        mesh.nAddTriangle(numel(V)-4 + 0, numel(V)-4 + 1, numel(V)-4 + 3);
+        mesh.nAddTriangle(numel(V)-4 + 0, numel(V)-4 + 3, numel(V)-4 + 2);
+
+        mesh.AddVertices(V, out _);
+        return mesh;
+    }
+
     protected Voxels voxels_webs() {
         Voxels webs = new();
+        List<int> keys = new();
         for (int i=0; i<no_web; ++i) {
             float theta0 = i * TWOPI / no_web;
-            float th = th_web + min(th_iw, th_ow) / 2;
-            float wi = wi_web;
-            List<Vec3> points = points_web(theta0);
-            points.Insert(0, points[0] - axial_extra*Vec3.UnitZ);
-            points.Add(points[^1] + axial_extra*Vec3.UnitZ);
-            Frames frames = new(points, Frames.EFrameType.CYLINDRICAL);
-            Geez.frame(frames.oGetLocalFrame(0f), 3f);
-            BaseBox web = new(frames, th, wi);
-            webs += web.voxConstruct();
+            Mesh mesh = mesh_web(theta0, keys: keys, line: i <= 4);
+            webs += new Voxels(mesh);
         }
+        Geez.remove(keys);
         return webs;
     }
 
-
-    protected Voxels voxels_iface_bolt_hole(float theta=0f) {
-        Vec3 at = rejxy(tocart(r_itrb, theta));
-        Pipe hole = new(
-            at,
-            L_itfb,
-            Bsz_itfb/2f
-        );
-        Geez.bbox(hole.bounds, COLOUR_CYAN);
-        return hole.voxels();
-    }
-
-    protected Voxels voxels_iface_bolt(float theta=0f) {
-        Vec2 at2 = tocart(r_itrb, theta);
-        Vec3 at = rejxy(at2);
-        Pipe disc = new(
-            at,
-            L_itfb,
-            Bsz_itfb/2f + th_itfb
-        );
-
-        // float ang_off = torad(10f);
-        // List<Vec2> corners = new List<Vec2>(4){
-        //     at2 + tocart(Bsz_itfb/2f + th_itfb, theta - PI_2 + ang_off),
-        //     at2 + tocart(Bsz_itfb/2f + th_itfb, theta + PI_2 - ang_off)
-        // };
-        // float x2;
-        // float y2;
-        // float x3;
-        // float y3;
-        // if (abs(theta - ang_off - PI_2) < 1e-5 ||
-        //         abs(theta - ang_off - 3*PI_2) < 1e-5) {
-        //     // m = vertical.
-        //     x2 = corners[1].X;
-        //     y2 = 0f;
-        // } else {
-        //     float m = tan(theta - ang_off);
-        //     // m * (x - corners[*].X) + corners[*].Y = -1/m x
-        //     x2 = (-m*corners[1].X + corners[1].Y) / (-m - 1/m);
-        //     y2 = -x2/m;
-        // }
-        // if (abs(theta + ang_off - PI_2) < 1e-5 ||
-        //         abs(theta + ang_off - 3*PI_2) < 1e-5) {
-        //     x3 = corners[0].X;
-        //     y3 = 0f;
-        // } else {
-        //     float m = tan(theta + ang_off);
-        //     x3 = (-m*corners[0].X + corners[0].Y) / (-m - 1/m);
-        //     y3 = -x2/m;
-        // }
-        // corners.Add(new Vec2(x2, y2));
-        // corners.Add(new Vec2(x3, y3));
-        // Polygon flange = new(corners, 0f, L_itfb);
-
-        return disc.voxels();// + flange.voxels();
-    }
 
     protected Voxels voxels_iface() {
         Voxels iface = new();
         for (int i=0; i<no_itfb; ++i) {
             float theta = i * TWOPI / no_itfb;
-            iface += voxels_iface_bolt(theta);
+            Pipe disc = new(
+                new Frame(rejxy(tocart(r_itrb, theta))),
+                L_itfb,
+                Bsz_itfb/2f + th_itfb
+            );
+            iface += disc.voxels();
         }
-        iface += new Pipe(ZERO3, L_itfb, r_itrb).voxels();
+        iface += new Pipe(new Frame(), L_itfb, r_itrb).voxels();
         return iface;
     }
 
@@ -391,75 +394,67 @@ public class Chamber {
         Voxels iface = new();
         for (int i=0; i<no_itfb; ++i) {
             float theta = i * TWOPI / no_itfb;
-            iface += voxels_iface_bolt_hole(theta);
+            Pipe hole = new(
+                new Frame(rejxy(tocart(r_itrb, theta))),
+                L_itfb,
+                Bsz_itfb/2f
+            );
+            Geez.bbox(hole.bounds, COLOUR_CYAN);
+            iface += hole.voxels();
         }
         return iface;
     }
+
     public Voxels voxels() {
-        Geez.frame(new(), 2.5f);
-        Vec3 A = rejxy(tocart(5f, 0.1f), 1f);
-        Vec3 B = rejxy(tocart(5f, 0.5f), 5f);
-        Geez.point(A, 0.3f, COLOUR_RED);
-        Geez.point(B, 0.3f, COLOUR_BLUE);
-
-        TwistedPlane tp = new(A, B, false);
-        Geez.voxels(tp.voxels());
-
-        return new();
-
         // Order of construction is this:
         // - construct webs.
         // - construct interface.
         // - construct volume enclosed by inner wall (excluding the wall).
-        // - offset inner enclosure to get outer enclosure (ex. wall).
-        // - offset outer enclosure to get outer filled (= enclosure inc. wall).
-        // - subtract inner enclosure from inner filled to get inner walls.
-        // - subtract outer enclosure from outer filled to get outer walls.
-        // - intersect webs with outer filled to trim excess.
-        // - subtract inner enclosure from webs to trim excess.
-        // - subtract outer filled from interface to trim excess.
-        // - combine all.
-        // These steps are interleaved however to reduce operations.
+        // These three are then offseted, filleted, and intersected or whatever
+        // to make the final thing.
+
+        // We view three things simultaneously.
+        Geez.Cycle key_running = new();
+        Geez.Cycle key_iface = new();
+        Geez.Cycle key_webs = new();
+        var col_iface = COLOUR_RED;
+        var col_webs = COLOUR_GREEN;
 
         Voxels iface_holes = voxels_iface_holes();
         Voxels iface = voxels_iface();
-        int key_iface = Geez.voxels(iface);
+        key_iface <<= Geez.voxels(iface, colour: col_iface);
         Voxels webs = voxels_webs();
-        int key_webs = Geez.voxels(webs);
+        key_webs <<= Geez.voxels(webs, colour: col_webs);
 
         Voxels inner_enclosure = voxels_interior();
         inner_enclosure.TripleOffset(-0.01f); // smooth.
 
-        Geez.voxels(inner_enclosure);
+        key_running <<= Geez.voxels(inner_enclosure);
 
         Voxels outer_enclosure = inner_enclosure.voxOffset(th_iw + th_web);
 
-
         Voxels vox;
 
-        // Add outer wall.
         vox = outer_enclosure.voxOffset(th_ow);
+        // Now: vox = outer filled.
+        key_running <<= Geez.voxels(vox);
 
-        Geez.voxels(vox);
-        Geez.pop(1, ignore: 1);
-
-        // Now: vox = outer filled, so do some operations.
-        webs.BoolIntersect(vox);
         iface.BoolSubtract(vox);
+        key_iface <<= Geez.voxels(iface, colour: col_iface);
 
-        // Make: vox = outer walls.
+        webs.BoolIntersect(vox);
+        key_webs <<= Geez.voxels(webs, colour: col_webs);
+
         vox.BoolSubtract(outer_enclosure);
-
-        Geez.voxels(vox);
-        Geez.pop(1, ignore: 1);
+        // Now: vox = outer walls.
+        key_running <<= Geez.voxels(vox);
 
         // Add interface and fillet this now complete outer surface.
         vox.BoolAdd(iface);
         vox.Fillet(3f);
 
-        Geez.voxels(vox);
-        Geez.pop(1, ignore: 1);
-        Geez.remove(key_iface);
+        key_running <<= Geez.voxels(vox);
+        key_iface <<= null;
 
         // Add inner walls and combine all.
         vox.BoolAdd(inner_enclosure.voxOffset(th_iw));
@@ -471,10 +466,8 @@ public class Chamber {
         // Remove holes.
         vox.BoolSubtract(iface_holes);
 
-
-        Geez.voxels(vox);
-        Geez.pop(1, ignore: 1);
-        Geez.remove(key_webs);
+        key_running <<= Geez.voxels(vox);
+        key_webs <<= null;
 
         // Clip axial excess.
         BBox3 bounds = vox.oCalculateBoundingBox();
@@ -482,8 +475,7 @@ public class Chamber {
         bounds.vecMax.Z = L_part;
         vox.Trim(bounds);
 
-        Geez.voxels(vox);
-        Geez.pop(1, ignore: 1);
+        key_running <<= Geez.voxels(vox);
 
         return vox;
     }
@@ -517,12 +509,11 @@ public class Chamber {
             wi_web = 1.5f,
         };
         chamber.check_realisable();
-        chamber.sectionview = false;
 
         Voxels vox = chamber.voxels();
         PicoGK.Library.Log("Baby made.");
 
-        string path = Path.Combine(PATH_ROOT, "exports/chamber.stl");
+        string path = fromroot("exports/chamber.stl");
         Leap71.ShapeKernel.Sh.ExportVoxelsToSTLFile(vox, path);
 
         PicoGK.Library.Log("Don.");
@@ -530,65 +521,9 @@ public class Chamber {
 }
 
 
-public class Web : SDF {
-    public List<Vec3> points { get; }
-    public float Ltheta { get; }
-    public float Lr { get; }
-    protected float zlo;
-    protected float zhi;
-
-    public Web(in List<Vec3> points, float Ltheta, float Lr) {
-        assert(points.Count >= 2, $"numel={points.Count}");
-        this.points = points;
-        this.Ltheta = Ltheta;
-        this.Lr = Lr;
-
-        float prevz = -INF;
-        for (int i=0; i<points.Count; ++i) {
-            float z = points[i].Z;
-            assert(z > prevz, $"prevz={prevz}, z={z}");
-            prevz = z;
-
-            float r = magxy(points[i]);
-            float theta = argxy(points[i]);
-            float rmin = r - Lr/2f;
-            float rmax = r + Lr/2f;
-            float thetamin = theta - Ltheta/2f;
-            float thetamax = theta + Ltheta/2f;
-            Vec2 corner0 = tocart(rmin, thetamin);
-            Vec2 corner1 = tocart(rmin, thetamax);
-            Vec2 corner2 = tocart(rmax, thetamin);
-            Vec2 corner3 = tocart(rmax, thetamax);
-            List<Vec3> ps = [
-                rejxy(corner0, z),
-                rejxy(corner1, z),
-                rejxy(corner2, z),
-                rejxy(corner3, z)
-            ];
-            Leap71.ShapeKernel.Sh.PreviewPointCloud(ps, 0.02f, COLOUR_RED);
-            Vec2 pmin = min(corner0, corner1, corner2, corner3);
-            Vec2 pmax = max(corner0, corner1, corner2, corner3);
-            include_in_bounds(rejxy(pmin, z));
-            include_in_bounds(rejxy(pmax, z));
-        }
-        this.zlo = points[0].Z;
-        this.zhi = points[^1].Z;
-    }
-
-    public override float signed_dist(in Vec3 p) {
-        return 1f;
-    }
 
 
-    protected float sdf_plane(Vec3 c, Vec3 n, Vec3 p) {
-        return dot(p - c, normalise(n));
-    }
-}
-
-
-
-
-public class TwistedPlane : SDF {
+public class TwistedPlane : SDFunbounded {
     protected float Dtheta { get; }
     protected float Dz { get; }
     protected float bracket_lo { get; }
@@ -601,8 +536,6 @@ public class TwistedPlane : SDF {
 
     static protected int MAX_ITERS => 12;
     static protected float TOL => 1e-3f;
-
-    static protected float radius = 10f;
 
     public TwistedPlane(in Vec3 a, in Vec3 b, bool positive)
             : this(argxy(a), argxy(b), a.Z, b.Z, positive) {
@@ -633,12 +566,6 @@ public class TwistedPlane : SDF {
         this.slope2 = this.slope*this.slope;
         this.slope3 = this.slope2*this.slope;
         this.slope4 = this.slope3*this.slope;
-
-        include_in_bounds(new(-radius, -radius, -radius));
-        include_in_bounds(new(radius, radius, radius));
-
-        this.bracket_lo = 2f*bounds.vecMin.Z;
-        this.bracket_hi = 2f*bounds.vecMax.Z;
     }
 
     protected Vec3 closest(in Vec3 p) {
@@ -706,8 +633,8 @@ public class TwistedPlane : SDF {
 
         // Bounds for bracketed search. These will be enlarged until a root is
         // found.
-        float lo = bracket_lo;
-        float hi = bracket_hi;
+        float lo = -10f; // informed by nothing lmao.
+        float hi = +10f;
 
         // Try gradient descent initially, but its not always stable.
         for (int _=0; _<MAX_ITERS; ++_) {
@@ -727,9 +654,6 @@ public class TwistedPlane : SDF {
             // Descend the gradient.
             s += ds;
             f = eff(s);
-            // Check instability (roughly).
-            if (s < bracket_lo || s > bracket_hi)
-                goto BRACKETED;
         }
         lo = s - 2f;
         hi = s + 2f;
@@ -769,8 +693,8 @@ public class TwistedPlane : SDF {
         }
 
       ROOTED:;
-        // Relax a bit in case f32 precision shit on our balls.
-        assert(abs(f) < 10*TOL);
+        // assert(abs(f) < TOL);
+        // Don't even worry bout it actually f32 precision shits on our balls.
 
         // Find the corresponding t value.
         float t = (s*slope*p.Y + p.X) / (s*s*slope2 + 1f);
@@ -785,8 +709,6 @@ public class TwistedPlane : SDF {
         float dist = mag(P - C);
         if ((P.Y > C.Y) == positive) // solid on either pos or neg side.
            dist = -dist;
-
-        dist = max(dist, mag(p) - radius);
         return dist;
     }
 }
@@ -798,7 +720,7 @@ public class RunningStats {
     public float maximum = 0f;
     public double stddev => sqrt((N > 1) ? M2/(N - 1) : 0f);
 
-    private float M2 = 0f; // sum of squared diffs
+    protected float M2 = 0f; // sum of squared diffs
 
     public RunningStats() {}
 

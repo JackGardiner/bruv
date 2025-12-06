@@ -30,13 +30,20 @@ public static class Br {
                 !.Parent
                 !.Parent
                 !.FullName;
+    public static string fromroot(string rel) => Path.Combine(PATH_ROOT, rel);
 
+    public static int numel<T>(T[] x) => x.Length;
+    public static int numel<T>(List<T> x) => x.Count;
+    public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
+
+    public static Colour COLOUR_BLACK => new("#000000");
     public static Colour COLOUR_RED => new("#FF0000");
     public static Colour COLOUR_GREEN => new("#00FF00");
     public static Colour COLOUR_BLUE => new("#0000FF");
     public static Colour COLOUR_CYAN => new("#00FFFF");
     public static Colour COLOUR_PINK => new("#FF00FF");
     public static Colour COLOUR_YELLOW => new("#FFFF00");
+    public static Colour COLOUR_WHITE => new("#FFFFFF");
 
     public const float INF = float.PositiveInfinity;
     public const float NAN = float.NaN;
@@ -174,7 +181,9 @@ public static class Br {
     public static float acos(float a) => MathF.Acos(a);
     public static float atan(float a) => MathF.Atan(a);
 
-    public static float hypot(float y, float x) => MathF.Sqrt(x*x + y*y);
+    public static float hypot(float x, float y) => MathF.Sqrt(x*x + y*y);
+    public static float hypot(float x, float y, float z)
+            => MathF.Sqrt(x*x + y*y + z*z);
     public static float atan2(float y, float x) => MathF.Atan2(y, x);
 
     public static float mag(Vec2 a) => a.Length();
@@ -195,7 +204,7 @@ public static class Br {
     public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
     public static Vec2 projxz(Vec3 a) => new(a.X, a.Z);
     public static Vec2 projyz(Vec3 a) => new(a.Y, a.Z);
-    public static Vec2 projection(Vec3 a, int axis)
+    public static Vec2 project(Vec3 a, int axis)
         => axis switch
         {
             AXISX => projyz(a),
@@ -207,7 +216,7 @@ public static class Br {
     public static Vec3 rejxy(Vec2 a, float b=0f) => new(a.X, a.Y, b);
     public static Vec3 rejxz(Vec2 a, float b=0f) => new(a.X, b, a.Y);
     public static Vec3 rejyz(Vec2 a, float b=0f) => new(b, a.X, a.Y);
-    public static Vec3 rejection(Vec2 a, int axis, float b=0f)
+    public static Vec3 reject(Vec2 a, int axis, float b=0f)
         => axis switch
         {
             AXISX => rejyz(a, b),
@@ -224,7 +233,7 @@ public static class Br {
             => rejxz(rot(projxz(a), b), a.Y);
     public static Vec3 rotyz(Vec3 a, float b)
             => rejyz(rot(projyz(a), b), a.X);
-    public static Vec3 rotation(Vec3 a, int axis, float b)
+    public static Vec3 rotate(Vec3 a, int axis, float b)
         => axis switch
         {
             AXISX => rotyz(a, b),
@@ -232,6 +241,14 @@ public static class Br {
             AXISZ => rotxy(a, b),
             _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
         };
+    public static Vec3 rotate(Vec3 p, Vec3 about, float by) {
+        about = normalise(about);
+        float cosby = cos(by);
+        float sinby = sin(by);
+        return p*cosby
+             + cross(about, p)*sinby
+             + about*dot(about, p)*(1f - cosby);
+    }
 
     public static Vec2 normalise(Vec2 a) => Vec2.Normalize(a);
     public static Vec3 normalise(Vec3 a) => Vec3.Normalize(a);
