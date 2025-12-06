@@ -1,5 +1,5 @@
 ﻿
-var voxel_size_mm = 0.7f;
+var voxel_size_mm = 1.5f;
 var task = Chamber.Task;
 bool sectioned = true; // only affects viewing.
 bool transparent = true; // also only affects viewing (whats the alternative?).

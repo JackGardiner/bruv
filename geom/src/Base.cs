@@ -3,6 +3,7 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using Lattice = PicoGK.Lattice;
 using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
@@ -75,6 +76,38 @@ public class Ball : SDF {
 
     public override float signed_dist(in Vec3 p) {
         return mag(p - centre) - r;
+    }
+}
+
+
+public class Pill : SDF {
+    public Vec3 a { get; }
+    public Vec3 b { get; }
+    public float r { get; }
+    protected Vec3 ab { get; }
+    protected Vec3 ab_magab2 { get; }
+
+    public Pill(Frame centre, float L, float r)
+        : this(centre.pos, centre.to_global(L*uZ3), r) {}
+    public Pill(Vec3 a, Vec3 b, float r) {
+        assert(r > 0f, $"r={r}");
+        this.a = a;
+        this.b = b;
+        this.r = r;
+        this.ab = b - a;
+        float magab = mag(this.ab);
+        this.ab_magab2 = ab / magab / magab;
+        include_in_bounds(a - r*ONE3);
+        include_in_bounds(a + r*ONE3);
+        include_in_bounds(b - r*ONE3);
+        include_in_bounds(b + r*ONE3);
+    }
+
+
+    public override float signed_dist(in Vec3 p) {
+        float axial = dot(ab_magab2, p - a);
+        Vec3 c = a + ab*clamp(axial, 0f, 1f);
+        return mag(p - c) - r;
     }
 }
 
@@ -187,6 +220,65 @@ public class Pipe : SDF {
 }
 
 
+public class Tubing {
+    public List<Vec3> points { get; }
+    public float ID { get; }
+    public float th { get; }
+    public float Fr { get; }
+    public BBox3 bounds { get; }
+
+    public Tubing(in List<Vec3> points, float OD)
+        : this(points, 0f, 0.5f*OD) {}
+    public Tubing(in List<Vec3> points, float ID, float th, float Fr=0f) {
+        assert(numel(points) >= 2, $"numel={numel(points)}");
+        this.points = points;
+        this.ID = ID;
+        this.th = th;
+        this.Fr = Fr;
+    }
+
+    public Voxels voxels() {
+        Vec3 S0 = points[0];
+        Vec3 S1 = points[1];
+        Vec3 E0 = points[^1];
+        Vec3 E1 = points[^2];
+        float remove_r = 1.01f*(0.5f*ID + th);
+        Pipe S = new(new Frame(S0, S0 - S1), remove_r, remove_r);
+        Pipe E = new(new Frame(E0, E0 - E1), remove_r, remove_r);
+
+        Voxels vox = new();
+        Voxels inner = new();
+        bool hollow = (ID > 1e-3f);
+        bool filleted = (Fr > 1e-3f);
+
+        if (hollow) {
+            for (int i=1; i<numel(points); ++i) {
+                Vec3 a = points[i - 1];
+                Vec3 b = points[i];
+                inner.BoolAdd(new Pill(a, b, 0.5f*ID).voxels());
+            }
+        }
+        if (!hollow || !filleted) {
+            for (int i=1; i<numel(points); ++i) {
+                Vec3 a = points[i - 1];
+                Vec3 b = points[i];
+                vox.BoolAdd(new Pill(a, b, 0.5f*ID + th).voxels());
+            }
+        }
+        if (filleted) {
+            if (hollow)
+                vox = inner.voxDoubleOffset(th + Fr, -Fr);
+            else
+                vox = vox.voxDoubleOffset(Fr, -Fr);
+        }
+        vox.BoolSubtract(inner);
+        vox.BoolSubtract(S.voxels());
+        vox.BoolSubtract(E.voxels());
+        return vox;
+    }
+}
+
+
 public class Polygon : SDF {
     public Frame centre { get; } // centre of low z end.
     public List<Vec2> points { get; }
@@ -260,7 +352,7 @@ public class Polygon : SDF {
             }
 
             float t = dot(aq2, ab) / dot(ab, ab);
-            t = clamp(t, 0f, 1f); // clamp to segment
+            t = clamp(t, 0f, 1f); // must lie on segment.
             Vec2 closest = a + t*ab;
 
             float d = mag(q2 - closest);

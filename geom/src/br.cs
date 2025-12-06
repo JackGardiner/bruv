@@ -200,6 +200,8 @@ public static class Br {
 
     public static Vec2 tocart(float r, float theta)
             => new(r*cos(theta), r*sin(theta));
+    public static Vec3 tocart(float r, float theta, float z)
+            => new(r*cos(theta), r*sin(theta), z);
 
     public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
     public static Vec2 projxz(Vec3 a) => new(a.X, a.Z);

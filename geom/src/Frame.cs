@@ -7,9 +7,26 @@ public class Frame {
     public Vec3 Y { get; }
     public Vec3 Z { get; }
 
-    public Frame() : this(ZERO3, uX3, uZ3) {}
-    public Frame(Vec3 pos) : this(pos, uX3, uZ3) {}
-    public Frame(Frame f, Vec3 new_pos) : this(new_pos, f.X, f.Z) {}
+    public Frame() {
+        this.pos = ZERO3;
+        this.X = uX3;
+        this.Y = uY3;
+        this.Z = uZ3;
+    }
+    public Frame(Vec3 pos) {
+        this.pos = pos;
+        this.X = uX3;
+        this.Y = uY3;
+        this.Z = uZ3;
+    }
+    public Frame(Vec3 new_pos, Frame f) {
+        this.pos = new_pos;
+        this.X = f.X;
+        this.Y = f.Y;
+        this.Z = f.Z;
+    }
+    public Frame(Vec3 pos, Vec3 Z)
+        : this(pos, arbitrary_perpendicular(Z), Z) {}
     public Frame(Vec3 pos, Vec3 X, Vec3 Z) {
         assert(mag(X) > 1e-5f, "gotta be non-zero");
         assert(mag(Z) > 1e-5f, "gotta be non-zero");
@@ -24,20 +41,20 @@ public class Frame {
 
     public Frame transx(float by, bool relative=true) {
         Vec3 along = relative ? X : uX3;
-        return new(this, pos + by*along);
+        return new(pos + by*along, this);
     }
     public Frame transy(float by, bool relative=true) {
         Vec3 along = relative ? Y : uY3;
-        return new(this, pos + by*along);
+        return new(pos + by*along, this);
     }
     public Frame transz(float by, bool relative=true) {
         Vec3 along = relative ? Z : uZ3;
-        return new(this, pos + by*along);
+        return new(pos + by*along, this);
     }
     public Frame translate(Vec3 by, bool relative=true) {
         if (relative)
             by = to_global_rot(by);
-        return new(this, pos + by);
+        return new(pos + by, this);
     }
 
     public Frame rotxy(float by, bool relative=true) {
@@ -92,5 +109,15 @@ public class Frame {
     public Vec3 from_other_rot(Frame other, Vec3 p) {
         Vec3 q = other.to_global_rot(p);
         return from_global_rot(q);
+    }
+
+
+    protected static Vec3 arbitrary_perpendicular(Vec3 Z) {
+        assert(mag(Z) > 1e-5f, "gotta be non-zero");
+        Z = normalise(Z);
+        Vec3 O = uY3; // dflt to getting unit X as perp to z.
+        if (abs(dot(Z, O)) > 0.99f) // too close to parallel.
+            O = uX3;
+        return cross(Z, O);
     }
 }

@@ -1,10 +1,8 @@
 using static Br;
-using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
-using Triangle = PicoGK.Triangle;
 using Lattice = PicoGK.Lattice;
 using BBox3 = PicoGK.BBox3;
 
@@ -12,32 +10,13 @@ public class Chamber {
 
     // Bit how ya going.
     //
-    // Typical frame used is cylindrical coordinates, z vector pointing along
-    // axis of symmettry (axial vector), from the nozzle towards the injector,
-    // where z=0 is the exit plane.
-    //
-    // Legend for 'X':
-    // AEAT = nozzle exit area to throat area ratio.
-    // Bsz = bolt size (i.e. M4 for M4x10).
-    // Bln = bolt length (i.e. 10e-3 for M4x10).
-    // D_ = discrete change in this variable.
-    // Ir = inner radius.
-    // L = length.
-    // L_ = length along this coordinate path.
-    // NLF = nozzle length as a fraction of the length of a 15deg cone.
-    // no = number of things.
-    // r = radial coordinate.
-    // th = thickness (normal to surface).
-    // phi = conical half-angle relative to negative axial vector.
-    // theta = circumferential angular coordinate.
-    // wi = circumferential width.
-    // x = x coordinate.
-    // y = y coordinate.
-    // z = z coordinate.
+    // Typical frame used is cylindrical coordinates, +z vector pointing along
+    // axis of symmetry (axial vector) from the injector towards the nozzle,
+    // where z=0 is the chamber top plane. Define theta=0 radial-outwards vector
+    // to coincide with +x vector.
     //
     //
     // Context for 'X':
-    //
     // nzl_X = nozzle construction value.
     // X_cc = chamber property.
     // X_conv = nozzle converging section property.
@@ -48,17 +27,36 @@ public class Chamber {
     // X_ow = outer wall property.
     // X_part = entire chamber+nozzle part property.
     // X_tht = nozzle throat property.
+    // X_channel = cooling channel property.
     // X_web = between-cooling-channel wall property.
+    //
+    // Legend for 'X':
+    // AEAT = nozzle exit area to throat area ratio.
+    // Bsz = bolt size (i.e. 4e-3 for M4x10).
+    // Bln = bolt length (i.e. 10e-3 for M4x10).
+    // D_ = discrete change in this variable.
+    // Fr = fillet radius.
+    // Ir = inner radius.
+    // L = length.
+    // L_ = length along this coordinate path.
+    // Mr = middle radius (average of inner and outer).
+    // NLF = nozzle length as a fraction of the length of a 15deg cone.
+    // no = number of things.
+    // r = radial coordinate.
+    // th = thickness (normal to surface).
+    // phi = axial angle relative to +Z.
+    // theta = circumferential angular coordinate.
+    // wi = circumferential width.
+    // x = x coordinate.
+    // y = y coordinate.
+    // z = z coordinate.
+    //
 
-    public required float r_itrb;
-    public required float L_itfb;
-    public required float Bsz_itfb;
-    public required float th_itfb;
-    public required int no_itfb;
+    public required PartMating pm { get; init; }
 
     public required float AEAT { get; init; }
     public required float L_cc { get; init; }
-    public required float r_cc { get; init; }
+    public required float Fr_cc { get; init; }
     public required float r_tht { get; init; }
     public float r_exit => sqrt(AEAT) * r_tht;
 
@@ -73,6 +71,8 @@ public class Chamber {
     public required float th_web { get; init; }
     public required float wi_web { get; init; }
 
+
+    protected const float AXIAL_EXTRA = 10f; // trimmed in final step.
 
     /*
     https://www.desmos.com/calculator/6wogn9dm4x
@@ -105,13 +105,13 @@ public class Chamber {
     public float nzl_r_conv => 1.5f*r_tht;
 
     public float nzl_z0 => 0f;
-    public float nzl_r0 => r_cc;
+    public float nzl_r0 => pm.r_cc;
 
     public float nzl_z1 => L_cc;
-    public float nzl_r1 => r_cc;
+    public float nzl_r1 => pm.r_cc;
 
     public float nzl_z2 => nzl_z1 - nzl_r_conv*sin(phi_conv);
-    public float nzl_r2 => r_cc - nzl_r_conv*(1f - cos(phi_conv));
+    public float nzl_r2 => pm.r_cc - nzl_r_conv*(1f - cos(phi_conv));
 
     public float nzl_z3 => nzl_z2 + (nzl_r3 - nzl_r2)/tan(phi_conv);
     public float nzl_r3 => r_tht * (2.5f - 1.5f*cos(phi_conv));
@@ -178,8 +178,6 @@ public class Chamber {
         return PI/8 * cos(PI * z / L_part);
     }
 
-
-    protected float axial_extra = 10f; // trimmed in final step.
 
     public void check_realisable() {
         // Easiest way to determine if the parameters create a realisable nozzle.
@@ -254,12 +252,12 @@ public class Chamber {
     }
 
     protected Voxels voxels_interior(int divisions=150) {
-        Lattice lattice = new();
+        Lattice lat = new();
 
         void push_beam(float za, float zb) {
             float ra = Ir_part(za);
             float rb = Ir_part(zb);
-            lattice.AddBeam(
+            lat.AddBeam(
                     new Vec3(0f, 0f, za), ra,
                     new Vec3(0f, 0f, zb), rb,
                     false
@@ -276,15 +274,15 @@ public class Chamber {
         int[] divs = new int[6];
         divvy(divisions, divs);
 
-        push_section(nzl_z0 - axial_extra, nzl_z0, 1);
+        push_section(nzl_z0 - AXIAL_EXTRA, nzl_z0, 1);
         for (int i=0; i<6; ++i)
             push_section(nzl_zA[i], nzl_zB[i], divs[i]);
-        push_section(nzl_z6, nzl_z6 + axial_extra, 1);
+        push_section(nzl_z6, nzl_z6 + AXIAL_EXTRA, 1);
 
-        return new Voxels(lattice);
+        return new Voxels(lat);
     }
 
-    protected Mesh mesh_web(float theta0, int divisions=250,
+    protected Mesh mesh_web(float max_r, float theta0, int divisions=250,
             List<int>? keys=null, bool line=false) {
         List<Vec3> points = new();
         for (int i=0; i<divisions; ++i) {
@@ -298,17 +296,17 @@ public class Chamber {
         if (keys != null) {
             int key = Geez.frame(new(
                 points[0],
-                rejxy(tocart(1f, argxy(points[0]) + PI_2)),
+                tocart(1f, argxy(points[0]) + PI_2, 0f),
                 uZ3
             ));
             keys.Add(key);
         }
-        points.Insert(0, points[0] - uZ3*axial_extra);
-        points.Add(points[^1] + uZ3*axial_extra);
+        points.Insert(0, points[0] - uZ3*AXIAL_EXTRA);
+        points.Add(points[^1] + uZ3*AXIAL_EXTRA);
 
         float rlo = r_tht;
-        float rhi = r_cc + th_iw + th_web + th_ow;
-        float Dt = 0.5f*(wi_web / r_cc); // t for theta.
+        float rhi = max_r;
+        float Dt = 0.5f*(wi_web / pm.r_cc); // t for theta.
 
         Mesh mesh = new();
         List<Vec3> V = new();
@@ -318,14 +316,14 @@ public class Chamber {
             assert(B.Z > A.Z, $"A.z={A.Z}, B.z={B.Z}");
             float tA = argxy(A);
             float tB = argxy(B);
-            Vec3 p000 = rejxy(tocart(rlo, tA - Dt), A.Z);
-            Vec3 p100 = rejxy(tocart(rhi, tA - Dt), A.Z);
-            Vec3 p010 = rejxy(tocart(rlo, tA + Dt), A.Z);
-            Vec3 p110 = rejxy(tocart(rhi, tA + Dt), A.Z);
-            Vec3 p001 = rejxy(tocart(rlo, tB - Dt), B.Z);
-            Vec3 p101 = rejxy(tocart(rhi, tB - Dt), B.Z);
-            Vec3 p011 = rejxy(tocart(rlo, tB + Dt), B.Z);
-            Vec3 p111 = rejxy(tocart(rhi, tB + Dt), B.Z);
+            Vec3 p000 = tocart(rlo, tA - Dt, A.Z);
+            Vec3 p100 = tocart(rhi, tA - Dt, A.Z);
+            Vec3 p010 = tocart(rlo, tA + Dt, A.Z);
+            Vec3 p110 = tocart(rhi, tA + Dt, A.Z);
+            Vec3 p001 = tocart(rlo, tB - Dt, B.Z);
+            Vec3 p101 = tocart(rhi, tB - Dt, B.Z);
+            Vec3 p011 = tocart(rlo, tB + Dt, B.Z);
+            Vec3 p111 = tocart(rhi, tB + Dt, B.Z);
             if (i == 1) {
                 V.Add(p000);
                 V.Add(p100);
@@ -363,121 +361,209 @@ public class Chamber {
     }
 
     protected Voxels voxels_webs() {
-        Voxels webs = new();
+        float max_r = pm.r_channel + 0.5f*pm.min_wi_channel + th_ow;
+        Voxels vox = new();
         List<int> keys = new();
         for (int i=0; i<no_web; ++i) {
             float theta0 = i * TWOPI / no_web;
-            Mesh mesh = mesh_web(theta0, keys: keys, line: i <= 4);
-            webs += new Voxels(mesh);
+            Mesh mesh = mesh_web(max_r, theta0, keys: keys, line: i <= 4);
+            vox.BoolAdd(new Voxels(mesh));
         }
         Geez.remove(keys);
-        return webs;
+        return vox;
     }
 
-
-    protected Voxels voxels_iface() {
-        Voxels iface = new();
-        for (int i=0; i<no_itfb; ++i) {
-            float theta = i * TWOPI / no_itfb;
-            Pipe disc = new(
-                new Frame(rejxy(tocart(r_itrb, theta))),
-                L_itfb,
-                Bsz_itfb/2f + th_itfb
-            );
-            iface += disc.voxels();
-        }
-        iface += new Pipe(new Frame(), L_itfb, r_itrb).voxels();
-        return iface;
+    protected Voxels voxels_cc_widening() {
+        Lattice lat = new();
+        float zA = -AXIAL_EXTRA;
+        float zB = 25f;
+        float zC = zB + 10f;
+        float rA = pm.r_channel + 0.5f*pm.min_wi_channel + th_ow;
+        float rB = rA;
+        float rC = pm.r_cc + th_iw + th_web + th_ow;
+        lat.AddBeam(
+            uZ3*zA, rA,
+            uZ3*zB, rB,
+            false
+        );
+        lat.AddBeam(
+            uZ3*zB, rB,
+            uZ3*zC, rC,
+            false
+        );
+        return new Voxels(lat);
     }
 
-    protected Voxels voxels_iface_holes() {
-        Voxels iface = new();
-        for (int i=0; i<no_itfb; ++i) {
-            float theta = i * TWOPI / no_itfb;
-            Pipe hole = new(
-                new Frame(rejxy(tocart(r_itrb, theta))),
-                L_itfb,
-                Bsz_itfb/2f
+    protected List<Vec3> points_inlet(int divisions=100) {
+        List<Vec3> points = [
+            tocart(pm.r_bolt + 15f, PI_2, -AXIAL_EXTRA),
+            tocart(pm.r_bolt + 15f, PI_2, nzl_z6 - 60f),
+            tocart(r_exit, PI_2, nzl_z6),
+        ];
+        // for (int i=0; i<divisions; ++i) {
+        //     float z = nzl_z0 + i*(nzl_z6 - nzl_z0)/divisions;
+        //     float r = pm.r_bolt + 15f;
+        //     points.Add(tocart(r, 0f, z));
+        // }
+        return points;
+    }
+    protected Voxels voxels_inlet() {
+        List<Vec3> points = points_inlet();
+        Voxels vox = new Tubing(points, 15f).voxels();
+        Vec3 p = points[0];
+        p.Z = 0f;
+        Frame frame = new Frame(
+            p + 0.5f*pm.flange_thickness*uZ3,
+            tocart(1f, PI_2 - argxy(p), 0f),
+            tocart(1f, -argxy(p), 0f)
+        );
+        vox.BoolAdd(new Cuboid(
+            frame.rotxz(torad(15f)),
+            15f,
+            pm.flange_thickness,
+            magxy(p) - pm.r_cc
+        ).voxels());
+        vox.BoolAdd(new Cuboid(
+            frame.rotxz(torad(-15f)),
+            15f,
+            pm.flange_thickness,
+            magxy(p) - pm.r_cc
+        ).voxels());
+        return vox;
+    }
+
+    protected Voxels voxels_neg_inlet() {
+        List<Vec3> points = points_inlet();
+        return new Tubing(points, 12f).voxels();
+    }
+
+    protected Voxels voxels_flange() {
+        Voxels vox;
+
+        vox = new Pipe(
+            new Frame(),
+            pm.flange_thickness,
+            pm.flange_outer_radius
+        ).voxels();
+
+        for (int i=0; i<pm.no_bolt; ++i) {
+            float theta = i * TWOPI / pm.no_bolt;
+            Pipe bolt_surrounding = new(
+                new Frame(tocart(pm.r_bolt, theta, 0f)),
+                pm.flange_thickness,
+                pm.Bsz_bolt/2f + pm.thickness_around_bolt
             );
-            Geez.bbox(hole.bounds, COLOUR_CYAN);
-            iface += hole.voxels();
+            vox.BoolAdd(bolt_surrounding.voxels());
         }
-        return iface;
+
+        return vox;
+    }
+
+    protected Voxels voxels_neg_bolts() {
+        Voxels vox = new();
+        for (int i=0; i<pm.no_bolt; ++i) {
+            float theta = i * TWOPI / pm.no_bolt;
+            Pipe bolt_hole = new(
+                new Frame(tocart(pm.r_bolt, theta, 0f)),
+                pm.flange_thickness,
+                pm.Bsz_bolt/2f
+            );
+            vox.BoolAdd(bolt_hole.voxels());
+        }
+        return vox;
+    }
+
+    protected Voxels voxels_neg_orings() {
+        Voxels vox;
+        vox = new Pipe(
+            new Frame(),
+            pm.Lz_Ioring,
+            pm.Ir_Ioring,
+            pm.Or_Ioring
+        ).voxels();
+        vox.BoolAdd(new Pipe(
+            new Frame(),
+            pm.Lz_Ooring,
+            pm.Ir_Ooring,
+            pm.Or_Ooring
+        ).voxels());
+        return vox;
     }
 
     public Voxels voxels() {
-        // Order of construction is this:
-        // - construct webs.
-        // - construct interface.
-        // - construct volume enclosed by inner wall (excluding the wall).
-        // These three are then offseted, filleted, and intersected or whatever
-        // to make the final thing.
 
-        // We view three things simultaneously.
-        Geez.Cycle key_running = new();
-        Geez.Cycle key_iface = new();
+        // We view a few things as they are updated.
+        Geez.Cycle key_flange = new();
         Geez.Cycle key_webs = new();
-        var col_iface = COLOUR_RED;
+        Geez.Cycle key_inlet = new();
+        Geez.Cycle key_part = new();
+        var col_flange = COLOUR_RED;
         var col_webs = COLOUR_GREEN;
+        var col_inlet = COLOUR_BLUE;
 
-        Voxels iface_holes = voxels_iface_holes();
-        Voxels iface = voxels_iface();
-        key_iface <<= Geez.voxels(iface, colour: col_iface);
+        Voxels flange = voxels_flange();
+        key_flange <<= Geez.voxels(flange, colour: col_flange);
         Voxels webs = voxels_webs();
         key_webs <<= Geez.voxels(webs, colour: col_webs);
+        Voxels inlet = voxels_inlet();
+        key_inlet <<= Geez.voxels(inlet, colour: col_inlet);
 
-        Voxels inner_enclosure = voxels_interior();
-        inner_enclosure.TripleOffset(-0.01f); // smooth.
+        Voxels cc_widening = voxels_cc_widening();
+        Voxels neg_bolts = voxels_neg_bolts();
+        Voxels neg_orings = voxels_neg_orings();
+        Voxels neg_inlet = voxels_neg_inlet();
 
-        key_running <<= Geez.voxels(inner_enclosure);
+        Voxels neg_cc = voxels_interior();
+        neg_cc.TripleOffset(-0.01f); // smooth.
 
-        Voxels outer_enclosure = inner_enclosure.voxOffset(th_iw + th_web);
+        key_part <<= Geez.voxels(neg_cc);
 
-        Voxels vox;
+        Voxels part;
 
-        vox = outer_enclosure.voxOffset(th_ow);
-        // Now: vox = outer filled.
-        key_running <<= Geez.voxels(vox);
+        part = neg_cc.voxOffset(th_iw + th_web + th_ow);
+        key_part <<= Geez.voxels(part);
 
-        iface.BoolSubtract(vox);
-        key_iface <<= Geez.voxels(iface, colour: col_iface);
+        part.BoolAdd(cc_widening);
+        key_part <<= Geez.voxels(part);
 
-        webs.BoolIntersect(vox);
+        Voxels neg_channel = part.voxDoubleOffset(Fr_cc, -Fr_cc - th_ow);
+
+        part.BoolAdd(flange);
+        part.BoolAdd(inlet);
+        part.Fillet(Fr_cc);
+        key_part <<= Geez.voxels(part);
+        key_flange <<= null;
+        key_inlet <<= null;
+
+        webs.BoolIntersect(part);
         key_webs <<= Geez.voxels(webs, colour: col_webs);
 
-        vox.BoolSubtract(outer_enclosure);
-        // Now: vox = outer walls.
-        key_running <<= Geez.voxels(vox);
+        part.BoolSubtract(neg_channel);
+        key_part <<= Geez.voxels(part);
 
-        // Add interface and fillet this now complete outer surface.
-        vox.BoolAdd(iface);
-        vox.Fillet(3f);
+        neg_channel.Offset(-th_web); // avoid copy tho.
+        Voxels inner_wall = neg_channel;
 
-        key_running <<= Geez.voxels(vox);
-        key_iface <<= null;
-
-        // Add inner walls and combine all.
-        vox.BoolAdd(inner_enclosure.voxOffset(th_iw));
-        vox.BoolAdd(webs);
-
-        // Add chamber cavity.
-        vox.BoolSubtract(inner_enclosure);
-
-        // Remove holes.
-        vox.BoolSubtract(iface_holes);
-
-        key_running <<= Geez.voxels(vox);
+        part.BoolAdd(inner_wall);
+        part.BoolAdd(webs);
+        key_part <<= Geez.voxels(part);
         key_webs <<= null;
 
+        part.BoolSubtract(neg_bolts);
+        part.BoolSubtract(neg_orings);
+        part.BoolSubtract(neg_inlet);
+        part.BoolSubtract(neg_cc);
+        key_part <<= Geez.voxels(part);
+
         // Clip axial excess.
-        BBox3 bounds = vox.oCalculateBoundingBox();
+        BBox3 bounds = part.oCalculateBoundingBox();
         bounds.vecMin.Z = 0f;
         bounds.vecMax.Z = L_part;
-        vox.Trim(bounds);
+        part.Trim(bounds);
 
-        key_running <<= Geez.voxels(vox);
+        key_part <<= Geez.voxels(part);
 
-        return vox;
+        return part;
     }
 
 
@@ -486,35 +572,62 @@ public class Chamber {
         PicoGK.Library.Log("whas good");
 
         Chamber chamber = new Chamber{
-            r_itrb = 67f,
-            L_itfb = 5f,
-            Bsz_itfb = 6f,
-            th_itfb = 4.5f,
-            no_itfb = 6,
+            pm = new PartMating{
+                r_cc=50f,
 
-            AEAT = 4f,
-            L_cc = 100f,
-            r_cc = 50f,
-            r_tht = 20f,
+                r_channel=60f,
+                min_wi_channel=2f,
 
-            NLF = 1f,
-            phi_conv = torad(-45f),
-            phi_div = torad(21f),
-            phi_exit = torad(10f),
+                Ir_Ioring=52.5f,
+                Or_Ioring=55.5f,
+                Ir_Ooring=64.5f,
+                Or_Ooring=67.5f,
+                Lz_Ioring=2f,
+                Lz_Ooring=2f,
 
-            no_web = 40,
-            th_iw = 1.5f,
-            th_ow = 2.0f,
-            th_web = 3f,
-            wi_web = 1.5f,
+                no_bolt=10,
+                r_bolt=76f,
+                Bsz_bolt=8f,
+                Bln_bolt=20f,
+
+                thickness_around_bolt=5f,
+                flange_thickness=7f,
+                flange_outer_radius=76f,
+                radial_fillet_radius=5f,
+                axial_fillet_radius=10f,
+            },
+
+            AEAT=4f,
+            L_cc=100f,
+            Fr_cc=3f,
+            r_tht=20f,
+
+            NLF=1f,
+            phi_conv=torad(-45f),
+            phi_div=torad(21f),
+            phi_exit=torad(10f),
+
+            no_web=40,
+            th_iw=1.5f,
+            th_ow=2.0f,
+            th_web=3f,
+            wi_web=1.5f,
         };
         chamber.check_realisable();
 
         Voxels vox = chamber.voxels();
         PicoGK.Library.Log("Baby made.");
 
-        string path = fromroot("exports/chamber.stl");
-        Leap71.ShapeKernel.Sh.ExportVoxelsToSTLFile(vox, path);
+        string stl_path = fromroot("exports/chamber.stl");
+        try {
+            Mesh mesh = new Mesh(vox);
+            mesh.SaveToStlFile(stl_path);
+            PicoGK.Library.Log($"Exported to stl: {stl_path}");
+        } catch (Exception e) {
+            PicoGK.Library.Log("Failed to export to stl. Exception log:");
+            PicoGK.Library.Log(e.ToString());
+            PicoGK.Library.Log("");
+        }
 
         PicoGK.Library.Log("Don.");
     }
