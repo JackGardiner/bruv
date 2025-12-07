@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Numerics;
-using System.Reflection.Metadata.Ecma335;
-using System.Security.Cryptography.X509Certificates;
+using System.Runtime.InteropServices;
 using Leap71.ShapeKernel;
 using PicoGK;
 using static System.MathF;
@@ -11,10 +9,7 @@ public class Injector
 {
 
     SimConfig s;
-    InjectorConfig inj;
-    SlmConfig slm;
-    EngineConfig eng;
-    MaterialConfig mat;
+    InterfacesConfig i;
 
     public class SimConfig
     {
@@ -40,7 +35,14 @@ public class Injector
         public float fLOxSwirlMfldLength { get; set; }
         public float fLOxPostWT { get; set; }
         public float fInjectorPlateThickness { get; set; }
-        public float FuelAnnulusOR { get; set; }
+        public float fFuelAnnulusOR { get; set; }
+        public float fInnerOringW {get; set; }
+        public float fInnerOringMR {get; set; }
+        public float fInnerOringDepth {get; set; }
+        public float fOuterOringW {get; set; }
+        public float fOuterOringMR {get; set; }
+        public float fOuterOringDepth {get; set; }
+
     }
 
     public class SlmConfig
@@ -50,9 +52,8 @@ public class Injector
 
     public class EngineConfig
     {
-        // Currently empty in JSON, add fields here later, e.g.:
-        // public float fChamberPressure { get; set; }
-        // public float fThroatDiameter { get; set; }
+        public float fChamberRadius { get; set; }
+        // holding space for stu x
     }
 
     public class MaterialConfig
@@ -76,6 +77,48 @@ public class Injector
         public float fElectricalConductivity { get; set; }
     }
 
+    public class InterfacesConfig
+    {
+        public LocalFrame oLOXInlet;
+        public LocalFrame oPTLOXInlet;
+        public LocalFrame oPTIPAInlet;
+        public LocalFrame oPTChamberInlet;
+        public LocalFrame oASIInlet;
+        public float fInnerOringIR;
+        public float fInnerOringMR;
+        public float fInnerOringOR;
+        public float fInnerOringDepth;
+        public float fCoolingChannelMR;
+        public float fCoolingChannelWidth;
+        public float fCoolingChannelIR;
+        public float fCoolingChannelOR;
+        public float fOuterOringMR;
+        public float fOuterOringIR;
+        public float fOuterOringOR;
+        public float fOuterOringDepth;
+        public float fBoltMR;
+        
+        // constructor: initialise what we already can
+        public InterfacesConfig(SimConfig s)
+        {
+            fInnerOringMR = s.inj.fInnerOringMR;
+            fInnerOringIR = s.inj.fInnerOringMR - s.inj.fInnerOringW/2f;
+            fInnerOringOR = s.inj.fInnerOringMR + s.inj.fInnerOringW/2f;
+            fInnerOringDepth = s.inj.fInnerOringDepth;
+
+            fOuterOringMR = s.inj.fOuterOringMR;
+            fOuterOringIR = s.inj.fOuterOringMR - s.inj.fOuterOringW/2f;
+            fOuterOringOR = s.inj.fOuterOringMR + s.inj.fOuterOringW/2f;
+            fOuterOringDepth = s.inj.fOuterOringDepth;
+
+            fCoolingChannelMR = 55f; //TODO fix magic number
+            fCoolingChannelWidth = 3f; //TODO as above
+            fCoolingChannelIR = fCoolingChannelMR - fCoolingChannelWidth/2f;
+            fCoolingChannelOR = fCoolingChannelMR + fCoolingChannelWidth/2f;
+
+            fBoltMR = 80f; //TODO as above
+        }
+    }
 
     public static void Task()
     {
@@ -87,16 +130,14 @@ public class Injector
                             fTransparency: 0.9f,
                             fMetallic: 0.4f,
                             fRoughness: 0.3f);
-
-        // Sh.ExportVoxelsToSTLFile(voxCoaxShearInjector, Path.Combine(Utils.strProjectRootFolder(), "exports/injector.stl"));
+        Sh.PreviewFrame(new LocalFrame(new Vector3(0f, 56.5f, 0f)), 10f);
     }
 
     public Injector()
     {
-    s = JsonLoader.LoadFromJsonFile<SimConfig>(Path.Combine(Utils.strProjectRootFolder(), "src/config.json"));
+        s = JsonLoader.LoadFromJsonFile<SimConfig>(Path.Combine(Utils.strProjectRootFolder(), "src/config.json"));
+        i = new InterfacesConfig(s);
     }
-
-    List<float> aEmptyList = new();
 
     public List<Vector3> InjectorPattern(List<int> aElementCount, List<float> aElementRadii, List<float> aElementClocking)
     {
@@ -120,40 +161,9 @@ public class Injector
         return aInjectorLocations;
     }
 
-    public Voxels voxLOxSwirlCore(LocalFrame oInjectorLocation)
-    {
-        /*
-               * *
-             *     *
-            *       *
-            *   ==  *== swirl inlet
-            * ||    *
-            *  ===  *
-             *  // *
-              * | *
-              * \ *     
-        ______* | *______
-               /\
-        */
-
-        LocalFrame oElementFaceFrame = new LocalFrame();
-        BaseCylinder oLOxSwirlFluid = new BaseCylinder(oInjectorLocation, s.inj.fLOxPostLength + s.inj.fLOxSwirlMfldLength);
-        oLOxSwirlFluid.SetRadius(new SurfaceModulation(new LineModulation(fGetLOxSwirlMfldLineModulation)));
-        Voxels voxLOxSwirlFluid = oLOxSwirlFluid.voxConstruct();
-        BBox3 oCropBox = voxLOxSwirlFluid.oCalculateBoundingBox();
-        oCropBox.vecMin.X -= 2*s.inj.fLOxPostWT; oCropBox.vecMin.Y -= 2*s.inj.fLOxPostWT; 
-        oCropBox.vecMax.X += 2*s.inj.fLOxPostWT; oCropBox.vecMax.Y += 2*s.inj.fLOxPostWT;
-        oCropBox.vecMax.Z = 2*(s.inj.fLOxPostLength + s.inj.fLOxSwirlMfldLength);
-        Voxels voxLOxSwirlWall = voxLOxSwirlFluid.voxOffset(s.inj.fLOxPostWT) - voxLOxSwirlFluid;
-        voxLOxSwirlWall.Trim(oCropBox);
-
-        return voxLOxSwirlWall;
-    }
 
     public Voxels voxInjectorPlate(List<Vector3> aInjElements, List<Vector3> aFilmElements, float fFilmCoolingHoleRadius,
-                                    float fAnnulusRadius, float fPlateThickness, float fOuterRadius,
-                                    float fInnerORRadius, float fInnerORWidth, float fInnerORDepth,
-                                    float fOuterORRadius, float fOuterORWidth, float fOuterORDepth)
+                                    float fAnnulusRadius, float fPlateThickness, float fOuterRadius)
     {
         // generate initial base plate
         BaseLens oPlate = new BaseLens(new LocalFrame(), fPlateThickness, 0, fOuterRadius);
@@ -175,181 +185,255 @@ public class Injector
         return voxPlate;
     }
 
-    public Voxels voxConeRoof(List<Vector3> aPointsList, float fRoofThickness, float fAlpha, float fOuterRadius)
+    public Voxels voxGroovyBaby(LocalFrame oFrame, float fGrooveDepth, float fGrooveIR, float fGrooveOR)
     {
-        // returns a roof structure constructed using cones originating at each point in aPointsList
-        // in future need to figure out how to bound this, for now using BBox3
+        BasePipe oGroove = new BasePipe(oFrame, fGrooveDepth, fGrooveIR, fGrooveOR);
+        return oGroove.voxConstruct();
+    }
 
-        BaseLens oRoof = new BaseLens(new LocalFrame(), fRoofThickness, 0f, fOuterRadius);
-        BaseLens oLOxCrop = new BaseLens(new LocalFrame(), fRoofThickness, 0f, fOuterRadius);
-        oRoof.SetHeight(new SurfaceModulation(fGetConeRoofLowerHeight), new SurfaceModulation(fGetConeRoofUpperHeight));
-        oLOxCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetConeRoofCropHeight));
+    public Voxels voxASIPassThrough()
+    {
+        BSPPPort ASIPort = new BSPPPort("1/4in", 6.35f); // 1/4in OD for SS insert?
 
-        Voxels voxRoof = new Voxels(oRoof.voxConstruct());
-        Voxels voxLOxCrop = new Voxels(oLOxCrop.voxConstruct());
-        
-        // iterate through each injector element and create wall section and fluid section
-        foreach (Vector3 aPoint in aPointsList)
+        return new Voxels(); //TODO
+    }
+
+    public class ConeRoof
+    {
+        // inputs
+        private readonly InjectorConfig Inj;
+        private readonly SlmConfig Slm;
+        private readonly InterfacesConfig Ifc;
+        private readonly List<Vector3> m_aPointsList;
+        private readonly float m_fRoofThickness;
+
+        // outputs
+
+        // constructor
+        public ConeRoof(InjectorConfig inj, SlmConfig slm, InterfacesConfig ifc,
+                        List<Vector3> aPointsList, float fRoofThickness)
         {
-            BasePipe oInjectorWall = new BasePipe(new LocalFrame(aPoint), s.inj.fLOxPostLength,
-                                                        0, s.inj.fLOxPostFluidRad+s.inj.fLOxPostWT);
-            BasePipe oInjectorFluid = new BasePipe(new LocalFrame(aPoint), s.inj.fLOxPostLength,
-                                                        0, s.inj.fLOxPostFluidRad);
-
-            voxRoof = voxRoof + oInjectorWall.voxConstruct();
-            voxRoof = voxRoof - oInjectorFluid.voxConstruct();
-            voxRoof = voxRoof - voxLOxCrop;
+            Inj = inj;
+            Slm = slm;
+            Ifc = ifc;
+            m_aPointsList = aPointsList;
+            m_fRoofThickness = fRoofThickness;
         }
 
-        float fGetConeRoofSurfaceModulation(float fPhi, float fLengthRatio)
+        // public query methods
+        // public Voxels voxUpperCrop()
+        // {
+        //     BaseLens oCrop = new BaseLens(new LocalFrame(), 0f, 0f,m_fOuterRadius);
+        //     oCrop.SetHeight(fConstantSurfaceModulation(0f), )
+        //     return new Voxels();
+        // }
+
+        public Voxels voxLowerCropVolume()
         {
-            float fRadius = fLengthRatio * fOuterRadius;
-            float fZVal = float.NaN;
+            return new Voxels();
+        }
+
+        // vox builder
+        public Voxels voxConstruct()
+        {
+            // returns a roof structure constructed using cones originating at each point in aPointsList
+
+            BaseLens oRoof = new BaseLens(new LocalFrame(), m_fRoofThickness, 0f, Ifc.fCoolingChannelOR);
+            BaseLens oLOxCrop = new BaseLens(new LocalFrame(), m_fRoofThickness, 0f, Ifc.fCoolingChannelOR);
+            oRoof.SetHeight(new SurfaceModulation(fGetConeRoofLowerHeight), new SurfaceModulation(fGetConeRoofUpperHeight));
+            oLOxCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetConeRoofCropHeight));
+
+            Voxels voxRoof = new Voxels(oRoof.voxConstruct());
+            Voxels voxLOxCrop = new Voxels(oLOxCrop.voxConstruct());
+            
+            // iterate through each injector element and create wall section and fluid section
+            foreach (Vector3 aPoint in m_aPointsList)
+            {
+                BasePipe oInjectorWall = new BasePipe(new LocalFrame(aPoint), Inj.fLOxPostLength,
+                                                            0, Inj.fLOxPostFluidRad+Inj.fLOxPostWT);
+                BasePipe oInjectorFluid = new BasePipe(new LocalFrame(aPoint), Inj.fLOxPostLength,
+                                                            0, Inj.fLOxPostFluidRad);
+
+                voxRoof = voxRoof + oInjectorWall.voxConstruct();
+                voxRoof = voxRoof - oInjectorFluid.voxConstruct();
+                voxRoof = voxRoof - voxLOxCrop;
+            }
+
+
+            return voxRoof;
+        }
+
+        // private helpers
+        private float fConstantSurfaceModulation(float fHeight)
+        {
+            return fHeight;
+        }
+        private float fGetConeRoofSurfaceModulation(float fPhi, float fLengthRatio)
+        {
+            float fRadius = fLengthRatio * Ifc.fCoolingChannelOR;
+            float fZVal = (Ifc.fCoolingChannelOR - fRadius)*Tan(Slm.fPrintAngle) + Inj.fInjectorPlateThickness;  // outer wall case
             // calculate vertical offset required (for now use cone mid-plane)
-            float fConeOffset = s.inj.fLOxPostLength - (s.inj.fLOxPostFluidRad+s.inj.fLOxPostWT)*Tan(s.slm.fPrintAngle);
-            foreach (Vector3 aPoint in aPointsList)
+            float fConeOffset = Inj.fLOxPostLength - (Inj.fLOxPostFluidRad+Inj.fLOxPostWT)*Tan(Slm.fPrintAngle);
+            foreach (Vector3 aPoint in m_aPointsList)
             {
                 float fPointPhi = Atan2(aPoint.Y, aPoint.X);
                 float fPointRad = Sqrt((aPoint.X*aPoint.X)+(aPoint.Y*aPoint.Y));
 
-                float fTrialZ = Sqrt((fRadius*fRadius)+(fPointRad*fPointRad)-(2*fRadius*fPointRad*Cos(fPhi-fPointPhi)))*Tan(fAlpha);
+                float fTrialZ = Sqrt((fRadius*fRadius)+(fPointRad*fPointRad)-(2*fRadius*fPointRad*Cos(fPhi-fPointPhi)))*Tan(Slm.fPrintAngle) + fConeOffset;
 
-                if(float.IsNaN(fZVal)){fZVal = fTrialZ;}
-                else if (fTrialZ < fZVal){fZVal = fTrialZ;}
-            }
-            return fZVal + fConeOffset;
+                if (fTrialZ < fZVal){fZVal = fTrialZ;}
+            }            
+        
+            return fZVal;
         }
 
-        float fGetConeRoofUpperHeight(float fPhi, float fLengthRatio)
+        private float fGetConeRoofUpperHeight(float fPhi, float fLengthRatio)
         {
-            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) + Cos(fAlpha)*fRoofThickness/2f;
+            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) + Cos(Slm.fPrintAngle)*m_fRoofThickness;
         }
 
-        float fGetConeRoofLowerHeight(float fPhi, float fLengthRatio)
+        private float fGetConeRoofLowerHeight(float fPhi, float fLengthRatio)
         {
-            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) - Cos(fAlpha)*fRoofThickness/2f;
+            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio);
         }
 
-        float fGetConeRoofCropHeight(float fPhi, float fLengthRatio)
+        private float fGetConeRoofCropHeight(float fPhi, float fLengthRatio)
         {
-            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) + Cos(fAlpha)*fRoofThickness*2f;
+            return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) + Cos(Slm.fPrintAngle)*m_fRoofThickness*2f;
         }
 
-        return voxRoof;
     }
 
-    public float fGetLOxSwirlMfldLineModulation(float fLengthRatio)
+    public class BSPPPort
     {
-        // total length of swirl manifold given
-        // calculate bottom cone section length (angle = s.inj.fLOxSwirlMfldAngleDeg)
-        // calculate top cone section length (angle = 45deg)
-        float fTopConeLength = s.inj.fLOxSwirlMflFluidRad * Tan(45f*(PI/180f)); // remove AM constraint magic num.
-        float fBottomConeLength = (s.inj.fLOxSwirlMflFluidRad-s.inj.fLOxPostFluidRad) * Tan(s.inj.fLOxSwirlMfldAngleDeg*(PI/180f));
-        float fStraightLength = s.inj.fLOxSwirlMfldLength - fTopConeLength - fBottomConeLength;
+        // inputs
+        private readonly string m_sSize;
+        private readonly float m_fDownstreamDiameter;
+        
+        // Geometry Outputs
+        private readonly float m_fFaceDiameter;
+        private readonly float m_fPilotBoreDiameter;
+        private readonly float m_fBoreDepthTotal;
 
-        float fLength = (s.inj.fLOxPostLength + s.inj.fLOxSwirlMfldLength) * fLengthRatio;
-
-        if (fLength < s.inj.fLOxPostLength) {
-            return s.inj.fLOxPostFluidRad;
-            }
-        else if (fLength < (s.inj.fLOxPostLength + fBottomConeLength)) {
-            return s.inj.fLOxPostFluidRad + (fLength-s.inj.fLOxPostLength)*(s.inj.fLOxSwirlMflFluidRad-s.inj.fLOxPostFluidRad)/fBottomConeLength;
-            }
-        else if (fLength < (s.inj.fLOxPostLength + fBottomConeLength + fStraightLength)) {
-            return s.inj.fLOxSwirlMflFluidRad;
-            }
-        else
+        // Constructor
+        public BSPPPort(string sSize, float fDownstreamDiameter)
         {
-            return s.inj.fLOxSwirlMflFluidRad - ((fLength-(s.inj.fLOxPostLength + fBottomConeLength + fStraightLength))*
-                    s.inj.fLOxSwirlMflFluidRad/fTopConeLength);
+            m_sSize = sSize;
+            m_fDownstreamDiameter = fDownstreamDiameter;
+
+            GetRelevantDimensions(sSize, 
+                                out m_fFaceDiameter, 
+                                out m_fPilotBoreDiameter, 
+                                out m_fBoreDepthTotal);
+        }
+        
+        // public query methods
+        public float fGetFaceDiameter()
+        {
+            return m_fFaceDiameter;
+        }
+        public float fGetPilotBoreDiameter()
+        {
+            return m_fPilotBoreDiameter;
+        }
+        public float fGetBoreDepthTotal()
+        {
+            return m_fBoreDepthTotal;
+        }
+        public float fGetDownstreamDiameter()
+        {
+            return m_fDownstreamDiameter;
+        }
+
+        // vox builder
+        public Voxels voxConstruct(LocalFrame oFaceFrame)
+        {
+            float fPilotRadius = m_fPilotBoreDiameter / 2f;
+            float fDownstreamRadius = m_fDownstreamDiameter / 2f;
+            float fBoreDepthTotal = m_fBoreDepthTotal;
+            
+            float fConeLength = fPilotRadius - fDownstreamRadius; 
+
+            // The straight section length must ensure the total length (Straight + Cone) equals m_fBoreDepthTotal.
+            float fStraightLength = m_fBoreDepthTotal - fConeLength; 
+            
+            LocalFrame oStraightFrame = oFaceFrame;
+
+            BasePipe oPilotBore = new BasePipe(oStraightFrame, -fStraightLength, 0, fPilotRadius);
+            BaseCone oTaper = new BaseCone(
+                oFaceFrame.oTranslate(new Vector3(0, 0, -fBoreDepthTotal)),
+                fPilotRadius - fDownstreamRadius,
+                fDownstreamRadius, fPilotRadius);
+
+        return oPilotBore.voxConstruct() + oTaper.voxConstruct();
+        }
+
+        // private helpers
+        private void GetRelevantDimensions(string sSize, out float fFaceDiam, out float fBoreDiam, out float fBoreDepth)
+        {
+            float fRequiredFullThreadLength; // Internal temp var for calculation
+            
+            switch (sSize)
+            {
+                case "1/4in":
+                    fBoreDiam = 13.3f;
+                    fRequiredFullThreadLength = 12.4f;
+                    fFaceDiam = 20.7f;
+                    break;
+                case "1/2in":
+                    fBoreDiam = 21.1f;
+                    fRequiredFullThreadLength = 14.5f;
+                    fFaceDiam = 34.0f;
+                    break;
+                case "3/4in":
+                    fBoreDiam = 26.6f;
+                    fRequiredFullThreadLength = 16.5f;
+                    fFaceDiam = 40.0f;
+                    break;
+                default:
+                    Library.Log($"BSPP size '{sSize}' not recognised. Using 1/4in default.");
+                    goto case "1/4in";
+            }
+
+            // Calculate total bore depth using the empirical rule (L_thread + 0.5 * D_pilot)
+            fBoreDepth = fRequiredFullThreadLength + 0.5f * fBoreDiam;
         }
     }
-
-    public class ImplicitParaboloid : IImplicit
-    {
-        protected float m_fA;
-        protected float m_fB;
-        protected float m_fThickness;
-        public ImplicitParaboloid(float fA, float fB, float fThickness)
-        {
-            m_fA = fA;
-            m_fB = fB;
-            m_fThickness = fThickness;
-        }
-
-        public float fSignedDistance(in Vector3 vecPt)
-        {
-            float dX = vecPt.X;
-            float dY = vecPt.Y;
-            float dZ = vecPt.Z;
-
-            float fDist = dX*dX/(m_fA*m_fA) + dY*dY/(m_fB*m_fB) - dZ;
-
-            // add thickness
-            return (float)(Math.Abs(fDist) - 0.5f * m_fThickness);  // note not ACTUAL thickness! change dis l8r
-        }
-    }
-
-public class ImplicitCone : IImplicit
-{
-    protected float m_fAlpha;     // half angle in radians
-    protected float m_fThickness;
-
-    public ImplicitCone(float fAlpha, float fThickness)
-    {
-        m_fAlpha = fAlpha;
-        m_fThickness = fThickness;
-    }
-
-    public float fSignedDistance(in Vector3 vecPt)
-    {
-        float x = vecPt.X;
-        float y = vecPt.Y;
-        float z = vecPt.Z;
-
-        // Radial distance from axis
-        float r = MathF.Sqrt(x * x + y * y);
-
-        // Cone SDF
-        float cosA = Cos(m_fAlpha);
-        float sinA = Sin(m_fAlpha);
-        float d = cosA * r - sinA * z;
-
-        // Apply wall thickness (shell)
-        return Abs(d) - m_fThickness * 0.5f;
-    }
-}
 
     public Voxels voxConstruct()
     {
-        // List<Vector3> aPointsList = [new Vector3(0f,0f,0f), new Vector3(20f, 40f, 0f)];
-
-        // messin around with implicit parabola thing
-        // IImplicit sdfCone = new ImplicitCone(PI/4, 1f);
-        // BBox3 oBBox = new BBox3(new Vector3(-10f,-10f,-10f), new Vector3(10f, 10f, 10f));
-
-        // Voxels voxCone = new Voxels(sdfCone, oBBox);
-
-
-        // return voxCone;
 
         List<Vector3> aInjectorLocations = InjectorPattern(s.inj.aElementCount, s.inj.aElementRadii, s.inj.aElementClocking);
         List<Vector3> aFilmCoolingLocations = InjectorPattern(s.inj.aFilmHoleCount, s.inj.aFilmHoleRadii, s.inj.aFilmHoleClocking);
-        // foreach(Vector3 vecLocation in aInjectorLocations)
-        // {
-        //     Sh.PreviewFrame(new LocalFrame(vecLocation), 10f);
-        //     voxLOxManifold += voxLOxSwirlCore(new LocalFrame(vecLocation));
-        // }
 
-        Voxels voxDividingWall = new Voxels(voxConeRoof(aInjectorLocations, 1f, PI/4, 40f));
+
+        ConeRoof oDividingWall = new ConeRoof(s.inj, s.slm, i, aInjectorLocations, 2f);
+        Voxels voxDividingWall = oDividingWall.voxConstruct();
+
         Voxels voxFacePlate = new Voxels(voxInjectorPlate(aInjectorLocations, aFilmCoolingLocations, 0.5f,
-                                                            s.inj.FuelAnnulusOR, s.inj.fInjectorPlateThickness, 50f,
-                                                            1f, 1f, 1f, 1f, 1f, 1f));
+                                                            s.inj.fFuelAnnulusOR, s.inj.fInjectorPlateThickness, i.fBoltMR));
+        Voxels voxInnerOringGroove = new Voxels(voxGroovyBaby(new LocalFrame(), i.fInnerOringDepth, i.fInnerOringIR, i.fInnerOringOR));
+        Voxels voxOuterOringGroove = new Voxels(voxGroovyBaby(new LocalFrame(), i.fOuterOringDepth, i.fOuterOringIR, i.fOuterOringOR));
 
-        Voxels voxOutput = voxDividingWall + voxFacePlate;
+        Voxels voxRegenInletGroove = new Voxels(voxGroovyBaby(new LocalFrame(), s.inj.fInjectorPlateThickness, 
+                                                i.fCoolingChannelIR, i.fCoolingChannelOR));
 
-        // cross section
-        BaseBox oCrossSection = new BaseBox(new LocalFrame(new Vector3(50f,0f,0f)), 100f, 100f, 100f);
-        return voxOutput - oCrossSection.voxConstruct();
-    }
+        Voxels voxGrooves = voxInnerOringGroove + voxOuterOringGroove + voxRegenInletGroove;
+
+        BSPPPort oASIPort = new BSPPPort("1/4in", 7f);
+        BSPPPort oLOXPort = new BSPPPort("1/2in", 15f);
+        BSPPPort oPTPort  = new BSPPPort("1/4in", 5f);
+
+        // Voxels voxPorts = oASIPort.voxConstruct();
+
+        Voxels voxOutput = voxDividingWall + voxFacePlate - voxGrooves;// + oASIPort.voxConstruct(new LocalFrame(new Vector3(0f, 0f, 0f)));;
+        BBox3 bounds = voxOutput.oCalculateBoundingBox();
+        if (bounds.vecMin.X < 0f) {
+            bounds.vecMin.X = 0f;
+            Voxels box = new(PicoGK.Utils.mshCreateCube(bounds));
+            voxOutput = voxOutput.voxBoolIntersect(box);
+        }
+        return voxOutput;
+    }       
+    
 }
