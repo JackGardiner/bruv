@@ -1,2 +1,2 @@
 # bruv
-Biprop Regenerative Unified Virtual-engine
+**B**ipropellant combustion, **R**egenerative cooling, **U**sing **V**oxels
