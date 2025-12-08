@@ -7,24 +7,12 @@ public class Frame {
     public Vec3 Y { get; }
     public Vec3 Z { get; }
 
-    public Frame() {
-        this.pos = ZERO3;
-        this.X = uX3;
-        this.Y = uY3;
-        this.Z = uZ3;
-    }
-    public Frame(Vec3 pos) {
-        this.pos = pos;
-        this.X = uX3;
-        this.Y = uY3;
-        this.Z = uZ3;
-    }
-    public Frame(Vec3 new_pos, Frame f) {
-        this.pos = new_pos;
-        this.X = f.X;
-        this.Y = f.Y;
-        this.Z = f.Z;
-    }
+    public Frame()
+        : this(ZERO3, uX3, uY3, uZ3) {}
+    public Frame(Vec3 pos)
+        : this(pos, uX3, uY3, uZ3) {}
+    public Frame(Vec3 new_pos, Frame f)
+        : this(new_pos, f.X, f.Y, f.Z) {}
     public Frame(Vec3 pos, Vec3 Z)
         : this(pos, arbitrary_perpendicular(Z), Z) {}
     public Frame(Vec3 pos, Vec3 X, Vec3 Z) {
@@ -36,6 +24,12 @@ public class Frame {
         this.pos = pos;
         this.X = X;
         this.Y = cross(Z, X);
+        this.Z = Z;
+    }
+    protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
+        this.pos = pos;
+        this.X = X;
+        this.Y = Y;
         this.Z = Z;
     }
 
@@ -76,6 +70,10 @@ public class Frame {
         if (relative)
             about = to_global_rot(about);
         return new(pos, Br.rotate(X, about, by), Br.rotate(Z, about, by));
+    }
+
+    public Frame flip() {
+        return new(pos, -X, -Y, -Z);
     }
 
     public Vec3 to_global(Vec3 p) {

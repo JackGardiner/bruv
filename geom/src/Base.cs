@@ -59,6 +59,29 @@ public abstract class SDF : IBoundedImplicit {
 
 
 
+public class Space : SDFunbounded {
+    public Frame centre { get; }
+    public float lo { get; }
+    public float hi { get; }
+
+    public Space(Frame centre, float lo, float hi) {
+        assert(hi > lo, $"lo={lo}, hi={hi}");
+        assert(lo != +INF, $"lo={lo}");
+        assert(hi != -INF, $"hi={hi}");
+        assert(lo != -INF || hi != +INF);
+        this.centre = centre;
+        this.lo = lo;
+        this.hi = hi;
+    }
+
+
+    public override float signed_dist(in Vec3 p) {
+        float z = dot(p - centre.pos, centre.Z);
+        return max(lo - z, z - hi);
+    }
+}
+
+
 public class Ball : SDF {
     public Vec3 centre { get; }
     public float r { get; }
@@ -84,19 +107,19 @@ public class Pill : SDF {
     public Vec3 a { get; }
     public Vec3 b { get; }
     public float r { get; }
-    protected Vec3 ab { get; }
-    protected Vec3 ab_magab2 { get; }
+    protected float magab { get; }
+    protected Vec3 AB { get; }
 
     public Pill(Frame centre, float L, float r)
         : this(centre.pos, centre.to_global(L*uZ3), r) {}
     public Pill(Vec3 a, Vec3 b, float r) {
         assert(r > 0f, $"r={r}");
+        assert(a != b);
         this.a = a;
         this.b = b;
         this.r = r;
-        this.ab = b - a;
-        float magab = mag(this.ab);
-        this.ab_magab2 = ab / magab / magab;
+        this.magab = mag(b - a);
+        this.AB = (b - a) / magab;
         include_in_bounds(a - r*ONE3);
         include_in_bounds(a + r*ONE3);
         include_in_bounds(b - r*ONE3);
@@ -105,8 +128,8 @@ public class Pill : SDF {
 
 
     public override float signed_dist(in Vec3 p) {
-        float axial = dot(ab_magab2, p - a);
-        Vec3 c = a + ab*clamp(axial, 0f, 1f);
+        float axial = dot(AB, p - a);
+        Vec3 c = a + AB*clamp(axial, 0f, magab);
         return mag(p - c) - r;
     }
 }
@@ -220,6 +243,89 @@ public class Pipe : SDF {
 }
 
 
+public class Cone : SDF {
+    public Frame centre { get; } // cone tip, +z towards cone.
+    public float Lz { get; }
+    public float phi { get; }
+    public float? th { get; }
+    protected float cosphi { get; }
+    protected float sinphi { get; }
+
+    public struct PhiV {
+        public float v { get; }
+        public PhiV(float v) { this.v = v; }
+    }
+    public static PhiV Phi(float phi) { return new PhiV(phi); }
+
+    public struct RadiusV {
+        public float v { get; }
+        public RadiusV(float v) { this.v = v; }
+    }
+    public static RadiusV Radius(float r) { return new RadiusV(r); }
+
+    public Cone(in Frame centre, float Lz, float r, float? th=null,
+            bool at_tip=false)
+        : this(centre, Lz, Phi(atan(r / Lz)), th, at_tip) {}
+    public Cone(in Frame centre, PhiV phi, RadiusV r, float? th=null,
+            bool at_tip=false)
+        : this(centre, r, phi, th, at_tip) {}
+    public Cone(in Frame centre, RadiusV r, PhiV phi, float? th=null,
+            bool at_tip=false)
+        : this(centre, r.v / tan(phi.v), phi, th, at_tip) {}
+    public Cone(in Frame centre, PhiV phi, float Lz, float? th=null,
+            bool at_tip=true)
+        : this(centre, Lz, phi, th, at_tip) {}
+    public Cone(in Frame centre, float Lz, PhiV phi, float? th=null,
+            bool at_tip=true) {
+        assert(Lz > 0f, $"Lz={Lz}");
+        assert(0f < phi.v && phi.v < PI_2, $"phi={phi.v}");
+        this.centre = centre;
+        if (!at_tip)
+            this.centre = this.centre.transz(Lz).flip();
+        this.Lz = Lz;
+        this.phi = phi.v;
+        this.th = th;
+        this.cosphi = cos(this.phi);
+        this.sinphi = sin(this.phi);
+        float r = Lz * sinphi/cosphi;
+        include_in_bounds(centre.to_global(new(0f, 0f, 0f)));
+        include_in_bounds(centre.to_global(new(-r, -r, Lz)));
+        include_in_bounds(centre.to_global(new(-r, +r, Lz)));
+        include_in_bounds(centre.to_global(new(+r, -r, Lz)));
+        include_in_bounds(centre.to_global(new(+r, +r, Lz)));
+    }
+
+
+    public override float signed_dist(in Vec3 p) {
+        Vec3 q = centre.from_global(p);
+        float r = magxy(q);
+        float z = q.Z;
+
+        // Cone sdf.
+        float dist = cosphi * r - sinphi * z;
+
+        // Distance along cone face.
+        Vec2 face = new(sinphi, cosphi);
+        Vec2 point = new(r, z);
+        float along = dot(face, point);
+        float length = Lz / cosphi;
+        if (along > length) {
+            along -= length;
+            dist = hypot(dist, along);
+        }
+
+        // Make shell if thickness was given.
+        if (th != null)
+            dist = abs(dist + 0.5f*th.Value) - 0.5f*th.Value;
+
+        // Make flat base.
+        dist = max(dist, z - Lz);
+
+        return dist;
+    }
+}
+
+
 public class Tubing {
     public List<Vec3> points { get; }
     public float ID { get; }
@@ -242,7 +348,7 @@ public class Tubing {
         Vec3 S1 = points[1];
         Vec3 E0 = points[^1];
         Vec3 E1 = points[^2];
-        float remove_r = 1.01f*(0.5f*ID + th);
+        float remove_r = 1.5f*(0.5f*ID + th);
         Pipe S = new(new Frame(S0, S0 - S1), remove_r, remove_r);
         Pipe E = new(new Frame(E0, E0 - E1), remove_r, remove_r);
 
@@ -271,7 +377,8 @@ public class Tubing {
             else
                 vox = vox.voxDoubleOffset(Fr, -Fr);
         }
-        vox.BoolSubtract(inner);
+        if (hollow)
+            vox.BoolSubtract(inner);
         vox.BoolSubtract(S.voxels());
         vox.BoolSubtract(E.voxels());
         return vox;

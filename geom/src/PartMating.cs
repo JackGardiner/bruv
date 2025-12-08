@@ -16,10 +16,10 @@ ___________________| |_________|  |_|   ___,- this plane is top of cc
 
     /* Required for realisable mate: */
 
-    public required float r_cc { get; init; }
+    public required float Or_cc { get; init; }
 
-    public required float r_channel { get; init; }
-    public required float min_wi_channel { get; init; }
+    public required float Ir_chnl { get; init; }
+    public required float Or_chnl { get; init; }
 
     public required float Ir_Ioring { get; init; }
     public required float Ir_Ooring { get; init; }
@@ -31,7 +31,7 @@ ___________________| |_________|  |_|   ___,- this plane is top of cc
 
     // bolt positions are cyclically symmetry about Z, one bolt lies on +X axis.
     public required int no_bolt { get; init; }
-    public required float r_bolt { get; init; }
+    public required float Mr_bolt { get; init; }
     public required float Bsz_bolt { get; init; }
     public required float Bln_bolt { get; init; }
 

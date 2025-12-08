@@ -13,24 +13,28 @@ public class Chamber {
     // Typical frame used is cylindrical coordinates, +z vector pointing along
     // axis of symmetry (axial vector) from the injector towards the nozzle,
     // where z=0 is the chamber top plane. Define theta=0 radial-outwards vector
-    // to coincide with +x vector.
+    // to coincide with +x vector and theta=PI_2 radial-outwards vector to
+    // coincide with +y vector. Define the +y vector to be vertical upwards when
+    // the motor is setup on the (horizontal) thrust stand.
     //
     //
     // Context for 'X':
     // nzl_X = nozzle construction value.
     // X_cc = chamber property.
+    // X_chnl = cooling channel property.
     // X_conv = nozzle converging section property.
     // X_div = nozzle diverging section property.
     // X_exit = nozzle exit property.
-    // X_ib = interface (with other part) bolt property.
+    // X_inlet = fuel inlet property.
     // X_iw = inner wall property.
+    // X_mani = fuel inlet manifold property.
     // X_ow = outer wall property.
     // X_part = entire chamber+nozzle part property.
     // X_tht = nozzle throat property.
-    // X_channel = cooling channel property.
     // X_web = between-cooling-channel wall property.
     //
     // Legend for 'X':
+    // A = area.
     // AEAT = nozzle exit area to throat area ratio.
     // Bsz = bolt size (i.e. 4e-3 for M4x10).
     // Bln = bolt length (i.e. 10e-3 for M4x10).
@@ -50,7 +54,6 @@ public class Chamber {
     // x = x coordinate.
     // y = y coordinate.
     // z = z coordinate.
-    //
 
     public required PartMating pm { get; init; }
 
@@ -65,14 +68,27 @@ public class Chamber {
     public required float phi_div { get; init; }
     public required float phi_exit { get; init; }
 
-    public required int no_web { get; init; } // =# of cooling channels.
     public required float th_iw { get; init; }
     public required float th_ow { get; init; }
+
+    public required int no_web { get; init; }
     public required float th_web { get; init; }
-    public required float wi_web { get; init; }
+    public required float Ltheta_web { get; init; }
+    public int no_chnl => no_web;
+    public float th_chnl => th_web;
+    public float Ltheta_chnl => TWOPI/no_chnl - Ltheta_web;
+    public float A_chnl // at cc.
+        => Ltheta_chnl/TWOPI * PI*(squared(pm.Or_cc + th_iw + th_chnl)
+                                 - squared(pm.Or_cc + th_iw));
+    // TODO: update fuel inlet manifold to use the correct channel area instead
+    // of the channel area at cc.
 
-
-    protected const float AXIAL_EXTRA = 10f; // trimmed in final step.
+    public required float D_inlet { get; init; }
+    public required float th_inlet { get; init; }
+    public required float r_inlet { get; init; }
+    public required float theta_inlet { get; init; }
+    public required float Dz_inlet { get; init; }
+    public float A_inlet => no_chnl*A_chnl;
 
     /*
     https://www.desmos.com/calculator/6wogn9dm4x
@@ -105,13 +121,13 @@ public class Chamber {
     public float nzl_r_conv => 1.5f*r_tht;
 
     public float nzl_z0 => 0f;
-    public float nzl_r0 => pm.r_cc;
+    public float nzl_r0 => pm.Or_cc;
 
     public float nzl_z1 => L_cc;
-    public float nzl_r1 => pm.r_cc;
+    public float nzl_r1 => pm.Or_cc;
 
     public float nzl_z2 => nzl_z1 - nzl_r_conv*sin(phi_conv);
-    public float nzl_r2 => pm.r_cc - nzl_r_conv*(1f - cos(phi_conv));
+    public float nzl_r2 => pm.Or_cc - nzl_r_conv*(1f - cos(phi_conv));
 
     public float nzl_z3 => nzl_z2 + (nzl_r3 - nzl_r2)/tan(phi_conv);
     public float nzl_r3 => r_tht * (2.5f - 1.5f*cos(phi_conv));
@@ -177,6 +193,9 @@ public class Chamber {
     public float theta_web(float z) {
         return PI/8 * cos(PI * z / L_part);
     }
+
+
+    protected const float AXIAL_EXTRA = 10f; // trimmed in final step.
 
 
     public void check_realisable() {
@@ -306,7 +325,7 @@ public class Chamber {
 
         float rlo = r_tht;
         float rhi = max_r;
-        float Dt = 0.5f*(wi_web / pm.r_cc); // t for theta.
+        float Dt = 0.5f*Ltheta_web; // t for theta.
 
         Mesh mesh = new();
         List<Vec3> V = new();
@@ -361,7 +380,7 @@ public class Chamber {
     }
 
     protected Voxels voxels_webs() {
-        float max_r = pm.r_channel + 0.5f*pm.min_wi_channel + th_ow;
+        float max_r = pm.Or_chnl + th_ow;
         Voxels vox = new();
         List<int> keys = new();
         for (int i=0; i<no_web; ++i) {
@@ -376,11 +395,11 @@ public class Chamber {
     protected Voxels voxels_cc_widening() {
         Lattice lat = new();
         float zA = -AXIAL_EXTRA;
-        float zB = 25f;
-        float zC = zB + 10f;
-        float rA = pm.r_channel + 0.5f*pm.min_wi_channel + th_ow;
+        float zB = 8f;
+        float zC = zB + 6f;
+        float rA = pm.Or_chnl + th_ow;
         float rB = rA;
-        float rC = pm.r_cc + th_iw + th_web + th_ow;
+        float rC = pm.Or_cc + th_iw + th_web + th_ow;
         lat.AddBeam(
             uZ3*zA, rA,
             uZ3*zB, rB,
@@ -394,47 +413,109 @@ public class Chamber {
         return new Voxels(lat);
     }
 
-    protected List<Vec3> points_inlet(int divisions=100) {
-        List<Vec3> points = [
-            tocart(pm.r_bolt + 15f, PI_2, -AXIAL_EXTRA),
-            tocart(pm.r_bolt + 15f, PI_2, nzl_z6 - 60f),
-            tocart(r_exit, PI_2, nzl_z6),
-        ];
-        // for (int i=0; i<divisions; ++i) {
-        //     float z = nzl_z0 + i*(nzl_z6 - nzl_z0)/divisions;
-        //     float r = pm.r_bolt + 15f;
-        //     points.Add(tocart(r, 0f, z));
-        // }
-        return points;
+    public float A_mani(float theta) {
+        // Lerp between initial (at mani inlet) and final (opposite mani inlet).
+        // This is so that the cross-sectional area lost from one channel to the
+        // next (travelling downstream) is exactly one channel area.
+        float Dtheta = theta - theta_inlet;
+        if (Dtheta > PI)
+            Dtheta = TWOPI - Dtheta;
+        // in one half-turn, no_chnl/2 channels are passed.
+        float t = abs(Dtheta) / (PI / (0.5f*no_chnl - 1f));
+        return 0.5f*A_inlet - A_chnl*t;
     }
-    protected Voxels voxels_inlet() {
-        List<Vec3> points = points_inlet();
-        Voxels vox = new Tubing(points, 15f).voxels();
-        Vec3 p = points[0];
-        p.Z = 0f;
-        Frame frame = new Frame(
-            p + 0.5f*pm.flange_thickness*uZ3,
-            tocart(1f, PI_2 - argxy(p), 0f),
-            tocart(1f, -argxy(p), 0f)
-        );
-        vox.BoolAdd(new Cuboid(
-            frame.rotxz(torad(15f)),
-            15f,
-            pm.flange_thickness,
-            magxy(p) - pm.r_cc
-        ).voxels());
-        vox.BoolAdd(new Cuboid(
-            frame.rotxz(torad(-15f)),
-            15f,
-            pm.flange_thickness,
-            magxy(p) - pm.r_cc
-        ).voxels());
+
+    public void points_mani(List<Vec3> points, float theta) {
+        float A = A_mani(theta);
+        // Must produce the same number of points each time.
+        // Must produce points in anticlockwise winding (meaning an in-order
+        // traversal would travel down the edge closest to the z-axis).
+        assert(A > 0);
+        // https://www.desmos.com/calculator/bfsipdjpsd
+        assert(phi_exit >= 0f);
+        float max_phi = PI_4;
+        float cosa = cos(phi_exit);
+        float sina = sin(phi_exit);
+        float tanb = tan(max_phi);
+        float L = 2f*sqrt(A/(cosa*cosa*tanb - sina*sina/tanb));
+        float Az = L*cosa;
+        float Ar = L*sina;
+        float Bz = L/2f*(sina/tanb + cosa);
+        float Br = L/2f*(sina + cosa*tanb);
+        float z0 = L_part - th_ow;
+        float r0 = Ir_part(z0) + 0.5f*th_iw;
+        points.Add(tocart(r0,           theta, z0));
+        points.Add(tocart(r0 - Ar,      theta, z0 - Az));
+        points.Add(tocart(r0 - Ar + Br, theta, z0 - Az + Br));
+    }
+
+    public Mesh mesh_mani(int divisions=250) {
+        Mesh mesh = new();
+        List<Vec3> V = new();
+        int N = 0;
+        for (int n=0; n<=divisions; ++n) {
+            int i;
+            int j;
+            if (n == divisions) {
+                i = numel(V) - N;
+                j = 0;
+            } else {
+                float theta = n*TWOPI/divisions;
+                points_mani(V, theta);
+                if (N == 0)
+                    N = numel(V);
+                if (n == 0)
+                    continue;
+                i = numel(V) - 2*N;
+                j = numel(V) - N;
+            }
+            // Join as quads.
+            for (int t0=0; t0<N; ++t0) {
+                int t1 = (t0 == N - 1) ? 0 : t0 + 1;
+                int a0 = i + t0;
+                int a1 = i + t1;
+                int b0 = j + t0;
+                int b1 = j + t1;
+                mesh.nAddTriangle(a0, b0, b1);
+                mesh.nAddTriangle(a0, b1, a1);
+            }
+        }
+        mesh.AddVertices(V, out _);
+        return mesh;
+    }
+
+    protected Voxels voxels_neg_mani() {
+        Vec3 a = tocart(r_inlet, theta_inlet, L_part + Dz_inlet);
+        Vec3 b = tocart(Ir_part(a.Z), theta_inlet, a.Z);
+        Voxels vox = new Tubing([a, b], D_inlet).voxels();
+        vox.BoolAdd(new Voxels(mesh_mani()));
         return vox;
     }
 
-    protected Voxels voxels_neg_inlet() {
-        List<Vec3> points = points_inlet();
-        return new Tubing(points, 12f).voxels();
+    protected Voxels voxels_mani() {
+        Voxels vox = voxels_neg_mani().voxOffset(th_inlet);
+
+        Frame inlet = new(tocart(r_inlet, theta_inlet, L_part + Dz_inlet), uY3);
+        Geez.frame(inlet);
+        float length = 12f;
+        float thicker = 2f;
+        float angle = DEG20;
+        float radius = 0.5f*D_inlet + th_inlet + thicker;
+        Voxels tapping;
+        tapping = new Pipe(inlet, length, radius).voxels();
+        tapping.BoolAdd(new Cone(
+            inlet.transz(length),
+            Cone.Radius(radius),
+            Cone.Phi(angle),
+            at_tip: false
+        ).voxels());
+        tapping.IntersectImplicit(
+            new Space(inlet, -INF, length + thicker / tan(angle))
+        );
+
+        vox.BoolAdd(tapping);
+        vox.IntersectImplicit(new Space(inlet, 0f, INF));
+        return vox;
     }
 
     protected Voxels voxels_flange() {
@@ -449,7 +530,7 @@ public class Chamber {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
             Pipe bolt_surrounding = new(
-                new Frame(tocart(pm.r_bolt, theta, 0f)),
+                new Frame(tocart(pm.Mr_bolt, theta, 0f)),
                 pm.flange_thickness,
                 pm.Bsz_bolt/2f + pm.thickness_around_bolt
             );
@@ -464,7 +545,7 @@ public class Chamber {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
             Pipe bolt_hole = new(
-                new Frame(tocart(pm.r_bolt, theta, 0f)),
+                new Frame(tocart(pm.Mr_bolt, theta, 0f)),
                 pm.flange_thickness,
                 pm.Bsz_bolt/2f
             );
@@ -474,6 +555,12 @@ public class Chamber {
     }
 
     protected Voxels voxels_neg_orings() {
+      // PREPROCESSOR MY BELOVED.
+      // c sharp has spared you.
+      // LONG LIVE THE PREPROCESSOR.
+      #if true
+        return new(); // oring grooves on injector side?
+      #else
         Voxels vox;
         vox = new Pipe(
             new Frame(),
@@ -488,30 +575,30 @@ public class Chamber {
             pm.Or_Ooring
         ).voxels());
         return vox;
+      #endif
     }
 
     public Voxels voxels() {
-
         // We view a few things as they are updated.
         Geez.Cycle key_flange = new();
         Geez.Cycle key_webs = new();
-        Geez.Cycle key_inlet = new();
+        Geez.Cycle key_mani = new();
         Geez.Cycle key_part = new();
         var col_flange = COLOUR_RED;
         var col_webs = COLOUR_GREEN;
-        var col_inlet = COLOUR_BLUE;
+        var col_mani = COLOUR_BLUE;
 
         Voxels flange = voxels_flange();
         key_flange <<= Geez.voxels(flange, colour: col_flange);
         Voxels webs = voxels_webs();
         key_webs <<= Geez.voxels(webs, colour: col_webs);
-        Voxels inlet = voxels_inlet();
-        key_inlet <<= Geez.voxels(inlet, colour: col_inlet);
+        Voxels mani = voxels_mani();
+        key_mani <<= Geez.voxels(mani, colour: col_mani);
 
         Voxels cc_widening = voxels_cc_widening();
         Voxels neg_bolts = voxels_neg_bolts();
         Voxels neg_orings = voxels_neg_orings();
-        Voxels neg_inlet = voxels_neg_inlet();
+        Voxels neg_mani = voxels_neg_mani();
 
         Voxels neg_cc = voxels_interior();
         neg_cc.TripleOffset(-0.01f); // smooth.
@@ -529,11 +616,11 @@ public class Chamber {
         Voxels neg_channel = part.voxDoubleOffset(Fr_cc, -Fr_cc - th_ow);
 
         part.BoolAdd(flange);
-        part.BoolAdd(inlet);
+        part.BoolAdd(mani);
         part.Fillet(Fr_cc);
         key_part <<= Geez.voxels(part);
-        key_flange <<= null;
-        key_inlet <<= null;
+        key_flange <<= Geez.CLEAR;
+        key_mani <<= Geez.CLEAR;
 
         webs.BoolIntersect(part);
         key_webs <<= Geez.voxels(webs, colour: col_webs);
@@ -544,14 +631,14 @@ public class Chamber {
         neg_channel.Offset(-th_web); // avoid copy tho.
         Voxels inner_wall = neg_channel;
 
-        part.BoolAdd(inner_wall);
         part.BoolAdd(webs);
+        part.BoolSubtract(neg_mani);
+        part.BoolAdd(inner_wall);
         key_part <<= Geez.voxels(part);
-        key_webs <<= null;
+        key_webs <<= Geez.CLEAR;
 
         part.BoolSubtract(neg_bolts);
         part.BoolSubtract(neg_orings);
-        part.BoolSubtract(neg_inlet);
         part.BoolSubtract(neg_cc);
         key_part <<= Geez.voxels(part);
 
@@ -573,10 +660,10 @@ public class Chamber {
 
         Chamber chamber = new Chamber{
             pm = new PartMating{
-                r_cc=50f,
+                Or_cc=50f,
 
-                r_channel=60f,
-                min_wi_channel=2f,
+                Ir_chnl=58.5f,
+                Or_chnl=61.5f,
 
                 Ir_Ioring=52.5f,
                 Or_Ioring=55.5f,
@@ -586,7 +673,7 @@ public class Chamber {
                 Lz_Ooring=2f,
 
                 no_bolt=10,
-                r_bolt=76f,
+                Mr_bolt=76f,
                 Bsz_bolt=8f,
                 Bln_bolt=20f,
 
@@ -603,15 +690,21 @@ public class Chamber {
             r_tht=20f,
 
             NLF=1f,
-            phi_conv=torad(-45f),
+            phi_conv=-DEG45,
             phi_div=torad(21f),
             phi_exit=torad(10f),
 
             no_web=40,
             th_iw=1.5f,
-            th_ow=2.0f,
-            th_web=3f,
-            wi_web=1.5f,
+            th_ow=3.0f,
+            th_web=2f,
+            Ltheta_web=2f/50f,
+
+            D_inlet=10f,
+            th_inlet=2f,
+            r_inlet=80f,
+            theta_inlet=-PI_2,
+            Dz_inlet=-15f,
         };
         chamber.check_realisable();
 

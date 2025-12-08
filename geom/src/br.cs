@@ -71,6 +71,16 @@ public static class Br {
     public const float PI = MathF.PI;
     public const float TWOPI = 2f*PI;
     public const float PI_2 = PI/2f;
+    public const float PI_4 = PI/4f;
+
+    public const float DEG10 = 0.17453292f;
+    public const float DEG15 = 0.2617994f;
+    public const float DEG20 = 0.34906584f;
+    public const float DEG30 = 0.5235988f;
+    public const float DEG45 = PI_4;
+    public const float DEG60 = 1.0471976f;
+    public const float DEG90 = PI_2;
+    public const float DEG180 = PI;
 
     public const int AXISX = 0;
     public const int AXISY = 1;
@@ -167,6 +177,7 @@ public static class Br {
     public static float log2(float a) => MathF.Log10(a);
     public static float log10(float a) => MathF.Log10(a);
 
+    public static float squared(float a) => a*a;
     public static float sqrt(float a) => MathF.Sqrt(a);
     public static float cbrt(float a) => MathF.Cbrt(a);
 

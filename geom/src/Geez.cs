@@ -15,7 +15,7 @@ public class Geez {
     public static float? roughness = null;
     public static bool? sectioned = null;
 
-    public static Colour dflt_colour = new Colour("#FF0000");
+    public static Colour dflt_colour = new Colour("#FFFFFF");
     public static float dflt_alpha = 1f;
     public static float dflt_metallic = 0.35f;
     public static float dflt_roughness = 0.5f;
@@ -159,6 +159,8 @@ public class Geez {
     }
 
 
+    public const int BLANK = 0;
+    public const int CLEAR = -1;
     public class Cycle {
         protected int[] keys; // rolling buffer.
         protected int i; // next index.
@@ -168,11 +170,15 @@ public class Geez {
             i = 0;
         }
 
-        public static Cycle operator<<(Cycle c, int? key) {
-            assert((key ?? 0) >= 0);
+        public static Cycle operator<<(Cycle c, int key) {
+            assert(key > 0 || key == CLEAR || key == BLANK);
+            if (key == CLEAR) {
+                c.clear();
+                return c;
+            }
             if (c.keys[c.i] != 0)
                 Geez.remove(c.keys[c.i]);
-            c.keys[c.i] = key ?? 0;
+            c.keys[c.i] = key;
             c.i = (c.i == numel(c.keys) - 1) ? 0 : c.i + 1;
             return c;
         }
@@ -223,7 +229,9 @@ public class Geez {
             Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
             meshes.Add(mesh);
         }
-        using (like(colour: colour, alpha: 1f, metallic: 0.1f, roughness: 0f))
+        using (dflt_like(colour: COLOUR_RED, alpha: 1f, metallic: 0.1f,
+                roughness: 0f))
+        using (like(colour: colour))
             return _push(meshes);
     }
 
@@ -232,18 +240,18 @@ public class Geez {
     }
     public static int line(in List<Vec3> points, Colour? colour=null,
             float arrow=0f) {
-        PolyLine line = new(colour ?? COLOUR_RED);
+        PolyLine line = new(colour ?? Geez.colour ?? COLOUR_GREEN);
         line.Add(points);
         if (arrow > 0f)
             line.AddArrow(arrow);
-        return Geez.line(line);
+        return Geez.lines([line]);
     }
     public static int lines(in List<PolyLine> lines) {
         return _push(lines);
     }
 
     protected static void _frame_lines(out Mesh? mesh, List<PolyLine> lines,
-            in Frame frame, float size, bool pos) {
+            in Frame frame, float size, bool mark_pos) {
         PolyLine X = new(COLOUR_RED);
         X.nAddVertex(frame.pos);
         X.nAddVertex(frame.pos + size*frame.X);
@@ -263,24 +271,26 @@ public class Geez {
         lines.Add(Y);
         lines.Add(Z);
 
-        mesh = (!pos) ? null
+        mesh = (!mark_pos) ? null
              : _ball_lores.mshCreateTransformed(0.05f*size*ONE3, frame.pos);
     }
-    public static int frame(in Frame frame, float size=5f, bool pos=true,
-            Colour? col=null) {
-        return Geez.frames([frame], size: size, pos: pos, colour: colour);
+    public static int frame(in Frame frame, float size=5f, bool mark_pos=true,
+            Colour? colour=null) {
+        return Geez.frames([frame], size: size, mark_pos: mark_pos,
+                colour: colour);
     }
     public static int frames(in List<Frame> frames, float size=5f,
-            bool pos=true, Colour? colour=null) {
+            bool mark_pos=true, Colour? colour=null) {
         List<PolyLine> lines = new();
         List<Mesh> meshes = new();
         foreach (Frame frame in frames) {
-            _frame_lines(out Mesh? mesh, lines, frame, size, pos);
+            _frame_lines(out Mesh? mesh, lines, frame, size, mark_pos);
             if (mesh != null)
                 meshes.Add(mesh);
         }
-        using (like(colour: colour ?? COLOUR_WHITE, alpha: 1f, metallic: 0f,
+        using (dflt_like(colour: COLOUR_WHITE, alpha: 1f, metallic: 0f,
                 roughness: 0f))
+        using (like(colour: colour))
             return _push(lines, meshes);
     }
 
@@ -351,14 +361,13 @@ public class Geez {
         lines.Add(l);
     }
     public static int bbox(in BBox3 bbox, Colour? colour=null) {
-        return Geez.bboxes([bbox], colour);
+        return Geez.bboxes([bbox], colour: colour);
     }
     public static int bboxes(in List<BBox3> bboxes, Colour? colour=null) {
         List<PolyLine> lines = new();
-        using (Geez.dflt_like(colour: COLOUR_CYAN)) {
+        using (dflt_like(colour: COLOUR_BLUE))
             foreach (BBox3 bbox in bboxes)
                 _bbox_lines(lines, bbox, colour);
-        }
         return _push(lines);
     }
 
