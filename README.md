@@ -1,2 +1,2 @@
 # bruv
-**B**ipropellant combustion, **R**egenerative cooling, **U**sing **V**oxels
+**B**ipropellant, **R**egeneratively cooling, **U**nprecedentedly optimised, **V**-kN motor
