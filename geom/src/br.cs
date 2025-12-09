@@ -104,20 +104,23 @@ public static class Br {
     public static int max(int a, int b) => (b > a) ? b : a;
     public static int clamp(int a, int lo, int hi)
             => (a > hi) ? hi : (a < lo) ? lo : a;
+    public static bool within(int a, int lo, int hi) => (lo <= a) && (a <= hi);
 
     public static float abs(float a) => (a < 0f) ? -a : a;
     public static float min(float a, float b) => ((b < a) || isnan(a)) ? b : a;
     public static float max(float a, float b) => ((b > a) || isnan(a)) ? b : a;
     public static float clamp(float a, float lo, float hi)
             => (a > hi) ? hi : (a < lo) ? lo : a;
+    public static bool within(float a, float lo, float hi)
+            => (lo <= a) && (a <= hi);
 
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
 
     public static Vec3 min(Vec3 a, Vec3 b)
-        => new(min(a.X, b.X), min(a.Y, b.Y), min(a.Z, b.Z));
+            => new(min(a.X, b.X), min(a.Y, b.Y), min(a.Z, b.Z));
     public static Vec3 max(Vec3 a, Vec3 b)
-        => new(max(a.X, b.X), max(a.Y, b.Y), max(a.Z, b.Z));
+            => new(max(a.X, b.X), max(a.Y, b.Y), max(a.Z, b.Z));
 
     public static float min(float a, params float[] bs) {
         float m = a;
@@ -169,15 +172,20 @@ public static class Br {
             m *= isnan(v) ? 1f : v;
         return m;
     }
+    public static float ave(params float[] vs) {
+        assert(numel(vs) > 0);
+        return sum(vs) / numel(vs);
+    }
 
     public static float pow(float a, float b) => MathF.Pow(a, b);
     public static float exp(float a) => MathF.Exp(a);
     public static float log(float a) => MathF.Log(a);
     public static float log(float a, float b) => MathF.Log(a, b);
-    public static float log2(float a) => MathF.Log10(a);
+    public static float log2(float a) => MathF.Log2(a);
     public static float log10(float a) => MathF.Log10(a);
 
     public static float squared(float a) => a*a;
+    public static float cubed(float a) => a*a*a;
     public static float sqrt(float a) => MathF.Sqrt(a);
     public static float cbrt(float a) => MathF.Cbrt(a);
 
@@ -192,9 +200,9 @@ public static class Br {
     public static float acos(float a) => MathF.Acos(a);
     public static float atan(float a) => MathF.Atan(a);
 
-    public static float hypot(float x, float y) => MathF.Sqrt(x*x + y*y);
+    public static float hypot(float x, float y) => sqrt(x*x + y*y);
     public static float hypot(float x, float y, float z)
-            => MathF.Sqrt(x*x + y*y + z*z);
+            => sqrt(x*x + y*y + z*z);
     public static float atan2(float y, float x) => MathF.Atan2(y, x);
 
     public static float mag(Vec2 a) => a.Length();
@@ -217,26 +225,26 @@ public static class Br {
     public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
     public static Vec2 projxz(Vec3 a) => new(a.X, a.Z);
     public static Vec2 projyz(Vec3 a) => new(a.Y, a.Z);
-    public static Vec2 project(Vec3 a, int axis)
-        => axis switch
-        {
-            AXISX => projyz(a),
-            AXISY => projxz(a),
-            AXISZ => projxy(a),
-            _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
-        };
+    public static Vec2 project(Vec3 a, int axis) {
+        assert(isaxis(axis), $"axis={axis}");
+        if (axis == AXISX)
+            return projyz(a);
+        if (axis == AXISY)
+            return projxz(a);
+        return projxy(a);
+    }
 
     public static Vec3 rejxy(Vec2 a, float b=0f) => new(a.X, a.Y, b);
     public static Vec3 rejxz(Vec2 a, float b=0f) => new(a.X, b, a.Y);
     public static Vec3 rejyz(Vec2 a, float b=0f) => new(b, a.X, a.Y);
-    public static Vec3 reject(Vec2 a, int axis, float b=0f)
-        => axis switch
-        {
-            AXISX => rejyz(a, b),
-            AXISY => rejxz(a, b),
-            AXISZ => rejxy(a, b),
-            _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
-        };
+    public static Vec3 reject(Vec2 a, int axis, float b=0f) {
+        assert(isaxis(axis), $"axis={axis}");
+        if (axis == AXISX)
+            return rejyz(a, b);
+        if (axis == AXISY)
+            return rejxz(a, b);
+        return rejxy(a, b);
+    }
 
     public static Vec2 rot(Vec2 a, float b)
             => new(a.X*cos(b) + a.Y*sin(b), a.X*-sin(b) + a.Y*cos(b));
@@ -246,14 +254,14 @@ public static class Br {
             => rejxz(rot(projxz(a), b), a.Y);
     public static Vec3 rotyz(Vec3 a, float b)
             => rejyz(rot(projyz(a), b), a.X);
-    public static Vec3 rotate(Vec3 a, int axis, float b)
-        => axis switch
-        {
-            AXISX => rotyz(a, b),
-            AXISY => rotxz(a, b),
-            AXISZ => rotxy(a, b),
-            _ => throw new ArgumentOutOfRangeException(nameof(axis), axis, "")
-        };
+    public static Vec3 rotate(Vec3 a, int axis, float b) {
+        assert(isaxis(axis), $"axis={axis}");
+        if (axis == AXISX)
+            return rotyz(a, b);
+        if (axis == AXISY)
+            return rotxz(a, b);
+        return rotxy(a, b);
+    }
     public static Vec3 rotate(Vec3 p, Vec3 about, float by) {
         about = normalise(about);
         float cosby = cos(by);
@@ -265,6 +273,10 @@ public static class Br {
 
     public static Vec2 normalise(Vec2 a) => Vec2.Normalize(a);
     public static Vec3 normalise(Vec3 a) => Vec3.Normalize(a);
+    public static Vec2 normalise_nonzero(Vec2 a)
+            => (mag(a) == 0f) ? a : normalise(a);
+    public static Vec3 normalise_nonzero(Vec3 a)
+            => (mag(a) == 0f) ? a : normalise(a);
 
     public static float dot(Vec2 a, Vec2 b) => Vec2.Dot(a, b);
     public static float dot(Vec3 a, Vec3 b) => Vec3.Dot(a, b);

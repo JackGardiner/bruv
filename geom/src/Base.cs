@@ -3,25 +3,28 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
-using Lattice = PicoGK.Lattice;
 using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
 
 public abstract class SDFunbounded : IImplicit {
-    public abstract float signed_dist(in Vec3 p);
+    public float signed_dist(in Vec3 p) => fSignedDistance(p);
 
-    public Voxels voxels(BBox3 bounds) {
-        return new Voxels(this, bounds);
+    public Voxels voxels(BBox3 bounds, bool enforce_faces=true) {
+        if (!enforce_faces)
+            return new Voxels(this, bounds);
+        Voxels vox = new Cuboid(bounds).voxels();
+        vox.IntersectImplicit(this);
+        return vox;
     }
 
 
-    public float fSignedDistance(in Vec3 p) => signed_dist(p);
+    public abstract float fSignedDistance(in Vec3 p);
 }
 
-public abstract class SDF : IBoundedImplicit {
-    public abstract float signed_dist(in Vec3 p);
+public abstract class SDF : SDFunbounded, IBoundedImplicit {
+    public BBox3 bounds => bounds_fr;
 
     public Voxels voxels() {
         assert(has_bounds, "no bounds have been set");
@@ -29,15 +32,12 @@ public abstract class SDF : IBoundedImplicit {
         // eh maybe bounds can be empty.
         return new Voxels(this);
     }
-    public Voxels voxels(params SDFunbounded[] intersect_with) {
-        Voxels vox = new Voxels(this);
-        foreach (IImplicit i in intersect_with)
-            vox.IntersectImplicit(i);
-        return vox;
-    }
 
-    public BBox3 bounds => bounds_fr;
+
     protected void set_bounds(Vec3 min, Vec3 max) {
+        assert(min.X <= max.X);
+        assert(min.Y <= max.Y);
+        assert(min.Z <= max.Z);
         bounds_fr = new BBox3(min, max);
         has_bounds = true;
     }
@@ -50,8 +50,6 @@ public abstract class SDF : IBoundedImplicit {
         has_bounds = true;
     }
 
-
-    public float fSignedDistance(in Vec3 p) => signed_dist(p);
     protected BBox3 bounds_fr;
     protected bool has_bounds = false;
     public BBox3 oBounds => bounds_fr;
@@ -75,7 +73,7 @@ public class Space : SDFunbounded {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         float z = dot(p - centre.pos, centre.Z);
         return max(lo - z, z - hi);
     }
@@ -97,7 +95,7 @@ public class Ball : SDF {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         return mag(p - centre) - r;
     }
 }
@@ -127,7 +125,7 @@ public class Pill : SDF {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         float axial = dot(AB, p - a);
         Vec3 c = a + AB*clamp(axial, 0f, magab);
         return mag(p - c) - r;
@@ -141,10 +139,24 @@ public class Cuboid : SDF {
     public float Ly { get; }
     public float Lz { get; }
 
+    public Cuboid(in BBox3 box)
+        : this(box.vecMin, box.vecMax) {}
+    public Cuboid(in Vec3 a, in Vec3 b) {
+        Vec3 lo = min(a, b);
+        Vec3 hi = max(a, b);
+        assert(lo.X < hi.X, $"lo={lo.X}, hi={hi.X}");
+        assert(lo.Y < hi.Y, $"lo={lo.Y}, hi={hi.Y}");
+        assert(lo.Z < hi.Z, $"lo={lo.Z}, hi={hi.Z}");
+        this.centre = new(new Vec3(ave(lo.X, hi.X), ave(lo.Y, hi.Y), lo.Z));
+        this.Lx = hi.X - lo.X;
+        this.Ly = hi.Y - lo.Y;
+        this.Lz = hi.Z - lo.Z;
+        set_bounds(lo, hi);
+    }
     public Cuboid(in Frame centre, float L)
         : this(centre, L, L, L) {}
-    public Cuboid(in Frame centre, float W, float Lz)
-        : this(centre, W, W, Lz) {}
+    public Cuboid(in Frame centre, float Lxy, float Lz)
+        : this(centre, Lxy, Lxy, Lz) {}
     public Cuboid(in Frame centre, float Lx, float Ly, float Lz) {
         assert(Lx > 0f, $"Lx={Lx}");
         assert(Ly > 0f, $"Ly={Ly}");
@@ -168,7 +180,7 @@ public class Cuboid : SDF {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);
         float distx = max(-Lx/2f - q.X, q.X - Lx/2f);
         float disty = max(-Ly/2f - q.Y, q.Y - Ly/2f);
@@ -222,7 +234,7 @@ public class Pipe : SDF {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);
         float r = magxy(q);
         float z = q.Z;
@@ -296,7 +308,7 @@ public class Cone : SDF {
     }
 
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);
         float r = magxy(q);
         float z = q.Z;
@@ -435,7 +447,7 @@ public class Polygon : SDF {
         return true;
     }
 
-    public override float signed_dist(in Vec3 p) {
+    public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);
         Vec2 q2 = projxy(q);
 

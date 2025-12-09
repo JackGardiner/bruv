@@ -18,8 +18,8 @@ ___________________| |_________|  |_|   ___,- this plane is top of cc
 
     public required float Or_cc { get; init; }
 
-    public required float Ir_chnl { get; init; }
-    public required float Or_chnl { get; init; }
+    public required float Mr_chnl { get; init; }
+    public required float min_wi_chnl { get; init; }
 
     public required float Ir_Ioring { get; init; }
     public required float Ir_Ooring { get; init; }
