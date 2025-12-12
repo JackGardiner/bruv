@@ -1,5 +1,9 @@
 using static Br;
+using br;
+
 using Vec3 = System.Numerics.Vector3;
+
+namespace br {
 
 public class Frame {
     public Vec3 pos { get; }
@@ -118,4 +122,6 @@ public class Frame {
             O = uX3;
         return cross(Z, O);
     }
+}
+
 }

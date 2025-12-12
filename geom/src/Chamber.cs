@@ -1,12 +1,12 @@
 using static Br;
+using br;
+
 using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
-using Lattice = PicoGK.Lattice;
 using BBox3 = PicoGK.BBox3;
-using ScalarField = PicoGK.ScalarField;
 
 public class Chamber {
 
@@ -27,6 +27,7 @@ public class Chamber {
     // X_conv = nozzle converging section property.
     // X_div = nozzle diverging section property.
     // X_exit = nozzle exit property.
+    // X_gas = gas/gas volume (aka interior of cc+nozzle) property.
     // X_inlet = fuel inlet property.
     // X_iw = inner wall property.
     // X_mani = fuel inlet manifold property.
@@ -43,13 +44,18 @@ public class Chamber {
     // D_ = discrete change in this variable.
     // Fr = fillet radius.
     // Ir = inner radius.
+    // Ioff = inner offset.
     // L = length.
     // L_ = length along this coordinate path.
     // Mr = middle radius (average of inner and outer).
     // NLF = nozzle length as a fraction of the length of a 15deg cone.
     // no = number of things.
+    // off = offset, normal to surface.
+    // Ooff = outer offset.
+    // Or = outer radius.
     // r = radial coordinate.
-    // th = thickness (normal to surface).
+    // semith = semi-thickness (half thickness).
+    // th = thickness, normal to surface.
     // phi = axial angle relative to +Z.
     // theta = circumferential angular coordinate.
     // wi = circumferential width.
@@ -63,14 +69,16 @@ public class Chamber {
 
     public required float AEAT { get; init; }
     public required float r_tht { get; init; }
-    public float r_exit => sqrt(AEAT) * r_tht;
+    public float r_exit = NAN;
+    protected void initialise_exit() {
+        r_exit = sqrt(AEAT) * r_tht;
+    }
 
     public required float NLF { get; init; }
     public required float phi_conv { get; init; }
     public required float phi_div { get; init; }
     public required float phi_exit { get; init; }
 
-    public required float L_wid { get; init; }
     public required float phi_wid { get; init; }
 
     public required float th_iw { get; init; }
@@ -79,24 +87,28 @@ public class Chamber {
     public required int no_web { get; init; }
     public required float th_web { get; init; }
     public required float Ltheta_web { get; init; }
-    protected float theta_web(float z) {
-        return PI/8 * cos(PI * z / cnt_z6);
+
+    public int no_chnl = -1;
+    public float th_chnl = NAN;
+    public float Ltheta_chnl = NAN;
+    public float A_chnl_exit = NAN;
+    protected float theta_chnl(float z) {
+        return 4*TWOPI/no_chnl * (0.5f + 0.5f*cos(PI * z / cnt_z6));
     }
-    public int no_chnl => no_web;
-    public float th_chnl => th_web;
-    public float Ltheta_chnl => TWOPI/no_chnl - Ltheta_web;
-    public float A_chnl // at cc.
-        => Ltheta_chnl/TWOPI * PI*(squared(pm.Or_cc + th_iw + th_chnl)
-                                 - squared(pm.Or_cc + th_iw));
-    // TODO: update fuel inlet manifold to use the correct channel area instead
-    // of the channel area at cc.
+    protected void initialise_chnl() {
+        no_chnl = no_web;
+        th_chnl = th_web;
+        Ltheta_chnl = TWOPI/no_chnl - Ltheta_web;
+        assert(Ltheta_chnl > 0f);
+        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(r_exit + th_iw + th_chnl)
+                                            - squared(r_exit + th_iw));
+    }
 
     public required float D_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float r_inlet { get; init; }
     public required float theta_inlet { get; init; }
     public required float Dz_inlet { get; init; }
-    public float A_inlet => no_chnl*A_chnl;
 
 
     /*
@@ -127,114 +139,209 @@ public class Chamber {
     5-6 rotated parabolic arc
     */
 
-    protected float cnt_r_conv => 1.5f*r_tht;
-    protected float cnt_r_cw => (pm.Mr_chnl - pm.Or_cc)
-                              / (2f - 2f*cos(phi_wid) + phi_wid*sin(phi_wid));
-                              // TODO: ^ use this.
+    protected float cnt_X = NAN;
 
-    protected float cnt_z0 => 0f;
-    protected float cnt_r0 => pm.Or_cc;
+    protected float cnt_r_conv = NAN;
+    protected float cnt_z0 = NAN;
+    protected float cnt_r0 = NAN;
+    protected float cnt_z1 = NAN;
+    protected float cnt_r1 = NAN;
+    protected float cnt_z2 = NAN;
+    protected float cnt_r2 = NAN;
+    protected float cnt_z3 = NAN;
+    protected float cnt_r3 = NAN;
+    protected float cnt_z4 = NAN;
+    protected float cnt_r4 = NAN;
+    protected float cnt_z5 = NAN;
+    protected float cnt_r5 = NAN;
+    protected float cnt_z6 = NAN;
+    protected float cnt_r6 = NAN;
+    protected float cnt_zP = NAN;
+    protected float cnt_rP = NAN;
 
-    protected float cnt_z1 => L_cc;
-    protected float cnt_r1 => pm.Or_cc;
+    protected float cnt_zQ = NAN;
+    protected float cnt_rQ = NAN;
+    protected float cnt_zR = NAN;
+    protected float cnt_rR = NAN;
 
-    protected float cnt_z2 => cnt_z1 - cnt_r_conv*sin(phi_conv);
-    protected float cnt_r2 => pm.Or_cc - cnt_r_conv*(1f - cos(phi_conv));
+    protected float cnt_para_az = NAN;
+    protected float cnt_para_bz = NAN;
+    protected float cnt_para_cz = NAN;
+    protected float cnt_para_ar = NAN;
+    protected float cnt_para_br = NAN;
+    protected float cnt_para_cr = NAN;
 
-    protected float cnt_z3 => cnt_z2 + (cnt_r3 - cnt_r2)/tan(phi_conv);
-    protected float cnt_r3 => r_tht * (2.5f - 1.5f*cos(phi_conv));
+    protected void initialise_cnt() {
+        cnt_X = AXIAL_EXTRA + 1.1f*max(pm.Mr_chnl, r_exit);
+        cnt_r_conv = 1.5f*r_tht;
 
-    protected float cnt_z4 => cnt_z3 - 1.5f*r_tht*sin(phi_conv);
-    protected float cnt_r4 => r_tht;
+        cnt_z0 = 0f;
+        cnt_r0 = pm.Or_cc;
 
-    protected float cnt_z5 => cnt_z4 + 0.382f*r_tht*sin(phi_div);
-    protected float cnt_r5 => r_tht*(1.382f - 0.382f*cos(phi_div));
+        cnt_z1 = L_cc;
+        cnt_r1 = pm.Or_cc;
 
-    protected float cnt_z6 => cnt_z4 + NLF*(3.732051f*r_exit - 3.683473f*r_tht);
-    protected float cnt_r6 => r_exit;
+        cnt_z2 = cnt_z1 - cnt_r_conv*sin(phi_conv);
+        cnt_r2 = pm.Or_cc - cnt_r_conv*(1f - cos(phi_conv));
 
-    protected float cnt_zP => (cnt_z5*tan(phi_div) - cnt_z6*tan(phi_exit)
-                             + cnt_r6 - cnt_r4)
-                            / (tan(phi_div) - tan(phi_exit));
-    protected float cnt_rP => tan(phi_exit) * (cnt_zP - cnt_z6) + cnt_r6;
+        cnt_r3 = r_tht * (2.5f - 1.5f*cos(phi_conv));
+        cnt_z3 = cnt_z2 + (cnt_r3 - cnt_r2)/tan(phi_conv);
 
-    protected float cnt_X => AXIAL_EXTRA + 1.5f*max(pm.Or_cc, r_exit);
-    protected float cnt_zQ => cnt_z0 - cnt_X;
-    protected float cnt_rQ => cnt_r0;
-    protected float cnt_zR => cnt_z6 + cnt_X;
-    protected float cnt_rR => cnt_r6;
+        cnt_z4 = cnt_z3 - 1.5f*r_tht*sin(phi_conv);
+        cnt_r4 = r_tht;
 
-    protected float cnt_para_az => cnt_z5 - 2f*cnt_zP + cnt_z6;
-    protected float cnt_para_bz => -2f*cnt_z6 + 2f*cnt_zP;
-    protected float cnt_para_cz => cnt_z6;
-    protected float cnt_para_ar => cnt_r5 - 2f*cnt_rP + cnt_r6;
-    protected float cnt_para_br => -2f*cnt_r6 + 2f*cnt_rP;
-    protected float cnt_para_cr => cnt_r6;
+        cnt_z5 = cnt_z4 + 0.382f*r_tht*sin(phi_div);
+        cnt_r5 = r_tht*(1.382f - 0.382f*cos(phi_div));
 
-    public void check_realisable() {
-        // Easiest way to determine if the parameters create a realisable nozzle.
+        cnt_z6 = cnt_z4 + NLF*(3.732051f*r_exit - 3.683473f*r_tht);
+        cnt_r6 = r_exit;
 
-        assert(cnt_z0 < cnt_z1, $"z0={cnt_z0}, z1={cnt_z1}");
-        assert(cnt_z1 < cnt_z2, $"z1={cnt_z1}, z2={cnt_z2}");
-        assert(cnt_z2 < cnt_z3, $"z2={cnt_z2}, z3={cnt_z3}");
-        assert(cnt_z3 < cnt_z4, $"z3={cnt_z3}, z4={cnt_z4}");
-        assert(cnt_z4 < cnt_z5, $"z4={cnt_z4}, z5={cnt_z5}");
-        assert(cnt_z5 < cnt_z6, $"z5={cnt_z5}, z6={cnt_z6}");
-        assert(cnt_zP > cnt_z5, $"zP={cnt_zP}, z5={cnt_z5}");
-        assert(cnt_zP < cnt_z6, $"zP={cnt_zP}, z6={cnt_z6}");
+        cnt_zP = (cnt_z5*tan(phi_div) - cnt_z6*tan(phi_exit) + cnt_r6 - cnt_r4)
+               / (tan(phi_div) - tan(phi_exit));
+        cnt_rP = tan(phi_exit)*(cnt_zP - cnt_z6) + cnt_r6;
 
-        assert(cnt_r0 == cnt_r1, $"r0={cnt_r0}, r1={cnt_r1}");
-        assert(cnt_r1 > cnt_r2, $"r1={cnt_r1}, r2={cnt_r2}");
-        assert(cnt_r2 > cnt_r3, $"r2={cnt_r2}, r3={cnt_r3}");
-        assert(cnt_r3 > cnt_r4, $"r3={cnt_r3}, r4={cnt_r4}");
-        assert(cnt_r4 < cnt_r5, $"r4={cnt_r4}, r5={cnt_r5}");
-        assert(cnt_r5 < cnt_r6, $"r5={cnt_r5}, r6={cnt_r6}");
-        assert(cnt_rP > cnt_r5, $"rP={cnt_rP}, r5={cnt_r5}");
-        assert(cnt_rP < cnt_r6, $"rP={cnt_rP}, r6={cnt_r6}");
+        cnt_zQ = cnt_z0 - cnt_X;
+        cnt_rQ = cnt_r0;
+        cnt_zR = cnt_z6 + cnt_X;
+        cnt_rR = cnt_r6;
 
-        assert(th_chnl >= pm.min_wi_chnl,
-                $"th_chnl={th_chnl}, min_wi_chnl={pm.min_wi_chnl}");
+        cnt_para_az = cnt_z5 - 2f*cnt_zP + cnt_z6;
+        cnt_para_bz = -2f*cnt_z6 + 2f*cnt_zP;
+        cnt_para_cz = cnt_z6;
+        cnt_para_ar = cnt_r5 - 2f*cnt_rP + cnt_r6;
+        cnt_para_br = -2f*cnt_r6 + 2f*cnt_rP;
+        cnt_para_cr = cnt_r6;
+    }
+
+
+    protected float cnt_wid_alpha = NAN;
+    protected float cnt_wid_r_s = NAN;
+
+    protected float cnt_wid_z0 = NAN;
+    protected float cnt_wid_r0 = NAN;
+    protected float cnt_wid_z1 = NAN;
+    protected float cnt_wid_r1 = NAN;
+    protected float cnt_wid_z2 = NAN;
+    protected float cnt_wid_r2 = NAN;
+    protected float cnt_wid_z3 = NAN;
+    protected float cnt_wid_r3 = NAN;
+    protected float cnt_wid_z4 = NAN;
+    protected float cnt_wid_r4 = NAN;
+
+    protected float cnt_wid_zS = NAN;
+    protected float cnt_wid_rS = NAN;
+    protected float cnt_wid_zT = NAN;
+    protected float cnt_wid_rT = NAN;
+
+    protected void initialise_cnt_wid() {
+        cnt_wid_alpha = 2f;
+        cnt_wid_r_s = (pm.Mr_chnl - pm.Or_cc)
+                    / (2f - 2f*cos(phi_wid)
+                     + cnt_wid_alpha*phi_wid*sin(phi_wid));
+
+        cnt_wid_z0 = 0f;
+        cnt_wid_r0 = pm.Mr_chnl;
+
+        cnt_wid_z1 = 0.5f*-phi_wid*cnt_wid_r_s;
+        cnt_wid_r1 = pm.Mr_chnl;
+
+        cnt_wid_z2 = cnt_wid_z1 - cnt_wid_r_s*sin(phi_wid);
+        cnt_wid_r2 = cnt_wid_r1 - cnt_wid_r_s*(1f - cos(phi_wid));
+
+        cnt_wid_r4 = pm.Or_cc + th_iw + 0.5f*th_chnl;
+        cnt_wid_r3 = cnt_wid_r4 + cnt_wid_r_s*(1f - cos(phi_wid));
+        cnt_wid_z3 = cnt_wid_z2 + (cnt_wid_r3 - cnt_wid_r2)/tan(phi_wid);
+        cnt_wid_z4 = cnt_wid_z3 - cnt_wid_r_s*sin(phi_wid);
+
+        cnt_wid_zS = cnt_wid_z0 - cnt_X;
+        cnt_wid_rS = cnt_wid_r0;
+        cnt_wid_zT = cnt_wid_z4 + cnt_X;
+        cnt_wid_rT = cnt_wid_r4;
     }
 
 
     protected int DIVISIONS
             => max(200, (int)(200f / PicoGK.Library.fVoxelSizeMM));
 
-    protected const float AXIAL_EXTRA = 10f; // trimmed in final step.
+    protected const float AXIAL_EXTRA = 10f; // trimmed at some point.
+    protected const float RADIAL_EXTRA = 5f; // trimmed at some point.
 
 
-    protected Vec2 cnt_0 => new(cnt_z0, cnt_r0);
-    protected Vec2 cnt_1 => new(cnt_z1, cnt_r1);
-    protected Vec2 cnt_2 => new(cnt_z2, cnt_r2);
-    protected Vec2 cnt_3 => new(cnt_z3, cnt_r3);
-    protected Vec2 cnt_4 => new(cnt_z4, cnt_r4);
-    protected Vec2 cnt_5 => new(cnt_z5, cnt_r5);
-    protected Vec2 cnt_6 => new(cnt_z6, cnt_r6);
-    protected Vec2 cnt_Q => new(cnt_zQ, cnt_rQ);
-    protected Vec2 cnt_R => new(cnt_zR, cnt_rR);
-    protected Vec2 cnt_0_1 => uX2;
-    protected Vec2 cnt_0_1_n => uY2;
-    protected Vec2 cnt_2_3 => tocart(1f, phi_conv);
-    protected Vec2 cnt_2_3_n => tocart(1f, phi_conv + PI_2);
-    protected float cnt_2_3_mag => mag(cnt_3 - cnt_2);
-    protected Vec2 cnt_5_6 => normalise(cnt_6 - cnt_5);
-    protected float cnt_5_6_mag => mag(cnt_6 - cnt_5);
-    // Caching is hugely impactful here, and can use genuine equality instead of
-    // imprecise.
+    // Caching is hugely impactful here, and we can/should use genuine equality
+    // instead of imprecise.
     protected class cnt_vec2eq : IEqualityComparer<Vec2> {
         public bool Equals(Vec2 a, Vec2 b) => (a.X == b.X) && (a.Y == b.Y);
         public int GetHashCode(Vec2 v) => HashCode.Combine(v.X, v.Y);
     }
-    protected Dictionary<Vec2, float> _voxels_cnt_cache
-            = new(10000000 /* ten milly */, new cnt_vec2eq());
-    protected int _voxels_cnt_cache_hits = 0;
-    protected float cnt_signed_dist(in Vec3 p) {
+    protected Vec2 cnt_0;
+    protected Vec2 cnt_1;
+    protected Vec2 cnt_2;
+    protected Vec2 cnt_3;
+    protected Vec2 cnt_4;
+    protected Vec2 cnt_5;
+    protected Vec2 cnt_6;
+    protected Vec2 cnt_Q;
+    protected Vec2 cnt_R;
+    protected Vec2 cnt_2_3;
+    protected Vec2 cnt_2_3_n;
+    protected float cnt_2_3_mag;
+    protected Vec2 cnt_5_6;
+    protected float cnt_5_6_mag;
+    protected Dictionary<Vec2, float>? _cnt_cache;
+    protected int _cnt_cache_hits;
+    protected void initialise_cnt_sdf() {
+        cnt_0 = new(cnt_z0, cnt_r0);
+        cnt_1 = new(cnt_z1, cnt_r1);
+        cnt_2 = new(cnt_z2, cnt_r2);
+        cnt_3 = new(cnt_z3, cnt_r3);
+        cnt_4 = new(cnt_z4, cnt_r4);
+        cnt_5 = new(cnt_z5, cnt_r5);
+        cnt_6 = new(cnt_z6, cnt_r6);
+        cnt_Q = new(cnt_zQ, cnt_rQ);
+        cnt_R = new(cnt_zR, cnt_rR);
+        cnt_2_3 = tocart(1f, phi_conv);
+        cnt_2_3_n = tocart(1f, phi_conv + PI_2);
+        cnt_2_3_mag = mag(cnt_3 - cnt_2);
+        cnt_5_6 = normalise(cnt_6 - cnt_5);
+        cnt_5_6_mag = mag(cnt_6 - cnt_5);
+        _cnt_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
+        _cnt_cache_hits = 0;
+    }
+
+    protected float cnt_wid_off;
+    protected Vec2 cnt_wid_0;
+    protected Vec2 cnt_wid_1;
+    protected Vec2 cnt_wid_2;
+    protected Vec2 cnt_wid_3;
+    protected Vec2 cnt_wid_4;
+    protected Vec2 cnt_wid_2_3;
+    protected Vec2 cnt_wid_2_3_n;
+    protected float cnt_wid_2_3_mag;
+    protected Dictionary<Vec2, float>? _cnt_wid_cache;
+    protected int _cnt_wid_cache_hits;
+    protected void initialise_cnt_wid_sdf() {
+        // The sdf gives the distance to the channel mid-contour.
+        cnt_wid_off = th_iw + 0.5f*th_chnl;
+
+        cnt_wid_0 = new(cnt_wid_z0, cnt_wid_r0);
+        cnt_wid_1 = new(cnt_wid_z1, cnt_wid_r1);
+        cnt_wid_2 = new(cnt_wid_z2, cnt_wid_r2);
+        cnt_wid_3 = new(cnt_wid_z3, cnt_wid_r3);
+        cnt_wid_4 = new(cnt_wid_z4, cnt_wid_r4);
+        cnt_wid_2_3 = tocart(1f, phi_conv);
+        cnt_wid_2_3_n = tocart(1f, phi_conv + PI_2);
+        cnt_wid_2_3_mag = mag(cnt_wid_3 - cnt_wid_2);
+        _cnt_wid_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
+        _cnt_wid_cache_hits = 0;
+    }
+
+    protected float cnt_sdf(in Vec3 p) {
         float z = p.Z;
         float r = magxy(p);
         Vec2 q = new(z, r);
         // CACHE ME.
-        if (_voxels_cnt_cache.TryGetValue(q, out float cached)) {
-            ++_voxels_cnt_cache_hits; // HIIIIIIT
+        if (_cnt_cache!.TryGetValue(q, out float cached)) {
+            ++_cnt_cache_hits; // HIIIIIIT
             return cached;
         }
         float dist = +INF;
@@ -318,7 +425,7 @@ public class Chamber {
 
             float pS = (-cnt_para_bz - sqrt(cnt_para_bz*cnt_para_bz
                                           - 4f*cnt_para_az*(cnt_para_cz - S)))
-                      / 2f / cnt_para_az;
+                     / 2f / cnt_para_az;
             Vec2 P = new(S, (cnt_para_ar*pS + cnt_para_br)*pS + cnt_para_cr);
             float absdist = mag(q - P);
             update(ref dist, (P.Y > q.Y) ? -absdist : absdist);
@@ -349,48 +456,129 @@ public class Chamber {
             update(ref dist, d);
         }
 
-        _voxels_cnt_cache[q] = dist;
+        _cnt_cache[q] = dist;
         return dist;
     }
-    protected class SDFcnt : SDFunbounded {
-        public required Chamber c { get; init; }
-        public required Func<float, float> f { get; init; }
-        public override float fSignedDistance(in Vec3 p) {
-            float dist = c.cnt_signed_dist(p);
-            return f(dist);
+
+    protected float cnt_wid_sdf(in Vec3 p) {
+        float z = p.Z;
+        float r = magxy(p);
+        Vec2 q = new(z, r);
+        // CACHE ME.
+        if (_cnt_wid_cache!.TryGetValue(q, out float cached)) {
+            ++_cnt_wid_cache_hits; // HIIIIIIT
+            return cached;
         }
-    }
-    protected Voxels voxels_cnt(float off, float? th=null) {
-        Func<float, float> f;
-        float maxo;
-        if (th == null) {
-            f = (float d) => d - off;
-            maxo = off;
-        } else {
-            f = (float d) => abs(d - off) - 0.5f*th.Value;
-            maxo = off + 0.5f*th.Value;
+        float dist = +INF;
+        void update(ref float dist, float d) {
+            if (abs(d) < abs(dist))
+                dist = d;
         }
-        return voxels_cnt(f, maxo);
-    }
-    protected Voxels voxels_cnt(Func<float, float> signed_dist_transform,
-            float max_offset) {
-        float r = max(pm.Or_cc, r_exit) + max_offset;
-        float zlo = cnt_z0 - AXIAL_EXTRA;
-        float zhi = cnt_z6 + AXIAL_EXTRA;
-        BBox3 bounds = new(new Vec3(-r, -r, zlo), new Vec3(+r, +r, zhi));
-        return new SDFcnt{c=this, f=signed_dist_transform}.voxels(bounds);
+        // Same deal as `cnt_sdf`.
+
+        assert(phi_wid < 0f);
+
+        // Check line segments.
+        if (within(z, cnt_wid_z0, cnt_wid_z1)) {
+            update(ref dist, r - cnt_wid_r0);
+        }
+        float rlo23 = cnt_wid_r3 + (cnt_wid_z3 - z)/tan(phi_wid);
+        float rhi23 = cnt_wid_r2 + (cnt_wid_z2 - z)/tan(phi_wid);
+        if (within(r, rlo23, rhi23)) {
+            float t = dot(q - cnt_wid_2, cnt_wid_2_3);
+            t = clamp(t, 0f, cnt_wid_2_3_mag);
+            Vec2 P = cnt_wid_2 + t*cnt_wid_2_3;
+            update(ref dist, dot(q - P, cnt_wid_2_3_n));
+        }
+
+        // Check circular arcs.
+        Vec2 d12 = q - new Vec2(cnt_wid_z1, cnt_wid_r1 - cnt_wid_r_s);
+        if (within(arg(d12), PI_2 + phi_wid, PI_2)) {
+            update(ref dist, +mag(d12) - cnt_wid_r_s);
+        }
+        Vec2 d34 = q - new Vec2(cnt_wid_z4, cnt_wid_r4 + cnt_wid_r_s);
+        if (within(arg(d34), -PI_2 + phi_wid, -PI_2)) {
+            update(ref dist, -mag(d34) + cnt_wid_r_s);
+        }
+
+        // Check end zones (TOUCHDOWWWWWWN or something idk not american).
+        if (z <= cnt_wid_z0) {
+            float dist_z = cnt_wid_zS - z;
+            float dist_r = r - cnt_wid_rS;
+            float d;
+            if (dist_z <= 0f || dist_r <= 0f)
+                d = max(dist_z, dist_r);
+            else
+                d = hypot(dist_z, dist_r);
+            update(ref dist, d);
+        }
+        if (z >= cnt_wid_zT) {
+            Vec2 d = q - new Vec2(cnt_wid_zT - cnt_wid_rT, 0f);
+            update(ref dist, mag(d) - cnt_wid_rT);
+        }
+
+        _cnt_wid_cache[q] = dist;
+        return dist;
     }
 
-    protected float cnt_radius_at(float z, float signed_dist=0f) {
+    protected float cnt_widened_sdf(in Vec3 p) {
+        return min(cnt_sdf(p), cnt_wid_sdf(p) + cnt_wid_off);
+    }
+
+
+    protected BBox3 bbox_cnt(float max_off) {
+        float r = max(cnt_rQ, cnt_rR) + max_off;
+        float zlo = cnt_zQ;
+        float zhi = cnt_zR;
+        return new(new Vec3(-r, -r, zlo), new Vec3(+r, +r, zhi));
+    }
+    protected BBox3 bbox_cnt_widened(float max_off) {
+        float r = max(cnt_rQ, cnt_rR, cnt_wid_rS) + max_off;
+        float zlo = min(cnt_zQ, cnt_wid_zS);
+        float zhi = cnt_zR;
+        return new(new Vec3(-r, -r, zlo), new Vec3(+r, +r, zhi));
+    }
+
+    protected Voxels voxels_cnt_gas() {
+        SDFfilled sdf = new(cnt_sdf);
+        return sdf.voxels(bbox_cnt(sdf.max_off), enforce_faces: false);
+    }
+    protected Voxels voxels_cnt_ow_filled() {
+        SDFfilled sdf = new(cnt_widened_sdf, th_iw + th_chnl + th_ow);
+        return sdf.voxels(bbox_cnt_widened(sdf.max_off), enforce_faces: false);
+    }
+    protected Voxels voxels_cnt_chnl() {
+        SDFshelled sdf = new(cnt_widened_sdf, th_iw, th_chnl);
+        sdf = sdf.innered();
+        // Clip the top to not have fuel shoot out the end of the nozzle.
+        float max_z = cnt_z6 - th_ow;
+        float min_z = cnt_z0 - AXIAL_EXTRA;
+        BBox3 bbox = bbox_cnt_widened(sdf.max_off);
+        bbox.vecMax.Z = max_z;
+        bbox.vecMin.Z = min_z;
+        Voxels vox = sdf.voxels(bbox);
+        // Extend it radially outwards at the nozzle exit to interface with
+        // manifold.
+        Frame exit = new(max_z*uZ3, -uZ3);
+        float Ir = cnt_radius_at(max_z, th_iw);
+        float Or = cnt_radius_at(max_z - th_chnl, th_iw + th_chnl + th_ow);
+        Ir += 0.2f; // safety.
+        Or += RADIAL_EXTRA;
+        vox.BoolAdd(new Pipe(exit, th_chnl, Ir, Or).voxels());
+        return vox;
+    }
+
+    protected float cnt_radius_at(float z, float signed_dist=0f,
+            bool widened=false) {
         assert(within(z, cnt_zQ, cnt_zR));
+        SDFfunction sdf = widened ? cnt_widened_sdf : cnt_sdf;
+
         // Initially, estimate by just offseting the inner point horizontally by
         // the signed dist. Though note that for horizontal linear segments, this
         // is the exact solution so we return straight away.
         float r;
-        bool exact = false;
         if (z <= cnt_z1) {
             r = cnt_r0;
-            exact = true;
         } else if (z <= cnt_z2) {
             r = cnt_r1 - cnt_r_conv + sqrt(cnt_r_conv*cnt_r_conv
                                          - squared(z - cnt_z1));
@@ -408,34 +596,33 @@ public class Chamber {
             r = (cnt_para_ar*p + cnt_para_br)*p + cnt_para_cr;
         } else {
             r = r_exit;
-            exact = true;
         }
+        // Also note i couldnt be bothered to put the widened analytic solns.
 
         r += signed_dist;
-        if (exact)
-            return r;
 
         // Now its close the correct solution, but not exactly. So, just kinda
         // brute force it by assuming the distance we are from the actual desired
         // offset is perfectly horizontal. note this has like i think linear
         // convergence so pretty bad but eh its fine.
-        for (int i=0; i<6; ++i) { // don loop forever.
-            float Dr = signed_dist - cnt_signed_dist(tocart(r, 0f, z));
+        for (int i=0; i<10; ++i) { // don loop forever.
+            float Dr = signed_dist - sdf(new(r, 0f, z));
             r += Dr; // doctor semi colon.
             if (abs(Dr) < 1e-3)
                 break;
+            assert(i != 9, $"Dr={Dr}");
         }
         return r;
     }
 
 
-    protected Mesh mesh_web(float rlo, float rhi, float theta0,
+    protected Mesh mesh_chnl(float rlo, float rhi, float theta0,
             bool draw_line=false) {
         List<Vec3> points = new();
-        for (int i=0; i<DIVISIONS; ++i) {
+        for (int i=0; i<=DIVISIONS; ++i) {
             float z = cnt_z0 + i*(cnt_z6 - cnt_z0)/DIVISIONS;
             float r = cnt_radius_at(z, -0.1f);
-            float theta = theta0 + theta_web(z);
+            float theta = theta0 + theta_chnl(z);
             points.Add(tocart(r, theta, z));
         }
         if (draw_line)
@@ -443,7 +630,7 @@ public class Chamber {
         points.Insert(0, points[0] - uZ3*AXIAL_EXTRA);
         points.Add(points[^1] + uZ3*AXIAL_EXTRA);
 
-        float Dt = 0.5f*Ltheta_web; // t for theta.
+        float Dt = 0.5f*Ltheta_chnl; // t for theta.
 
         Mesh mesh = new();
         List<Vec3> V = new();
@@ -497,13 +684,15 @@ public class Chamber {
         return mesh;
     }
 
-    protected Voxels voxels_webs(List<int>? keys=null) {
-        float min_r = r_tht + th_iw;
-        float max_r = max(pm.Mr_chnl + 0.5f*th_web, r_exit + th_iw + th_web);
+    protected Voxels voxels_chnl(List<int>? keys=null) {
+        float min_r = r_tht;
+        float max_r = pm.Mr_chnl + 0.5f*th_chnl;
+        max_r = max(max_r, r_exit + th_iw + th_chnl + th_ow);
+        max_r += RADIAL_EXTRA;
         Voxels vox = new();
-        for (int i=0; i<no_web; ++i) {
-            float theta0 = i * TWOPI / no_web;
-            Mesh mesh = mesh_web(min_r, max_r, theta0, draw_line: i <= 4);
+        for (int i=0; i<no_chnl; ++i) {
+            float theta0 = i * TWOPI / no_chnl;
+            Mesh mesh = mesh_chnl(min_r, max_r, theta0, draw_line: i <= 4);
             if (keys != null) {
                 int key = Geez.mesh(mesh);
                 keys.Add(key);
@@ -513,28 +702,7 @@ public class Chamber {
         return vox;
     }
 
-    protected Voxels voxels_cc_widening() {
-        Lattice lat = new();
-        float zA = -AXIAL_EXTRA;
-        float zB = 8f;
-        float zC = zB + 6f;
-        float rA = pm.Mr_chnl + 0.5f*th_web + th_ow;
-        float rB = rA;
-        float rC = pm.Or_cc + th_iw + th_web + th_ow;
-        lat.AddBeam(
-            uZ3*zA, rA,
-            uZ3*zB, rB,
-            false
-        );
-        lat.AddBeam(
-            uZ3*zB, rB,
-            uZ3*zC, rC,
-            false
-        );
-        return new Voxels(lat);
-    }
-
-    protected float A_mani(float theta) {
+    protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
         // next (travelling downstream) is exactly one channel area.
@@ -543,11 +711,12 @@ public class Chamber {
             Dtheta = TWOPI - Dtheta;
         // in one half-turn, no_chnl/2 channels are passed.
         float t = abs(Dtheta) / (PI / (0.5f*no_chnl - 1f));
-        return 0.5f*A_inlet - A_chnl*t;
+        float A0 = 0.5f*no_chnl*A_chnl_exit;
+        return A0 - A_chnl_exit*t;
     }
 
-    protected void points_mani(List<Vec3> points, float theta) {
-        float A = A_mani(theta);
+    protected void points_neg_mani(List<Vec3> points, float theta) {
+        float A = A_neg_mani(theta);
         // Must produce the same number of points each time.
         // Must produce points in anticlockwise winding (meaning an in-order
         // traversal would travel down the edge closest to the z-axis).
@@ -564,13 +733,13 @@ public class Chamber {
         float Bz = L/2f*(sina/tanb + cosa);
         float Br = L/2f*(sina + cosa*tanb);
         float z0 = cnt_z6 - th_ow;
-        float r0 = cnt_radius_at(z0, 0.5f*th_iw);
+        float r0 = cnt_radius_at(z0, th_iw + th_chnl + th_ow);
         points.Add(tocart(r0,           theta, z0));
         points.Add(tocart(r0 - Ar,      theta, z0 - Az));
-        points.Add(tocart(r0 - Ar + Br, theta, z0 - Az + Br));
+        points.Add(tocart(r0 - Ar + Br, theta, z0 - Az + Bz));
     }
 
-    protected Mesh mesh_mani() {
+    protected Mesh mesh_neg_mani() {
         Mesh mesh = new();
         List<Vec3> V = new();
         int N = 0;
@@ -582,7 +751,7 @@ public class Chamber {
                 j = 0;
             } else {
                 float theta = n*TWOPI/DIVISIONS;
-                points_mani(V, theta);
+                points_neg_mani(V, theta);
                 if (N == 0)
                     N = numel(V);
                 if (n == 0)
@@ -607,25 +776,24 @@ public class Chamber {
 
     protected Voxels voxels_neg_mani() {
         // Main manifold.
-        Voxels vox = new Voxels(mesh_mani());
+        Voxels vox = new Voxels(mesh_neg_mani());
         // Fuel inlet.
-        Vec3 a = tocart(r_inlet, theta_inlet, cnt_z6 + Dz_inlet);
-        Vec3 b = tocart(cnt_radius_at(a.Z, th_iw), theta_inlet, a.Z);
+        Vec3 a = tocart(
+            r_inlet,
+            theta_inlet,
+            cnt_z6 + Dz_inlet
+        );
+        Vec3 b = tocart(
+            cnt_radius_at(a.Z, th_iw + th_chnl + th_ow + 1f),
+            theta_inlet,
+            a.Z
+        );
         vox.BoolAdd(new Tubing([a, b], D_inlet).voxels());
-        // Ensure no intersection with inner wall/cavity.
-        float loz = vox.oCalculateBoundingBox().vecMin.Z;
-        Voxels walls = new Pipe(
-            new Frame(uZ3*(cnt_z6 + 5f), -uZ3),
-            cnt_z6 - loz + 10f,
-            r_exit + 2f*th_iw
-        ).voxels();
-        walls.IntersectImplicit(new SDFcnt{c=this, f=(float d)=>d-th_iw});
-        vox.BoolSubtract(walls);
         return vox;
     }
 
-    protected Voxels voxels_mani() {
-        Voxels vox = voxels_neg_mani().voxOffset(th_inlet);
+    protected Voxels voxels_mani(in Voxels neg_mani) {
+        Voxels vox = neg_mani.voxOffset(th_inlet);
 
         Frame inlet = new(tocart(r_inlet, theta_inlet, cnt_z6 + Dz_inlet), uY3);
         float length = 12f;
@@ -646,6 +814,7 @@ public class Chamber {
 
         vox.BoolAdd(tapping);
         vox.IntersectImplicit(new Space(inlet, 0f, INF));
+
         return vox;
     }
 
@@ -711,74 +880,63 @@ public class Chamber {
 
     public Voxels voxels() {
         // We view a few things as they are updated.
-        Geez.Cycle key_webs = new();
+        Geez.Cycle key_gas = new();
         Geez.Cycle key_flange = new();
         Geez.Cycle key_mani = new();
+        Geez.Cycle key_chnl = new();
         Geez.Cycle key_part = new();
-        var col_webs = COLOUR_GREEN;
+        var col_gas = COLOUR_PINK;
         var col_flange = COLOUR_RED;
         var col_mani = COLOUR_BLUE;
+        var col_chnl = COLOUR_GREEN;
 
-        Voxels webs;
-        using (Geez.like(colour: col_webs)) {
-            List<int> keys_webs = new();
-            webs = voxels_webs(keys_webs);
-            key_webs <<= Geez.voxels(webs);
-            Geez.remove(keys_webs);
-        }
-        Voxels flange = voxels_flange();
-        key_flange <<= Geez.voxels(flange, colour: col_flange);
-        Voxels mani = voxels_mani();
-        key_mani <<= Geez.voxels(mani, colour: col_mani);
-
-        Voxels cc_widening = voxels_cc_widening();
         Voxels neg_bolts = voxels_neg_bolts();
         Voxels neg_orings = voxels_neg_orings();
         Voxels neg_mani = voxels_neg_mani();
 
-        Voxels part = voxels_cnt(th_iw + th_web + th_ow);
-        key_part <<= Geez.voxels(part);
+        Voxels gas = voxels_cnt_gas();
+        key_gas <<= Geez.voxels(gas, colour: col_gas);
 
-        part.BoolAdd(cc_widening);
-        key_part <<= Geez.voxels(part);
+        Voxels flange = voxels_flange();
+        key_flange <<= Geez.voxels(flange, colour: col_flange);
 
-        Voxels neg_channel = part.voxDoubleOffset(3f, -3f - th_ow);
+        Voxels mani = voxels_mani(neg_mani);
+        key_mani <<= Geez.voxels(mani, colour: col_mani);
 
+        Voxels ow_filled = voxels_cnt_ow_filled();
+
+        Voxels chnl;
+        using (Geez.like(colour: col_chnl)) {
+            List<int> keys_chnl = new();
+            chnl = voxels_chnl(keys_chnl);
+            key_chnl <<= Geez.voxels(chnl);
+            Geez.remove(keys_chnl);
+        }
+        Voxels cnt_chnl = voxels_cnt_chnl();
+        chnl.BoolIntersect(cnt_chnl);
+        key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
+        Fillet.convex(chnl, 0.4f, inplace: true);
+        chnl.BoolIntersect(ow_filled);
+        key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
+
+        Voxels part = ow_filled; // no copy.
         part.BoolAdd(flange);
         part.BoolAdd(mani);
+        Fillet.concave(part, 3f, inplace: true);
         key_part <<= Geez.voxels(part);
         key_flange <<= Geez.CLEAR;
         key_mani <<= Geez.CLEAR;
 
-        float Fr_internal = 3f;
-        float Fr_external = 1f;
-        part.DoubleOffset(Fr_internal, -Fr_internal - Fr_external);
-        part.Offset(Fr_external);
+        part.BoolSubtract(chnl);
         key_part <<= Geez.voxels(part);
+        key_chnl <<= Geez.CLEAR;
 
-        webs.BoolIntersect(part);
-        key_webs <<= Geez.voxels(webs, colour: col_webs);
-
-        // Voxels neg_channel = voxels_cnt(th_iw + th_web);
-        // TODO: ^ +some way of adding the widening (probs just ternary).
-        part.BoolSubtract(neg_channel);
-        key_part <<= Geez.voxels(part);
-
-
-        part.BoolAdd(webs);
-        part.BoolSubtract(neg_mani);
-        key_part <<= Geez.voxels(part);
-        key_webs <<= Geez.CLEAR;
-
-        Voxels inner_wall = voxels_cnt(th_iw);
-        part.BoolAdd(inner_wall);
-        key_part <<= Geez.voxels(part);
-
-        Voxels neg_cc = voxels_cnt(0f);
-        part.BoolSubtract(neg_cc);
+        part.BoolSubtract(gas);
         part.BoolSubtract(neg_bolts);
         part.BoolSubtract(neg_orings);
+        part.BoolSubtract(neg_mani);
         key_part <<= Geez.voxels(part);
+        key_gas <<= Geez.CLEAR;
 
         // Clip axial excess.
         BBox3 bounds = part.oCalculateBoundingBox();
@@ -792,10 +950,41 @@ public class Chamber {
     }
 
 
+    public void initialise() {
+        initialise_exit();
+        initialise_chnl();
+        initialise_cnt();
+        initialise_cnt_wid();
+        initialise_cnt_sdf();
+        initialise_cnt_wid_sdf();
 
-    public static void Task() {
-        PicoGK.Library.Log("whas good");
+        // Easiest way to determine if the parameters create a realisable nozzle.
 
+        assert(cnt_z0 < cnt_z1, $"z0={cnt_z0}, z1={cnt_z1}");
+        assert(cnt_z1 < cnt_z2, $"z1={cnt_z1}, z2={cnt_z2}");
+        assert(cnt_z2 < cnt_z3, $"z2={cnt_z2}, z3={cnt_z3}");
+        assert(cnt_z3 < cnt_z4, $"z3={cnt_z3}, z4={cnt_z4}");
+        assert(cnt_z4 < cnt_z5, $"z4={cnt_z4}, z5={cnt_z5}");
+        assert(cnt_z5 < cnt_z6, $"z5={cnt_z5}, z6={cnt_z6}");
+        assert(cnt_zP > cnt_z5, $"zP={cnt_zP}, z5={cnt_z5}");
+        assert(cnt_zP < cnt_z6, $"zP={cnt_zP}, z6={cnt_z6}");
+
+        assert(cnt_r0 == cnt_r1, $"r0={cnt_r0}, r1={cnt_r1}");
+        assert(cnt_r1 > cnt_r2, $"r1={cnt_r1}, r2={cnt_r2}");
+        assert(cnt_r2 > cnt_r3, $"r2={cnt_r2}, r3={cnt_r3}");
+        assert(cnt_r3 > cnt_r4, $"r3={cnt_r3}, r4={cnt_r4}");
+        assert(cnt_r4 < cnt_r5, $"r4={cnt_r4}, r5={cnt_r5}");
+        assert(cnt_r5 < cnt_r6, $"r5={cnt_r5}, r6={cnt_r6}");
+        assert(cnt_rP > cnt_r5, $"rP={cnt_rP}, r5={cnt_r5}");
+        assert(cnt_rP < cnt_r6, $"rP={cnt_rP}, r6={cnt_r6}");
+
+        assert(th_chnl + 1e-2 >= pm.min_wi_chnl,
+                $"th_chnl={th_chnl}, min_wi_chnl={pm.min_wi_chnl}");
+    }
+
+
+
+    public static Voxels maker() {
         Chamber chamber = new Chamber{
             pm = new PartMating{
                 Or_cc=50f,
@@ -832,7 +1021,6 @@ public class Chamber {
             phi_div=torad(21f),
             phi_exit=torad(10f),
 
-            L_wid=8f,
             phi_wid=-DEG45,
 
             th_iw=1.5f,
@@ -840,7 +1028,7 @@ public class Chamber {
 
             no_web=40,
             th_web=2f,
-            Ltheta_web=2f/50f,
+            Ltheta_web=1.5f/50f,
 
             D_inlet=10f,
             th_inlet=2f,
@@ -848,28 +1036,24 @@ public class Chamber {
             theta_inlet=-PI_2,
             Dz_inlet=-15f,
         };
-        chamber.check_realisable();
+        chamber.initialise();
 
         Voxels vox = chamber.voxels();
         PicoGK.Library.Log("Baby made.");
-        PicoGK.Library.Log(
-            $"  contour sdf evaluations: {numel(chamber._voxels_cnt_cache):N0}");
-        PicoGK.Library.Log(
-            $"  contour sdf cache hits:  {chamber._voxels_cnt_cache_hits:N0}");
+
+        int cnt_hits = chamber._cnt_cache_hits;
+        int cnt_total = cnt_hits + numel(chamber._cnt_cache!);
+        int cnt_wid_hits = chamber._cnt_wid_cache_hits;
+        int cnt_wid_total = cnt_wid_hits + numel(chamber._cnt_wid_cache!);
+        PicoGK.Library.Log($"  cache sdf: "
+                + $"{cnt_hits:N0} / {cnt_total:N0} "
+                + $"({cnt_hits * 100f / cnt_total:F2}%)");
+        PicoGK.Library.Log($"  cache wid_sdf: "
+                + $"{cnt_wid_hits:N0} / {cnt_wid_total:N0} "
+                + $"({cnt_wid_hits * 100f / cnt_wid_total:F2}%)");
         PicoGK.Library.Log("  bang.");
 
-        string stl_path = fromroot("exports/chamber.stl");
-        try {
-            Mesh mesh = new Mesh(vox);
-            mesh.SaveToStlFile(stl_path);
-            PicoGK.Library.Log($"Exported to stl: {stl_path}");
-        } catch (Exception e) {
-            PicoGK.Library.Log("Failed to export to stl. Exception log:");
-            PicoGK.Library.Log(e.ToString());
-            PicoGK.Library.Log("");
-        }
-
-        PicoGK.Library.Log("Don.");
+        return vox;
     }
 }
 

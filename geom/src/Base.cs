@@ -7,6 +7,7 @@ using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
+namespace br {
 
 public abstract class SDFunbounded : IImplicit {
     public float signed_dist(in Vec3 p) => fSignedDistance(p);
@@ -34,6 +35,10 @@ public abstract class SDF : SDFunbounded, IBoundedImplicit {
     }
 
 
+    protected void set_bounds(in BBox3 bbox) {
+        bounds_fr = bbox;
+        has_bounds = true;
+    }
     protected void set_bounds(Vec3 min, Vec3 max) {
         assert(min.X <= max.X);
         assert(min.Y <= max.Y);
@@ -56,6 +61,57 @@ public abstract class SDF : SDFunbounded, IBoundedImplicit {
 }
 
 
+public delegate float SDFfunction(in Vec3 p);
+
+public abstract class SDFfunc : SDFunbounded {
+    public abstract SDFfunction sdf { get; }
+    public abstract float max_off { get; }
+}
+
+public class SDFfilled : SDFfunc {
+    private SDFfunction _sdf;
+    public float off { get; }
+
+    public override SDFfunction sdf => _sdf;
+    public override float max_off => off;
+
+    public SDFfilled(in SDFfunction sdf, float off=0f) {
+        this._sdf = sdf;
+        this.off = off;
+    }
+    public override float fSignedDistance(in Vec3 p) {
+        return sdf(p) - off;
+    }
+}
+public class SDFshelled : SDFfunc {
+    private SDFfunction _sdf;
+    public float off { get; }
+    public float semith { get; }
+    public float Ioff => off - semith;
+    public float Ooff => off + semith;
+
+    public override SDFfunction sdf => _sdf;
+    public override float max_off => Ooff;
+
+    public SDFshelled(in SDFfunction sdf, float th)
+        : this(sdf, 0f, th) {}
+    public SDFshelled(in SDFfunction sdf, float off, float th) {
+        this._sdf = sdf;
+        this.semith = 0.5f*th;
+        this.off = off;
+    }
+    public SDFshelled innered() {
+        return new SDFshelled(sdf, off + semith, 2f*semith);
+    }
+    public SDFshelled outered() {
+        return new SDFshelled(sdf, off - semith, 2f*semith);
+    }
+
+    public override float fSignedDistance(in Vec3 p) {
+        return abs(sdf(p) - off) - semith;
+    }
+}
+
 
 public class Space : SDFunbounded {
     public Frame centre { get; }
@@ -76,6 +132,46 @@ public class Space : SDFunbounded {
     public override float fSignedDistance(in Vec3 p) {
         float z = dot(p - centre.pos, centre.Z);
         return max(lo - z, z - hi);
+    }
+}
+
+public class Sectioner {
+    protected List<object> ops = new();
+    protected bool has_union = false;
+
+    public bool has_cuts() => numel(ops) > 0;
+
+    public void intersect(Space space) {
+        ops.Add(space);
+    }
+    public void intersect(Sectioner sect) {
+        ops.AddRange(sect.ops);
+    }
+    public void union(Space space) {
+        Sectioner sect = new();
+        sect.intersect(space);
+        ops.Add(sect);
+        has_union = true;
+    }
+    public void union(Sectioner sect) {
+        ops.Add(sect);
+        has_union = true;
+    }
+
+    public Voxels cut(in Voxels vox, bool inplace=false) {
+        Voxels cutted = inplace ? vox : vox.voxDuplicate();
+        Voxels original = (has_union && inplace) ? vox.voxDuplicate() : vox;
+        foreach (object op in ops) {
+            if (op is Space space) {
+                cutted.IntersectImplicit(space);
+            } else if (op is Sectioner sect) {
+                Voxels add = sect.cut(original, inplace: false);
+                cutted.BoolAdd(add);
+            } else {
+                assert(false);
+            }
+        }
+        return cutted;
     }
 }
 
@@ -491,4 +587,6 @@ public class Polygon : SDF {
         }
         return dist;
     }
+}
+
 }

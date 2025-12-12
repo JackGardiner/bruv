@@ -1,8 +1,17 @@
 ﻿
-var voxel_size_mm = 1.5f;
-var task = Chamber.Task;
-bool sectioned = true; // only affects viewing.
-bool transparent = true; // also only affects viewing (whats the alternative?).
+using static Br;
+using br;
+
+Func<PicoGK.Voxels?> voxel_maker = Chamber.maker;
+float voxel_size_mm = 0.8f;
+
+Sectioner sectioner = new();
+Frame frame = new Frame().rotxz(DEG90);
+sectioner.intersect(new Space(frame, 0f, INF));
+sectioner.union(new Space(frame.rotyz(DEG60), 0f, INF));
+bool section_view = true; // only affects viewing.
+bool section_stl = true; // only affects stl export.
+bool transparent = true; // only affects viewing (whats the alternative?).
 
 
 // Task wrapper to configure some things and have nicer exception handling.
@@ -14,9 +23,33 @@ void wrapped_task() {
         Geez.dflt_alpha = transparent ? 0.8f : 1f;
         Geez.dflt_metallic = 0.35f;
         Geez.dflt_roughness = 0.8f;
-        Geez.dflt_sectioned = sectioned;
+        if (section_view)
+            Geez.dflt_sectioner = sectioner;
 
-        task();
+        PicoGK.Library.Log("");
+        PicoGK.Library.Log("whas good");
+
+        PicoGK.Voxels? vox = voxel_maker();
+
+        if (vox != null) {
+            if (section_stl)
+                vox = sectioner.cut(vox, inplace: true);
+            string class_name = voxel_maker.Method.DeclaringType?.Name
+                             ?? "rocket_ting";
+            string stl_path = fromroot($"exports/{class_name}.stl");
+            try {
+                PicoGK.Mesh mesh = new(vox);
+                mesh.SaveToStlFile(stl_path);
+                PicoGK.Library.Log($"Exported to stl: {stl_path}");
+            } catch (Exception e) {
+                PicoGK.Library.Log("Failed to export to stl. Exception log:");
+                PicoGK.Library.Log(e.ToString());
+                PicoGK.Library.Log("");
+            }
+        }
+
+        PicoGK.Library.Log("Don.");
+        PicoGK.Library.Log("");
 
         // Now loop until window is closed, since picogk will stop the instant
         // this function returns (and the thread is terminated).
@@ -42,9 +75,7 @@ void wrapped_task() {
 
 // Create exports directory.
 try {
-    string exports = PicoGK.Utils.strProjectRootFolder();
-    exports = Path.Combine(exports, "exports");
-    Directory.CreateDirectory(exports);
+    Directory.CreateDirectory(fromroot("exports"));
 } catch (Exception e) {
     Console.WriteLine("FAILED to create exports directory. Exception log:");
     Console.WriteLine(e.ToString());

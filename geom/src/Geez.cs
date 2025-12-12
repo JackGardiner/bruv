@@ -1,4 +1,6 @@
 using static Br;
+using br;
+
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
@@ -8,58 +10,62 @@ using PolyLine = PicoGK.PolyLine;
 using BBox3 = PicoGK.BBox3;
 using Colour = PicoGK.ColorFloat;
 
+namespace br {
+
 public class Geez {
     public static Colour? colour = null;
     public static float? alpha = null;
     public static float? metallic = null;
     public static float? roughness = null;
-    public static bool? sectioned = null;
+    public static Sectioner? sectioner = null;
 
     public static Colour dflt_colour = new Colour("#FFFFFF");
     public static float dflt_alpha = 1f;
     public static float dflt_metallic = 0.35f;
     public static float dflt_roughness = 0.5f;
-    public static bool dflt_sectioned = false;
+    public static Sectioner dflt_sectioner = new();
 
 
     public static IDisposable like(Colour? colour=null, float? alpha=null,
-            float? metallic=null, float? roughness=null, bool? sectioned=null) {
+            float? metallic=null, float? roughness=null,
+            Sectioner? sectioner=null) {
         var colour0 = Geez.colour;
         var alpha0 = Geez.alpha;
         var metallic0 = Geez.metallic;
         var roughness0 = Geez.roughness;
-        var sectioned0 = Geez.sectioned;
+        var sectioner0 = Geez.sectioner;
         Geez.colour = colour ?? colour0;
         Geez.alpha = alpha ?? alpha0;
         Geez.metallic = metallic ?? metallic0;
         Geez.roughness = roughness ?? roughness0;
-        Geez.sectioned = sectioned ?? sectioned0;
+        Geez.sectioner = sectioner ?? sectioner0;
         return new OnLeave(() => {
                 Geez.colour = colour0;
                 Geez.alpha = alpha0;
                 Geez.metallic = metallic0;
                 Geez.roughness = roughness0;
-                Geez.sectioned = sectioned0;
+                Geez.sectioner = sectioner0;
             });
     }
     public static IDisposable dflt_like(Colour? colour=null, float? alpha=null,
-            float? metallic=null, float? roughness=null, bool? sectioned=null) {
+            float? metallic=null, float? roughness=null,
+            Sectioner? sectioner=null) {
         var colour0 = Geez.dflt_colour;
         var alpha0 = Geez.dflt_alpha;
         var metallic0 = Geez.dflt_metallic;
         var roughness0 = Geez.dflt_roughness;
-        var sectioned0 = Geez.dflt_sectioned;
+        var sectioner0 = Geez.dflt_sectioner;
         Geez.dflt_colour = colour ?? colour0;
         Geez.dflt_alpha = alpha ?? alpha0;
         Geez.dflt_metallic = metallic ?? metallic0;
         Geez.dflt_roughness = roughness ?? roughness0;
-        Geez.dflt_sectioned = sectioned ?? sectioned0;
+        Geez.dflt_sectioner = sectioner ?? sectioner0;
         return new OnLeave(() => {
                 Geez.dflt_colour = colour0;
                 Geez.dflt_alpha = alpha0;
                 Geez.dflt_metallic = metallic0;
                 Geez.dflt_roughness = roughness0;
-                Geez.dflt_sectioned = sectioned0;
+                Geez.dflt_sectioner = sectioner0;
             });
     }
     private class OnLeave : IDisposable {
@@ -194,17 +200,10 @@ public class Geez {
 
 
     public static int voxels(in Voxels vox, Colour? colour=null) {
-        // Cross section if requested.
-        Voxels new_vox = vox;
-        if (sectioned ?? dflt_sectioned) {
-            BBox3 bounds = vox.oCalculateBoundingBox();
-            if (bounds.vecMin.X < 0f) {
-                bounds.vecMin.X = 0f;
-                Voxels box = new(PicoGK.Utils.mshCreateCube(bounds));
-                new_vox = new_vox.voxBoolIntersect(box);
-            }
-        }
-        Mesh mesh = new Mesh(new_vox);
+        // Apply sectioner.
+        Sectioner sect = sectioner ?? dflt_sectioner;
+        Voxels new_vox = sect.has_cuts() ? sect.cut(vox) : vox;
+        Mesh mesh = new(new_vox);
         return Geez.mesh(mesh, colour: colour);
     }
 
@@ -453,4 +452,6 @@ public class Geez {
         foreach (Triangle t in T)
             _ball_hires.nAddTriangle(t);
     }
+}
+
 }
