@@ -42,6 +42,7 @@ public class Chamber {
     // Bsz = bolt size (i.e. 4e-3 for M4x10).
     // Bln = bolt length (i.e. 10e-3 for M4x10).
     // D_ = discrete change in this variable.
+    // ell = arc length.
     // Fr = fillet radius.
     // Ir = inner radius.
     // Ioff = inner offset.
@@ -109,6 +110,8 @@ public class Chamber {
     public required float r_inlet { get; init; }
     public required float theta_inlet { get; init; }
     public required float Dz_inlet { get; init; }
+
+    public required float phi_mani { get; init; }
 
 
     /*
@@ -528,14 +531,14 @@ public class Chamber {
 
     protected BBox3 bbox_cnt(float max_off) {
         float r = max(cnt_rQ, cnt_rR) + max_off;
-        float zlo = cnt_zQ;
-        float zhi = cnt_zR;
+        float zlo = cnt_zQ - max_off;
+        float zhi = cnt_zR + max_off;
         return new(new Vec3(-r, -r, zlo), new Vec3(+r, +r, zhi));
     }
     protected BBox3 bbox_cnt_widened(float max_off) {
         float r = max(cnt_rQ, cnt_rR, cnt_wid_rS) + max_off;
-        float zlo = min(cnt_zQ, cnt_wid_zS);
-        float zhi = cnt_zR;
+        float zlo = min(cnt_zQ, cnt_wid_zS) - max_off;
+        float zhi = cnt_zR + max_off;
         return new(new Vec3(-r, -r, zlo), new Vec3(+r, +r, zhi));
     }
 
@@ -715,12 +718,41 @@ public class Chamber {
         return A0 - A_chnl_exit*t;
     }
 
+    protected List<Vec2> points_neg_mani(float min_z, out float Lr) {
+        List<Vec2> points = new(); // =[(z,r),...]
+        float max_z = cnt_z6 - th_ow;
+        // Firstly add the overhanging point (to ensure the channel isnt
+        // partially restricted by the line).
+        Vec2 a = new(
+            max_z,
+            cnt_radius_at(max_z, th_iw + th_chnl + th_ow) + th_chnl
+        );
+        points.Add(a);
+        // Then add the contour hugging the outer wall.
+        for (int i=0; i<=DIVISIONS/4; ++i) {
+            float z = max_z + i*(min_z - max_z)/(DIVISIONS/4);
+            float r = cnt_radius_at(z, th_iw + th_chnl + th_ow);
+            points.Add(new(z, r));
+        }
+        // Now add the intersection between the shallowest lines we can make.
+        // https://www.desmos.com/calculator/xfhcgwu2el
+        Vec2 b = points[^1];
+        float cz = (a.Y - b.Y)*0.5f/tan(abs(phi_mani)) + 0.5f*(a.X + b.X);
+        float cr = (a.X - b.X)*0.5f*tan(abs(phi_mani)) + 0.5f*(a.Y + b.Y);
+        Vec2 c = new(cz, cr);
+        points.Add(c);
+        // Also output the lower edge projected length to hugely aid the
+        // numerical search for matching area.
+        Lr = (c - b).Y;
+        return points;
+    }
     protected void points_neg_mani(List<Vec3> points, float theta) {
         float A = A_neg_mani(theta);
         // Must produce the same number of points each time.
         // Must produce points in anticlockwise winding (meaning an in-order
         // traversal would travel down the edge closest to the z-axis).
         assert(A > 0);
+        // Use an approximation to get an initial guess for min z.
         // https://www.desmos.com/calculator/bfsipdjpsd
         assert(phi_exit >= 0f);
         float max_phi = PI_4;
@@ -729,14 +761,24 @@ public class Chamber {
         float tanb = tan(max_phi);
         float L = 2f*sqrt(A/(cosa*cosa*tanb - sina*sina/tanb));
         float Az = L*cosa;
+      #if false
         float Ar = L*sina;
         float Bz = L/2f*(sina/tanb + cosa);
         float Br = L/2f*(sina + cosa*tanb);
-        float z0 = cnt_z6 - th_ow;
-        float r0 = cnt_radius_at(z0, th_iw + th_chnl + th_ow);
-        points.Add(tocart(r0,           theta, z0));
-        points.Add(tocart(r0 - Ar,      theta, z0 - Az));
-        points.Add(tocart(r0 - Ar + Br, theta, z0 - Az + Bz));
+      #endif
+        float min_z = cnt_z6 - th_ow - Az;
+        List<Vec2> ps = new();
+        for (int i=0; i<10; ++i) {
+            ps = points_neg_mani(min_z, out float Lr);
+            float rem_A = A - Polygon.area(ps);
+            float Dz = -rem_A/Lr; // very good guess, but still a guess.
+            min_z += Dz;
+            if (abs(Dz) < 1e-3 && abs(rem_A) < 1e-2)
+                break;
+            assert(i != 9, $"Dz={Dz}, rem_A={rem_A}");
+        }
+        foreach (Vec2 p in ps)
+            points.Add(tocart(p.Y, theta, p.X));
     }
 
     protected Mesh mesh_neg_mani() {
@@ -774,34 +816,54 @@ public class Chamber {
         return mesh;
     }
 
+    // z axis radially inwards.
+    protected Frame frame_inlet() => new(
+            tocart(r_inlet, theta_inlet, cnt_z6 + Dz_inlet),
+            -tocart(1f, theta_inlet, 0f)
+        );
+
     protected Voxels voxels_neg_mani() {
+        Frame inlet = frame_inlet();
         // Main manifold.
         Voxels vox = new Voxels(mesh_neg_mani());
         // Fuel inlet.
-        Vec3 a = tocart(
-            r_inlet,
-            theta_inlet,
-            cnt_z6 + Dz_inlet
-        );
+        Vec3 a = inlet.pos;
         Vec3 b = tocart(
             cnt_radius_at(a.Z, th_iw + th_chnl + th_ow + 1f),
-            theta_inlet,
+            argxy(a),
             a.Z
         );
         vox.BoolAdd(new Tubing([a, b], D_inlet).voxels());
+        // Fillet concave joining corner between tubing and manifold (should be
+        // the only concave corner).
+        Fillet.concave(vox, 10f, inplace: true);
+        // Add hard clip to fuel inlet.
+        vox.BoolAdd(new Pipe(
+            inlet.flip(),
+            2f*RADIAL_EXTRA,
+            D_inlet + 3f*th_inlet
+        ).voxels());
         return vox;
     }
 
     protected Voxels voxels_mani(in Voxels neg_mani) {
-        Voxels vox = neg_mani.voxOffset(th_inlet);
+        Frame inlet = frame_inlet();
 
-        Frame inlet = new(tocart(r_inlet, theta_inlet, cnt_z6 + Dz_inlet), uY3);
-        float length = 12f;
-        float thicker = 2f;
+        // Remove the inlet hard clip (plus a little bit of the tubing but that
+        // will be updated anyway).
+        Voxels neg = neg_mani.voxIntersectImplicit(new Space(inlet, 3f, INF));
+        Voxels vox = neg.voxOffset(th_inlet);
+
+        float length = 8f;
+        float thicker = 1f;
         float angle = DEG20;
         float radius = 0.5f*D_inlet + th_inlet + thicker;
         Voxels tapping;
-        tapping = new Pipe(inlet, length, radius).voxels();
+        tapping = new Pipe(
+            inlet.transz(-RADIAL_EXTRA),
+            length + RADIAL_EXTRA,
+            radius
+        ).voxels();
         tapping.BoolAdd(new Cone(
             inlet.transz(length),
             Cone.Radius(radius),
@@ -813,7 +875,6 @@ public class Chamber {
         );
 
         vox.BoolAdd(tapping);
-        vox.IntersectImplicit(new Space(inlet, 0f, INF));
 
         return vox;
     }
@@ -822,16 +883,16 @@ public class Chamber {
         Voxels vox;
 
         vox = new Pipe(
-            new Frame(),
-            pm.flange_thickness,
+            new Frame(-AXIAL_EXTRA*uZ3),
+            pm.flange_thickness + AXIAL_EXTRA,
             pm.flange_outer_radius
         ).voxels();
 
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
             Pipe bolt_surrounding = new(
-                new Frame(tocart(pm.Mr_bolt, theta, 0f)),
-                pm.flange_thickness,
+                new Frame(tocart(pm.Mr_bolt, theta, -AXIAL_EXTRA)),
+                pm.flange_thickness + AXIAL_EXTRA,
                 pm.Bsz_bolt/2f + pm.thickness_around_bolt
             );
             vox.BoolAdd(bolt_surrounding.voxels());
@@ -845,8 +906,8 @@ public class Chamber {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
             Pipe bolt_hole = new(
-                new Frame(tocart(pm.Mr_bolt, theta, 0f)),
-                pm.flange_thickness,
+                new Frame(tocart(pm.Mr_bolt, theta, -AXIAL_EXTRA)),
+                pm.flange_thickness + AXIAL_EXTRA,
                 pm.Bsz_bolt/2f
             );
             vox.BoolAdd(bolt_hole.voxels());
@@ -882,17 +943,13 @@ public class Chamber {
         // We view a few things as they are updated.
         Geez.Cycle key_gas = new();
         Geez.Cycle key_flange = new();
-        Geez.Cycle key_mani = new();
+        Geez.Cycle key_neg_mani = new();
         Geez.Cycle key_chnl = new();
         Geez.Cycle key_part = new();
         var col_gas = COLOUR_PINK;
         var col_flange = COLOUR_RED;
-        var col_mani = COLOUR_BLUE;
+        var col_neg_mani = COLOUR_BLUE;
         var col_chnl = COLOUR_GREEN;
-
-        Voxels neg_bolts = voxels_neg_bolts();
-        Voxels neg_orings = voxels_neg_orings();
-        Voxels neg_mani = voxels_neg_mani();
 
         Voxels gas = voxels_cnt_gas();
         key_gas <<= Geez.voxels(gas, colour: col_gas);
@@ -900,8 +957,8 @@ public class Chamber {
         Voxels flange = voxels_flange();
         key_flange <<= Geez.voxels(flange, colour: col_flange);
 
-        Voxels mani = voxels_mani(neg_mani);
-        key_mani <<= Geez.voxels(mani, colour: col_mani);
+        Voxels neg_mani = voxels_neg_mani();
+        key_neg_mani <<= Geez.voxels(neg_mani, colour: col_neg_mani);
 
         Voxels ow_filled = voxels_cnt_ow_filled();
 
@@ -919,31 +976,33 @@ public class Chamber {
         chnl.BoolIntersect(ow_filled);
         key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
 
+        Voxels mani = voxels_mani(neg_mani);
         Voxels part = ow_filled; // no copy.
         part.BoolAdd(flange);
         part.BoolAdd(mani);
-        Fillet.concave(part, 3f, inplace: true);
         key_part <<= Geez.voxels(part);
         key_flange <<= Geez.CLEAR;
-        key_mani <<= Geez.CLEAR;
+        key_neg_mani <<= Geez.CLEAR;
+
+        // Clip top to fillet that edge but not bottom.
+        part.IntersectImplicit(new Space(new(), -INF, cnt_z6));
+        key_part <<= Geez.voxels(part);
+        Fillet.both(part, concave_Fr: 3f, convex_Fr: 2f, inplace: true);
+        key_part <<= Geez.voxels(part);
 
         part.BoolSubtract(chnl);
         key_part <<= Geez.voxels(part);
         key_chnl <<= Geez.CLEAR;
 
         part.BoolSubtract(gas);
-        part.BoolSubtract(neg_bolts);
-        part.BoolSubtract(neg_orings);
-        part.BoolSubtract(neg_mani);
         key_part <<= Geez.voxels(part);
         key_gas <<= Geez.CLEAR;
 
-        // Clip axial excess.
-        BBox3 bounds = part.oCalculateBoundingBox();
-        bounds.vecMin.Z = 0f;
-        bounds.vecMax.Z = cnt_z6;
-        part.Trim(bounds);
-
+        part.BoolSubtract(voxels_neg_bolts());
+        part.BoolSubtract(voxels_neg_orings());
+        part.BoolSubtract(neg_mani);
+        // Clip bottom.
+        part.IntersectImplicit(new Space(new(), 0f, INF));
         key_part <<= Geez.voxels(part);
 
         return part;
@@ -987,31 +1046,31 @@ public class Chamber {
     public static Voxels maker() {
         Chamber chamber = new Chamber{
             pm = new PartMating{
-                Or_cc=50f,
+                Or_cc=40f,
 
-                Mr_chnl=60f,
+                Mr_chnl=50f,
                 min_wi_chnl=2f,
 
-                Ir_Ioring=52.5f,
-                Or_Ioring=55.5f,
-                Ir_Ooring=64.5f,
-                Or_Ooring=67.5f,
+                Ir_Ioring=42.5f,
+                Or_Ioring=45.5f,
+                Ir_Ooring=54.5f,
+                Or_Ooring=57.5f,
                 Lz_Ioring=2f,
                 Lz_Ooring=2f,
 
                 no_bolt=10,
-                Mr_bolt=76f,
+                Mr_bolt=66f,
                 Bsz_bolt=8f,
                 Bln_bolt=20f,
 
                 thickness_around_bolt=5f,
                 flange_thickness=7f,
-                flange_outer_radius=77.5f,
+                flange_outer_radius=68f,
                 radial_fillet_radius=5f,
                 axial_fillet_radius=10f,
             },
 
-            L_cc=100f,
+            L_cc=70f,
 
             AEAT=4f,
             r_tht=20f,
@@ -1031,10 +1090,12 @@ public class Chamber {
             Ltheta_web=1.5f/50f,
 
             D_inlet=10f,
-            th_inlet=2f,
+            th_inlet=3f,
             r_inlet=80f,
-            theta_inlet=-PI_2,
+            theta_inlet=-DEG90,
             Dz_inlet=-15f,
+
+            phi_mani=DEG45,
         };
         chamber.initialise();
 

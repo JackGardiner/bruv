@@ -499,21 +499,32 @@ public class Polygon : SDF {
     public List<Vec2> points { get; }
     public float L { get; }
 
-    public Polygon(in Frame centre, in List<Vec2> points, float L) {
-        assert(numel(points) >= 3, $"numel={numel(points)}");
-        assert(_is_simple_polygon(points), "cooked it");
-        assert(L > 0f, $"L={L}");
-        this.centre = centre;
-        this.points = points;
-        this.L = L;
-        for (int i=0; i<numel(points); ++i) {
-            include_in_bounds(centre.to_global(rejxy(points[i], 0f)));
-            include_in_bounds(centre.to_global(rejxy(points[i], L)));
+
+    public static float area(in List<Vec2> points) {
+        int N = numel(points);
+        float A = 0f;
+        for (int i=0; i<N; ++i) {
+            int j = (i + 1 == N) ? 0 : i + 1;
+            Vec2 a = points[i];
+            Vec2 b = points[j];
+            A += a.X*b.Y - b.X*a.Y;
         }
+        return 0.5f*abs(A);
     }
 
+    public static float perimeter(in List<Vec2> points) {
+        int N = numel(points);
+        float ell = 0f;
+        for (int i=0; i<N; ++i) {
+            int j = (i + 1 == N) ? 0 : i + 1;
+            Vec2 a = points[i];
+            Vec2 b = points[j];
+            ell += mag(b - a);
+        }
+        return 0.5f*abs(ell);
+    }
 
-    protected static bool _is_simple_polygon(in List<Vec2> points) {
+    public static bool is_simple(in List<Vec2> points) {
         int N = numel(points);
         if (N < 3)
             return false;
@@ -542,6 +553,22 @@ public class Polygon : SDF {
         }
         return true;
     }
+
+
+    public Polygon(in Frame centre, in List<Vec2> points, float L) {
+        assert(numel(points) >= 3, $"numel={numel(points)}");
+        assert(is_simple(points), "cooked it");
+        assert(L > 0f, $"L={L}");
+        this.centre = centre;
+        this.points = points;
+        this.L = L;
+        for (int i=0; i<numel(points); ++i) {
+            include_in_bounds(centre.to_global(rejxy(points[i], 0f)));
+            include_in_bounds(centre.to_global(rejxy(points[i], L)));
+        }
+    }
+
+
 
     public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);

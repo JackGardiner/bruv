@@ -1,2 +1,5 @@
 # bruv
-**B**ipropellant, **R**egeneratively cooling, **U**nprecedentedly optimised, **V**-kN motor
+**B**ipropellant,
+**R**egeneratively cooled,
+**U**nprecedentedly optimised,
+**V**-kN motor maker
