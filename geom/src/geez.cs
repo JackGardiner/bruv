@@ -1,6 +1,4 @@
 using static Br;
-using br;
-
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
@@ -12,7 +10,7 @@ using Colour = PicoGK.ColorFloat;
 
 namespace br {
 
-public class Geez {
+public static class Geez {
     public static Colour? colour = null;
     public static float? alpha = null;
     public static float? metallic = null;
@@ -75,15 +73,15 @@ public class Geez {
     }
 
 
-    protected static Dictionary<int, (List<PolyLine>, List<Mesh>)> _geezed
+    private static Dictionary<int, (List<PolyLine>, List<Mesh>)> _geezed
             = new();
-    protected static int _next = 1; // must leave 0 as illegal.
-    protected static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
+    private static int _next = 1; // must leave 0 as illegal.
+    private static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
         int key = _next++;
         _geezed.Add(key, (lines, meshes));
         return key;
     }
-    protected static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
+    private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
         Vec3? point = null;
         foreach (PolyLine line in lines) {
             PicoGK.Library.oViewer().Add(line);
@@ -110,19 +108,19 @@ public class Geez {
             Leap71.ShapeKernel.Sh.PreviewMesh(_dummy, COLOUR_BLACK);
         }
     }
-    protected static int _push(in List<Mesh> meshes) {
+    private static int _push(in List<Mesh> meshes) {
         _view([], meshes);
         return _track([], meshes);
     }
-    protected static int _push(in List<PolyLine> lines) {
+    private static int _push(in List<PolyLine> lines) {
         _view(lines, []);
         return _track(lines, []);
     }
-    protected static int _push(in List<PolyLine> lines, in List<Mesh> meshes) {
+    private static int _push(in List<PolyLine> lines, in List<Mesh> meshes) {
         _view(lines, meshes);
         return _track(lines, meshes);
     }
-    protected static int _push(in List<Mesh> meshes, in List<PolyLine> lines) {
+    private static int _push(in List<Mesh> meshes, in List<PolyLine> lines) {
         _view(lines, meshes);
         return _track(lines, meshes);
     }
@@ -213,8 +211,8 @@ public class Geez {
     }
 
 
-    protected static Mesh _ball_hires;
-    protected static Mesh _ball_lores;
+    private static Mesh _ball_hires;
+    private static Mesh _ball_lores;
     public static int point(in Vec3 p, float r=2f, Colour? colour=null,
             bool hires=true) {
         return Geez.points([p], r: r, colour: colour, hires: hires);
@@ -249,7 +247,7 @@ public class Geez {
         return _push(lines);
     }
 
-    protected static void _frame_lines(out Mesh? mesh, List<PolyLine> lines,
+    private static void _frame_lines(out Mesh? mesh, List<PolyLine> lines,
             in Frame frame, float size, bool mark_pos) {
         PolyLine X = new(COLOUR_RED);
         X.nAddVertex(frame.pos);
@@ -293,7 +291,7 @@ public class Geez {
             return _push(lines, meshes);
     }
 
-    protected static void _bbox_lines(List<PolyLine> lines, in BBox3 bbox,
+    private static void _bbox_lines(List<PolyLine> lines, in BBox3 bbox,
             Colour? colour) {
         Colour col = colour ?? Geez.colour ?? Geez.dflt_colour;
         Vec3 p000 = bbox.vecMin;

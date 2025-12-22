@@ -261,14 +261,11 @@ public class Cuboid : SDF {
         this.Lx = Lx;
         this.Ly = Ly;
         this.Lz = Lz;
-        include_in_bounds(centre.to_global(new(-Lx/2f, -Ly/2f, 0f)));
-        include_in_bounds(centre.to_global(new(-Lx/2f, +Ly/2f, 0f)));
-        include_in_bounds(centre.to_global(new(+Lx/2f, -Ly/2f, 0f)));
-        include_in_bounds(centre.to_global(new(+Lx/2f, +Ly/2f, 0f)));
-        include_in_bounds(centre.to_global(new(-Lx/2f, -Ly/2f, Lz)));
-        include_in_bounds(centre.to_global(new(-Lx/2f, +Ly/2f, Lz)));
-        include_in_bounds(centre.to_global(new(+Lx/2f, -Ly/2f, Lz)));
-        include_in_bounds(centre.to_global(new(+Lx/2f, +Ly/2f, Lz)));
+        BBox3 bbox = new(
+            new Vec3(-Lx/2f, -Ly/2f, 0f),
+            new Vec3(+Lx/2f, +Ly/2f, Lz)
+        );
+        set_bounds(centre.to_global(bbox));
     }
 
     public Cuboid centred() {
@@ -310,14 +307,11 @@ public class Pipe : SDF {
         this.Lz = Lz;
         this.rlo = rlo;
         this.rhi = rhi;
-        include_in_bounds(centre.to_global(new(-rhi, -rhi, 0f)));
-        include_in_bounds(centre.to_global(new(-rhi, +rhi, 0f)));
-        include_in_bounds(centre.to_global(new(+rhi, -rhi, 0f)));
-        include_in_bounds(centre.to_global(new(+rhi, +rhi, 0f)));
-        include_in_bounds(centre.to_global(new(-rhi, -rhi, Lz)));
-        include_in_bounds(centre.to_global(new(-rhi, +rhi, Lz)));
-        include_in_bounds(centre.to_global(new(+rhi, -rhi, Lz)));
-        include_in_bounds(centre.to_global(new(+rhi, +rhi, Lz)));
+        BBox3 bbox = new(
+            new Vec3(-rhi, -rhi, 0f),
+            new Vec3(+rhi, +rhi, Lz)
+        );
+        set_bounds(centre.to_global(bbox));
     }
 
     public Pipe filled() {
@@ -351,6 +345,32 @@ public class Pipe : SDF {
 }
 
 
+public class Donut : SDF {
+    public Frame centre { get; } // centre point, z along axis of symmetry.
+    public float R { get; } // distance from axis of revoultion.
+    public float r { get; } // half-thickness.
+
+    public Donut(in Frame centre, float R, float r) {
+        assert(R >= 0f);
+        assert(r > 0f);
+        this.centre = centre;
+        this.R = R;
+        this.r = r;
+        BBox3 bbox = new(
+            new Vec3(-R - r, -R - r, -r),
+            new Vec3(+R + r, +R + r, +r)
+        );
+        set_bounds(centre.to_global(bbox));
+    }
+
+    public override float fSignedDistance(in Vec3 p) {
+        Vec3 q = centre.from_global(p);
+        float dist = hypot(magxy(q) - R, q.Z);
+        return abs(dist) - r;
+    }
+}
+
+
 public class Cone : SDF {
     public Frame centre { get; } // cone tip, +z towards cone.
     public float Lz { get; }
@@ -359,31 +379,25 @@ public class Cone : SDF {
     protected float cosphi { get; }
     protected float sinphi { get; }
 
-    public struct PhiV {
-        public float v { get; }
-        public PhiV(float v) { this.v = v; }
-    }
-    public static PhiV Phi(float phi) { return new PhiV(phi); }
+    public struct AsPhi { public required float v { get; init; } }
+    public static AsPhi as_phi(float phi) => new AsPhi{v=phi};
 
-    public struct RadiusV {
-        public float v { get; }
-        public RadiusV(float v) { this.v = v; }
-    }
-    public static RadiusV Radius(float r) { return new RadiusV(r); }
+    public struct AsRadius { public required float v { get; init; } }
+    public static AsRadius as_radius(float r) => new AsRadius{v=r};
 
     public Cone(in Frame centre, float Lz, float r, float? th=null,
             bool at_tip=false)
-        : this(centre, Lz, Phi(atan(r / Lz)), th, at_tip) {}
-    public Cone(in Frame centre, PhiV phi, RadiusV r, float? th=null,
+        : this(centre, Lz, as_phi(atan(r / Lz)), th, at_tip) {}
+    public Cone(in Frame centre, AsPhi phi, AsRadius r, float? th=null,
             bool at_tip=false)
         : this(centre, r, phi, th, at_tip) {}
-    public Cone(in Frame centre, RadiusV r, PhiV phi, float? th=null,
+    public Cone(in Frame centre, AsRadius r, AsPhi phi, float? th=null,
             bool at_tip=false)
         : this(centre, r.v / tan(phi.v), phi, th, at_tip) {}
-    public Cone(in Frame centre, PhiV phi, float Lz, float? th=null,
+    public Cone(in Frame centre, AsPhi phi, float Lz, float? th=null,
             bool at_tip=true)
         : this(centre, Lz, phi, th, at_tip) {}
-    public Cone(in Frame centre, float Lz, PhiV phi, float? th=null,
+    public Cone(in Frame centre, float Lz, AsPhi phi, float? th=null,
             bool at_tip=true) {
         assert(Lz > 0f, $"Lz={Lz}");
         assert(0f < phi.v && phi.v < PI_2, $"phi={phi.v}");
@@ -396,11 +410,11 @@ public class Cone : SDF {
         this.cosphi = cos(this.phi);
         this.sinphi = sin(this.phi);
         float r = Lz * sinphi/cosphi;
-        include_in_bounds(centre.to_global(new(0f, 0f, 0f)));
-        include_in_bounds(centre.to_global(new(-r, -r, Lz)));
-        include_in_bounds(centre.to_global(new(-r, +r, Lz)));
-        include_in_bounds(centre.to_global(new(+r, -r, Lz)));
-        include_in_bounds(centre.to_global(new(+r, +r, Lz)));
+        include_in_bounds(centre.to_global(new Vec3(0f, 0f, 0f)));
+        include_in_bounds(centre.to_global(new Vec3(-r, -r, Lz)));
+        include_in_bounds(centre.to_global(new Vec3(-r, +r, Lz)));
+        include_in_bounds(centre.to_global(new Vec3(+r, -r, Lz)));
+        include_in_bounds(centre.to_global(new Vec3(+r, +r, Lz)));
     }
 
 
@@ -553,6 +567,129 @@ public class Polygon : SDF {
         }
         return true;
     }
+
+    public static Vec2 line_intersection(Vec2 a0, Vec2 a1, Vec2 b0, Vec2 b1,
+            out bool outside) {
+        Vec2 Da = a1 - a0;
+        Vec2 Db = b1 - b0;
+        float den = cross(Da, Db);
+        assert(!closeto(den, 0));
+        float t = cross(b0 - a0, Db) / den;
+        outside = within(t, 0f, 1f);
+        return a0 + t*Da;
+    }
+
+    public static List<Vec2> line_resample(List<Vec2> ps, int divisions) {
+        assert(numel(ps) >= 2);
+        assert(divisions >= 2);
+        float Ell = 0f;
+        for (int i=1; i<numel(ps); ++i)
+            Ell += mag(ps[i] - ps[i - 1]);
+        float L_seg = Ell / (divisions - 1);
+        // Ensure exact start and end points.
+        List<Vec2> new_ps = new List<Vec2>(divisions){ps[0]};
+        float accum = 0f; // accumulated length.
+        int seg = 1;
+        Vec2 prev = ps[0];
+        while (numel(new_ps) < divisions - 1) {
+            Vec2 upto = ps[seg];
+            float ell = mag(upto - prev);
+            if (accum + ell >= L_seg) {
+                float t = (L_seg - accum) / ell;
+                new_ps.Add(prev + t*(upto - prev));
+                prev = new_ps[^1];
+                accum = 0f;
+            } else {
+                ++seg;
+                assert(seg < numel(ps));
+                prev = upto;
+                accum += ell;
+            }
+        }
+        new_ps.Add(ps[^1]);
+        return new_ps;
+    }
+
+    public static void fillet(List<Vec2> ps, int i, float Fr, float prec=1f,
+            int? divisions=null, bool only_this_vertex=false) {
+      TRY_AGAIN:;
+        assert_idx(i, numel(ps));
+        int i_n1 = (i - 1 + numel(ps)) % numel(ps);
+        int i_p1 = (i + 1) % numel(ps);
+        assert_idx(i_n1, numel(ps));
+        assert_idx(i_p1, numel(ps));
+        Vec2 a = ps[i_n1];
+        Vec2 b = ps[i];
+        Vec2 c = ps[i_p1];
+        float mag_ba = mag(a - b);
+        float mag_bc = mag(c - b);
+        // Points too close.
+        assert(mag_ba > 1e-5f);
+        assert(mag_bc > 1e-5f);
+        Vec2 BA = (a - b) / mag_ba;
+        Vec2 BC = (c - b) / mag_bc;
+        float beta = acos(clamp(dot(BA, BC), -1f, 1f));
+        // Insanely sharp point.
+        assert(!closeto(beta, 0f));
+        // Already a straight line.
+        if (closeto(abs(beta), PI))
+            return;
+        // Find the two points which will be joined by a circular arc.
+        float ell = Fr / tan(0.5f*beta);
+        Vec2 d = b + BA*ell;
+        // Radius may be too great for these points.
+        if (ell > min(mag_ba, mag_bc)) {
+            if (only_this_vertex)
+                assert(false, "fillet radius too great for this corner");
+            // Remove the shorter segment and replace it by extending the segment
+            // just before that.
+            assert(numel(ps) >= 4, "too few points to do fillet "
+                                 + "(or too strange a shape)");
+            if (mag_ba <= mag_bc) {
+                // extend segment ab.
+                int i_n2 = (i - 2 + numel(ps)) % numel(ps);
+                assert_idx(i_n2, numel(ps));
+                Vec2 new_a = line_intersection(ps[i_n2], a, b, c, out _);
+                ps[i_n1] = new_a;
+                ps.RemoveAt(i);
+                i = i_n1;
+            } else {
+                // extend segment bc.
+                int i_p2 = (i + 2 + numel(ps)) % numel(ps);
+                assert_idx(i_p2, numel(ps));
+                Vec2 new_c = line_intersection(ps[i_p2], c, b, a, out _);
+                ps[i_p1] = new_c;
+                ps.RemoveAt(i);
+                // i unchanged.
+            }
+            // Removal may require another wrap around.
+            if (i == numel(ps))
+                i = 0;
+            goto TRY_AGAIN;
+        }
+        // Find the centre of the circular arc.
+        float off = Fr / sin(0.5f*beta);
+        Vec2 centre = b + normalise(BA + BC)*off;
+        // Angles of each arc endpoint.
+        float theta0 = arg(b - centre);
+        float Ltheta = theta0 - arg(d - centre);
+        if (abs(Ltheta) > PI)
+            Ltheta += (Ltheta < 0) ? TWOPI : -TWOPI;
+        theta0 -= Ltheta;
+        Ltheta *= 2f;
+        // Calc segment count.
+        int divs = divisions ?? (int)(abs(Ltheta) / TWOPI * 50f * prec);
+        assert(divs > 0);
+        // Trace the arc.
+        List<Vec2> replace_b = new(divs);
+        for (int j=0; j<divs; ++j) {
+            float theta = theta0 + j*Ltheta/(divs - 1);
+            replace_b.Add(centre + tocart(Fr, theta));
+        }
+        ps.RemoveAt(i);
+        ps.InsertRange(i, replace_b);
+    }
+
 
 
     public Polygon(in Frame centre, in List<Vec2> points, float L) {
