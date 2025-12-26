@@ -1049,12 +1049,7 @@ public class Chamber {
         float neg_Lr = 0.5f*D_tc;
         float pos_Lr = 0.5f*D_tc + th_tc;
         foreach (Vec3 p in points) {
-            Frame frame = new(
-                p,
-                tocart(1f, argxy(p) + PI_2, 0f), // x = +circumferential
-                // y = +axial
-                tocart(1f, argxy(p), 0f) // z = +radial
-            );
+            Frame frame = Frame.cyl_radial(p);
 
             Voxels this_neg = new Pipe(
                 frame,
@@ -1106,13 +1101,67 @@ public class Chamber {
         ).voxels();
 
         for (int i=0; i<pm.no_bolt; ++i) {
-            float theta = i * TWOPI / pm.no_bolt;
-            Pipe bolt_surrounding = new(
-                new Frame(tocart(pm.Mr_bolt, theta, -EXTRA)),
-                pm.flange_thickness + EXTRA,
-                pm.Bsz_bolt/2f + pm.thickness_around_bolt
-            );
-            vox.BoolAdd(bolt_surrounding.voxels());
+            float theta = i*TWOPI/pm.no_bolt;
+            float r = pm.Mr_bolt;
+            float Lz = pm.flange_thickness;
+            float Lr = pm.Bsz_bolt/2f + pm.thickness_around_bolt;
+            Vec3 p = tocart(r, theta, 0f);
+
+            List<Vec2> tracezr = new();
+            float rlo = pm.Or_cc + th_iw + th_chnl + th_ow - r;
+            float zhi = squared((Lr - rlo)/Lr/2f)*10f;
+            int N = DIVISIONS/16;
+            for (int j=0; j<N; ++j) {
+                float x = squared(j/(float)(N - 1))*(zhi + 2f*EXTRA);
+                float y = Lr - Lr*2f*sqrt(x/10f);
+                tracezr.Add(new(x, y));
+            }
+            tracezr.Add(new(zhi + 2f*EXTRA, rlo));
+            tracezr.Add(new(zhi + 2f*EXTRA, Lr + EXTRA));
+            tracezr.Add(new(0f,             Lr + EXTRA));
+
+            List<Vec2> tracexy = new();
+            float theta_stop = PI/2.3f;
+            N = (int)(DIVISIONS*(TWOPI - 2f*theta_stop)/TWOPI)/2;
+            for (int j=0; j<N; ++j) {
+                float t = -PI + j*TWOPI/N;
+                if (abs(wraprad(t + PI)) < theta_stop)
+                    continue;
+                tracexy.Add(tocart(Lr, t));
+            }
+            float length = 2f*(r - pm.Or_cc - th_iw - th_chnl - th_ow);
+            Vec2 A = tocart(Lr, -PI - theta_stop)
+                   + tocart(length, -PI - theta_stop + PI_2);
+            Vec2 B = tocart(Lr, -PI + theta_stop)
+                    + tocart(length, -PI + theta_stop - PI_2);
+            if (A.Y < B.Y) {
+                Vec2 C = Polygon.line_intersection(
+                    A, tracexy[^1],
+                    B, tracexy[0],
+                    out _
+                );
+                tracexy.Add(C);
+            } else {
+                tracexy.Add(A);
+                tracexy.Add(B);
+            }
+
+            Voxels this_vox = new Polygon(
+                Frame.cyl_axial(p - EXTRA*uZ3),
+                Lz + zhi + 2f*EXTRA,
+                tracexy
+            ).voxels();
+            this_vox.BoolSubtract(new Polygon(
+                Frame.cyl_circum(p + (Lz - 1f)*uZ3),
+                2f*(Lr + EXTRA),
+                tracezr
+            ).at_middle().voxels());
+            this_vox.BoolAdd(new Pipe(
+                Frame.cyl_axial(p - EXTRA*uZ3),
+                Lz + EXTRA,
+                Lr
+            ).voxels());
+            vox.BoolAdd(this_vox);
         }
 
         return vox;
@@ -1122,11 +1171,16 @@ public class Chamber {
         Voxels vox = new();
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
-            Frame frame = new Frame(tocart(pm.Mr_bolt, theta, -EXTRA));
+            Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
             vox.BoolAdd(new Pipe(
-                frame,
+                frame.transz(-EXTRA),
                 pm.flange_thickness + EXTRA,
                 pm.Bsz_bolt/2f
+            ).voxels());
+            vox.BoolAdd(new Pipe(
+                frame.transz(pm.flange_thickness),
+                3f*EXTRA,
+                pm.Bsz_bolt/2f + 3f
             ).voxels());
         }
         return vox;
@@ -1292,10 +1346,10 @@ public class Chamber {
                 axial_fillet_radius=10f,
             },
 
-            L_cc=70f,
+            L_cc=100f,
 
             AEAT=4f,
-            r_tht=18f,
+            r_tht=23f,
 
             NLF=1f,
             phi_conv=-DEG45,

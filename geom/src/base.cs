@@ -812,6 +812,10 @@ public class Polygon : SDF {
         }
     }
 
+    public Polygon at_middle() {
+        return new(centre.transz(-Lz/2f), Lz, points);
+    }
+
 
     public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre.from_global(p);

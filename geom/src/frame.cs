@@ -13,38 +13,97 @@ public class Frame {
 
     public Frame()
         : this(ZERO3, uX3, uY3, uZ3) {}
+
     public Frame(Vec3 pos)
         : this(pos, uX3, uY3, uZ3) {}
+
     public Frame(Vec3 new_pos, Frame f)
         : this(new_pos, f.X, f.Y, f.Z) {}
+
     public Frame(Vec3 pos, Vec3 Z)
         : this(pos, arbitrary_perpendicular(Z), Z) {}
-    public Frame(Vec3 pos, Vec3 X, Vec3 Z) {
-        assert(isgood(pos));
-        assert(!closeto(mag(X), 0f), "gotta be non-zero");
-        assert(!closeto(mag(Z), 0f), "gotta be non-zero");
-        X = normalise(X);
-        Z = normalise(Z);
-        assert(closeto(dot(X, Z), 0f), "gotta be right angle");
-        this.pos = pos;
-        this.X = X;
-        this.Y = cross(Z, X);
-        this.Z = Z;
+
+    public Frame(Vec3 pos, Vec3 X, Vec3 Z)
+        : this(pos, normalise(X), normalise(cross(Z, X)), normalise(Z)) {}
+
+    public class Cyl {
+        public Frame origin { get; }
+        public Cyl() : this(new Frame()) {}
+        public Cyl(in Frame origin) {
+            this.origin = origin;
+        }
+
+        public Frame axial(Vec3 pos) {
+            Vec3 q = origin.from_global(pos);
+            bool on_z = closeto(q.X, 0f) && closeto(q.Y, 0f);
+            // default to as-if lies on x.
+            float theta = on_z ? 0f : argxy(q);
+
+            Vec3 Rad = tocart(1f, theta, 0f);
+            Vec3 Cir = tocart(1f, theta + PI_2, 0f);
+            Vec3 Axi = uZ3;
+            Rad = origin.to_global_rot(Rad);
+            Cir = origin.to_global_rot(Cir);
+            Axi = origin.to_global_rot(Axi);
+            return new(pos, Rad, Cir, Axi);
+        }
+        public Frame radial(Vec3 pos) {
+            return axial(pos).cyclecw();
+        }
+        public Frame circum(Vec3 pos) {
+            return axial(pos).cycleccw();
+        }
     }
-    protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
-        assert(isgood(pos));
-        assert(closeto(mag(X), 1f));
-        assert(closeto(mag(Y), 1f));
-        assert(closeto(mag(Z), 1f));
-        assert(closeto(dot(X, Y), 0f));
-        assert(closeto(dot(X, Z), 0f));
-        assert(closeto(dot(Y, Z), 0f));
-        assert(closeto(cross(Z, X), Y)); // rhs
-        this.pos = pos;
-        this.X = X;
-        this.Y = Y;
-        this.Z = Z;
+
+    public class Sph {
+        public Frame origin { get; }
+        public Sph() : this(new Frame()) {}
+        public Sph(in Frame origin) {
+            this.origin = origin;
+        }
+
+        public Frame normal(Vec3 pos) {
+            Vec3 q = origin.from_global(pos);
+            bool on_z = closeto(q.X, 0f) && closeto(q.Y, 0f);
+            bool at_0 = closeto(q, ZERO3);
+            // default to as-if lies on x.
+            float theta = on_z ? 0f : argxy(q);
+            float phi = at_0 ? PI_2 : argphi(q);
+
+            Vec3 Lon = tocart(1f, theta, as_phi(phi + PI_2));
+            Vec3 Lat = tocart(1f, theta + PI_2, 0f);
+            Vec3 Nor = tocart(1f, theta, as_phi(phi));
+            Lon = origin.to_global_rot(Lon);
+            Lat = origin.to_global_rot(Lat);
+            Nor = origin.to_global_rot(Nor);
+            return new(pos, Lon, Lat, Nor);
+        }
+        public Frame longit(Vec3 pos) {
+            return normal(pos).cyclecw();
+        }
+        public Frame latit(Vec3 pos) {
+            return normal(pos).cycleccw();
+        }
     }
+
+    // x = +radial, y = +circumferential, z = +axial
+    public static Frame cyl_axial(Vec3 pos) => new Cyl().axial(pos);
+
+    // x = +circumferential, y = +axial, z = +radial
+    public static Frame cyl_radial(Vec3 pos) => new Cyl().radial(pos);
+
+    // x = +axial, y = +radial, z = +circumferential
+    public static Frame cyl_circum(Vec3 pos) => new Cyl().circum(pos);
+
+    // x = +longitudinal, y = +latitudinal, z = +normal
+    public static Frame sph_normal(Vec3 pos) => new Sph().normal(pos);
+
+    // x = +latitudinal, y = +normal, z = +longitudinal
+    public static Frame sph_longit(Vec3 pos) => new Sph().longit(pos);
+
+    // x = +normal, y = +longitudinal, z = +latitudinal
+    public static Frame sph_latit(Vec3 pos) => new Sph().latit(pos);
+
 
     public Frame transx(float by, bool relative=true) {
         Vec3 along = relative ? X : uX3;
@@ -104,6 +163,14 @@ public class Frame {
     public Frame swapyz() {
         return new(pos, -X, Z, Y);
     }
+
+    public Frame cyclecw() {
+        return new(pos, Y, Z, X);
+    }
+    public Frame cycleccw() {
+        return new(pos, Z, X, Y);
+    }
+
 
     public Vec3 to_global(Vec3 p) {
         return pos + p.X*X + p.Y*Y + p.Z*Z;
@@ -198,6 +265,21 @@ public class Frame {
         if (abs(dot(Z, O)) > 0.99f) // too close to parallel.
             O = uX3;
         return cross(Z, O);
+    }
+
+    protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
+        assert(isgood(pos));
+        assert(closeto(mag(X), 1f));
+        assert(closeto(mag(Y), 1f));
+        assert(closeto(mag(Z), 1f));
+        assert(closeto(dot(X, Y), 0f));
+        assert(closeto(dot(X, Z), 0f));
+        assert(closeto(dot(Y, Z), 0f));
+        assert(closeto(cross(Z, X), Y)); // rhs
+        this.pos = pos;
+        this.X = X;
+        this.Y = Y;
+        this.Z = Z;
     }
 }
 

@@ -300,6 +300,7 @@ public static class Br {
     public static Vec2 rot90cw(Vec2 a) => new(a.Y, -a.X);
     public static Vec2 rotate(Vec2 a, float b)
         => new(a.X*cos(b) - a.Y*sin(b), a.X*sin(b) + a.Y*cos(b));
+    public static Vec2 rotxy(Vec2 a, float b) => rotate(a, b);
     public static Vec3 rotxy(Vec3 a, float b)
         => rejxy(rotate(projxy(a), b), a.Z);
     public static Vec3 rotxz(Vec3 a, float b)
@@ -323,8 +324,14 @@ public static class Br {
              + about*dot(about, p)*(1f - cosby);
     }
 
-    public static Vec2 normalise(Vec2 a) => Vec2.Normalize(a);
-    public static Vec3 normalise(Vec3 a) => Vec3.Normalize(a);
+    public static Vec2 normalise(Vec2 a) {
+        assert(!closeto(mag(a), 0f));
+        return Vec2.Normalize(a);
+    }
+    public static Vec3 normalise(Vec3 a) {
+        assert(!closeto(mag(a), 0f));
+        return Vec3.Normalize(a);
+    }
     public static Vec2 normalise_nonzero(Vec2 a)
         => closeto(mag(a), 0f) ? a : normalise(a);
     public static Vec3 normalise_nonzero(Vec3 a)
