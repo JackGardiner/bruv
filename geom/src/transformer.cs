@@ -132,7 +132,7 @@ public class Transformer {
     public Voxels voxels(in Voxels vox) {
         Mesh a = new Mesh(vox);
         Mesh b = mesh(a);
-        return new Voxels(a);
+        return new Voxels(b);
     }
 }
 
