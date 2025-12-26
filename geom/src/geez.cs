@@ -223,6 +223,7 @@ public static class Geez {
         Mesh ball = hires ? _ball_hires : _ball_lores;
         List<Mesh> meshes = new();
         foreach (Vec3 p in ps) {
+            assert(isgood(p), $"p={vecstr(p)}");
             Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
             meshes.Add(mesh);
         }

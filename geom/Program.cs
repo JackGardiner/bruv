@@ -4,14 +4,12 @@ using br;
 
 Func<PicoGK.Voxels?> voxel_maker = Chamber.maker;
 float voxel_size_mm = 0.8f;
-
-Sectioner sectioner = new();
-Frame frame = new Frame().rotxz(DEG90);
-sectioner.intersect(new Space(frame, 0f, INF));
-sectioner.union(new Space(frame.rotyz(DEG60), 0f, INF));
 bool section_view = true; // only affects viewing.
-bool section_stl = true; // only affects stl export.
+bool section_stl = false; // only affects stl export.
 bool transparent = true; // only affects viewing (whats the alternative?).
+
+// Setup sectioner.
+Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
 
 
 // Task wrapper to configure some things and have nicer exception handling.
@@ -64,7 +62,7 @@ void wrapped_task() {
         while (running) {
             object? obj = field?.GetValue(null);
             running = (obj != null) ? (bool)obj : false;
-            Thread.Sleep(5);
+            Thread.Sleep(50);
         }
     } catch (Exception e) {
         PicoGK.Library.Log("FAILED when running task. Exception log:");

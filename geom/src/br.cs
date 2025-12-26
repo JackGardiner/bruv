@@ -34,16 +34,18 @@ public static class Br {
     }
 
     public static string PATH_ROOT
-            => Directory.GetParent(AppContext.BaseDirectory)
-                !.Parent
-                !.Parent
-                !.Parent
-                !.FullName;
+        => Directory.GetParent(AppContext.BaseDirectory)
+            !.Parent
+            !.Parent
+            !.Parent
+            !.FullName;
     public static string fromroot(string rel) => Path.Combine(PATH_ROOT, rel);
 
     public static int numel<T>(T[] x) => x.Length;
     public static int numel<T>(List<T> x) => x.Count;
     public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
+
+    public static string vecstr(in Vec3 a) => $"({a.X}, {a.Y}, {a.Z})";
 
     public static Colour COLOUR_BLACK => new("#000000");
     public static Colour COLOUR_RED => new("#FF0000");
@@ -60,7 +62,7 @@ public static class Br {
     public static bool isinf(float a) => float.IsInfinity(a);
     public static bool isinf(Vec2 a) => isinf(a.X) || isinf(a.Y);
     public static bool isinf(Vec3 a)
-            => isinf(a.X) || isinf(a.Y) || isinf(a.Z);
+        => isinf(a.X) || isinf(a.Y) || isinf(a.Z);
     public static bool noninf(float a) => !isinf(a);
     public static bool noninf(Vec2 a) => !isinf(a);
     public static bool noninf(Vec3 a) => !isinf(a);
@@ -68,7 +70,7 @@ public static class Br {
     public static bool isnan(float a) => float.IsNaN(a);
     public static bool isnan(Vec2 a) => isnan(a.X) || isnan(a.Y);
     public static bool isnan(Vec3 a)
-            => isnan(a.X) || isnan(a.Y) || isnan(a.Z);
+        => isnan(a.X) || isnan(a.Y) || isnan(a.Z);
     public static bool nonnan(float a) => !isnan(a);
     public static bool nonnan(Vec2 a) => !isnan(a);
     public static bool nonnan(Vec3 a) => !isnan(a);
@@ -76,6 +78,11 @@ public static class Br {
     public static bool isgood(float a) => !isnan(a) && !isinf(a);
     public static bool isgood(Vec2 a) => !isnan(a) && !isinf(a);
     public static bool isgood(Vec3 a) => !isnan(a) && !isinf(a);
+
+    public const float SQRTH = 0.70710677f; // sqrt(1/2)
+    public const float SQRT2 = 1.4142135f;
+    public const float SQRT3 = 1.7320508f;
+    public const float SQRT4 = 2.0000000f;
 
     public const float PI = MathF.PI;
     public const float TWOPI = 2f*PI;
@@ -95,12 +102,16 @@ public static class Br {
     public const int AXISY = 1;
     public const int AXISZ = 2;
     public static bool isaxis(int axis)
-            => (axis == AXISX) || (axis == AXISY) || (axis == AXISZ);
+        => (axis == AXISX) || (axis == AXISY) || (axis == AXISZ);
 
     public static Vec2 ZERO2 => Vec2.Zero;
     public static Vec3 ZERO3 => Vec3.Zero;
     public static Vec2 ONE2 => Vec2.One;
     public static Vec3 ONE3 => Vec3.One;
+    public static Vec2 NAN2 => Vec2.NaN;
+    public static Vec3 NAN3 => Vec3.NaN;
+    public static Vec2 INF2 => Vec2.PositiveInfinity;
+    public static Vec3 INF3 => Vec3.PositiveInfinity;
 
     public static Vec2 uX2 => Vec2.UnitX;
     public static Vec2 uY2 => Vec2.UnitY;
@@ -131,6 +142,15 @@ public static class Br {
             return false;
         return abs(a - b) <= (atol + rtol*abs(b));
     }
+    public static bool closeto(Vec2 a, Vec2 b, float rtol=1e-4f,
+            float atol=1e-5f)
+        => closeto(a.X, b.X, rtol: rtol, atol: atol) &&
+           closeto(a.Y, b.Y, rtol: rtol, atol: atol);
+    public static bool closeto(Vec3 a, Vec3 b, float rtol=1e-4f,
+            float atol=1e-5f)
+        => closeto(a.X, b.X, rtol: rtol, atol: atol) &&
+           closeto(a.Y, b.Y, rtol: rtol, atol: atol) &&
+           closeto(a.Z, b.Z, rtol: rtol, atol: atol);
 
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
@@ -276,8 +296,10 @@ public static class Br {
         return rejxy(a, b);
     }
 
+    public static Vec2 rot90ccw(Vec2 a) => new(-a.Y, a.X);
+    public static Vec2 rot90cw(Vec2 a) => new(a.Y, -a.X);
     public static Vec2 rotate(Vec2 a, float b)
-        => new(a.X*cos(b) + a.Y*sin(b), a.X*-sin(b) + a.Y*cos(b));
+        => new(a.X*cos(b) - a.Y*sin(b), a.X*sin(b) + a.Y*cos(b));
     public static Vec3 rotxy(Vec3 a, float b)
         => rejxy(rotate(projxy(a), b), a.Z);
     public static Vec3 rotxz(Vec3 a, float b)

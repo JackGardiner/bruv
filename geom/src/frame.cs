@@ -33,6 +33,13 @@ public class Frame {
     }
     protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
         assert(isgood(pos));
+        assert(closeto(mag(X), 1f));
+        assert(closeto(mag(Y), 1f));
+        assert(closeto(mag(Z), 1f));
+        assert(closeto(dot(X, Y), 0f));
+        assert(closeto(dot(X, Z), 0f));
+        assert(closeto(dot(Y, Z), 0f));
+        assert(closeto(cross(Z, X), Y)); // rhs
         this.pos = pos;
         this.X = X;
         this.Y = Y;
@@ -78,8 +85,24 @@ public class Frame {
         return new(pos, Br.rotate(X, about, by), Br.rotate(Z, about, by));
     }
 
-    public Frame flip() {
-        return new(pos, -X, -Y, -Z);
+    public Frame flipxy() {
+        return new(pos, -X, -Y, Z);
+    }
+    public Frame flipxz() {
+        return new(pos, -X, Y, -Z);
+    }
+    public Frame flipyz() {
+        return new(pos, X, -Y, -Z);
+    }
+
+    public Frame swapxz() {
+        return new(pos, Z, -Y, X);
+    }
+    public Frame swapxy() {
+        return new(pos, Y, X, -Z);
+    }
+    public Frame swapyz() {
+        return new(pos, -X, Z, Y);
     }
 
     public Vec3 to_global(Vec3 p) {

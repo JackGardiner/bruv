@@ -28,6 +28,7 @@ public abstract class SDF : SDFunbounded, IBoundedImplicit {
     public BBox3 bounds => bounds_fr;
 
     public Voxels voxels() {
+        assert(!inf_bounds, "shape is infinite and has no bounds");
         assert(has_bounds, "no bounds have been set");
         // assert(bounds.vecMin != bounds.vecMax, "bounds cannot be empty");
         // eh maybe bounds can be empty.
@@ -36,17 +37,20 @@ public abstract class SDF : SDFunbounded, IBoundedImplicit {
 
 
     protected void set_bounds(in BBox3 bbox) {
+        assert(!inf_bounds);
         bounds_fr = bbox;
         has_bounds = true;
     }
-    protected void set_bounds(Vec3 min, Vec3 max) {
+    protected void set_bounds(in Vec3 min, in Vec3 max) {
+        assert(!inf_bounds);
         assert(min.X <= max.X);
         assert(min.Y <= max.Y);
         assert(min.Z <= max.Z);
         bounds_fr = new BBox3(min, max);
         has_bounds = true;
     }
-    protected void include_in_bounds(Vec3 p) {
+    protected void include_in_bounds(in Vec3 p) {
+        assert(!inf_bounds);
         if (!has_bounds) {
             bounds_fr = new BBox3(p, p);
         } else {
@@ -54,9 +58,13 @@ public abstract class SDF : SDFunbounded, IBoundedImplicit {
         }
         has_bounds = true;
     }
+    protected void unbounded_bc_inf() {
+        inf_bounds = true;
+    }
 
     protected BBox3 bounds_fr;
     protected bool has_bounds = false;
+    protected bool inf_bounds = false;
     public BBox3 oBounds => bounds_fr;
 }
 
@@ -115,23 +123,22 @@ public class SDFshelled : SDFfunc {
 
 public class Space : SDFunbounded {
     public Frame centre { get; }
-    public float lo { get; }
-    public float hi { get; }
+    public float zlo { get; }
+    public float zhi { get; }
 
-    public Space(Frame centre, float lo, float hi) {
-        assert(hi > lo, $"lo={lo}, hi={hi}");
-        assert(lo != +INF, $"lo={lo}");
-        assert(hi != -INF, $"hi={hi}");
-        assert(lo != -INF || hi != +INF);
+    public Space(Frame centre, float zlo, float zhi) {
+        assert(zhi > zlo, $"zlo={zlo}, zhi={zhi}");
+        assert(zlo != +INF, $"zlo={zlo}");
+        assert(zhi != -INF, $"zhi={zhi}");
+        assert(zlo != -INF || zhi != +INF);
         this.centre = centre;
-        this.lo = lo;
-        this.hi = hi;
+        this.zlo = zlo;
+        this.zhi = zhi;
     }
-
 
     public override float fSignedDistance(in Vec3 p) {
         float z = dot(p - centre.pos, centre.Z);
-        return max(lo - z, z - hi);
+        return max(zlo - z, z - zhi);
     }
 }
 
@@ -173,6 +180,23 @@ public class Sectioner {
         }
         return cutted;
     }
+
+
+    public static Sectioner pie(float min_theta, float max_theta) {
+        assert(min_theta < max_theta);
+        float Dtheta = max_theta - min_theta;
+        Frame frame0 = new(ZERO3, tocart(1f, min_theta + PI_2, 0f));
+        Frame frame1 = new(ZERO3, tocart(1f, max_theta - PI_2, 0f));
+        Space space0 = new(frame0, 0f, +INF);
+        Space space1 = new(frame1, 0f, +INF);
+        Sectioner sectioner = new();
+        sectioner.intersect(space0);
+        if (Dtheta > PI)
+            sectioner.union(space1);
+        else
+            sectioner.intersect(space1);
+        return sectioner;
+    }
 }
 
 
@@ -186,8 +210,13 @@ public class Ball : SDF {
         assert(r > 0f, $"r={r}");
         this.centre = centre;
         this.r = r;
-        include_in_bounds(centre - ONE3*r);
-        include_in_bounds(centre + ONE3*r);
+        if (isinf(r)) {
+            unbounded_bc_inf();
+        } else {
+            include_in_bounds(centre - ONE3*r);
+            include_in_bounds(centre + ONE3*r);
+        }
+
     }
 
 
@@ -208,16 +237,20 @@ public class Pill : SDF {
         : this(centre.pos, centre.to_global(L*uZ3), r) {}
     public Pill(Vec3 a, Vec3 b, float r) {
         assert(r > 0f, $"r={r}");
-        assert(a != b);
+        assert(!closeto(a, b), $"a={vecstr(a)}, b={vecstr(b)}");
         this.a = a;
         this.b = b;
         this.r = r;
         this.magab = mag(b - a);
         this.AB = (b - a) / magab;
-        include_in_bounds(a - r*ONE3);
-        include_in_bounds(a + r*ONE3);
-        include_in_bounds(b - r*ONE3);
-        include_in_bounds(b + r*ONE3);
+        if (isinf(a) || isinf(b) || isinf(r)) {
+            unbounded_bc_inf();
+        } else {
+            include_in_bounds(a - r*ONE3);
+            include_in_bounds(a + r*ONE3);
+            include_in_bounds(b - r*ONE3);
+            include_in_bounds(b + r*ONE3);
+        }
     }
 
 
@@ -247,11 +280,15 @@ public class Cuboid : SDF {
         this.Lx = hi.X - lo.X;
         this.Ly = hi.Y - lo.Y;
         this.Lz = hi.Z - lo.Z;
-        set_bounds(lo, hi);
+        if (isinf(this.Lx) || isinf(this.Ly) || isinf(this.Lz)) {
+            unbounded_bc_inf();
+        } else {
+            set_bounds(lo, hi);
+        }
     }
     public Cuboid(in Frame centre, float L)
         : this(centre, L, L, L) {}
-    public Cuboid(in Frame centre, float Lxy, float Lz)
+    public Cuboid(in Frame centre, float Lz, float Lxy)
         : this(centre, Lxy, Lxy, Lz) {}
     public Cuboid(in Frame centre, float Lx, float Ly, float Lz) {
         assert(Lx > 0f, $"Lx={Lx}");
@@ -261,15 +298,73 @@ public class Cuboid : SDF {
         this.Lx = Lx;
         this.Ly = Ly;
         this.Lz = Lz;
-        BBox3 bbox = new(
-            new Vec3(-Lx/2f, -Ly/2f, 0f),
-            new Vec3(+Lx/2f, +Ly/2f, Lz)
-        );
-        set_bounds(centre.to_global(bbox));
+        if (isinf(this.Lx) || isinf(this.Ly) || isinf(this.Lz)) {
+            unbounded_bc_inf();
+        } else {
+            BBox3 bbox = new(
+                new Vec3(-Lx/2f, -Ly/2f, 0f),
+                new Vec3(+Lx/2f, +Ly/2f, Lz)
+            );
+            set_bounds(centre.to_global(bbox));
+        }
     }
 
-    public Cuboid centred() {
-        return new(centre.translate(uZ3*-Lz/2f), Lx, Ly, Lz);
+    public Cuboid at_centre() {
+        return new(centre.transz(-Lz/2f), Lx, Ly, Lz);
+    }
+
+    public const int CORNER_x0y0z0 = 0x0;
+    public const int CORNER_x1y0z0 = 0x1;
+    public const int CORNER_x0y1z0 = 0x2;
+    public const int CORNER_x1y1z0 = 0x3;
+    public const int CORNER_x0y0z1 = 0x4;
+    public const int CORNER_x1y0z1 = 0x5;
+    public const int CORNER_x0y1z1 = 0x6;
+    public const int CORNER_x1y1z1 = 0x7;
+    public Cuboid at_corner(int corner) {
+        Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
+        if ((corner & 0x1) == 1)
+            trans.X += Lx;
+        if ((corner & 0x2) == 1)
+            trans.Y += Ly;
+        if ((corner & 0x4) == 1)
+            trans.Z += Lz;
+        return new(centre.translate(trans), Lx, Ly, Lz);
+    }
+
+    public const int EDGE_x0z0 = 0x8 + 0x8*0;
+    public const int EDGE_x1z0 = 0x8 + 0x8*1;
+    public const int EDGE_y0z0 = 0x8 + 0x8*2;
+    public const int EDGE_y1z0 = 0x8 + 0x8*3;
+    public const int EDGE_x0z1 = 0x8 + 0x8*4;
+    public const int EDGE_x1z1 = 0x8 + 0x8*5;
+    public const int EDGE_y0z1 = 0x8 + 0x8*6;
+    public const int EDGE_y1z1 = 0x8 + 0x8*7;
+    public const int EDGE_x0y0 = 0x8 + 0x8*8;
+    public const int EDGE_x1y0 = 0x8 + 0x8*9;
+    public const int EDGE_x0y1 = 0x8 + 0x8*10;
+    public const int EDGE_x1y1 = 0x8 + 0x8*11;
+    public Cuboid at_edge(int edge) {
+        Vec3 trans = new();
+        switch (edge) {
+            case EDGE_x0z0: trans = new(-Lx/2f, 0f, 0f); break;
+            case EDGE_x1z0: trans = new(+Lx/2f, 0f, 0f); break;
+            case EDGE_y0z0: trans = new(0f, -Ly/2f, 0f); break;
+            case EDGE_y1z0: trans = new(0f, +Ly/2f, 0f); break;
+
+            case EDGE_x0z1: trans = new(-Lx/2f, 0f, +Lz); break;
+            case EDGE_x1z1: trans = new(+Lx/2f, 0f, +Lz); break;
+            case EDGE_y0z1: trans = new(0f, -Ly/2f, +Lz); break;
+            case EDGE_y1z1: trans = new(0f, +Ly/2f, +Lz); break;
+
+            case EDGE_x0y0: trans = new(-Lx/2f, -Ly/2f, +Lz/2f); break;
+            case EDGE_x1y0: trans = new(+Lx/2f, -Ly/2f, +Lz/2f); break;
+            case EDGE_x0y1: trans = new(-Lx/2f, +Ly/2f, +Lz/2f); break;
+            case EDGE_x1y1: trans = new(+Lx/2f, +Ly/2f, +Lz/2f); break;
+
+            default: assert(false); break;
+        }
+        return new(centre.translate(trans), Lx, Ly, Lz);
     }
 
 
@@ -299,7 +394,6 @@ public class Pipe : SDF {
     public Pipe(in Frame centre, float Lz, float r)
         : this(centre, Lz, 0f, r) {}
     public Pipe(in Frame centre, float Lz, float rlo, float rhi) {
-        assert(isgood(Lz));
         assert(Lz > 0f, $"Lz={Lz}");
         assert(rhi > rlo, $"rlo={rlo}, rhi={rhi}");
         assert(rlo >= 0f, $"rlo={rlo}, rhi={rhi}");
@@ -307,11 +401,15 @@ public class Pipe : SDF {
         this.Lz = Lz;
         this.rlo = rlo;
         this.rhi = rhi;
-        BBox3 bbox = new(
-            new Vec3(-rhi, -rhi, 0f),
-            new Vec3(+rhi, +rhi, Lz)
-        );
-        set_bounds(centre.to_global(bbox));
+        if (isinf(Lz) || isinf(rlo) || isinf(rhi)) {
+            unbounded_bc_inf();
+        } else {
+            BBox3 bbox = new(
+                new Vec3(-rhi, -rhi, 0f),
+                new Vec3(+rhi, +rhi, Lz)
+            );
+            set_bounds(centre.to_global(bbox));
+        }
     }
 
     public Pipe filled() {
@@ -356,11 +454,15 @@ public class Donut : SDF {
         this.centre = centre;
         this.R = R;
         this.r = r;
-        BBox3 bbox = new(
-            new Vec3(-R - r, -R - r, -r),
-            new Vec3(+R + r, +R + r, +r)
-        );
-        set_bounds(centre.to_global(bbox));
+        if (isinf(R) || isinf(r)) {
+            unbounded_bc_inf();
+        } else {
+            BBox3 bbox = new(
+                new Vec3(-R - r, -R - r, -r),
+                new Vec3(+R + r, +R + r, +r)
+            );
+            set_bounds(centre.to_global(bbox));
+        }
     }
 
     public override float fSignedDistance(in Vec3 p) {
@@ -388,33 +490,31 @@ public class Cone : SDF {
     public Cone(in Frame centre, float Lz, float r, float? th=null,
             bool at_tip=false)
         : this(centre, Lz, as_phi(atan(r / Lz)), th, at_tip) {}
-    public Cone(in Frame centre, AsPhi phi, AsRadius r, float? th=null,
-            bool at_tip=false)
-        : this(centre, r, phi, th, at_tip) {}
     public Cone(in Frame centre, AsRadius r, AsPhi phi, float? th=null,
             bool at_tip=false)
         : this(centre, r.v / tan(phi.v), phi, th, at_tip) {}
-    public Cone(in Frame centre, AsPhi phi, float Lz, float? th=null,
-            bool at_tip=true)
-        : this(centre, Lz, phi, th, at_tip) {}
     public Cone(in Frame centre, float Lz, AsPhi phi, float? th=null,
             bool at_tip=true) {
         assert(Lz > 0f, $"Lz={Lz}");
         assert(0f < phi.v && phi.v < PI_2, $"phi={phi.v}");
         this.centre = centre;
         if (!at_tip)
-            this.centre = this.centre.transz(Lz).flip();
+            this.centre = this.centre.transz(Lz).flipyz();
         this.Lz = Lz;
         this.phi = phi.v;
         this.th = th;
         this.cosphi = cos(this.phi);
         this.sinphi = sin(this.phi);
         float r = Lz * sinphi/cosphi;
-        include_in_bounds(centre.to_global(new Vec3(0f, 0f, 0f)));
-        include_in_bounds(centre.to_global(new Vec3(-r, -r, Lz)));
-        include_in_bounds(centre.to_global(new Vec3(-r, +r, Lz)));
-        include_in_bounds(centre.to_global(new Vec3(+r, -r, Lz)));
-        include_in_bounds(centre.to_global(new Vec3(+r, +r, Lz)));
+        if (isinf(Lz) || isinf(th ?? 0f)) {
+            unbounded_bc_inf();
+        } else {
+            include_in_bounds(centre.to_global(new Vec3(0f, 0f, 0f)));
+            include_in_bounds(centre.to_global(new Vec3(-r, -r, Lz)));
+            include_in_bounds(centre.to_global(new Vec3(-r, +r, Lz)));
+            include_in_bounds(centre.to_global(new Vec3(+r, -r, Lz)));
+            include_in_bounds(centre.to_global(new Vec3(+r, +r, Lz)));
+        }
     }
 
 
@@ -453,12 +553,14 @@ public class Tubing {
     public float ID { get; }
     public float th { get; }
     public float Fr { get; }
-    public BBox3 bounds { get; }
 
     public Tubing(in List<Vec3> points, float OD)
         : this(points, 0f, 0.5f*OD) {}
     public Tubing(in List<Vec3> points, float ID, float th, float Fr=0f) {
         assert(numel(points) >= 2, $"numel={numel(points)}");
+        assert(ID >= 0f);
+        assert(th > 0f);
+        assert(Fr >= 0f);
         this.points = points;
         this.ID = ID;
         this.th = th;
@@ -509,10 +611,6 @@ public class Tubing {
 
 
 public class Polygon : SDF {
-    public Frame centre { get; } // centre of low z end.
-    public List<Vec2> points { get; }
-    public float L { get; }
-
 
     public static float area(in List<Vec2> points) {
         int N = numel(points);
@@ -624,8 +722,8 @@ public class Polygon : SDF {
         float mag_ba = mag(a - b);
         float mag_bc = mag(c - b);
         // Points too close.
-        assert(mag_ba > 1e-5f);
-        assert(mag_bc > 1e-5f);
+        assert(!closeto(mag_ba, 0f));
+        assert(!closeto(mag_bc, 0f));
         Vec2 BA = (a - b) / mag_ba;
         Vec2 BC = (c - b) / mag_bc;
         float beta = acos(clamp(dot(BA, BC), -1f, 1f));
@@ -692,19 +790,27 @@ public class Polygon : SDF {
 
 
 
-    public Polygon(in Frame centre, in List<Vec2> points, float L) {
+
+    public Frame centre { get; } // centre of low z end.
+    public List<Vec2> points { get; }
+    public float Lz { get; }
+
+    public Polygon(in Frame centre, float Lz, in List<Vec2> points) {
         assert(numel(points) >= 3, $"numel={numel(points)}");
         assert(is_simple(points), "cooked it");
-        assert(L > 0f, $"L={L}");
+        assert(Lz > 0f, $"Lz={Lz}");
         this.centre = centre;
         this.points = points;
-        this.L = L;
-        for (int i=0; i<numel(points); ++i) {
-            include_in_bounds(centre.to_global(rejxy(points[i], 0f)));
-            include_in_bounds(centre.to_global(rejxy(points[i], L)));
+        this.Lz = Lz;
+        if (isinf(Lz)) {
+            unbounded_bc_inf();
+        } else {
+            for (int i=0; i<numel(points); ++i) {
+                include_in_bounds(centre.to_global(rejxy(points[i], 0f)));
+                include_in_bounds(centre.to_global(rejxy(points[i], Lz)));
+            }
         }
     }
-
 
 
     public override float fSignedDistance(in Vec3 p) {
@@ -741,7 +847,7 @@ public class Polygon : SDF {
         if (winding != 0)
             dist_proj = -dist_proj;
 
-        float dist_axial = max(-q.Z, q.Z - L);
+        float dist_axial = max(-q.Z, q.Z - Lz);
 
         float dist;
         if (dist_proj <= 0f || dist_axial <= 0f) {
