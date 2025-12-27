@@ -981,8 +981,8 @@ public class Chamber {
     protected void voxels_inlet(in Frame inlet, out Voxels neg, out Voxels pos) {
         float L = 15f;
         float L_extra = 2f;
-        Vec3 a = inlet.to_global(new Vec3(0f, 0f, L_extra));
-        Vec3 b = inlet.to_global(new Vec3(0f, 0f, -L));
+        Vec3 a = inlet * new Vec3(0f, 0f, L_extra);
+        Vec3 b = inlet * new Vec3(0f, 0f, -L);
         float phi = -argphi(inlet.Z) - PI_2;
         Vec3 c = b + tocart((r_tht - magxy(b))/cos(phi), argxy(b), as_phi(phi));
         pos = new Tubing([a, b], D_inlet + 2f*th_inlet).voxels();
@@ -1268,18 +1268,18 @@ public class Chamber {
         Voxels cnt_ow_filled = voxels_cnt_ow_filled();
 
         add(ref cnt_ow_filled);
-        add(ref flange, key_flange);
         add(ref pos_mani, key_mani);
-        add(ref pos_tc, key_tc);
         add(ref pos_inlet);
+        add(ref pos_tc, key_tc);
+        add(ref flange, key_flange);
 
         part.IntersectImplicit(new Space(new Frame(), -INF, cnt_z6));
         Fillet.concave(part, 3f, inplace: true);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
 
-        sub(ref chnl, key_chnl);
         sub(ref gas, key_gas);
+        sub(ref chnl, key_chnl);
         sub(ref neg_mani);
         sub(ref neg_inlet);
         sub(ref neg_tc);
@@ -1311,6 +1311,18 @@ public class Chamber {
                     + $"({cnt_wid_hits * 100f / cnt_wid_total:F2}%)");
         }
         PicoGK.Library.Log("  bang.");
+
+
+        PicoGK.Library.Log("Drawings:");
+
+        Frame frame_xy = new Frame(ZERO3, uX3, uZ3);
+        Drawing.to_file(fromroot($"exports/chamber_xy.svg"), part, frame_xy);
+        PicoGK.Library.Log("  xy done.");
+
+        Frame frame_yz = new Frame(ZERO3, uY3, uX3);
+        Drawing.to_file(fromroot($"exports/chamber_yz.svg"), part, frame_yz);
+        PicoGK.Library.Log("  yz done.");
+
 
         return part;
     }

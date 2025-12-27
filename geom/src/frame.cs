@@ -172,6 +172,14 @@ public class Frame {
         return new(pos, Z, X, Y);
     }
 
+    public Frame compose(in Frame other) {
+        Vec3 pos = to_global(other.pos);
+        Vec3 X = to_global_rot(other.X);
+        Vec3 Y = to_global_rot(other.Y);
+        Vec3 Z = to_global_rot(other.Z);
+        return new(pos, X, Y, Z);
+    }
+
 
     public Vec3 to_global(Vec3 p) {
         return pos + p.X*X + p.Y*Y + p.Z*Z;
@@ -230,6 +238,18 @@ public class Frame {
         Vec3 vmax = max(v000, v001, v010, v011, v100, v101, v110, v111);
         return new(vmin, vmax);
     }
+
+
+    public static Vec3 operator*(in Frame frame, in Vec3 p)
+        => frame.to_global(p);
+    public static Vec3 operator/(in Frame frame, in Vec3 p)
+        => frame.from_global(p);
+
+    public static BBox3 operator*(in Frame frame, in BBox3 bbox)
+        => frame.to_global(bbox);
+    public static BBox3 operator/(in Frame frame, in BBox3 bbox)
+        => frame.from_global(bbox);
+
 
     public Vec3 to_other(Frame other, Vec3 p) {
         Vec3 q = to_global(p);

@@ -266,7 +266,7 @@ public class Pill : SDF {
     protected Vec3 AB { get; }
 
     public Pill(Frame centre, float L, float r)
-        : this(centre.pos, centre.to_global(L*uZ3), r) {}
+        : this(centre.pos, centre * (L*uZ3), r) {}
     public Pill(Vec3 a, Vec3 b, float r) {
         assert(r > 0f, $"r={r}");
         assert(!closeto(a, b), $"a={vecstr(a)}, b={vecstr(b)}");
@@ -337,7 +337,7 @@ public class Cuboid : SDF {
                 new Vec3(-Lx/2f, -Ly/2f, 0f),
                 new Vec3(+Lx/2f, +Ly/2f, Lz)
             );
-            set_bounds(centre.to_global(bbox));
+            set_bounds(centre * bbox);
         }
     }
 
@@ -431,7 +431,7 @@ public class Pipe : SDF {
                 new Vec3(-rhi, -rhi, 0f),
                 new Vec3(+rhi, +rhi, Lz)
             );
-            set_bounds(centre.to_global(bbox));
+            set_bounds(centre * bbox);
         }
     }
 
@@ -495,7 +495,7 @@ public class Donut : SDF {
                 new Vec3(-R - r, -R - r, -r),
                 new Vec3(+R + r, +R + r, +r)
             );
-            set_bounds(centre.to_global(bbox));
+            set_bounds(centre * bbox);
         }
     }
 
@@ -543,11 +543,11 @@ public class Cone : SDF {
         if (isinf(Lz) || isinf(th ?? 0f)) {
             unbounded_bc_inf();
         } else {
-            include_in_bounds(centre.to_global(new Vec3(0f, 0f, 0f)));
-            include_in_bounds(centre.to_global(new Vec3(-r, -r, Lz)));
-            include_in_bounds(centre.to_global(new Vec3(-r, +r, Lz)));
-            include_in_bounds(centre.to_global(new Vec3(+r, -r, Lz)));
-            include_in_bounds(centre.to_global(new Vec3(+r, +r, Lz)));
+            include_in_bounds(centre * new Vec3(0f, 0f, 0f));
+            include_in_bounds(centre * new Vec3(-r, -r, Lz));
+            include_in_bounds(centre * new Vec3(-r, +r, Lz));
+            include_in_bounds(centre * new Vec3(+r, -r, Lz));
+            include_in_bounds(centre * new Vec3(+r, +r, Lz));
         }
     }
 
@@ -840,8 +840,8 @@ public class Polygon : SDF {
             unbounded_bc_inf();
         } else {
             for (int i=0; i<numel(points); ++i) {
-                include_in_bounds(centre.to_global(rejxy(points[i], 0f)));
-                include_in_bounds(centre.to_global(rejxy(points[i], Lz)));
+                include_in_bounds(centre * rejxy(points[i], 0f));
+                include_in_bounds(centre * rejxy(points[i], Lz));
             }
         }
     }

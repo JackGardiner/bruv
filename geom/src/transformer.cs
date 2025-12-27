@@ -110,6 +110,21 @@ public class Transformer {
         return new(_m * other._m);
     }
 
+    public static Transformer to_global(in Frame frame) {
+        Mat4 m = new(
+              frame.X.X,   frame.X.Y,   frame.X.Z, 0f,
+              frame.Y.X,   frame.Y.Y,   frame.Y.Z, 0f,
+              frame.Z.X,   frame.Z.Y,   frame.Z.Z, 0f,
+            frame.pos.X, frame.pos.Y, frame.pos.Z, 1f
+        );
+        return new(m);
+    }
+    public static Transformer to_local(in Frame frame) {
+        Mat4 m = to_global(frame)._m;
+        assert(Mat4.Invert(m, out m), "failed to invert local->global matrix");
+        return new(m);
+    }
+
     public Vec3 vec(in Vec3 vec) {
         return Vec3.Transform(vec, _m);
     }
