@@ -28,19 +28,23 @@ public class Chamber {
     // X_div = nozzle diverging section property.
     // X_exit = nozzle exit property.
     // X_gas = gas/gas volume (aka interior of cc+nozzle) property.
+    // X_imani = fuel inlet manifold inner (wall) property.
     // X_inlet = fuel inlet property.
     // X_iw = inner wall property.
     // X_mani = fuel inlet manifold property.
+    // X_omani = fuel inlet manifold outer (wall) property.
     // X_ow = outer wall property.
     // X_part = entire chamber+nozzle part property.
+    // X_tc = thermocouple property.
     // X_tht = nozzle throat property.
     // X_web = between-cooling-channel wall property.
     //
     // Legend for 'X':
     // A = area.
     // AEAT = nozzle exit area to throat area ratio.
-    // Bsz = bolt size (i.e. 4e-3 for M4x10).
+    // beta = angle between two line segments.
     // Bln = bolt length (i.e. 10e-3 for M4x10).
+    // Bsz = bolt size (i.e. 4e-3 for M4x10).
     // D_ = discrete change in this variable.
     // ell = arc length.
     // Fr = fillet radius.
@@ -92,26 +96,53 @@ public class Chamber {
     public int no_chnl = -1;
     public float th_chnl = NAN;
     public float Ltheta_chnl = NAN;
+    public float theta0_chnl = NAN;
     public float A_chnl_exit = NAN;
     protected float theta_chnl(float z) {
-        return 4*TWOPI/no_chnl * (0.5f + 0.5f*cos(PI * z / cnt_z6));
+        z = z/cnt_z6 - 0.5f;
+        return 4*TWOPI/no_chnl * 0.5f*sin(PI*z);
     }
     protected void initialise_chnl() {
         no_chnl = no_web;
         th_chnl = th_web;
         Ltheta_chnl = TWOPI/no_chnl - Ltheta_web;
         assert(Ltheta_chnl > 0f);
+
+        float ave_theta = 0f;
+        int N = 10000;
+        for (int i=0; i<N; ++i) {
+            float z = cnt_z0 + i*(cnt_z6 - cnt_z0)/N;
+            float theta = theta_chnl(z);
+            ave_theta += (theta - ave_theta) / (i + 1);
+        }
+        // theta0_chnl = theta_tc - ave_theta;
+        theta0_chnl = theta_tc - theta_chnl(cnt_z6);
+
         A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(r_exit + th_iw + th_chnl)
                                             - squared(r_exit + th_iw));
     }
 
+    public required float th_imani { get; init; }
+    public required float th_omani { get; init; }
+    public required float phi_mani { get; init; }
+
+    public required float theta_inlet { get; init; }
     public required float D_inlet { get; init; }
     public required float th_inlet { get; init; }
-    public required float r_inlet { get; init; }
-    public required float theta_inlet { get; init; }
-    public required float Dz_inlet { get; init; }
+    public required float phi_inlet { get; init; }
 
-    public required float phi_mani { get; init; }
+    public required float theta_tc { get; init; }
+    public required int no_tc { get; init; }
+    public required float D_tc { get; init; }
+    public required float th_tc { get; init; }
+    public required float phi_tc { get; init; }
+    public required float L_tc { get; init; }
+
+
+    protected int DIVISIONS
+        => max(200, (int)(200f / PicoGK.Library.fVoxelSizeMM));
+
+    protected const float EXTRA = 10f; // trimmed at some point.
 
 
     /*
@@ -140,9 +171,14 @@ public class Chamber {
       [diverging:]
     4-5 circular arc
     5-6 rotated parabolic arc
+
+    widening desie: https://www.desmos.com/calculator/qac1nmgrus
     */
 
+    protected float cnt_wid_off = NAN;
+
     protected float cnt_X = NAN;
+
 
     protected float cnt_r_conv = NAN;
     protected float cnt_z0 = NAN;
@@ -174,8 +210,67 @@ public class Chamber {
     protected float cnt_para_br = NAN;
     protected float cnt_para_cr = NAN;
 
+
+    protected float cnt_wid_alpha = NAN;
+    protected float cnt_wid_r_s = NAN;
+
+    protected float cnt_wid_z0 = NAN;
+    protected float cnt_wid_r0 = NAN;
+    protected float cnt_wid_z1 = NAN;
+    protected float cnt_wid_r1 = NAN;
+    protected float cnt_wid_z2 = NAN;
+    protected float cnt_wid_r2 = NAN;
+    protected float cnt_wid_z3 = NAN;
+    protected float cnt_wid_r3 = NAN;
+    protected float cnt_wid_z4 = NAN;
+    protected float cnt_wid_r4 = NAN;
+
+    protected float cnt_wid_zS = NAN;
+    protected float cnt_wid_rS = NAN;
+
+
+    protected Vec2 cnt_0 = NAN2;
+    protected Vec2 cnt_1 = NAN2;
+    protected Vec2 cnt_2 = NAN2;
+    protected Vec2 cnt_3 = NAN2;
+    protected Vec2 cnt_4 = NAN2;
+    protected Vec2 cnt_5 = NAN2;
+    protected Vec2 cnt_6 = NAN2;
+    protected Vec2 cnt_Q = NAN2;
+    protected Vec2 cnt_R = NAN2;
+    protected Vec2 cnt_2_3 = NAN2;
+    protected Vec2 cnt_2_3_n = NAN2;
+    protected float cnt_2_3_mag = NAN;
+    protected Vec2 cnt_5_6 = NAN2;
+    protected float cnt_5_6_mag = NAN;
+
+    protected Vec2 cnt_wid_0 = NAN2;
+    protected Vec2 cnt_wid_1 = NAN2;
+    protected Vec2 cnt_wid_2 = NAN2;
+    protected Vec2 cnt_wid_3 = NAN2;
+    protected Vec2 cnt_wid_4 = NAN2;
+    protected Vec2 cnt_wid_2_3 = NAN2;
+    protected Vec2 cnt_wid_2_3_n = NAN2;
+    protected float cnt_wid_2_3_mag = NAN;
+
+    // Caching is hugely impactful here, and we can/should use genuine equality
+    // instead of imprecise.
+    protected class cnt_vec2eq : IEqualityComparer<Vec2> {
+        public bool Equals(Vec2 a, Vec2 b) => (a.X == b.X) && (a.Y == b.Y);
+        public int GetHashCode(Vec2 v) => HashCode.Combine(v.X, v.Y);
+    }
+    protected Dictionary<Vec2, float>? _cnt_cache = null;
+    protected Dictionary<Vec2, float>? _cnt_wid_cache = null;
+    protected int _cnt_cache_hits = int.MinValue;
+    protected int _cnt_wid_cache_hits = int.MinValue;
+
     protected void initialise_cnt() {
-        cnt_X = AXIAL_EXTRA + 1.1f*max(pm.Mr_chnl, r_exit);
+        // The wid sdf gives the distance to the channel mid-contour.
+        cnt_wid_off = th_iw + 0.5f*th_web;
+
+        cnt_X = EXTRA + 1.1f*max(pm.Mr_chnl, r_exit);
+
+
         cnt_r_conv = 1.5f*r_tht;
 
         cnt_z0 = 0f;
@@ -214,85 +309,32 @@ public class Chamber {
         cnt_para_ar = cnt_r5 - 2f*cnt_rP + cnt_r6;
         cnt_para_br = -2f*cnt_r6 + 2f*cnt_rP;
         cnt_para_cr = cnt_r6;
-    }
 
 
-    protected float cnt_wid_alpha = NAN;
-    protected float cnt_wid_r_s = NAN;
+        cnt_wid_r0 = pm.Mr_chnl;
+        cnt_wid_r4 = pm.Or_cc + th_iw + 0.5f*th_web;
 
-    protected float cnt_wid_z0 = NAN;
-    protected float cnt_wid_r0 = NAN;
-    protected float cnt_wid_z1 = NAN;
-    protected float cnt_wid_r1 = NAN;
-    protected float cnt_wid_z2 = NAN;
-    protected float cnt_wid_r2 = NAN;
-    protected float cnt_wid_z3 = NAN;
-    protected float cnt_wid_r3 = NAN;
-    protected float cnt_wid_z4 = NAN;
-    protected float cnt_wid_r4 = NAN;
-
-    protected float cnt_wid_zS = NAN;
-    protected float cnt_wid_rS = NAN;
-    protected float cnt_wid_zT = NAN;
-    protected float cnt_wid_rT = NAN;
-
-    protected void initialise_cnt_wid() {
         cnt_wid_alpha = 2f;
-        cnt_wid_r_s = (pm.Mr_chnl - pm.Or_cc)
+        cnt_wid_r_s = (cnt_wid_r0 - cnt_wid_r4)
                     / (2f - 2f*cos(phi_wid)
                      + cnt_wid_alpha*phi_wid*sin(phi_wid));
 
         cnt_wid_z0 = 0f;
-        cnt_wid_r0 = pm.Mr_chnl;
 
         cnt_wid_z1 = 0.5f*-phi_wid*cnt_wid_r_s;
-        cnt_wid_r1 = pm.Mr_chnl;
+        cnt_wid_r1 = cnt_wid_r0;
 
         cnt_wid_z2 = cnt_wid_z1 - cnt_wid_r_s*sin(phi_wid);
         cnt_wid_r2 = cnt_wid_r1 - cnt_wid_r_s*(1f - cos(phi_wid));
 
-        cnt_wid_r4 = pm.Or_cc + th_iw + 0.5f*th_chnl;
         cnt_wid_r3 = cnt_wid_r4 + cnt_wid_r_s*(1f - cos(phi_wid));
         cnt_wid_z3 = cnt_wid_z2 + (cnt_wid_r3 - cnt_wid_r2)/tan(phi_wid);
         cnt_wid_z4 = cnt_wid_z3 - cnt_wid_r_s*sin(phi_wid);
 
         cnt_wid_zS = cnt_wid_z0 - cnt_X;
         cnt_wid_rS = cnt_wid_r0;
-        cnt_wid_zT = cnt_wid_z4 + cnt_X;
-        cnt_wid_rT = cnt_wid_r4;
-    }
 
 
-    protected int DIVISIONS
-            => max(200, (int)(200f / PicoGK.Library.fVoxelSizeMM));
-
-    protected const float AXIAL_EXTRA = 10f; // trimmed at some point.
-    protected const float RADIAL_EXTRA = 5f; // trimmed at some point.
-
-
-    // Caching is hugely impactful here, and we can/should use genuine equality
-    // instead of imprecise.
-    protected class cnt_vec2eq : IEqualityComparer<Vec2> {
-        public bool Equals(Vec2 a, Vec2 b) => (a.X == b.X) && (a.Y == b.Y);
-        public int GetHashCode(Vec2 v) => HashCode.Combine(v.X, v.Y);
-    }
-    protected Vec2 cnt_0;
-    protected Vec2 cnt_1;
-    protected Vec2 cnt_2;
-    protected Vec2 cnt_3;
-    protected Vec2 cnt_4;
-    protected Vec2 cnt_5;
-    protected Vec2 cnt_6;
-    protected Vec2 cnt_Q;
-    protected Vec2 cnt_R;
-    protected Vec2 cnt_2_3;
-    protected Vec2 cnt_2_3_n;
-    protected float cnt_2_3_mag;
-    protected Vec2 cnt_5_6;
-    protected float cnt_5_6_mag;
-    protected Dictionary<Vec2, float>? _cnt_cache;
-    protected int _cnt_cache_hits;
-    protected void initialise_cnt_sdf() {
         cnt_0 = new(cnt_z0, cnt_r0);
         cnt_1 = new(cnt_z1, cnt_r1);
         cnt_2 = new(cnt_z2, cnt_r2);
@@ -302,39 +344,26 @@ public class Chamber {
         cnt_6 = new(cnt_z6, cnt_r6);
         cnt_Q = new(cnt_zQ, cnt_rQ);
         cnt_R = new(cnt_zR, cnt_rR);
-        cnt_2_3 = tocart(1f, phi_conv);
-        cnt_2_3_n = tocart(1f, phi_conv + PI_2);
         cnt_2_3_mag = mag(cnt_3 - cnt_2);
-        cnt_5_6 = normalise(cnt_6 - cnt_5);
+        cnt_2_3 = (cnt_3 - cnt_2) / cnt_2_3_mag;
+        cnt_2_3_n = rot90ccw(cnt_2_3);
         cnt_5_6_mag = mag(cnt_6 - cnt_5);
-        _cnt_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
-        _cnt_cache_hits = 0;
-    }
+        cnt_5_6 = (cnt_6 - cnt_5) / cnt_5_6_mag;
 
-    protected float cnt_wid_off;
-    protected Vec2 cnt_wid_0;
-    protected Vec2 cnt_wid_1;
-    protected Vec2 cnt_wid_2;
-    protected Vec2 cnt_wid_3;
-    protected Vec2 cnt_wid_4;
-    protected Vec2 cnt_wid_2_3;
-    protected Vec2 cnt_wid_2_3_n;
-    protected float cnt_wid_2_3_mag;
-    protected Dictionary<Vec2, float>? _cnt_wid_cache;
-    protected int _cnt_wid_cache_hits;
-    protected void initialise_cnt_wid_sdf() {
-        // The sdf gives the distance to the channel mid-contour.
-        cnt_wid_off = th_iw + 0.5f*th_chnl;
 
         cnt_wid_0 = new(cnt_wid_z0, cnt_wid_r0);
         cnt_wid_1 = new(cnt_wid_z1, cnt_wid_r1);
         cnt_wid_2 = new(cnt_wid_z2, cnt_wid_r2);
         cnt_wid_3 = new(cnt_wid_z3, cnt_wid_r3);
         cnt_wid_4 = new(cnt_wid_z4, cnt_wid_r4);
-        cnt_wid_2_3 = tocart(1f, phi_conv);
-        cnt_wid_2_3_n = tocart(1f, phi_conv + PI_2);
         cnt_wid_2_3_mag = mag(cnt_wid_3 - cnt_wid_2);
+        cnt_wid_2_3 = (cnt_wid_3 - cnt_wid_2) / cnt_wid_2_3_mag;
+        cnt_wid_2_3_n = rot90ccw(cnt_wid_2_3);
+
+
+        _cnt_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
         _cnt_wid_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
+        _cnt_cache_hits = 0;
         _cnt_wid_cache_hits = 0;
     }
 
@@ -430,8 +459,10 @@ public class Chamber {
                                           - 4f*cnt_para_az*(cnt_para_cz - S)))
                      / 2f / cnt_para_az;
             Vec2 P = new(S, (cnt_para_ar*pS + cnt_para_br)*pS + cnt_para_cr);
-            float absdist = mag(q - P);
-            update(ref dist, (P.Y > q.Y) ? -absdist : absdist);
+            float d = mag(q - P);
+            if (r < P.Y)
+                d = -d; // inside conic.
+            update(ref dist, d);
         } else if (r >= rhi56 && z <= cnt_z6) {
             // Point 6 is necessarily closest (on the conic) and outside.
             update(ref dist, mag(q - cnt_6));
@@ -464,12 +495,13 @@ public class Chamber {
     }
 
     protected float cnt_wid_sdf(in Vec3 p) {
+        // Same deal as `cnt_sdf`.
+
         float z = p.Z;
         float r = magxy(p);
         Vec2 q = new(z, r);
-        // CACHE ME.
         if (_cnt_wid_cache!.TryGetValue(q, out float cached)) {
-            ++_cnt_wid_cache_hits; // HIIIIIIT
+            ++_cnt_wid_cache_hits;
             return cached;
         }
         float dist = +INF;
@@ -477,9 +509,9 @@ public class Chamber {
             if (abs(d) < abs(dist))
                 dist = d;
         }
-        // Same deal as `cnt_sdf`.
 
         assert(phi_wid < 0f);
+
 
         // Check line segments.
         if (within(z, cnt_wid_z0, cnt_wid_z1)) {
@@ -515,9 +547,9 @@ public class Chamber {
                 d = hypot(dist_z, dist_r);
             update(ref dist, d);
         }
-        if (z >= cnt_wid_zT) {
-            Vec2 d = q - new Vec2(cnt_wid_zT - cnt_wid_rT, 0f);
-            update(ref dist, mag(d) - cnt_wid_rT);
+        if (z >= cnt_wid_z4) {
+            Vec2 d = q - new Vec2(cnt_wid_z4, 0f);
+            update(ref dist, +mag(d) - cnt_wid_r4);
         }
 
         _cnt_wid_cache[q] = dist;
@@ -554,8 +586,8 @@ public class Chamber {
         SDFshelled sdf = new(cnt_widened_sdf, th_iw, th_chnl);
         sdf = sdf.innered();
         // Clip the top to not have fuel shoot out the end of the nozzle.
-        float max_z = cnt_z6 - th_ow;
-        float min_z = cnt_z0 - AXIAL_EXTRA;
+        float max_z = cnt_z6 - th_omani;
+        float min_z = cnt_z0 - EXTRA;
         BBox3 bbox = bbox_cnt_widened(sdf.max_off);
         bbox.vecMax.Z = max_z;
         bbox.vecMin.Z = min_z;
@@ -564,21 +596,20 @@ public class Chamber {
         // manifold.
         Frame exit = new(max_z*uZ3, -uZ3);
         float Ir = cnt_radius_at(max_z, th_iw);
-        float Or = cnt_radius_at(max_z - th_chnl, th_iw + th_chnl + th_ow);
-        Ir += 0.2f; // safety.
-        Or += RADIAL_EXTRA;
+        float Or = cnt_radius_at(max_z, th_iw + th_chnl + th_imani);
+        Ir += 0.1f; // safety.
+        Or += 0.1f;
         vox.BoolAdd(new Pipe(exit, th_chnl, Ir, Or).voxels());
         return vox;
     }
 
     protected float cnt_radius_at(float z, float signed_dist=0f,
             bool widened=false) {
-        assert(within(z, cnt_zQ, cnt_zR));
+        assert(within(z, cnt_zQ, cnt_zR), $"z={z}");
         SDFfunction sdf = widened ? cnt_widened_sdf : cnt_sdf;
 
         // Initially, estimate by just offseting the inner point horizontally by
-        // the signed dist. Though note that for horizontal linear segments, this
-        // is the exact solution so we return straight away.
+        // the signed dist.
         float r;
         if (z <= cnt_z1) {
             r = cnt_r0;
@@ -619,8 +650,7 @@ public class Chamber {
     }
 
 
-    protected Mesh mesh_chnl(float rlo, float rhi, float theta0,
-            bool draw_line=false) {
+    protected Mesh mesh_chnl(float rlo, float rhi, float theta0) {
         List<Vec3> points = new();
         for (int i=0; i<=DIVISIONS; ++i) {
             float z = cnt_z0 + i*(cnt_z6 - cnt_z0)/DIVISIONS;
@@ -628,10 +658,8 @@ public class Chamber {
             float theta = theta0 + theta_chnl(z);
             points.Add(tocart(r, theta, z));
         }
-        if (draw_line)
-            Geez.line(points);
-        points.Insert(0, points[0] - uZ3*AXIAL_EXTRA);
-        points.Add(points[^1] + uZ3*AXIAL_EXTRA);
+        points.Insert(0, points[0] - uZ3*EXTRA);
+        points.Add(points[^1] + uZ3*EXTRA);
 
         float Dt = 0.5f*Ltheta_chnl; // t for theta.
 
@@ -640,7 +668,8 @@ public class Chamber {
         for (int i=1; i<numel(points); ++i) {
             Vec3 A = points[i - 1];
             Vec3 B = points[i];
-            assert(B.Z > A.Z, $"A.z={A.Z}, B.z={B.Z}");
+            assert(B.Z > A.Z, $"A.Z={A.Z}, B.Z={B.Z}");
+          #if true
             float tA = argxy(A);
             float tB = argxy(B);
             Vec3 p000 = tocart(rlo, tA - Dt, A.Z);
@@ -651,6 +680,20 @@ public class Chamber {
             Vec3 p101 = tocart(rhi, tB - Dt, B.Z);
             Vec3 p011 = tocart(rlo, tB + Dt, B.Z);
             Vec3 p111 = tocart(rhi, tB + Dt, B.Z);
+          #else
+            float tA = argxy(A);
+            float tB = argxy(B);
+            float semith = (rhi - rlo)/2f;
+            float semiwi = r_tht*Ltheta_chnl/2f;
+            Vec3 p000 = A + rejxy(rotate(new Vec2(-semith, -semiwi), tA), A.Z);
+            Vec3 p100 = A + rejxy(rotate(new Vec2(+semith, -semiwi), tA), A.Z);
+            Vec3 p010 = A + rejxy(rotate(new Vec2(-semith, +semiwi), tA), A.Z);
+            Vec3 p110 = A + rejxy(rotate(new Vec2(+semith, +semiwi), tA), A.Z);
+            Vec3 p001 = B + rejxy(rotate(new Vec2(-semith, -semiwi), tB), B.Z);
+            Vec3 p101 = B + rejxy(rotate(new Vec2(+semith, -semiwi), tB), B.Z);
+            Vec3 p011 = B + rejxy(rotate(new Vec2(-semith, +semiwi), tB), B.Z);
+            Vec3 p111 = B + rejxy(rotate(new Vec2(+semith, +semiwi), tB), B.Z);
+          #endif
             if (i == 1) {
                 V.Add(p000);
                 V.Add(p100);
@@ -691,11 +734,11 @@ public class Chamber {
         float min_r = r_tht;
         float max_r = pm.Mr_chnl + 0.5f*th_chnl;
         max_r = max(max_r, r_exit + th_iw + th_chnl + th_ow);
-        max_r += RADIAL_EXTRA;
+        max_r += EXTRA;
         Voxels vox = new();
         for (int i=0; i<no_chnl; ++i) {
-            float theta0 = i * TWOPI / no_chnl;
-            Mesh mesh = mesh_chnl(min_r, max_r, theta0, draw_line: i <= 4);
+            float theta0 = theta0_chnl + i*TWOPI/no_chnl;
+            Mesh mesh = mesh_chnl(min_r, max_r, theta0);
             if (keys != null) {
                 int key = Geez.mesh(mesh);
                 keys.Add(key);
@@ -703,58 +746,136 @@ public class Chamber {
             vox.BoolAdd(new Voxels(mesh));
         }
         return vox;
+        // Voxels inv = new Cuboid(vox.oCalculateBoundingBox()).voxels();
+        // inv.BoolSubtract(vox);
+        // return inv;
     }
 
+    protected const float min_A_neg_mani = 16f; // mm^2
     protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
         // next (travelling downstream) is exactly one channel area.
-        float Dtheta = theta - theta_inlet;
-        if (Dtheta > PI)
-            Dtheta = TWOPI - Dtheta;
+        float Dtheta = wraprad(theta - theta_inlet);
         // in one half-turn, no_chnl/2 channels are passed.
-        float t = abs(Dtheta) / (PI / (0.5f*no_chnl - 1f));
+        float t = abs(Dtheta) / (PI / (0.5f*no_chnl));
         float A0 = 0.5f*no_chnl*A_chnl_exit;
-        return A0 - A_chnl_exit*t;
+        float A = A0 - A_chnl_exit*t;
+        A = max(A, min_A_neg_mani);
+        return A;
     }
 
-    protected List<Vec2> points_neg_mani(float min_z, out float Lr) {
-        List<Vec2> points = new(); // =[(z,r),...]
-        float max_z = cnt_z6 - th_ow;
-        // Firstly add the overhanging point (to ensure the channel isnt
-        // partially restricted by the line).
-        Vec2 a = new(
-            max_z,
-            cnt_radius_at(max_z, th_iw + th_chnl + th_ow) + th_chnl
-        );
-        points.Add(a);
-        // Then add the contour hugging the outer wall.
-        for (int i=0; i<=DIVISIONS/4; ++i) {
-            float z = max_z + i*(min_z - max_z)/(DIVISIONS/4);
-            float r = cnt_radius_at(z, th_iw + th_chnl + th_ow);
-            points.Add(new(z, r));
+    // Must produce the same number of points each time.
+    // Must produce points in anticlockwise winding (meaning an in-order
+    //   traversal would travel down the edge closest to the z-axis).
+    protected delegate void PointsManiF(List<Vec3> points, float theta);
+
+    protected void points_maybe_mani(float neg_min_z, out List<Vec2> neg,
+            out List<Vec2> pos, out Vec3 inlet, out float Lr) {
+        // note neg_min_z for neg is only a "construction" value, it is filleted
+        // so is not the true minimum.
+
+        /* Neg is a outer-wall hugging triangle thing:
+    |---,._   - a (filleted)
+    |      `-,
+    |         `-,
+    |           `;  - c (filleted)
+   |          ,-'
+   |      ,-'
+  ,'`---'
+  |   '---- b (filleted)
+        */
+
+        /* Pos is a huge wedge:
+ ,- d
+
+ ,-------,._   - A (filleted)
+ |          `-,
+ |             `-,
+ |                `;  - C (filleted)
+ |              ,-'
+ |           ,-'
+ |        ,-'
+ |     ,-'
+ |  ,-'
+ '-'      - e
+        */
+        float Fr_a = 2f;
+        float Fr_b = 1.5f;
+        float Fr_c = 2f;
+        int divisions_a = DIVISIONS/100;
+        int divisions_c = DIVISIONS/80;
+
+        // Get the contour hugging the outer wall.
+        neg = new(); // =[(z,r),...]
+        float neg_max_z = cnt_z6 - th_omani;
+        for (int i=0; i<=DIVISIONS/8; ++i) {
+            float z = neg_max_z + i*(neg_min_z - neg_max_z)/(DIVISIONS/8);
+            float r = cnt_radius_at(z, th_iw + th_chnl + th_imani);
+            neg.Add(new(z, r));
         }
-        // Now add the intersection between the shallowest lines we can make.
-        // https://www.desmos.com/calculator/xfhcgwu2el
-        Vec2 b = points[^1];
-        float cz = (a.Y - b.Y)*0.5f/tan(abs(phi_mani)) + 0.5f*(a.X + b.X);
-        float cr = (a.X - b.X)*0.5f*tan(abs(phi_mani)) + 0.5f*(a.Y + b.Y);
-        Vec2 c = new(cz, cr);
-        points.Add(c);
-        // Also output the lower edge projected length to hugely aid the
-        // numerical search for matching area.
-        Lr = (c - b).Y;
-        return points;
+        // Get an "overhanging" point (to ensure the channel isnt partially
+        // restricted by being in a non-right-angle corner).
+        Vec2 a = neg[0] + uY2*th_chnl;
+        // Get the lowest point.
+        Vec2 b = neg[^1];
+        // Then get the intersection between the shallowest lines we can make
+        // from these two points. https://www.desmos.com/calculator/xfhcgwu2el
+        assert(phi_mani > 0f);
+        Vec2 c = new(
+            0.5f*(a.Y - b.Y)/tan(phi_mani) + 0.5f*(a.X + b.X),
+            0.5f*(a.X - b.X)*tan(phi_mani) + 0.5f*(a.Y + b.Y)
+        );
+
+        float phi_aA = 1.25f*PI - 0.5f*phi_mani;
+        Vec2 A = a + tocart(th_omani/cos(phi_aA), phi_aA);
+        Vec2 C = c + uY2*th_omani/cos(phi_mani);
+        Vec2 d = new(cnt_z6, r_tht); // throat radius reasonable lower extreme.
+        Vec2 e = new(
+            (d.Y - b.Y)/tan(phi_mani) + b.X - th_omani/sin(phi_mani),
+            r_tht
+        );
+
+        // Now fillet the lower corner.
+        neg.Add(c); // temp, to ensure the line.
+        int divs_fillet = DIVISIONS/10;
+        Polygon.fillet(neg, numel(neg) - 2, Fr_b, divisions: divs_fillet);
+        neg.RemoveAt(numel(neg) - 1);
+
+        // Note that this fillet has made the polygon variable-length, so
+        // resample it to a fixed amount.
+        List<Vec2> wall = neg[..^divs_fillet];
+        List<Vec2> fillet = neg[^divs_fillet..];
+        wall = Polygon.line_resample(wall, DIVISIONS/25);
+        fillet = Polygon.line_resample(fillet, DIVISIONS/60);
+        // Add the other two points to make the final closed loop.
+        neg = [..wall, ..fillet, c, a];
+
+        // Fixed-count fillet for the outer corner and the overhang corner.
+        Polygon.fillet(neg, numel(neg) - 2, Fr_c, divisions: divisions_c);
+        Polygon.fillet(neg, numel(neg) - 1, Fr_a, divisions: divisions_a);
+
+        // Pos so easyyy with all fixed-division fillets.
+        pos = [d, e, C, A];
+        Polygon.fillet(pos, 3, Fr_a + th_omani, divisions: divisions_a);
+        Polygon.fillet(pos, 2, Fr_c + th_omani, divisions: divisions_c);
+
+        // Place the inlet some way up the lower edge. Note the last coordinate
+        // stores the axial angle.
+        inlet = rejxy((2f*b + 3f*c)/5f, phi_inlet);
+
+        // Output the lower edge projected length to hugely aid the numerical
+        // search for matching area.
+        Lr = abs((c - b).Y);
     }
-    protected void points_neg_mani(List<Vec3> points, float theta) {
+
+    protected void points_mani(float theta, out List<Vec3> neg,
+            out List<Vec3> pos, out Frame inlet) {
         float A = A_neg_mani(theta);
-        // Must produce the same number of points each time.
-        // Must produce points in anticlockwise winding (meaning an in-order
-        // traversal would travel down the edge closest to the z-axis).
         assert(A > 0);
         // Use an approximation to get an initial guess for min z.
         // https://www.desmos.com/calculator/bfsipdjpsd
-        assert(phi_exit >= 0f);
+        assert(phi_exit > 0f);
         float max_phi = PI_4;
         float cosa = cos(phi_exit);
         float sina = sin(phi_exit);
@@ -766,22 +887,34 @@ public class Chamber {
         float Bz = L/2f*(sina/tanb + cosa);
         float Br = L/2f*(sina + cosa*tanb);
       #endif
-        float min_z = cnt_z6 - th_ow - Az;
-        List<Vec2> ps = new();
+        float min_z = cnt_z6 - th_ow - Az; // guess.
+        List<Vec2> neg2 = new();
+        List<Vec2> pos2 = new();
+        Vec3 inlet_ZRp = new(NAN, NAN, NAN);
         for (int i=0; i<10; ++i) {
-            ps = points_neg_mani(min_z, out float Lr);
-            float rem_A = A - Polygon.area(ps);
+            points_maybe_mani(min_z, out neg2, out pos2, out inlet_ZRp,
+                    out float Lr);
+            float rem_A = A - Polygon.area(neg2);
             float Dz = -rem_A/Lr; // very good guess, but still a guess.
             min_z += Dz;
+            assert(min_z > cnt_z4);
             if (abs(Dz) < 1e-3 && abs(rem_A) < 1e-2)
                 break;
             assert(i != 9, $"Dz={Dz}, rem_A={rem_A}");
         }
-        foreach (Vec2 p in ps)
-            points.Add(tocart(p.Y, theta, p.X));
+        neg = new();
+        foreach (Vec2 p in neg2)
+            neg.Add(tocart(p.Y, theta, p.X));
+        pos = new();
+        foreach (Vec2 p in pos2)
+            pos.Add(tocart(p.Y, theta, p.X));
+        inlet = new(
+            tocart(inlet_ZRp.Y, theta, inlet_ZRp.X),
+            tocart(1f, theta, as_phi(inlet_ZRp.Z))
+        );
     }
 
-    protected Mesh mesh_neg_mani() {
+    protected Mesh mesh_mani(PointsManiF points_f) {
         Mesh mesh = new();
         List<Vec3> V = new();
         int N = 0;
@@ -792,12 +925,15 @@ public class Chamber {
                 i = numel(V) - N;
                 j = 0;
             } else {
-                float theta = n*TWOPI/DIVISIONS;
-                points_neg_mani(V, theta);
-                if (N == 0)
-                    N = numel(V);
-                if (n == 0)
+                float theta = theta_inlet + n*TWOPI/DIVISIONS;
+                int numel0 = numel(V);
+                points_f(V, theta);
+                int Dnumel = numel(V) - numel0;
+                if (n == 0) {
+                    N = Dnumel;
                     continue;
+                }
+                assert(N == Dnumel, $"N={N}, Dnumel={Dnumel}");
                 i = numel(V) - 2*N;
                 j = numel(V) - N;
             }
@@ -816,86 +952,216 @@ public class Chamber {
         return mesh;
     }
 
-    // z axis radially inwards.
-    protected Frame frame_inlet() => new(
-            tocart(r_inlet, theta_inlet, cnt_z6 + Dz_inlet),
-            -tocart(1f, theta_inlet, 0f)
-        );
+    protected void voxels_mani(out Frame inlet, out Voxels neg, out Voxels pos) {
+        PointsManiF get_pos = (List<Vec3> points, float theta) => {
+            points_mani(theta, out _, out List<Vec3> pos, out _);
+            points.AddRange(pos);
+        };
+        Mesh mesh_pos = mesh_mani(get_pos);
+        pos = new(mesh_pos);
 
-    protected Voxels voxels_neg_mani() {
-        Frame inlet = frame_inlet();
-        // Main manifold.
-        Voxels vox = new Voxels(mesh_neg_mani());
-        // Fuel inlet.
-        Vec3 a = inlet.pos;
-        Vec3 b = tocart(
-            cnt_radius_at(a.Z, th_iw + th_chnl + th_ow + 1f),
-            argxy(a),
-            a.Z
-        );
-        vox.BoolAdd(new Tubing([a, b], D_inlet).voxels());
-        // Fillet concave joining corner between tubing and manifold (should be
-        // the only concave corner).
-        Fillet.concave(vox, 10f, inplace: true);
-        // Add hard clip to fuel inlet.
-        vox.BoolAdd(new Pipe(
-            inlet.flip(),
-            2f*RADIAL_EXTRA,
-            D_inlet + 3f*th_inlet
-        ).voxels());
-        return vox;
+        Frame? inlet_fr = null;
+        PointsManiF get_neg = (List<Vec3> points, float theta) => {
+            points_mani(theta, out List<Vec3> neg, out _, out Frame maybeinlet);
+            if (closeto(theta, theta_inlet)) {
+                assert(inlet_fr == null);
+                inlet_fr = maybeinlet;
+            }
+            points.AddRange(neg);
+        };
+        Mesh mesh_neg = mesh_mani(get_neg);
+        neg = new(mesh_neg);
+        assert(inlet_fr != null);
+        inlet = inlet_fr!;
     }
 
-    protected Voxels voxels_mani(in Voxels neg_mani) {
-        Frame inlet = frame_inlet();
-
-        // Remove the inlet hard clip (plus a little bit of the tubing but that
-        // will be updated anyway).
-        Voxels neg = neg_mani.voxIntersectImplicit(new Space(inlet, 3f, INF));
-        Voxels vox = neg.voxOffset(th_inlet);
-
-        float length = 8f;
-        float thicker = 1f;
-        float angle = DEG20;
-        float radius = 0.5f*D_inlet + th_inlet + thicker;
-        Voxels tapping;
-        tapping = new Pipe(
-            inlet.transz(-RADIAL_EXTRA),
-            length + RADIAL_EXTRA,
-            radius
-        ).voxels();
-        tapping.BoolAdd(new Cone(
-            inlet.transz(length),
-            Cone.Radius(radius),
-            Cone.Phi(angle),
-            at_tip: false
+    protected void voxels_inlet(in Frame inlet, out Voxels neg, out Voxels pos) {
+        float L = 15f;
+        float L_extra = 2f;
+        Vec3 a = inlet.to_global(new Vec3(0f, 0f, L_extra));
+        Vec3 b = inlet.to_global(new Vec3(0f, 0f, -L));
+        float phi = -argphi(inlet.Z) - PI_2;
+        Vec3 c = b + tocart((r_tht - magxy(b))/cos(phi), argxy(b), as_phi(phi));
+        pos = new Tubing([a, b], D_inlet + 2f*th_inlet).voxels();
+        pos.BoolAdd(new Cuboid(
+            new Frame(0.5f*(b + c), cross(inlet.Z, uZ3), inlet.Z),
+            4.5f,
+            mag(b - c),
+            L + L_extra
         ).voxels());
-        tapping.IntersectImplicit(
-            new Space(inlet, -INF, length + thicker / tan(angle))
-        );
+        Fillet.concave(pos, 6f, inplace: true);
+        neg = new Tubing([a, b], D_inlet).voxels();
+    }
 
-        vox.BoolAdd(tapping);
+    protected List<Vec3> points_tc() {
+        float min_z = cnt_z0;
+        float max_z = cnt_z6;
+        float dif = (max_z - min_z)/(no_tc + 2);
+        min_z += dif;
+        max_z -= dif;
+        List<Vec3> line = new();
+        for (int i=0; i<DIVISIONS; ++i) {
+            float z = min_z + i*(max_z - min_z)/(DIVISIONS - 1);
+            float theta = theta0_chnl + theta_chnl(z);
+            float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, widened: true);
+            line.Add(tocart(r, theta, z));
+        }
 
-        return vox;
+        List<float> dists = new(numel(line)){ 0f };
+        float sumlen = 0f;
+        for (int i=1; i<numel(line); ++i) {
+            sumlen += mag(line[i] - line[i - 1]);
+            dists.Add(sumlen);
+        }
+
+        List<Vec3> points = new(no_tc);
+        for (int i=0; i<no_tc; ++i) {
+            float target = i*sumlen/(no_tc - 1);
+            int lo = 0;
+            int hi = numel(dists) - 1;
+            int idx = 0;
+            while (lo <= hi) {
+                int mid = (lo + hi) / 2;
+                if (dists[mid] >= target) {
+                    idx = mid; // maybe found.
+                    hi = mid - 1;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            if (idx == 0) {
+                points.Add(line[idx]);
+            } else {
+                float d0 = dists[idx - 1];
+                float d1 = dists[idx];
+                float t = (target - d0) / (d1 - d0);
+                Vec3 p = t*line[idx] + (1f - t)*line[idx - 1];
+                points.Add(p);
+            }
+        }
+        return points;
+    }
+
+    protected void voxels_tc(out Voxels neg, out Voxels pos) {
+        List<Vec3> points = points_tc();
+        neg = new();
+        pos = new();
+        float neg_Lr = 0.5f*D_tc;
+        float pos_Lr = 0.5f*D_tc + th_tc;
+        foreach (Vec3 p in points) {
+            Frame frame = Frame.cyl_radial(p);
+
+            Voxels this_neg = new Pipe(
+                frame,
+                L_tc + EXTRA,
+                neg_Lr
+            ).voxels();
+            this_neg.IntersectImplicit(new Cone(
+                frame.transz(th_chnl/2f + th_ow),
+                +INF,
+                Cone.as_phi(PI_4)
+            ));
+
+            Voxels this_pos = new Pipe(
+                frame.transz(-2f*EXTRA),
+                L_tc + 2f*EXTRA,
+                pos_Lr
+            ).voxels();
+            this_pos.BoolAdd(new Cuboid(
+                frame.transz(-2f*EXTRA).rotxy(PI_4),
+                L_tc + 2f*EXTRA,
+                pos_Lr
+            ).at_corner(Cuboid.CORNER_x0y0z0).voxels());
+            Cuboid web = new Cuboid(
+                frame.transz(-2f*EXTRA),
+                th_tc,
+                100f,
+                L_tc + 2f*EXTRA
+            ).at_edge(Cuboid.EDGE_y0z0);
+            this_pos.BoolAdd(web.voxels());
+            this_pos.IntersectImplicit(new Space(
+                frame.translate(new Vec3(0f, -pos_Lr/SQRTH + web.Lx/2f, L_tc))
+                     .rotyz(phi_tc),
+                -INF,
+                0f
+            ));
+
+            neg.BoolAdd(this_neg);
+            pos.BoolAdd(this_pos);
+        }
     }
 
     protected Voxels voxels_flange() {
         Voxels vox;
 
         vox = new Pipe(
-            new Frame(-AXIAL_EXTRA*uZ3),
-            pm.flange_thickness + AXIAL_EXTRA,
+            new Frame(-EXTRA*uZ3),
+            pm.flange_thickness + EXTRA,
             pm.flange_outer_radius
         ).voxels();
 
         for (int i=0; i<pm.no_bolt; ++i) {
-            float theta = i * TWOPI / pm.no_bolt;
-            Pipe bolt_surrounding = new(
-                new Frame(tocart(pm.Mr_bolt, theta, -AXIAL_EXTRA)),
-                pm.flange_thickness + AXIAL_EXTRA,
-                pm.Bsz_bolt/2f + pm.thickness_around_bolt
-            );
-            vox.BoolAdd(bolt_surrounding.voxels());
+            float theta = i*TWOPI/pm.no_bolt;
+            float r = pm.Mr_bolt;
+            float Lz = pm.flange_thickness;
+            float Lr = pm.Bsz_bolt/2f + pm.thickness_around_bolt;
+            Vec3 p = tocart(r, theta, 0f);
+
+            List<Vec2> tracezr = new();
+            float rlo = pm.Or_cc + th_iw + th_chnl + th_ow - r;
+            float zhi = squared((Lr - rlo)/Lr/2f)*10f;
+            int N = DIVISIONS/16;
+            for (int j=0; j<N; ++j) {
+                float x = squared(j/(float)(N - 1))*(zhi + 2f*EXTRA);
+                float y = Lr - Lr*2f*sqrt(x/10f);
+                tracezr.Add(new(x, y));
+            }
+            tracezr.Add(new(zhi + 2f*EXTRA, rlo));
+            tracezr.Add(new(zhi + 2f*EXTRA, Lr + EXTRA));
+            tracezr.Add(new(0f,             Lr + EXTRA));
+
+            List<Vec2> tracexy = new();
+            float theta_stop = PI/2.3f;
+            N = (int)(DIVISIONS*(TWOPI - 2f*theta_stop)/TWOPI)/2;
+            for (int j=0; j<N; ++j) {
+                float t = -PI + j*TWOPI/N;
+                if (abs(wraprad(t + PI)) < theta_stop)
+                    continue;
+                tracexy.Add(tocart(Lr, t));
+            }
+            float length = 2f*(r - pm.Or_cc - th_iw - th_chnl - th_ow);
+            Vec2 A = tocart(Lr, -PI - theta_stop)
+                   + tocart(length, -PI - theta_stop + PI_2);
+            Vec2 B = tocart(Lr, -PI + theta_stop)
+                    + tocart(length, -PI + theta_stop - PI_2);
+            if (A.Y < B.Y) {
+                Vec2 C = Polygon.line_intersection(
+                    A, tracexy[^1],
+                    B, tracexy[0],
+                    out _
+                );
+                tracexy.Add(C);
+            } else {
+                tracexy.Add(A);
+                tracexy.Add(B);
+            }
+
+            Voxels this_vox = new Polygon(
+                Frame.cyl_axial(p - EXTRA*uZ3),
+                Lz + zhi + 2f*EXTRA,
+                tracexy
+            ).voxels();
+            this_vox.BoolSubtract(new Polygon(
+                Frame.cyl_circum(p + (Lz - 1f)*uZ3),
+                2f*(Lr + EXTRA),
+                tracezr
+            ).at_middle().voxels());
+            this_vox.BoolAdd(new Pipe(
+                Frame.cyl_axial(p - EXTRA*uZ3),
+                Lz + EXTRA,
+                Lr
+            ).voxels());
+            vox.BoolAdd(this_vox);
         }
 
         return vox;
@@ -905,12 +1171,17 @@ public class Chamber {
         Voxels vox = new();
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i * TWOPI / pm.no_bolt;
-            Pipe bolt_hole = new(
-                new Frame(tocart(pm.Mr_bolt, theta, -AXIAL_EXTRA)),
-                pm.flange_thickness + AXIAL_EXTRA,
+            Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
+            vox.BoolAdd(new Pipe(
+                frame.transz(-EXTRA),
+                pm.flange_thickness + EXTRA,
                 pm.Bsz_bolt/2f
-            );
-            vox.BoolAdd(bolt_hole.voxels());
+            ).voxels());
+            vox.BoolAdd(new Pipe(
+                frame.transz(pm.flange_thickness),
+                3f*EXTRA,
+                pm.Bsz_bolt/2f + 3f
+            ).voxels());
         }
         return vox;
     }
@@ -942,25 +1213,23 @@ public class Chamber {
     public Voxels voxels() {
         // We view a few things as they are updated.
         Geez.Cycle key_gas = new();
-        Geez.Cycle key_flange = new();
-        Geez.Cycle key_neg_mani = new();
+        Geez.Cycle key_mani = new();
         Geez.Cycle key_chnl = new();
+        Geez.Cycle key_tc = new();
+        Geez.Cycle key_flange = new();
         Geez.Cycle key_part = new();
-        var col_gas = COLOUR_PINK;
-        var col_flange = COLOUR_RED;
-        var col_neg_mani = COLOUR_BLUE;
+        var col_gas = COLOUR_RED;
+        var col_mani = COLOUR_BLUE;
         var col_chnl = COLOUR_GREEN;
+        var col_tc = COLOUR_PINK;
+        var col_flange = COLOUR_YELLOW;
 
         Voxels gas = voxels_cnt_gas();
         key_gas <<= Geez.voxels(gas, colour: col_gas);
 
-        Voxels flange = voxels_flange();
-        key_flange <<= Geez.voxels(flange, colour: col_flange);
-
-        Voxels neg_mani = voxels_neg_mani();
-        key_neg_mani <<= Geez.voxels(neg_mani, colour: col_neg_mani);
-
-        Voxels ow_filled = voxels_cnt_ow_filled();
+        voxels_mani(out Frame inlet, out Voxels neg_mani, out Voxels pos_mani);
+        key_mani <<= Geez.voxels(neg_mani, colour: col_mani);
+        voxels_inlet(inlet, out Voxels neg_inlet, out Voxels pos_inlet);
 
         Voxels chnl;
         using (Geez.like(colour: col_chnl)) {
@@ -973,21 +1242,28 @@ public class Chamber {
         chnl.BoolIntersect(cnt_chnl);
         key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
         Fillet.convex(chnl, 0.4f, inplace: true);
-        chnl.BoolIntersect(ow_filled);
         key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
 
-        Voxels mani = voxels_mani(neg_mani);
-        Voxels part = ow_filled; // no copy.
-        part.BoolAdd(flange);
-        part.BoolAdd(mani);
-        key_part <<= Geez.voxels(part);
-        key_flange <<= Geez.CLEAR;
-        key_neg_mani <<= Geez.CLEAR;
+        voxels_tc(out Voxels neg_tc, out Voxels pos_tc);
+        key_tc <<= Geez.voxels(pos_tc, colour: col_tc);
 
-        // Clip top to fillet that edge but not bottom.
-        part.IntersectImplicit(new Space(new(), -INF, cnt_z6));
+        Voxels flange = voxels_flange();
+        key_flange <<= Geez.voxels(flange, colour: col_flange);
+
+        Voxels part = voxels_cnt_ow_filled();
+        part.BoolAdd(flange);
+        part.BoolAdd(pos_mani);
+        part.BoolAdd(pos_inlet);
         key_part <<= Geez.voxels(part);
-        Fillet.both(part, concave_Fr: 3f, convex_Fr: 2f, inplace: true);
+        key_mani <<= Geez.CLEAR;
+        key_flange <<= Geez.CLEAR;
+
+        part.BoolAdd(pos_tc);
+        key_part <<= Geez.voxels(part);
+        key_tc <<= Geez.CLEAR;
+
+        part.IntersectImplicit(new Space(new Frame(), -INF, cnt_z6));
+        Fillet.concave(part, 3f, inplace: true);
         key_part <<= Geez.voxels(part);
 
         part.BoolSubtract(chnl);
@@ -998,11 +1274,14 @@ public class Chamber {
         key_part <<= Geez.voxels(part);
         key_gas <<= Geez.CLEAR;
 
+        part.BoolSubtract(neg_mani);
+        part.BoolSubtract(neg_inlet);
+        part.BoolSubtract(neg_tc);
+        key_part <<= Geez.voxels(part);
+
         part.BoolSubtract(voxels_neg_bolts());
         part.BoolSubtract(voxels_neg_orings());
-        part.BoolSubtract(neg_mani);
-        // Clip bottom.
-        part.IntersectImplicit(new Space(new(), 0f, INF));
+        part.IntersectImplicit(new Space(new Frame(), 0f, INF));
         key_part <<= Geez.voxels(part);
 
         return part;
@@ -1011,11 +1290,8 @@ public class Chamber {
 
     public void initialise() {
         initialise_exit();
-        initialise_chnl();
         initialise_cnt();
-        initialise_cnt_wid();
-        initialise_cnt_sdf();
-        initialise_cnt_wid_sdf();
+        initialise_chnl();
 
         // Easiest way to determine if the parameters create a realisable nozzle.
 
@@ -1046,56 +1322,64 @@ public class Chamber {
     public static Voxels maker() {
         Chamber chamber = new Chamber{
             pm = new PartMating{
-                Or_cc=40f,
+                Or_cc=50f,
 
-                Mr_chnl=50f,
+                Mr_chnl=60f,
                 min_wi_chnl=2f,
 
-                Ir_Ioring=42.5f,
-                Or_Ioring=45.5f,
-                Ir_Ooring=54.5f,
-                Or_Ooring=57.5f,
+                Ir_Ioring=52.5f,
+                Or_Ioring=55.5f,
+                Ir_Ooring=64.5f,
+                Or_Ooring=67.5f,
                 Lz_Ioring=2f,
                 Lz_Ooring=2f,
 
                 no_bolt=10,
-                Mr_bolt=66f,
+                Mr_bolt=76f,
                 Bsz_bolt=8f,
                 Bln_bolt=20f,
 
                 thickness_around_bolt=5f,
                 flange_thickness=7f,
-                flange_outer_radius=68f,
+                flange_outer_radius=78f,
                 radial_fillet_radius=5f,
                 axial_fillet_radius=10f,
             },
 
-            L_cc=70f,
+            L_cc=100f,
 
             AEAT=4f,
-            r_tht=20f,
+            r_tht=23f,
 
             NLF=1f,
             phi_conv=-DEG45,
-            phi_div=torad(21f),
-            phi_exit=torad(10f),
+            phi_div=torad(18f),
+            phi_exit=torad(8f),
 
             phi_wid=-DEG45,
 
             th_iw=1.5f,
-            th_ow=3.0f,
+            th_ow=2.5f,
 
             no_web=40,
             th_web=2f,
             Ltheta_web=1.5f/50f,
 
+            th_imani=1.5f,
+            th_omani=2.5f,
+            phi_mani=DEG45,
+
+            theta_inlet=-DEG90,
             D_inlet=10f,
             th_inlet=3f,
-            r_inlet=80f,
-            theta_inlet=-DEG90,
-            Dz_inlet=-15f,
+            phi_inlet=-DEG45,
 
-            phi_mani=DEG45,
+            theta_tc=DEG90,
+            no_tc=6,
+            D_tc=4f,
+            th_tc=2f,
+            phi_tc=DEG45,
+            L_tc=15f,
         };
         chamber.initialise();
 
@@ -1115,219 +1399,5 @@ public class Chamber {
         PicoGK.Library.Log("  bang.");
 
         return vox;
-    }
-}
-
-
-
-
-public class TwistedPlane : SDFunbounded {
-    protected float Dtheta { get; }
-    protected float Dz { get; }
-    protected float bracket_lo { get; }
-    protected float bracket_hi { get; }
-    protected bool positive { get; }
-    protected float slope { get; } // slope of surface, as dy/dz, at x=1.
-    protected float slope2 { get; } // slope^2.
-    protected float slope3 { get; } // slope^3.
-    protected float slope4 { get; } // slope^4.
-
-    static protected int MAX_ITERS => 12;
-    static protected float TOL => 1e-3f;
-
-    public TwistedPlane(in Vec3 a, in Vec3 b, bool positive)
-            : this(argxy(a), argxy(b), a.Z, b.Z, positive) {
-        float a_r = magxy(a);
-        float b_r = magxy(b);
-        // Check they have equal radius.
-        assert(abs(a_r - b_r) < 1e-5f, $"a_r={a_r}, b_r={b_r}");
-        assert(abs(a_r / b_r) < 1f + 1e-5f, $"a_r={a_r}, b_r={b_r}");
-    }
-    public TwistedPlane(float theta0, float theta1, float z0, float z1,
-            bool positive) {
-        // Check this isnt a horizontal plane.
-        assert(abs(z1 - z0) > 1e-5f, $"z0={z0}, z1={z1}");
-        this.Dtheta = theta0;
-        this.Dz = z0;
-        this.positive = positive;
-        // Recall:
-        //  surf(t, s) = (t, s*t*slope, s)
-        // We know that (1,0,0) lies on the surface (trivial), need to find
-        // `slope` s.t. (cos(theta1 - theta0), sin(theta1 - theta0), z1 - z0)
-        // lies on the surface.
-        // => t = cos(theta1 - theta0)
-        // => s = z1 - z0
-        // => slope = sin(theta1 - theta0) / t / s
-        //  slope = tan(theta1 - theta0) / (z1 - z0)
-        this.slope = tan(theta1 - theta0) / (z1 - z0);
-        assert(this.slope < 2f, "too unstable at extreme pringle shapes");
-        this.slope2 = this.slope*this.slope;
-        this.slope3 = this.slope2*this.slope;
-        this.slope4 = this.slope3*this.slope;
-    }
-
-    protected Vec3 closest(in Vec3 p) {
-        // The surface is:
-        Vec3 surf(float s, float t) => new(t, s*t*slope, s);
-
-        // Trying to find the closest point (on the surface) to p:
-        //  P = surf(s, t) s.t. mag(P - p) is minimised over s,t.
-        // Equivalent to minimising:
-        //  f(s,t) = dot(surf(s, t) - p, surf(s, t) - p)
-        //  f(s,t) = (t - p.X)^2 + (s*t*slope - p.Y)^2 + (s - p.Z)^2
-        // This is a multivariable problem (for now....).
-        // The minimum will occur at zero gradient:
-        //  df/ds = 2*t*slope*(s*t*slope - p.Y) + 2*(s - p.Z)
-        //  df/dt = 2*s*slope*(s*t*slope - p.Y) + 2*(t - p.X)
-        //  df/ds = df/dt = 0 @ minimum.
-        // f_s=0:
-        //  0 = 2*t*slope*(s*t*slope - p.Y) + 2*(s - p.Z)
-        //  0 = s*t^2*slope^2 - p.Y*t*slope + s - p.Z
-        //  s*(t^2*slope^2 + 1) = t*slope*p.Y + p.Z
-        // f_t=0:
-        //  0 = 2*s*slope*(s*t*slope - p.Y) + 2*(t - p.X)
-        //  0 = s^2*t*slope^2 - p.Y*s*slope + t - p.X
-        //  t*(s^2*slope^2 + 1) = s*slope*p.Y + p.X
-        // Either of these can be used to reduce the problem to a single
-        // variable. We'll eliminate t.
-        //  t*(s^2*slope^2 + 1) = s*slope*p.Y + p.X
-        // => t = (s*slope*p.Y + p.X) / (s^2*slope^2 + 1)
-        // With a lot of pain (aka wolfram alpha queries/sympy scripts) this
-        // reduces grad(f)=0 to:
-        //  0 = eff(s)
-        //  eff(s) = s^5 * (slope^4)
-        //         + s^4 * (-p.Z*slope^4)
-        //         + s^3 * (2*slope^2)
-        //         + s^2 * (p.X*p.Y*slope^3 - 2*p.Z*slope^2)
-        //         + s   * (p.X^2*slope^2 - p.Y^2*slope^2 + 1)
-        //         + 1   * (-p.X*p.Y*slope - p.Z)
-        //  eff(s) = s^5 * A
-        //         + s^4 * B
-        //         + s^3 * C
-        //         + s^2 * D
-        //         + s   * E
-        //         + 1   * F
-        // ayyy a simple polynomial root. fifth order so no closed form but no
-        // worries.
-        float A = slope4;
-        float B = -p.Z*slope4;
-        float C = 2f*slope2;
-        float D = p.X*p.Y*slope3 - 2f*p.Z*slope2;
-        float E = p.X*p.X*slope2 - p.Y*p.Y*slope2 + 1f;
-        float F = -p.X*p.Y*slope - p.Z;
-
-        float eff(float s)
-            => ((((A*s + B)*s + C)*s + D)*s + E)*s + F;
-        float eff_s(float s)
-            => (((5f*A*s + 4f*B)*s + 3f*C)*s + 2f*D)*s + E;
-        float eff_ss(float s)
-            => ((20f*A*s + 12f*B)*s + 6f*C)*s + 2f*D;
-
-        // Initial guess, which is close if slope is small (common). Otherwise
-        // its pretty average but its also very difficult to get an easy accurate
-        // guess.
-        float s = p.Z;
-        float f = eff(s);
-
-        // Bounds for bracketed search. These will be enlarged until a root is
-        // found.
-        float lo = -10f; // informed by nothing lmao.
-        float hi = +10f;
-
-        // Try gradient descent initially, but its not always stable.
-        for (int _=0; _<MAX_ITERS; ++_) {
-            // Check solution.
-            if (abs(f) < TOL)
-                goto ROOTED;
-            // Halley's method (second order gradient descent).
-            float f_s = eff_s(s);
-            float f_ss = eff_ss(s);
-            float ds = -f*f_s / (f_s*f_s - 0.5f*f*f_ss);
-            // Check stagnation (and dont assume its a solution :().
-            if (s + ds == s) {
-                lo = s - 0.1f;
-                hi = s + 0.1f;
-                goto BRACKETED;
-            }
-            // Descend the gradient.
-            s += ds;
-            f = eff(s);
-        }
-        lo = s - 2f;
-        hi = s + 2f;
-
-      BRACKETED:;
-        // FIIIINE lets do bisection.
-
-        // Expand bounds until a root is bracketed.
-        float flo = eff(lo);
-        while (flo * eff(hi) > 0f) {
-            // Double search range if no sign change.
-            float mid = 0.5f*(lo + hi);
-            assert((mid != lo) && (mid != hi));
-            lo = mid + 2f*(lo - mid);
-            hi = mid + 2f*(hi - mid);
-            assert((lo != -INF) && (hi != +INF));
-            flo = eff(lo);
-        }
-
-        assert(flo * eff(hi) <= 0f, "cooked");
-        for (;;) {
-            float mid = 0.5f*(lo + hi);
-            float fmid = eff(mid);
-            // Check solution (or precision limit).
-            if (abs(fmid) < TOL || (mid == lo) || (mid == hi)) {
-                s = mid;
-                f = fmid;
-                goto ROOTED;
-            }
-            // Iterate brackets.
-            if (flo*fmid < 0f) {
-                hi = mid;
-            } else {
-                lo = mid;
-                flo = fmid;
-            }
-        }
-
-      ROOTED:;
-        // assert(abs(f) < TOL);
-        // Don't even worry bout it actually f32 precision shits on our balls.
-
-        // Find the corresponding t value.
-        float t = (s*slope*p.Y + p.X) / (s*s*slope2 + 1f);
-
-        // Return the point on the surface which we have found to be the closest.
-        return surf(s, t);
-    }
-
-    public override float fSignedDistance(in Vec3 p) {
-        Vec3 P = rotxy(p, Dtheta) - uZ3*Dz;
-        Vec3 C = closest(P);
-        float dist = mag(P - C);
-        if ((P.Y > C.Y) == positive) // solid on either pos or neg side.
-           dist = -dist;
-        return dist;
-    }
-}
-
-
-public class RunningStats {
-    public int N = 0;
-    public float mean = 0f;
-    public float maximum = 0f;
-    public double stddev => sqrt((N > 1) ? M2/(N - 1) : 0f);
-
-    protected float M2 = 0f; // sum of squared diffs
-
-    public RunningStats() {}
-
-    public void add(float x) {
-        N += 1;
-        maximum = max(maximum, x);
-        float delta = x - mean;
-        mean += delta / N;
-        float delta2 = x - mean;
-        M2 += delta * delta2;
     }
 }
