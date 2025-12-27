@@ -370,6 +370,95 @@ public static class Geez {
     }
 
 
+    public static int pipe(in Pipe pipe, Colour? colour=null, int? rings=null,
+            int bars=6) {
+        float r = pipe.rhi;
+        float L = pipe.Lz;
+        Frame frame = pipe.centre;
+
+        if (rings == null)
+            rings = max(3, (int)(L * 2.5f / (TWOPI/bars*r)));
+        assert(rings >= 2);
+        assert(bars >= 2);
+
+        List<PolyLine> lines = new();
+        PolyLine line;
+        Colour col = colour ?? Geez.colour ?? Geez.dflt_colour;
+
+        bool done_inner = false;
+      DO:;
+
+        // Rings.
+        for (int n=0; n<rings.Value; ++n) {
+            float z = n*L/(rings.Value - 1);
+            line = new(col);
+            int N = 100;
+            for (int i=0; i<N; ++i) {
+                float theta = i*TWOPI/(N - 1);
+                line.nAddVertex(frame.to_global(tocart(r, theta, z)));
+            }
+            lines.Add(line);
+        }
+
+        // Bars.
+        for (int n=0; n<bars; ++n) {
+            float theta = n*TWOPI/bars;
+            line = new(col);
+            line.Add([
+                frame.to_global(tocart(r, theta, 0f)),
+                frame.to_global(tocart(r, theta, L)),
+            ]);
+            lines.Add(line);
+        }
+
+        // Maybe do inner also.
+        if (!done_inner) {
+            if (pipe.rlo > 0f) {
+                // Add connections to the bars.
+                for (int n=0; n<bars; ++n) {
+                    float theta = n*TWOPI/bars;
+                    line = new(col);
+                    line.Add([
+                        frame.to_global(tocart(pipe.rlo, theta, 0f)),
+                        frame.to_global(tocart(pipe.rhi, theta, 0f)),
+                    ]);
+                    lines.Add(line);
+                    line = new(col);
+                    line.Add([
+                        frame.to_global(tocart(pipe.rlo, theta, L)),
+                        frame.to_global(tocart(pipe.rhi, theta, L)),
+                    ]);
+                    lines.Add(line);
+                }
+
+                r = pipe.rlo;
+                done_inner = true;
+                goto DO;
+            } else {
+                // Add crosses on the end.
+                assert((bars%2) == 0);
+                for (int n=0; n<bars/2; ++n) {
+                    float theta = n*TWOPI/bars;
+                    line = new(col);
+                    line.Add([
+                        frame.to_global(tocart(r, theta, 0f)),
+                        frame.to_global(tocart(r, theta + PI, 0f)),
+                    ]);
+                    lines.Add(line);
+                    line = new(col);
+                    line.Add([
+                        frame.to_global(tocart(r, theta, L)),
+                        frame.to_global(tocart(r, theta + PI, L)),
+                    ]);
+                    lines.Add(line);
+                }
+            }
+        }
+
+        return _push(lines);
+    }
+
+
 
 
     static Mesh _dummy_og;
