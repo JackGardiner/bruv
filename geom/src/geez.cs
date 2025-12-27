@@ -1,4 +1,5 @@
-using static Br;
+using static br.Br;
+
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
@@ -145,6 +146,9 @@ public static class Geez {
             remove(recent(ignore));
     }
     public static void remove(int key) {
+        if (key <= 0) // noop.
+            return;
+
         (List<PolyLine> lines, List<Mesh> meshes) = _geezed[key];
         _geezed.Remove(key);
 
@@ -168,23 +172,38 @@ public static class Geez {
     public class Cycle {
         protected int[] keys; // rolling buffer.
         protected int i; // next index.
-        public Cycle(int size=1) {
+
+        public Colour? colour = null;
+        public float? alpha = null;
+        public float? metallic = null;
+        public float? roughness = null;
+        public Sectioner? sectioner = null;
+
+        public Cycle(int size=1, Colour? colour=null, float? alpha = null,
+                float? metallic = null, float? roughness = null,
+                Sectioner? sectioner = null
+            ) {
             assert(size > 0);
             keys = new int[size];
             i = 0;
+
+            this.colour = colour;
+            this.alpha = alpha;
+            this.metallic = metallic;
+            this.roughness = roughness;
+            this.sectioner = sectioner;
         }
 
-        public static Cycle operator<<(Cycle c, int key) {
+        public void cycle(int key) {
             assert(key > 0 || key == CLEAR || key == BLANK);
             if (key == CLEAR) {
-                c.clear();
-                return c;
+                clear();
+                return;
             }
-            if (c.keys[c.i] != 0)
-                Geez.remove(c.keys[c.i]);
-            c.keys[c.i] = key;
-            c.i = (c.i == numel(c.keys) - 1) ? 0 : c.i + 1;
-            return c;
+            if (keys[i] > 0)
+                Geez.remove(keys[i]);
+            keys[i] = key;
+            i = (i == numel(keys) - 1) ? 0 : i + 1;
         }
 
         public void clear() {
@@ -193,6 +212,21 @@ public static class Geez {
                     Geez.remove(keys[j]);
                 keys[j] = 0;
             }
+        }
+
+        public static Cycle operator<<(Cycle c, int key) {
+            c.cycle(key);
+            return c;
+        }
+
+        public IDisposable like() {
+            return Geez.like(
+                colour: colour,
+                alpha: alpha,
+                metallic: metallic,
+                roughness: roughness,
+                sectioner: sectioner
+            );
         }
     }
 

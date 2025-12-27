@@ -1,4 +1,4 @@
-using static Br;
+using static br.Br;
 using br;
 
 using Vec2 = System.Numerics.Vector2;
@@ -669,6 +669,9 @@ public class Chamber {
             Vec3 A = points[i - 1];
             Vec3 B = points[i];
             assert(B.Z > A.Z, $"A.Z={A.Z}, B.Z={B.Z}");
+          // PREPROCESSOR MY BELOVED.
+          // c sharp has spared you.
+          // LONG LIVE THE PREPROCESSOR.
           #if true
             float tA = argxy(A);
             float tB = argxy(B);
@@ -1053,9 +1056,10 @@ public class Chamber {
 
             Voxels this_neg = new Pipe(
                 frame,
-                L_tc + EXTRA,
+                L_tc,
                 neg_Lr
-            ).voxels();
+            ).extended(EXTRA, EXTEND_UP)
+             .voxels();
             this_neg.IntersectImplicit(new Cone(
                 frame.transz(th_chnl/2f + th_ow),
                 +INF,
@@ -1063,21 +1067,25 @@ public class Chamber {
             ));
 
             Voxels this_pos = new Pipe(
-                frame.transz(-2f*EXTRA),
-                L_tc + 2f*EXTRA,
+                frame,
+                L_tc,
                 pos_Lr
-            ).voxels();
+            ).extended(2*EXTRA, EXTEND_DOWN)
+             .voxels();
             this_pos.BoolAdd(new Cuboid(
-                frame.transz(-2f*EXTRA).rotxy(PI_4),
-                L_tc + 2f*EXTRA,
+                frame.rotxy(PI_4),
+                L_tc,
                 pos_Lr
-            ).at_corner(Cuboid.CORNER_x0y0z0).voxels());
+            ).extended(2*EXTRA, EXTEND_DOWN)
+             .at_corner(CORNER_x0y0z0)
+             .voxels());
             Cuboid web = new Cuboid(
-                frame.transz(-2f*EXTRA),
+                frame,
                 th_tc,
                 100f,
-                L_tc + 2f*EXTRA
-            ).at_edge(Cuboid.EDGE_y0z0);
+                L_tc
+            ).extended(2*EXTRA, EXTEND_DOWN)
+             .at_edge(EDGE_y0z0);
             this_pos.BoolAdd(web.voxels());
             this_pos.IntersectImplicit(new Space(
                 frame.translate(new Vec3(0f, -pos_Lr/SQRTH + web.Lx/2f, L_tc))
@@ -1095,10 +1103,11 @@ public class Chamber {
         Voxels vox;
 
         vox = new Pipe(
-            new Frame(-EXTRA*uZ3),
-            pm.flange_thickness + EXTRA,
+            new Frame(),
+            pm.flange_thickness,
             pm.flange_outer_radius
-        ).voxels();
+        ).extended(EXTRA, EXTEND_DOWN)
+         .voxels();
 
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
@@ -1147,20 +1156,24 @@ public class Chamber {
             }
 
             Voxels this_vox = new Polygon(
-                Frame.cyl_axial(p - EXTRA*uZ3),
-                Lz + zhi + 2f*EXTRA,
+                Frame.cyl_axial(p),
+                Lz + zhi,
                 tracexy
-            ).voxels();
+            ).extended(2*EXTRA, EXTEND_UPDOWN)
+             .voxels();
             this_vox.BoolSubtract(new Polygon(
                 Frame.cyl_circum(p + (Lz - 1f)*uZ3),
-                2f*(Lr + EXTRA),
+                2f*Lr,
                 tracezr
-            ).at_middle().voxels());
+            ).at_middle()
+             .extended(2*EXTRA, EXTEND_UPDOWN)
+             .voxels());
             this_vox.BoolAdd(new Pipe(
-                Frame.cyl_axial(p - EXTRA*uZ3),
-                Lz + EXTRA,
+                new Frame(p),
+                Lz,
                 Lr
-            ).voxels());
+            ).extended(EXTRA, EXTEND_DOWN)
+             .voxels());
             vox.BoolAdd(this_vox);
         }
 
@@ -1170,13 +1183,14 @@ public class Chamber {
     protected Voxels voxels_neg_bolts() {
         Voxels vox = new();
         for (int i=0; i<pm.no_bolt; ++i) {
-            float theta = i * TWOPI / pm.no_bolt;
+            float theta = i*TWOPI/pm.no_bolt;
             Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
             vox.BoolAdd(new Pipe(
-                frame.transz(-EXTRA),
-                pm.flange_thickness + EXTRA,
+                frame,
+                pm.flange_thickness,
                 pm.Bsz_bolt/2f
-            ).voxels());
+            ).extended(EXTRA, EXTEND_DOWN)
+             .voxels());
             vox.BoolAdd(new Pipe(
                 frame.transz(pm.flange_thickness),
                 3f*EXTRA,
@@ -1186,103 +1200,117 @@ public class Chamber {
         return vox;
     }
 
-    protected Voxels voxels_neg_orings() {
-      // PREPROCESSOR MY BELOVED.
-      // c sharp has spared you.
-      // LONG LIVE THE PREPROCESSOR.
-      #if true
-        return new(); // oring grooves on injector side?
-      #else
-        Voxels vox;
-        vox = new Pipe(
-            new Frame(),
-            pm.Lz_Ioring,
-            pm.Ir_Ioring,
-            pm.Or_Ioring
-        ).voxels();
-        vox.BoolAdd(new Pipe(
-            new Frame(),
-            pm.Lz_Ooring,
-            pm.Ir_Ooring,
-            pm.Or_Ooring
-        ).voxels());
-        return vox;
-      #endif
-    }
-
     public Voxels voxels() {
-        // We view a few things as they are updated.
-        Geez.Cycle key_gas = new();
-        Geez.Cycle key_mani = new();
-        Geez.Cycle key_chnl = new();
-        Geez.Cycle key_tc = new();
-        Geez.Cycle key_flange = new();
+        Voxels part = new();
         Geez.Cycle key_part = new();
-        var col_gas = COLOUR_RED;
-        var col_mani = COLOUR_BLUE;
-        var col_chnl = COLOUR_GREEN;
-        var col_tc = COLOUR_PINK;
-        var col_flange = COLOUR_YELLOW;
+
+        void add(ref Voxels vox, Geez.Cycle? key=null) {
+            part.BoolAdd(vox);
+            using (key_part.like())
+                key_part <<= Geez.voxels(part);
+            if (key != null)
+                key.clear();
+            vox.Dispose();
+            vox = new();
+        }
+        void sub(ref Voxels vox, Geez.Cycle? key=null) {
+            part.BoolSubtract(vox);
+            using (key_part.like())
+                key_part <<= Geez.voxels(part);
+            if (key != null)
+                key.clear();
+            vox.Dispose();
+            vox = new();
+        }
+
+        // We view a few things as they are updated.
+        Geez.Cycle key_gas = new(colour: COLOUR_RED);
+        Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
+        Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
+        Geez.Cycle key_tc = new(colour: COLOUR_PINK);
+        Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
 
         Voxels gas = voxels_cnt_gas();
-        key_gas <<= Geez.voxels(gas, colour: col_gas);
+        using (key_gas.like())
+            key_gas <<= Geez.voxels(gas);
 
         voxels_mani(out Frame inlet, out Voxels neg_mani, out Voxels pos_mani);
-        key_mani <<= Geez.voxels(neg_mani, colour: col_mani);
+        using (key_mani.like())
+            key_mani <<= Geez.voxels(neg_mani);
+
         voxels_inlet(inlet, out Voxels neg_inlet, out Voxels pos_inlet);
 
         Voxels chnl;
-        using (Geez.like(colour: col_chnl)) {
+        using (key_chnl.like()) {
             List<int> keys_chnl = new();
             chnl = voxels_chnl(keys_chnl);
             key_chnl <<= Geez.voxels(chnl);
             Geez.remove(keys_chnl);
+
+            Voxels cnt_chnl = voxels_cnt_chnl();
+            chnl.BoolIntersect(cnt_chnl);
+            key_chnl <<= Geez.voxels(chnl);
+
+            Fillet.convex(chnl, 0.4f, inplace: true);
+            key_chnl <<= Geez.voxels(chnl);
         }
-        Voxels cnt_chnl = voxels_cnt_chnl();
-        chnl.BoolIntersect(cnt_chnl);
-        key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
-        Fillet.convex(chnl, 0.4f, inplace: true);
-        key_chnl <<= Geez.voxels(chnl, colour: col_chnl);
 
         voxels_tc(out Voxels neg_tc, out Voxels pos_tc);
-        key_tc <<= Geez.voxels(pos_tc, colour: col_tc);
+        using (key_tc.like())
+            key_tc <<= Geez.voxels(pos_tc);
 
         Voxels flange = voxels_flange();
-        key_flange <<= Geez.voxels(flange, colour: col_flange);
+        using (key_flange.like())
+            key_flange <<= Geez.voxels(flange);
 
-        Voxels part = voxels_cnt_ow_filled();
-        part.BoolAdd(flange);
-        part.BoolAdd(pos_mani);
-        part.BoolAdd(pos_inlet);
-        key_part <<= Geez.voxels(part);
-        key_mani <<= Geez.CLEAR;
-        key_flange <<= Geez.CLEAR;
+        Voxels neg_bolts = voxels_neg_bolts();
 
-        part.BoolAdd(pos_tc);
-        key_part <<= Geez.voxels(part);
-        key_tc <<= Geez.CLEAR;
+        Voxels cnt_ow_filled = voxels_cnt_ow_filled();
+
+        add(ref cnt_ow_filled);
+        add(ref flange, key_flange);
+        add(ref pos_mani, key_mani);
+        add(ref pos_tc, key_tc);
+        add(ref pos_inlet);
 
         part.IntersectImplicit(new Space(new Frame(), -INF, cnt_z6));
         Fillet.concave(part, 3f, inplace: true);
-        key_part <<= Geez.voxels(part);
+        using (key_part.like())
+            key_part <<= Geez.voxels(part);
 
-        part.BoolSubtract(chnl);
-        key_part <<= Geez.voxels(part);
-        key_chnl <<= Geez.CLEAR;
+        sub(ref chnl, key_chnl);
+        sub(ref gas, key_gas);
+        sub(ref neg_mani);
+        sub(ref neg_inlet);
+        sub(ref neg_tc);
+        sub(ref neg_bolts);
 
-        part.BoolSubtract(gas);
-        key_part <<= Geez.voxels(part);
-        key_gas <<= Geez.CLEAR;
-
-        part.BoolSubtract(neg_mani);
-        part.BoolSubtract(neg_inlet);
-        part.BoolSubtract(neg_tc);
-        key_part <<= Geez.voxels(part);
-
-        part.BoolSubtract(voxels_neg_bolts());
-        part.BoolSubtract(voxels_neg_orings());
         part.IntersectImplicit(new Space(new Frame(), 0f, INF));
-        key_part <<= Geez.voxels(part);
+        using (key_part.like())
+            key_part <<= Geez.voxels(part);
+
+
+        PicoGK.Library.Log("Baby made.");
+
+        int cnt_hits = _cnt_cache_hits;
+        int cnt_total = cnt_hits + numel(_cnt_cache!);
+        int cnt_wid_hits = _cnt_wid_cache_hits;
+        int cnt_wid_total = cnt_wid_hits + numel(_cnt_wid_cache!);
+        if (cnt_total == 0) {
+            PicoGK.Library.Log($"  cache sdf: unused");
+        } else {
+            PicoGK.Library.Log($"  cache sdf: "
+                    + $"{cnt_hits:N0} / {cnt_total:N0} "
+                    + $"({cnt_hits * 100f / cnt_total:F2}%)");
+        }
+        if (cnt_wid_total == 0) {
+            PicoGK.Library.Log($"  cache wid_sdf: unused");
+        } else {
+            PicoGK.Library.Log($"  cache wid_sdf: "
+                    + $"{cnt_wid_hits:N0} / {cnt_wid_total:N0} "
+                    + $"({cnt_wid_hits * 100f / cnt_wid_total:F2}%)");
+        }
+        PicoGK.Library.Log("  bang.");
 
         return part;
     }
@@ -1315,89 +1343,5 @@ public class Chamber {
 
         assert(th_chnl + 1e-2 >= pm.min_wi_chnl,
                 $"th_chnl={th_chnl}, min_wi_chnl={pm.min_wi_chnl}");
-    }
-
-
-
-    public static Voxels maker() {
-        Chamber chamber = new Chamber{
-            pm = new PartMating{
-                Or_cc=50f,
-
-                Mr_chnl=60f,
-                min_wi_chnl=2f,
-
-                Ir_Ioring=52.5f,
-                Or_Ioring=55.5f,
-                Ir_Ooring=64.5f,
-                Or_Ooring=67.5f,
-                Lz_Ioring=2f,
-                Lz_Ooring=2f,
-
-                no_bolt=10,
-                Mr_bolt=76f,
-                Bsz_bolt=8f,
-                Bln_bolt=20f,
-
-                thickness_around_bolt=5f,
-                flange_thickness=7f,
-                flange_outer_radius=78f,
-                radial_fillet_radius=5f,
-                axial_fillet_radius=10f,
-            },
-
-            L_cc=100f,
-
-            AEAT=4f,
-            r_tht=23f,
-
-            NLF=1f,
-            phi_conv=-DEG45,
-            phi_div=torad(18f),
-            phi_exit=torad(8f),
-
-            phi_wid=-DEG45,
-
-            th_iw=1.5f,
-            th_ow=2.5f,
-
-            no_web=40,
-            th_web=2f,
-            Ltheta_web=1.5f/50f,
-
-            th_imani=1.5f,
-            th_omani=2.5f,
-            phi_mani=DEG45,
-
-            theta_inlet=-DEG90,
-            D_inlet=10f,
-            th_inlet=3f,
-            phi_inlet=-DEG45,
-
-            theta_tc=DEG90,
-            no_tc=6,
-            D_tc=4f,
-            th_tc=2f,
-            phi_tc=DEG45,
-            L_tc=15f,
-        };
-        chamber.initialise();
-
-        Voxels vox = chamber.voxels();
-        PicoGK.Library.Log("Baby made.");
-
-        int cnt_hits = chamber._cnt_cache_hits;
-        int cnt_total = cnt_hits + numel(chamber._cnt_cache!);
-        int cnt_wid_hits = chamber._cnt_wid_cache_hits;
-        int cnt_wid_total = cnt_wid_hits + numel(chamber._cnt_wid_cache!);
-        PicoGK.Library.Log($"  cache sdf: "
-                + $"{cnt_hits:N0} / {cnt_total:N0} "
-                + $"({cnt_hits * 100f / cnt_total:F2}%)");
-        PicoGK.Library.Log($"  cache wid_sdf: "
-                + $"{cnt_wid_hits:N0} / {cnt_wid_total:N0} "
-                + $"({cnt_wid_hits * 100f / cnt_wid_total:F2}%)");
-        PicoGK.Library.Log("  bang.");
-
-        return vox;
     }
 }

@@ -1,50 +1,24 @@
 ﻿
-using static Br;
+using static br.Br;
 using br;
 
-Func<PicoGK.Voxels?> voxel_maker = Chamber.maker;
-float voxel_size_mm = 0.8f;
-bool section_view = true; // only affects viewing.
-bool section_stl = false; // only affects stl export.
-bool transparent = true; // only affects viewing (whats the alternative?).
+using TPIAP = TwoPeasInAPod;
 
-// Setup sectioner.
-Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
+float voxel_size_mm = 0.7f;
+TPIAP.make = TPIAP.MAKE_CHAMBER;
+TPIAP.transparent = true; // only affects viewing (duh?)
+TPIAP.section_view = true;
+TPIAP.section_stl = false;
+TPIAP.sectioner = Sectioner.pie(torad(0f), torad(270f));
 
 
 // Task wrapper to configure some things and have nicer exception handling.
 void wrapped_task() {
     try {
-        // Configure some viewing options.
-        PicoGK.Library.oViewer().SetBackgroundColor(new("#202020"));
-        Geez.dflt_colour = new PicoGK.ColorFloat("#AB331A"); // copperish.
-        Geez.dflt_alpha = transparent ? 0.8f : 1f;
-        Geez.dflt_metallic = 0.35f;
-        Geez.dflt_roughness = 0.8f;
-        if (section_view)
-            Geez.dflt_sectioner = sectioner;
-
         PicoGK.Library.Log("");
         PicoGK.Library.Log("whas good");
 
-        PicoGK.Voxels? vox = voxel_maker();
-
-        if (vox != null) {
-            if (section_stl)
-                vox = sectioner.cut(vox, inplace: true);
-            string class_name = voxel_maker.Method.DeclaringType?.Name
-                             ?? "rocket_ting";
-            string stl_path = fromroot($"exports/{class_name}.stl");
-            try {
-                PicoGK.Mesh mesh = new(vox);
-                mesh.SaveToStlFile(stl_path);
-                PicoGK.Library.Log($"Exported to stl: {stl_path}");
-            } catch (Exception e) {
-                PicoGK.Library.Log("Failed to export to stl. Exception log:");
-                PicoGK.Library.Log(e.ToString());
-                PicoGK.Library.Log("");
-            }
-        }
+        TPIAP.entrypoint();
 
         PicoGK.Library.Log("Don.");
         PicoGK.Library.Log("");

@@ -1,4 +1,5 @@
-using static Br;
+using static br.Br;
+
 using Vec3 = System.Numerics.Vector3;
 using Mat4 = System.Numerics.Matrix4x4;
 
@@ -129,9 +130,12 @@ public class Transformer {
         return ret;
     }
 
-    public Voxels voxels(in Voxels vox) {
+    public Voxels voxels(in Voxels vox, bool dispose=false) {
         Mesh a = new Mesh(vox);
+        if (dispose)
+            vox.Dispose();
         Mesh b = mesh(a);
+        a.Dispose();
         return new Voxels(b);
     }
 }

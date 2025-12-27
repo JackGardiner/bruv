@@ -1,4 +1,5 @@
-using static Br;
+using static br.Br;
+
 using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
@@ -8,6 +9,37 @@ using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
 namespace br {
+
+public static partial class Br {
+    // chuck a couple more constants in un-qualified land.
+
+    public const int EXTEND_UP     = 0x1;
+    public const int EXTEND_DOWN   = 0x2;
+    public const int EXTEND_UPDOWN = 0x3;
+
+    public const int CORNER_x0y0z0 = 0x0;
+    public const int CORNER_x1y0z0 = 0x1;
+    public const int CORNER_x0y1z0 = 0x2;
+    public const int CORNER_x1y1z0 = 0x3;
+    public const int CORNER_x0y0z1 = 0x4;
+    public const int CORNER_x1y0z1 = 0x5;
+    public const int CORNER_x0y1z1 = 0x6;
+    public const int CORNER_x1y1z1 = 0x7;
+
+    public const int EDGE_x0z0 = 0x8 + 0x8*0;
+    public const int EDGE_x1z0 = 0x8 + 0x8*1;
+    public const int EDGE_y0z0 = 0x8 + 0x8*2;
+    public const int EDGE_y1z0 = 0x8 + 0x8*3;
+    public const int EDGE_x0z1 = 0x8 + 0x8*4;
+    public const int EDGE_x1z1 = 0x8 + 0x8*5;
+    public const int EDGE_y0z1 = 0x8 + 0x8*6;
+    public const int EDGE_y1z1 = 0x8 + 0x8*7;
+    public const int EDGE_x0y0 = 0x8 + 0x8*8;
+    public const int EDGE_x1y0 = 0x8 + 0x8*9;
+    public const int EDGE_x0y1 = 0x8 + 0x8*10;
+    public const int EDGE_x1y1 = 0x8 + 0x8*11;
+}
+
 
 public abstract class SDFunbounded : IImplicit {
     public float signed_dist(in Vec3 p) => fSignedDistance(p);
@@ -313,14 +345,6 @@ public class Cuboid : SDF {
         return new(centre.transz(-Lz/2f), Lx, Ly, Lz);
     }
 
-    public const int CORNER_x0y0z0 = 0x0;
-    public const int CORNER_x1y0z0 = 0x1;
-    public const int CORNER_x0y1z0 = 0x2;
-    public const int CORNER_x1y1z0 = 0x3;
-    public const int CORNER_x0y0z1 = 0x4;
-    public const int CORNER_x1y0z1 = 0x5;
-    public const int CORNER_x0y1z1 = 0x6;
-    public const int CORNER_x1y1z1 = 0x7;
     public Cuboid at_corner(int corner) {
         Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
         if ((corner & 0x1) == 1)
@@ -332,18 +356,6 @@ public class Cuboid : SDF {
         return new(centre.translate(trans), Lx, Ly, Lz);
     }
 
-    public const int EDGE_x0z0 = 0x8 + 0x8*0;
-    public const int EDGE_x1z0 = 0x8 + 0x8*1;
-    public const int EDGE_y0z0 = 0x8 + 0x8*2;
-    public const int EDGE_y1z0 = 0x8 + 0x8*3;
-    public const int EDGE_x0z1 = 0x8 + 0x8*4;
-    public const int EDGE_x1z1 = 0x8 + 0x8*5;
-    public const int EDGE_y0z1 = 0x8 + 0x8*6;
-    public const int EDGE_y1z1 = 0x8 + 0x8*7;
-    public const int EDGE_x0y0 = 0x8 + 0x8*8;
-    public const int EDGE_x1y0 = 0x8 + 0x8*9;
-    public const int EDGE_x0y1 = 0x8 + 0x8*10;
-    public const int EDGE_x1y1 = 0x8 + 0x8*11;
     public Cuboid at_edge(int edge) {
         Vec3 trans = new();
         switch (edge) {
@@ -365,6 +377,17 @@ public class Cuboid : SDF {
             default: assert(false); break;
         }
         return new(centre.translate(trans), Lx, Ly, Lz);
+    }
+
+    public Cuboid extended(float Lz, int direction) {
+        assert(direction == EXTEND_UP || direction == EXTEND_DOWN
+            || direction == EXTEND_UPDOWN);
+        float Dz = 0f;
+        switch (direction) {
+            case EXTEND_DOWN: Dz = -Lz; break;
+            case EXTEND_UPDOWN: Dz = -Lz/2f; break;
+        }
+        return new(centre.transz(Dz), Lx, Ly, this.Lz + Lz);
     }
 
 
@@ -419,6 +442,17 @@ public class Pipe : SDF {
     }
     public Pipe hole() {
         return new Pipe(centre, Lz, rlo);
+    }
+
+    public Pipe extended(float Lz, int direction) {
+        assert(direction == EXTEND_UP || direction == EXTEND_DOWN
+            || direction == EXTEND_UPDOWN);
+        float Dz = 0f;
+        switch (direction) {
+            case EXTEND_DOWN: Dz = -Lz; break;
+            case EXTEND_UPDOWN: Dz = -Lz/2f; break;
+        }
+        return new(centre.transz(Dz), this.Lz + Lz, rlo, rhi);
     }
 
 
@@ -814,6 +848,17 @@ public class Polygon : SDF {
 
     public Polygon at_middle() {
         return new(centre.transz(-Lz/2f), Lz, points);
+    }
+
+    public Polygon extended(float Lz, int direction) {
+        assert(direction == EXTEND_UP || direction == EXTEND_DOWN
+            || direction == EXTEND_UPDOWN);
+        float Dz = 0f;
+        switch (direction) {
+            case EXTEND_DOWN: Dz = -Lz; break;
+            case EXTEND_UPDOWN: Dz = -Lz/2f; break;
+        }
+        return new(centre.transz(Dz), this.Lz + Lz, points);
     }
 
 

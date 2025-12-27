@@ -1,4 +1,4 @@
-using static Br;
+using static br.Br;
 
 using Voxels = PicoGK.Voxels;
 

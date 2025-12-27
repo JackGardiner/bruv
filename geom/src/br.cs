@@ -3,7 +3,9 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 using Colour = PicoGK.ColorFloat;
 
-public static class Br {
+namespace br {
+
+public static partial class Br {
 
     public class AssertionFailed : Exception {
         public AssertionFailed(string message) : base(message) {}
@@ -342,4 +344,6 @@ public static class Br {
 
     public static float cross(Vec2 a, Vec2 b) => a.X*b.Y - a.Y*b.X;
     public static Vec3 cross(Vec3 a, Vec3 b) => Vec3.Cross(a, b);
+}
+
 }

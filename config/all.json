@@ -1,0 +1,101 @@
+{
+    "part_mating": {
+        "Or_cc": 50.0,
+
+        "Mr_chnl": 60.0,
+        "min_wi_chnl": 2.0,
+
+        "Ir_Ioring": 52.5,
+        "Or_Ioring": 55.5,
+        "Ir_Ooring": 64.5,
+        "Or_Ooring": 67.5,
+        "Lz_Ioring": 2.0,
+        "Lz_Ooring": 2.0,
+
+        "no_bolt": 10,
+        "Mr_bolt": 76.0,
+        "Bsz_bolt": 8.0,
+        "Bln_bolt": 20.0,
+
+        "thickness_around_bolt": 5.0,
+        "flange_thickness": 7.0,
+        "flange_outer_radius": 78.0,
+        "radial_fillet_radius": 5.0,
+        "axial_fillet_radius": 10.0
+    },
+    "chamber": {
+        "L_cc": 100.0,
+
+        "AEAT": 4.0,
+        "r_tht": 23.0,
+
+        "NLF": 1.0,
+        "phi_conv": -0.7853981633974483,
+        "phi_div": 0.3141592653589793,
+        "phi_exit": 0.13962634015954636,
+        "phi_wid": -0.7853981633974483,
+
+        "th_iw": 1.5,
+        "th_ow": 2.5,
+
+        "no_web": 40,
+        "th_web": 2.0,
+        "Ltheta_web": 0.03,
+
+        "th_imani": 1.5,
+        "th_omani": 2.5,
+
+        "theta_inlet": -1.5707963267948966,
+        "D_inlet": 10.0,
+        "th_inlet": 3.0,
+
+        "theta_tc": 1.5707963267948966,
+        "no_tc": 6,
+        "D_tc": 4.0,
+        "th_tc": 2.0,
+        "L_tc": 15.0
+    },
+    "injector": {
+        "aElementCount": [5, 10],
+        "aElementRadii": [16, 31],
+        "aElementClocking": [0, 0, 0],
+        "aFilmHoleCount": [30],
+        "aFilmHoleRadii": [45],
+        "aFilmHoleClocking": [0],
+        "fLOxPostFluidRad": 2.5,
+        "fLOxPostLength": 10.0,
+        "fLOxSwirlMflFluidRad": 3.5,
+        "fLOxSwirlMfldAngleDeg": 45.0,
+        "fLOxSwirlMfldLength": 12.0,
+        "fLOxPostWT": 1.0,
+        "fInjectorPlateThickness": 3.0,
+        "fFuelAnnulusOR": 4.5,
+        "fInnerOringPadW": 10.0,
+        "fInnerOringW": 5.0,
+        "fInnerOringMR": 50.0,
+        "fInnerOringDepth": 1.5,
+        "fOuterOringW": 5.0,
+        "fOuterOringMR": 60.0,
+        "fOuterOringDepth": 1.5
+    },
+    "printer": {
+        "name": "Nikon SLM280 2.0",
+        "max_print_angle": 0.785398163397,
+        "bed_size_width": 280,
+        "bed_size_length": 280,
+        "bed_size_height": 365
+    },
+    "material": {
+        "name": "CuCr1Zr-NHT",
+        "horizontal_tensile_strength": 255e6,
+        "vertical_tensile_strength": 225e6,
+        "horizontal_yield_strength": 180e6,
+        "vertical_yield_strength": 175e6,
+        "horizontal_elongation_at_break": 0.37,
+        "vertical_elongation_at_break": 0.39,
+        "vickers_hardness": 75,
+        "mean_roughness": 24e-6,
+        "roughness_depth": 135e-6,
+        "electrical_conductivity": 11.5e6
+    }
+}
