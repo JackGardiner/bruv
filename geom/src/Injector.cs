@@ -10,6 +10,7 @@ using static System.MathF;
 public class Injector
 {
 
+    // MARK: Configs
     SimConfig s;
     InterfacesConfig i;
 
@@ -99,11 +100,21 @@ public class Injector
         public float fOuterOringIR;
         public float fOuterOringOR;
         public float fOuterOringDepth;
+        public float fFlangeOR;
         public float fBoltMR;
+        public float fBoltRadius;
+        public float fBoltClearanceRadius;
+        public int iBoltCount;
+        public float fBoltCBoreDepth;
+        public float fBoltCBoreWidth;
+        public float fNutVertexWidth;
+        public float fFlangeThickness;
+        public float fWasherRadius;
         
         // constructor: initialise what we already can
         public InterfacesConfig(SimConfig s)
         {
+            // TODO: replace placeholder values (InterfacesConfig)
             fCoolingChannelWidth = 3f; // should be a little larger than the chamber channel width
 
             //calculate inner o-ring position
@@ -121,7 +132,17 @@ public class Injector
             fOuterOringOR = fOuterOringIR + s.inj.fOuterOringW;
             fOuterOringDepth = s.inj.fOuterOringDepth;
 
-            fBoltMR = 80f; //TODO as above
+            fFlangeOR = fOuterOringOR + 2f;
+            fBoltRadius = 5f/2;
+            fBoltClearanceRadius = 5.3f/2;
+            iBoltCount = 8;
+
+            fBoltMR = fFlangeOR + fBoltRadius + 2f;
+            fBoltCBoreDepth = 5f;
+            fBoltCBoreWidth = 10f;
+            fFlangeThickness = fBoltCBoreDepth + 5f;
+
+            fWasherRadius = 9f/2;
         }
     }
 
@@ -281,6 +302,7 @@ public class Injector
         return voxBars;
     }
 
+    // MARK: ConeRoof
     public class ConeRoof
     {
         // inputsw
@@ -309,18 +331,23 @@ public class Injector
         public Voxels voxUpperCrop()
         {
             BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Ifc.fCoolingChannelOR);
-            oCrop.SetHeight(new SurfaceModulation(0f), new SurfaceModulation(fGetAtticLowerHeight));
+            oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetAtticLowerHeight));
             return oCrop.voxConstruct();
         }
 
         public Voxels voxLowerCrop()
         {
             BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Ifc.fCoolingChannelOR);
-            oCrop.SetHeight(new SurfaceModulation(0f), new SurfaceModulation(fGetConeRoofLowerHeight));
+            oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetConeRoofLowerHeight));
             return oCrop.voxConstruct();
         }
 
         public float fOuterBoundingRadius()
+        {
+            return 0f;
+        }
+
+        public float fGetGussetWidth()
         {
             return 0f;
         }
@@ -335,8 +362,9 @@ public class Injector
             oRoof.SetHeight(new SurfaceModulation(fGetConeRoofLowerHeight), new SurfaceModulation(fGetConeRoofUpperHeight));
             oLOxCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetConeRoofCropHeight));
 
-            Voxels voxRoof = new Voxels(oRoof.voxConstruct());
-            Voxels voxLOxCrop = new Voxels(oLOxCrop.voxConstruct());
+            Voxels voxRoof = oRoof.voxConstruct();
+            Voxels voxLOxCrop = oLOxCrop.voxConstruct();
+            Library.Log("Middle roof and crop zone constructed");
             
             // iterate through each injector element and create wall section and fluid section
             foreach (Vector3 aPoint in m_aPointsList)
@@ -350,20 +378,119 @@ public class Injector
                 voxRoof = voxRoof - oInjectorFluid.voxConstruct();
             }
             voxRoof = voxRoof - voxLOxCrop; // crop away stuff
+            Library.Log("Injector elements constructed");
 
             // add top roof (attic)
             BaseLens oAttic = new BaseLens(new LocalFrame(), m_fRoofThickness, 0f, Ifc.fCoolingChannelOR);
             oAttic.SetHeight(new SurfaceModulation(fGetAtticLowerHeight), new SurfaceModulation(fGetAtticUpperHeight));
             Voxels voxAttic = new Voxels(oAttic.voxConstruct());
+            float fMaxAtticZ = voxAttic.oCalculateBoundingBox().vecMax.Z;
+            float fMaxAtticR = Ifc.fCoolingChannelOR - ((fMaxAtticZ - Inj.fInjectorPlateThickness - Cos(Slm.fPrintAngle)*4*m_fRoofThickness) / Tan(Slm.fPrintAngle));
+            Library.Log("Attic constructed");
 
             // create augmented spark igniter through-port
             BasePipe oASIWall = new BasePipe(new LocalFrame(m_aASILocation), 50f, 6.35f, 10.35f);
             BasePipe oASIFluid = new BasePipe(new LocalFrame(m_aASILocation), 50f, 0, 6.35f);
             Voxels voxOut = voxRoof + voxAttic + oASIWall.voxConstruct() - oASIFluid.voxConstruct();
+            Library.Log("ASI port constructed");
 
+            // create flange
+            BasePipe oFlangeBase = new BasePipe(new LocalFrame(new Vector3(0f, 0f, -Ifc.fFlangeThickness)),
+                                                3*Ifc.fFlangeThickness, Ifc.fCoolingChannelIR/2, Ifc.fFlangeOR);
+            Voxels voxBoltClearances = new();
+            List<Vector3> aBoltPos = new();
+            for (int i=0; i<Ifc.iBoltCount; i++)
+            {
+                float fAngle = i*(2*PI/Ifc.iBoltCount);
+                Vector3 oBoltPos = new Vector3(Ifc.fBoltMR*Cos(fAngle), Ifc.fBoltMR*Sin(fAngle), 0);
+                aBoltPos.Add(oBoltPos);
+                BasePipe oBoltClearance = new BasePipe(new LocalFrame(oBoltPos+new Vector3(0f,0f,-Ifc.fFlangeThickness)), 
+                                            3*Ifc.fFlangeThickness, 0, Ifc.fWasherRadius+2f);
+                //TODO: add bridging rectangular prism here
+                Sh.PreviewFrame(new LocalFrame(oBoltPos), 5f);
+                voxBoltClearances += oBoltClearance.voxConstruct();
+            }
+            Voxels voxFlange = oFlangeBase.voxConstruct() + voxBoltClearances;
+            voxFlange += voxFlange.voxOverOffset(8f); // fillet concave only
+            //Sh.PreviewVoxels(voxFlange, Cp.clrRandom(), 0.2f);
+            BBox3 oVerticalTrimBox = new BBox3(-2*Ifc.fFlangeOR,-2*Ifc.fFlangeOR, 0f, 2*Ifc.fFlangeOR, 2*Ifc.fFlangeOR, Ifc.fFlangeThickness);
+            voxFlange.Trim(oVerticalTrimBox);
+            voxFlange -= voxUpperCrop();
+            
+            voxOut += voxFlange;
+            Library.Log("Flange constructed");
+
+            // make gussets
+            // create cone shape
+            BaseCone oGussetCone = new BaseCone(new LocalFrame(new Vector3(0f, 0f, Ifc.fFlangeThickness)),
+                                                fMaxAtticZ-Ifc.fFlangeThickness, Ifc.fBoltMR+2f, fMaxAtticR);
+            Voxels voxGussetCone = oGussetCone.voxConstruct();
+                
+            // create spider web box thing and bolt holes voxel fields
+            Voxels voxGussetBox = new();
+            Voxels voxBoltHoles = new();
+            Voxels voxThrustRods = new();
+            Voxels voxStrutHoles = new();
+            
+            for (int i=0; i<aBoltPos.Count(); i++)
+            {
+                Vector3 oBoltPos = aBoltPos[i];
+                LocalFrame oGussetFrame = new LocalFrame(oBoltPos, Vector3.UnitZ, oBoltPos);
+                BaseBox oGussetBox = new BaseBox(oGussetFrame, fMaxAtticZ, Ifc.fBoltMR*2, 2*(Ifc.fWasherRadius+2f));
+                voxGussetBox += oGussetBox.voxConstruct();
+
+                // thrust rods
+                if (i%2 == 0)
+                {
+                    // vertical loft: rectangle -> circle
+                    Vector3 vecCast = VecOperations.vecUpdateRadius(oBoltPos, -20f) + new Vector3(0f, 0f, fMaxAtticZ);
+                    vecCast = voxGussetCone.vecRayCastToSurface(vecCast, -Vector3.UnitZ);
+                    LocalFrame oBottomFrame = new LocalFrame(vecCast).oTranslate(new Vector3(0f, 0f, 0f));
+                    float fBottomFrameZ = oBottomFrame.vecGetPosition().Z;
+                    LocalFrame oTopFrame = new LocalFrame(new Vector3(oBottomFrame.vecGetPosition().X,
+                                                                        oBottomFrame.vecGetPosition().Y,
+                                                                        fMaxAtticZ + 15));
+                    float fStrutArea = Pow(2f*Ifc.fBoltRadius+4, 2);
+                    float fStrutRadius = Sqrt(fStrutArea/PI);
+                    Library.Log($"Strut radius = {fStrutRadius}");
+                    Rectangle oRectangle = new Rectangle(2*(Ifc.fWasherRadius+2f), 2*(Ifc.fWasherRadius+2f));
+                    Circle oCircle = new Circle(fStrutRadius);
+                    float fLoftHeight = oTopFrame.vecGetPosition().Z - oBottomFrame.vecGetPosition().Z;
+                    BaseLoft oStrut = new BaseLoft(oBottomFrame, oRectangle, oCircle, fLoftHeight);
+                    BaseBox oBridgeBox = new BaseBox(oBottomFrame, -fBottomFrameZ, 2*(Ifc.fWasherRadius+2f), 2*(Ifc.fWasherRadius+2f));
+                    voxStrutHoles += new BaseCylinder(oTopFrame, -10f, 3f).voxConstruct();
+                    voxThrustRods += new Voxels(oStrut.mshConstruct()) + new Voxels(oBridgeBox.mshConstruct());
+                }
+
+                // bolt holes
+                BasePipe oBoltHole = new BasePipe(new LocalFrame(oBoltPos), 2*Ifc.fFlangeThickness, 0f, Ifc.fBoltClearanceRadius);
+                BasePipe oWasherHole = new BasePipe(new LocalFrame(oBoltPos+new Vector3(0f,0f,Ifc.fFlangeThickness)),
+                                                                                2*Ifc.fFlangeThickness, 0f, Ifc.fWasherRadius+0.5f);
+                voxBoltHoles += oBoltHole.voxConstruct() + oWasherHole.voxConstruct() + voxStrutHoles;
+            }
+            Library.Log("Flange details (gussets etc.) created");
+ 
+
+            // booleans
+            Voxels voxInnerPipeCrop = new BasePipe(new LocalFrame(), 2*fMaxAtticZ, 0f, fMaxAtticR).voxConstruct();
+            Voxels voxGusset = (voxGussetCone & voxGussetBox) + voxThrustRods - voxUpperCrop() - voxInnerPipeCrop;
+
+            voxOut += voxGusset;
+            Library.Log("Flange details (gussets etc.) added");
+
+            
+
+            Voxels voxCropZone = voxOut - voxUpperCrop() - voxInnerPipeCrop;
+            Voxels voxNoCropZone = voxOut & (voxUpperCrop() + voxInnerPipeCrop);
+            voxCropZone.OverOffset(5f);
+            Library.Log("Filleting completed");
+
+            voxOut = voxCropZone + voxNoCropZone;
+            voxOut -= voxBoltHoles;
+            
             return voxOut;
         }
-
+                
         // private helpers
         private float fGetConeRoofSurfaceModulation(float fPhi, float fLengthRatio)
         {
@@ -405,7 +532,7 @@ public class Injector
         private float fGetAtticSurfaceModulation(float fPhi, float fLengthRatio)
         {
             float fRadius = fLengthRatio * Ifc.fCoolingChannelOR;
-            float fInnerWallZ = Sqrt(fRadius*fRadius)*Tan(Slm.fPrintAngle) + 3f; // fix
+            float fInnerWallZ = Sqrt(fRadius*fRadius)*Tan(Slm.fPrintAngle) + 3f; // TODO: fix magic number
             float fOuterWallZ = (Ifc.fCoolingChannelOR - fRadius)*Tan(Slm.fPrintAngle) + Inj.fInjectorPlateThickness;
             return Min(fInnerWallZ, fOuterWallZ);
         }
@@ -415,11 +542,11 @@ public class Injector
         }
         private float fGetAtticUpperHeight(float fPhi, float fLengthRatio)
         {
-            return fGetAtticSurfaceModulation(fPhi, fLengthRatio) + Cos(Slm.fPrintAngle)*m_fRoofThickness;
+            return fGetAtticSurfaceModulation(fPhi, fLengthRatio) + Cos(Slm.fPrintAngle)*4*m_fRoofThickness; //TODO:fix magic number attic WT
         }
-
     }
 
+    // MARK: GPort
     public class GPort
     {
         // inputs
@@ -527,6 +654,13 @@ public class Injector
         return oCropCyl.voxConstruct();
     }
 
+    protected Voxels voxBoltFlange()
+    {
+
+        return new();
+    }
+
+    // MARK: voxConstruct
     public Voxels voxConstruct()
     {
         List<Vector3> aInjectorLocations = InjectorPattern(s.inj.aElementCount, s.inj.aElementRadii, s.inj.aElementClocking);
@@ -536,8 +670,6 @@ public class Injector
         Sh.PreviewCylinderWireframe(new BaseCylinder(new LocalFrame(), -50, i.fCoolingChannelOR), Cp.clrBlack);
         Sh.PreviewCylinderWireframe(new BaseCylinder(new LocalFrame(), -50, s.eng.fChamberRadius), Cp.clrBlack);
 
-
-
         Sh.PreviewPointCloud(aInjectorLocations, 1f, Cp.clrGreen);
         Sh.PreviewPointCloud(aFilmCoolingLocations, 1f, Cp.clrLavender);
 
@@ -545,7 +677,7 @@ public class Injector
         Voxels voxDividingWall = oDividingWall.voxConstruct();
 
         Voxels voxFacePlate = new Voxels(voxInjectorPlate(aInjectorLocations, aFilmCoolingLocations, 0.5f,
-                                                            s.inj.fFuelAnnulusOR, s.inj.fInjectorPlateThickness, i.fBoltMR));
+                                                            s.inj.fFuelAnnulusOR, s.inj.fInjectorPlateThickness, i.fCoolingChannelOR));
         Voxels voxInnerOringGroove = new Voxels(voxGroovyBaby(new LocalFrame(), i.fInnerOringDepth, i.fInnerOringIR, i.fInnerOringOR));
         Voxels voxOuterOringGroove = new Voxels(voxGroovyBaby(new LocalFrame(), i.fOuterOringDepth, i.fOuterOringIR, i.fOuterOringOR));
         Voxels voxRegenSlot = new Voxels(voxGroovyBaby(new LocalFrame(), s.inj.fInjectorPlateThickness, i.fCoolingChannelIR, i.fCoolingChannelOR));
@@ -554,8 +686,10 @@ public class Injector
 
         Voxels voxInletsWalls = voxPorts(oDividingWall)[0];
         Voxels voxInletsFluids = voxPorts(oDividingWall)[1];
+        Library.Log("Ports constructed");
 
         Voxels voxBars = voxPrisonBarSupports(oDividingWall, 2, 40, 1, 40);
+        Library.Log("Prison bars constructed");
 
         Voxels voxOutput = voxDividingWall + voxFacePlate - voxGrooves + voxInletsWalls - voxInletsFluids + voxBars;
         BBox3 bounds = voxOutput.oCalculateBoundingBox();
@@ -564,6 +698,13 @@ public class Injector
             Voxels box = new(PicoGK.Utils.mshCreateCube(bounds));
             voxOutput = voxOutput.voxBoolIntersect(box);
         }
+
+        // PolySliceStack oStack = voxOutput.oVectorize(1f, true);
+        // oStack.AddToViewer(Library.oViewer());
+        // PolySlice oSlice = oStack.oSliceAt(2);
+        // string strFilename = Br.fromroot($"exports/slice.svg");
+        // oSlice.SaveToSvgFile(strFilename, false);
+
         return voxOutput;
     }       
 }

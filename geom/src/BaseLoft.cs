@@ -19,6 +19,7 @@
 using PicoGK;
 using Leap71.ShapeKernel;
 using System.Numerics;
+using System.IO.Pipes;
 
 class BaseLoft
 {
@@ -61,11 +62,8 @@ class BaseLoft
     public Mesh mshConstruct()
     {
         // Move the edges to top and bottom of the cylinder, respectively
-        // LocalFrame frmTop = m_frm.frmTranslatedZ(m_fHeight / 2);
-        LocalFrame frmTop = LocalFrame.oGetTranslatedFrame(m_frm, new Vector3(0f, 0f, m_fHeight / 2));
-
-        // LocalFrame frmBtm = m_frm.frmTranslatedZ(-m_fHeight / 2);
-        LocalFrame frmBtm = LocalFrame.oGetTranslatedFrame(m_frm, new Vector3(0f, 0f, -m_fHeight / 2));
+        LocalFrame frmTop = LocalFrame.oGetTranslatedFrame(m_frm, new Vector3(0f, 0f, m_fHeight));
+        LocalFrame frmBtm = m_frm;
 
         // Position the 2D contours in space
         OrientedContour oTop = new(frmTop, m_oEdgeTop);
@@ -194,18 +192,20 @@ class BaseLoft
                         out Vector3 vecPtTop,
                         out Vector3 vecNoTop);
 
-
-            Vector3 vecCurPt = new Vector3(float.Lerp(vecPtBtm.X, vecPtTop.X, fV),
-                                                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fV),
+            // map old weighting (linear) to new weighting (sinusoidal)
+            // https://www.desmos.com/calculator/8u2dfbdkgl
+            float fVSmoov = 0.5f*(-MathF.Cos(MathF.PI*fV)+1f);
+            Vector3 vecCurPt = new Vector3(float.Lerp(vecPtBtm.X, vecPtTop.X, fVSmoov),
+                                                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
                                                 float.Lerp(vecPtBtm.Z, vecPtTop.Z, fV));
 
-            Vector3 vecCurNo = Vector3.Normalize(new Vector3(float.Lerp(vecNoBtm.X, vecNoTop.X, fV),
-                                                                float.Lerp(vecNoBtm.Y, vecNoTop.Y, fV),
+            Vector3 vecCurNo = Vector3.Normalize(new Vector3(float.Lerp(vecNoBtm.X, vecNoTop.X, fVSmoov),
+                                                                float.Lerp(vecNoBtm.Y, vecNoTop.Y, fVSmoov),
                                                                 float.Lerp(vecNoBtm.Z, vecNoTop.Z, fV)));
 
             float fU = u / (float)nSubDiv;
 
-            float fOffset = m_xModulation.fOffset(fU, fV) * m_fModulationHeight;
+            float fOffset = m_xModulation.fOffset(fU, fVSmoov) * m_fModulationHeight;
             anIndices[u] = msh.nAddVertex(vecCurPt + vecCurNo * fOffset);
         }
 
