@@ -10,7 +10,7 @@ namespace br {
 
 public static class Drawing {
     public static PolySlice as_poly_slice(Voxels vox, in Frame slice_at) {
-        Transformer trans = Transformer.to_local(slice_at);
+        Transformer trans = new Transformer().to_local(slice_at);
         vox = trans.voxels(vox);
 
         vox.GetVoxelDimensions(

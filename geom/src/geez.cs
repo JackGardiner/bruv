@@ -10,7 +10,6 @@ using PolyLine = PicoGK.PolyLine;
 using BBox3 = PicoGK.BBox3;
 using Colour = PicoGK.ColorFloat;
 using Viewer = PicoGK.Viewer;
-using System.Numerics;
 
 namespace br {
 
@@ -93,10 +92,33 @@ public static class Geez {
 
 
     public class HackView : Viewer.IViewerAction, Viewer.IKeyHandler {
-        private static Vec3 _shift = ZERO3;
-        private static float _zoom = NAN;
+        private static BBox3? _scoped = null;
+
+        private static System.Diagnostics.Stopwatch _stopwatch = new();
+
+        private static float _prev_zoom = NAN;
+        private static float _zoom_scale = 100f;
+
+        private static Vec3 _pos = ZERO3;
+        private static Vec3 _vel = ZERO3;
+        private static float _target_speed = 50f;
+        private static float _responsiveness = 20f;
+
+        private const int KEY_SPACE = 0;
+        private const int KEY_SHIFT = 1;
+        private const int KEY_W = 2;
+        private const int KEY_S = 3;
+        private const int KEY_A = 4;
+        private const int KEY_D = 5;
+        private static bool[] _held = new bool[6];
 
       #if false
+        // Leaving this here just so you can see how cooked the required
+        // workaround is to get picogk's own orthographic projection working
+        // correctly regardless of window size. Follow pointer to viewer object,
+        // then to glfwWindow object, then find the win32 api window handle at
+        // byte 872.
+
         [InteropServices.DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
         [InteropServices.StructLayout(InteropServices.LayoutKind.Sequential)]
@@ -106,78 +128,114 @@ public static class Geez {
             public int Right;
             public int Bottom;
         }
+
+        IntPtr hwnd_ptr_ptr = Perv.get<IntPtr>(PICOGK_VIEWER, "m_hThis");
+        IntPtr hwnd_ptr = InteropServices.Marshal.ReadIntPtr(hwnd_ptr_ptr);
+        IntPtr hwnd = InteropServices.Marshal.ReadIntPtr(hwnd_ptr, 872);
+
+        float aspect_ratio = 1f;
+        if (hwnd == IntPtr.Zero) {
+            Console.WriteLine("HWND is null.");
+        } else if (!GetClientRect(hwnd, out RECT rect)) {
+            Console.WriteLine("GetClientRect failed.");
+        } else {
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (height == 0) {
+                Console.WriteLine("Invalid viewport size.");
+            } else {
+                aspect_ratio = (float)width / height;
+            }
+        }
+
+        if (max(size.X, size.Y) > size.Z) {
+            size.X = max(size.X, size.Y);
+            size.Y = size.X / aspect_ratio;
+        } else {
+            size.Y = size.Z;
+            size.X = size.Z * aspect_ratio;
+        }
+        size /= 1.5f;
+        size *= pow(zoom, 3f);
+
+
+
+
+        // yoooo for future reference this is a much easier way to get the aspect
+        // ratio:
+        Mat4 proj_stat = Perv.get<Mat4>(PICOGK_VIEWER, "m_matProjectionStatic");
+        float aspect_ratio = proj_stat[1,1] / proj_stat[0,0];
       #endif
 
+
         private static void make_shit_happen() {
+            // Checkout the genuine bounding box.
             Perv.invoke(PICOGK_VIEWER, "RecalculateBoundingBox");
             BBox3 bbox = Perv.get<BBox3>(PICOGK_VIEWER, "m_oBBox");
-            Vec3 centre = bbox.vecCenter();
-            Vec3 size = bbox.vecSize();
 
+            // Only set the initial box once, on the first thing rendered.
+            if (_scoped == null && !bbox.Equals(new BBox3()))
+                _scoped = bbox;
+            if (_scoped == null)
+                return;
+
+            // Get Dt across calls.
+            if (!_stopwatch.IsRunning) {
+                _stopwatch.Start();
+                return;
+            }
+            float Dt = (float)_stopwatch.Elapsed.TotalSeconds;
+            _stopwatch.Restart();
+
+            // We pretend our object is scaled smaller to enable higher zooms,
+            // but this also means our zoom scales waaay slower. So, we
+            // implement a custom zoom-re-scaler and also initialise zoom at
+            // scale.
             float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-
-          #if false
-            // Leaving this here just so you can see how cooked the required
-            // workaround is to get picogk's own orthographic projection working
-            // correctly regardless of window size. Follow pointer to viewer
-            // object, then to glfwWindow object, then find the win32 api window
-            // handle at byte 872.
-            IntPtr hwnd_ptr_ptr = Perv.get<IntPtr>(PICOGK_VIEWER, "m_hThis");
-            IntPtr hwnd_ptr = InteropServices.Marshal.ReadIntPtr(hwnd_ptr_ptr);
-            IntPtr hwnd = InteropServices.Marshal.ReadIntPtr(hwnd_ptr, 872);
-
-            float aspect_ratio = 1f;
-            if (hwnd == IntPtr.Zero) {
-                Console.WriteLine("HWND is null.");
-            } else if (!GetClientRect(hwnd, out RECT rect)) {
-                Console.WriteLine("GetClientRect failed.");
-            } else {
-                int width = rect.Right - rect.Left;
-                int height = rect.Bottom - rect.Top;
-                if (height == 0) {
-                    Console.WriteLine("Invalid viewport size.");
-                } else {
-                    aspect_ratio = (float)width / height;
-                }
-            }
-
-            if (max(size.X, size.Y) > size.Z) {
-                size.X = max(size.X, size.Y);
-                size.Y = size.X / aspect_ratio;
-            } else {
-                size.Y = size.Z;
-                size.X = size.Z * aspect_ratio;
-            }
-            size /= 1.5f;
-            size *= pow(zoom, 3f);
-          #endif
-
-            // We pretend our object is 50x smaller to get a 50x further away far
-            // clip plane, but this also means our zoom scales 50x slower. So,
-            // we implement a custom zoom-re-scaler and also initialise zoom to
-            // 50x.
-            size /= 50f;
-            if (_zoom != zoom) {
-                if (nonnan(_zoom)) {
-                    float Dzoom = zoom - _zoom;
-                    Dzoom *= 1f + pow(zoom, 1.3f);
-                    zoom = _zoom + Dzoom;
-                    zoom = max(0.1f, zoom);
+            Console.WriteLine(zoom);
+            if (!(_prev_zoom == zoom)) {
+                if (nonnan(_prev_zoom)) {
+                    float Dzoom = (zoom - _prev_zoom)*_zoom_scale;
+                    Dzoom *= log(zoom/_zoom_scale + 1f);
+                    Dzoom *= 5f;
+                    zoom = _prev_zoom + Dzoom;
+                    zoom = max(zoom, 0.1f);
                     Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
                 }
-                _zoom = zoom;
+                _prev_zoom = zoom;
             }
 
+            // Handle accel/vel/pos.
+            float theta = PI + torad(PICOGK_VIEWER.m_fOrbit);
+            Frame frame = new(ZERO3, tocart(1f, theta, 0f), uZ3);
+            Vec3 target = ZERO3;
+            if (_held[KEY_SPACE]) target += frame.Z;
+            if (_held[KEY_SHIFT]) target -= frame.Z;
+            if (_held[KEY_W])     target += frame.X;
+            if (_held[KEY_S])     target -= frame.X;
+            if (_held[KEY_A])     target += frame.Y;
+            if (_held[KEY_D])     target -= frame.Y;
+            if (target != ZERO3)
+                target = normalise(target) * _target_speed;
+            _vel += (target - _vel)*(1f - exp(-_responsiveness * Dt));
+            if (mag(_vel) < 1e-3f && mag(target) < 1e-3f)
+                _vel = ZERO3;
+
+            // Scale velocity impact with zoom level also.
+            float by = 5f * zoom / _zoom_scale;
+            _pos += by*_vel*Dt;
+
+            // Setup box to trick picogk into thinking its the origin.
+            Vec3 origin = _scoped.Value.vecCenter();
+            Vec3 size = _scoped.Value.vecSize();
+            size /= _zoom_scale;
             BBox3 newbbox = new BBox3(-size/2f, size/2f);
-            // For some reason, if the bbox is the max finite size (like after)
-            // initialisation, picogk cracks it if u change that without viewing
-            // something.
-            if (bbox.Equals(new BBox3()))
-                newbbox = new BBox3();
             Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
 
-            Transformer t = new();
-            t = t.translate(_shift - centre);
+            // Shift all objects into the origin established by first rendered
+            // object and then to camera.
+            Transformer t = new Transformer()
+                .translate(-_pos - origin);
             _set_all_transforms(t.mat_T);
         }
 
@@ -193,8 +251,17 @@ public static class Geez {
         private static async Task make_shit_happen_continuously() {
             for (;;) {
                 make_shit_happen_in_the_future();
-                await Task.Delay(16);
+                await Task.Delay(5);
             }
+        }
+
+        public static void reset_view() {
+            // Cheeky reset.
+            _pos = ZERO3;
+            _vel = ZERO3;
+            _scoped = null;
+            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
+            _prev_zoom = NAN;
         }
 
         /* Viewer.IViewerAction */
@@ -205,31 +272,31 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
-            if (!pressed)
-                return false;
-
-            Vec3 eye = Perv.get<Vec3>(PICOGK_VIEWER, "m_vecEye");
-            eye = normalise(eye);
-            Vec3 X = (closeto(eye, uZ3) || closeto(eye, -uZ3))
-                   ? uX3
-                   : cross(-eye, uZ3);
-            Frame frame = new(ZERO3, X, -eye);
-            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            float by = pow(3f*zoom, (3f*zoom < 1f) ? 3f : 1/3f);
-
             switch (key) {
-                case Viewer.EKeys.Key_W: _shift -= 2f*by*frame.Z; break;
-                case Viewer.EKeys.Key_S: _shift += 2f*by*frame.Z; break;
-                case Viewer.EKeys.Key_A: _shift -= by*frame.X; break;
-                case Viewer.EKeys.Key_D: _shift += by*frame.X; break;
+                case Viewer.EKeys.Key_W: _held[KEY_W] = pressed; return true;
+                case Viewer.EKeys.Key_S: _held[KEY_S] = pressed; return true;
+                case Viewer.EKeys.Key_A: _held[KEY_A] = pressed; return true;
+                case Viewer.EKeys.Key_D: _held[KEY_D] = pressed; return true;
                 case Viewer.EKeys.Key_Space:
-                    _shift += shift ? by*uZ3 : -by*uZ3; break;
+                    if (!pressed) {
+                        _held[KEY_SHIFT] = false;
+                        _held[KEY_SPACE] = false;
+                    } else {
+                        _held[shift ? KEY_SHIFT : KEY_SPACE] = true;
+                    }
+                    return true;
+
+                case Viewer.EKeys.Key_Backspace:
+                    if (!pressed)
+                        break;
+                    reset_view();
+                    return true;
             }
-            return true;
+            return false;
         }
 
         public static void initialise() {
-            Perv.set(PICOGK_VIEWER, "m_fZoom", 50f);
+            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
             PICOGK_VIEWER.AddKeyHandler(new HackView());
             _ = make_shit_happen_continuously();
         }

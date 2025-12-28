@@ -12,10 +12,10 @@ namespace br {
 public class Transformer {
     protected Mat4 _m { get; } // why the fuck does csharp store it row major.
     protected Transformer(in Mat4 mat) {
-        assert(mat[0, 3] == 0f);
-        assert(mat[1, 3] == 0f);
-        assert(mat[2, 3] == 0f);
-        assert(mat[3, 3] == 1f);
+        assert(closeto(mat[0, 3], 0f));
+        assert(closeto(mat[1, 3], 0f));
+        assert(closeto(mat[2, 3], 0f));
+        assert(closeto(mat[3, 3], 1f));
         this._m = mat;
     }
 
@@ -77,7 +77,7 @@ public class Transformer {
     }
 
 
-    public Transformer translate(Vec3 by) {
+    public Transformer translate(in Vec3 by) {
         Mat4 m = new(
               1f,   0f,   0f, 0f,
               0f,   1f,   0f, 0f,
@@ -86,7 +86,7 @@ public class Transformer {
         );
         return new(_m * m);
     }
-    public Transformer scale(Vec3 by) {
+    public Transformer scale(in Vec3 by) {
         Mat4 m = new(
             by.X,   0f,   0f, 0f,
               0f, by.Y,   0f, 0f,
@@ -95,7 +95,17 @@ public class Transformer {
         );
         return new(_m * m);
     }
-    public Transformer rotate(Vec3 about, float by) {
+    public Transformer scale(in Vec3 along, float by) {
+        Vec3 v = normalise(along);
+        Mat4 outer = new Mat4(
+            (by - 1f)*v.X*v.X, (by - 1f)*v.X*v.Y, (by - 1f)*v.X*v.Z, 0f,
+            (by - 1f)*v.Y*v.X, (by - 1f)*v.Y*v.Y, (by - 1f)*v.Y*v.Z, 0f,
+            (by - 1f)*v.Z*v.X, (by - 1f)*v.Z*v.Y, (by - 1f)*v.Z*v.Z, 0f,
+                           0f,                0f,                0f, 0f
+        );
+        return new(_m * (outer + Mat4.Identity));
+    }
+    public Transformer rotate(in Vec3 about, float by) {
         Vec3 X = Br.rotate(uX3, about, by);
         Vec3 Y = Br.rotate(uY3, about, by);
         Vec3 Z = Br.rotate(uZ3, about, by);
@@ -111,19 +121,25 @@ public class Transformer {
         return new(_m * other._m);
     }
 
-    public static Transformer to_global(in Frame frame) {
+
+    public Transformer to_global(in Frame frame) {
         Mat4 m = new(
               frame.X.X,   frame.X.Y,   frame.X.Z, 0f,
               frame.Y.X,   frame.Y.Y,   frame.Y.Z, 0f,
               frame.Z.X,   frame.Z.Y,   frame.Z.Z, 0f,
             frame.pos.X, frame.pos.Y, frame.pos.Z, 1f
         );
-        return new(m);
+        return new(_m * m);
     }
-    public static Transformer to_local(in Frame frame) {
-        Mat4 m = to_global(frame)._m;
+    public Transformer to_local(in Frame frame) {
+        Mat4 m = new(
+              frame.X.X,   frame.X.Y,   frame.X.Z, 0f,
+              frame.Y.X,   frame.Y.Y,   frame.Y.Z, 0f,
+              frame.Z.X,   frame.Z.Y,   frame.Z.Z, 0f,
+            frame.pos.X, frame.pos.Y, frame.pos.Z, 1f
+        );
         assert(Mat4.Invert(m, out m), "failed to invert local->global matrix");
-        return new(m);
+        return new(_m * m);
     }
 
     public Vec3 vec(in Vec3 vec) {
