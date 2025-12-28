@@ -4,6 +4,7 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using Mesh = PicoGK.Mesh;
 using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
@@ -294,7 +295,7 @@ public class Pill : SDF {
 }
 
 
-public class Cuboid : SDF {
+public class Cuboid {
     public Frame centre { get; } // centre of low z end.
     public float Lx { get; }
     public float Ly { get; }
@@ -312,11 +313,9 @@ public class Cuboid : SDF {
         this.Lx = hi.X - lo.X;
         this.Ly = hi.Y - lo.Y;
         this.Lz = hi.Z - lo.Z;
-        if (isinf(this.Lx) || isinf(this.Ly) || isinf(this.Lz)) {
-            unbounded_bc_inf();
-        } else {
-            set_bounds(lo, hi);
-        }
+        assert(noninf(Lx));
+        assert(noninf(Ly));
+        assert(noninf(Lz));
     }
     public Cuboid(in Frame centre, float L)
         : this(centre, L, L, L) {}
@@ -330,15 +329,9 @@ public class Cuboid : SDF {
         this.Lx = Lx;
         this.Ly = Ly;
         this.Lz = Lz;
-        if (isinf(this.Lx) || isinf(this.Ly) || isinf(this.Lz)) {
-            unbounded_bc_inf();
-        } else {
-            BBox3 bbox = new(
-                new Vec3(-Lx/2f, -Ly/2f, 0f),
-                new Vec3(+Lx/2f, +Ly/2f, Lz)
-            );
-            set_bounds(centre * bbox);
-        }
+        assert(noninf(Lx));
+        assert(noninf(Ly));
+        assert(noninf(Lz));
     }
 
     public Cuboid at_centre() {
@@ -391,19 +384,45 @@ public class Cuboid : SDF {
     }
 
 
-    public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre.from_global(p);
-        float distx = max(-Lx/2f - q.X, q.X - Lx/2f);
-        float disty = max(-Ly/2f - q.Y, q.Y - Ly/2f);
-        float distz = max(-q.Z, q.Z - Lz);
+    public List<Vec3> get_corners() {
+        return [
+            centre * new Vec3(-Lx/2f, -Ly/2f, 0f),
+            centre * new Vec3(-Lx/2f, -Ly/2f, Lz),
+            centre * new Vec3(-Lx/2f, +Ly/2f, 0f),
+            centre * new Vec3(-Lx/2f, +Ly/2f, Lz),
+            centre * new Vec3(+Lx/2f, -Ly/2f, 0f),
+            centre * new Vec3(+Lx/2f, -Ly/2f, Lz),
+            centre * new Vec3(+Lx/2f, +Ly/2f, 0f),
+            centre * new Vec3(+Lx/2f, +Ly/2f, Lz),
+        ];
+    }
 
-        float dist;
-        if (distx <= 0f || disty <= 0f || distz <= 0f) {
-            dist = max(distx, disty, distz);
-        } else {
-            dist = hypot(distx, disty, distz);
-        }
-        return dist;
+    public Voxels voxels() {
+        return new(mesh());
+    }
+
+    public Mesh mesh() {
+        Mesh mesh = new();
+        mesh.AddVertices(get_corners(), out _);
+        // +X quad.
+        mesh.nAddTriangle(4, 5, 7);
+        mesh.nAddTriangle(4, 7, 6);
+        // -X quad.
+        mesh.nAddTriangle(0, 2, 3);
+        mesh.nAddTriangle(0, 3, 1);
+        // +Y quad.
+        mesh.nAddTriangle(2, 6, 7);
+        mesh.nAddTriangle(2, 7, 3);
+        // -Y quad.
+        mesh.nAddTriangle(0, 1, 5);
+        mesh.nAddTriangle(0, 5, 4);
+        // +Z quad.
+        mesh.nAddTriangle(1, 3, 7);
+        mesh.nAddTriangle(1, 7, 5);
+        // -Z quad.
+        mesh.nAddTriangle(0, 4, 6);
+        mesh.nAddTriangle(0, 6, 2);
+        return mesh;
     }
 }
 
@@ -442,6 +461,10 @@ public class Pipe : SDF {
     }
     public Pipe hole() {
         return new Pipe(centre, Lz, rlo);
+    }
+
+    public Pipe hollowed(float Ir) {
+        return new Pipe(centre, Lz, Ir, rhi);
     }
 
     public Pipe extended(float Lz, int direction) {
@@ -644,18 +667,20 @@ public class Tubing {
 }
 
 
-public class Polygon : SDF {
+public class Polygon {
 
-    public static float area(in List<Vec2> points) {
+    public static float area(in List<Vec2> points, bool signed=false) {
         int N = numel(points);
         float A = 0f;
         for (int i=0; i<N; ++i) {
             int j = (i + 1 == N) ? 0 : i + 1;
             Vec2 a = points[i];
             Vec2 b = points[j];
-            A += a.X*b.Y - b.X*a.Y;
+            A += cross(a, b);
         }
-        return 0.5f*abs(A);
+        if (!signed)
+            A = abs(A);
+        return 0.5f*A;
     }
 
     public static float perimeter(in List<Vec2> points) {
@@ -667,7 +692,7 @@ public class Polygon : SDF {
             Vec2 b = points[j];
             ell += mag(b - a);
         }
-        return 0.5f*abs(ell);
+        return ell;
     }
 
     public static bool is_simple(in List<Vec2> points) {
@@ -833,17 +858,10 @@ public class Polygon : SDF {
         assert(numel(points) >= 3, $"numel={numel(points)}");
         assert(is_simple(points), "cooked it");
         assert(Lz > 0f, $"Lz={Lz}");
+        assert(noninf(Lz), $"Lz={Lz}");
         this.centre = centre;
         this.points = points;
         this.Lz = Lz;
-        if (isinf(Lz)) {
-            unbounded_bc_inf();
-        } else {
-            for (int i=0; i<numel(points); ++i) {
-                include_in_bounds(centre * rejxy(points[i], 0f));
-                include_in_bounds(centre * rejxy(points[i], Lz));
-            }
-        }
     }
 
     public Polygon at_middle() {
@@ -862,49 +880,110 @@ public class Polygon : SDF {
     }
 
 
-    public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre.from_global(p);
-        Vec2 q2 = projxy(q);
+    public Voxels voxels() {
+        return new(mesh());
+    }
 
-        int N = points.Count;
-        int winding = 0;
+    public Mesh mesh() {
+        bool ccw = area(points, signed: true) >= 0f;
+        int N = numel(points);
 
-        float dist_proj = INF;
-        for (int i=0; i<N; ++i) {
-            Vec2 a = points[i];
-            Vec2 b = points[(i + 1 == N) ? 0 : i + 1];
+        bool point_in_tri(Vec2 p, Vec2 a, Vec2 b, Vec2 c) {
+            float ab = cross(b - a, p - a);
+            float bc = cross(c - b, p - b);
+            float ca = cross(a - c, p - c);
+            return ab >= 0f && bc >= 0f && ca >= 0f;
+        }
 
-            Vec2 ab = b - a;
-            Vec2 aq2 = q2 - a;
+        bool contains_any_point(List<Vec2> vertices, List<int> indices, Vec2 a,
+                Vec2 b, Vec2 c, int ear) {
+            int N = numel(indices);
+            for (int j=0; j<N; ++j) {
+                // Skip the ear's own vertices.
+                if (j == ear
+                        || j == (ear - 1 + N) % N
+                        || j == (ear + 1) % N)
+                    continue;
 
-            if (a.Y <= q2.Y) {
-                if (b.Y > q2.Y && cross(ab, aq2) > 0)
-                    winding += 1;
-            } else {
-                if (b.Y <= q2.Y && cross(ab, aq2) < 0)
-                    winding -= 1;
+                Vec2 p = vertices[indices[j]];
+                if (point_in_tri(p, a, b, c))
+                    return true;
             }
-
-            float t = dot(aq2, ab) / dot(ab, ab);
-            t = clamp(t, 0f, 1f); // must lie on segment.
-            Vec2 closest = a + t*ab;
-
-            float d = mag(q2 - closest);
-            dist_proj = min(dist_proj, d);
+            return false;
         }
 
-        if (winding != 0)
-            dist_proj = -dist_proj;
 
-        float dist_axial = max(-q.Z, q.Z - Lz);
+        Mesh mesh = new();
+        void mesh_poly(int off, bool top) {
+            List<int> I = new(N);
+            for (int i=0; i<N; ++i)
+                I.Add(i);
+            if (!ccw)
+                I.Reverse();
 
-        float dist;
-        if (dist_proj <= 0f || dist_axial <= 0f) {
-            dist = max(dist_proj, dist_axial);
-        } else {
-            dist = hypot(dist_proj, dist_axial);
+            int M = numel(I);
+            while (M > 3) {
+                bool found = false;
+                for (int i=0; i<M; ++i) {
+                    int A = I[(i - 1 + M) % M];
+                    int B = I[i];
+                    int C = I[(i + 1) % M];
+
+                    Vec2 a = points[A];
+                    Vec2 b = points[B];
+                    Vec2 c = points[C];
+
+                    if (cross(c - b, a - b) <= 0f)
+                        continue;
+
+                    if (contains_any_point(points, I, a, b, c, i))
+                        continue;
+
+                    if (top) {
+                        mesh.nAddTriangle(off + A, off + B, off + C);
+                    } else {
+                        mesh.nAddTriangle(off + A, off + C, off + B);
+                    }
+                    I.RemoveAt(i);
+                    M -= 1;
+                    found = true;
+                    break;
+                }
+                assert(found, "no ear found?");
+            }
+            if (top) {
+                mesh.nAddTriangle(off + I[0], off + I[1], off + I[2]);
+            } else {
+                mesh.nAddTriangle(off + I[0], off + I[2], off + I[1]);
+            }
         }
-        return dist;
+
+        // Mesh bottom and top faces.
+        mesh_poly(0, false);
+        mesh_poly(N, true);
+        // Mesh sides as quads.
+        for (int i=0; i<N; ++i) {
+            int j = (i == N - 1) ? 0 : i + 1;
+            int a0 = i;
+            int a1 = j;
+            int b0 = i + N;
+            int b1 = j + N;
+            if (ccw) {
+                mesh.nAddTriangle(a0, a1, b1);
+                mesh.nAddTriangle(a0, b1, b0);
+            } else {
+                mesh.nAddTriangle(a1, a0, b1);
+                mesh.nAddTriangle(a0, b0, b1);
+            }
+        }
+
+        List<Vec3> V = new();
+        for (int i=0; i<N; ++i)
+            V.Add(centre * rejxy(points[i], 0f));
+        for (int i=0; i<N; ++i)
+            V.Add(centre * rejxy(points[i], Lz));
+        mesh.AddVertices(V, out _);
+        return mesh;
     }
 }
 

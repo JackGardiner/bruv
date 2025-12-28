@@ -141,8 +141,7 @@ public class Chamber {
     public required float L_tc { get; init; }
 
 
-    protected int DIVISIONS
-        => max(200, (int)(200f / PicoGK.Library.fVoxelSizeMM));
+    protected int DIVISIONS => max(200, (int)(200f / VOXEL_SIZE));
 
     protected const float EXTRA = 10f; // trimmed at some point.
 
@@ -1098,10 +1097,12 @@ public class Chamber {
         float pos_Lr = 0.5f*D_tc + th_tc;
         foreach (Vec3 p in points) {
             Frame frame = Frame.cyl_radial(p);
+            float Lz = cnt_radius_at(p.Z, th_iw + 0.5f*th_chnl + L_tc)
+                     - magxy(p);
 
             Voxels this_neg = new Pipe(
                 frame,
-                L_tc,
+                Lz,
                 neg_Lr
             ).extended(EXTRA, EXTEND_UP)
              .voxels();
@@ -1113,13 +1114,13 @@ public class Chamber {
 
             Voxels this_pos = new Pipe(
                 frame,
-                L_tc,
+                Lz,
                 pos_Lr
             ).extended(2*EXTRA, EXTEND_DOWN)
              .voxels();
             this_pos.BoolAdd(new Cuboid(
                 frame.rotxy(PI_4),
-                L_tc,
+                Lz,
                 pos_Lr
             ).extended(2*EXTRA, EXTEND_DOWN)
              .at_corner(CORNER_x0y0z0)
@@ -1128,12 +1129,12 @@ public class Chamber {
                 frame,
                 th_tc,
                 100f,
-                L_tc
+                Lz
             ).extended(2*EXTRA, EXTEND_DOWN)
              .at_edge(EDGE_y0z0);
             this_pos.BoolAdd(web.voxels());
             this_pos.IntersectImplicit(new Space(
-                frame.translate(new Vec3(0f, -pos_Lr/SQRTH + web.Lx/2f, L_tc))
+                frame.translate(new Vec3(0f, -pos_Lr/SQRTH + web.Lx/2f, Lz))
                      .rotyz(phi_tc),
                 -INF,
                 0f
@@ -1187,7 +1188,7 @@ public class Chamber {
             Vec2 A = tocart(Lr, -PI - theta_stop)
                    + tocart(length, -PI - theta_stop + PI_2);
             Vec2 B = tocart(Lr, -PI + theta_stop)
-                    + tocart(length, -PI + theta_stop - PI_2);
+                   + tocart(length, -PI + theta_stop - PI_2);
             if (A.Y < B.Y) {
                 Vec2 C = Polygon.line_intersection(
                     A, tracexy[^1],
@@ -1225,22 +1226,24 @@ public class Chamber {
         return vox;
     }
 
-    protected Voxels voxels_neg_bolts() {
+    protected Voxels voxels_neg_bolts(ref Geez.Cycle key) {
         Voxels vox = new();
-        for (int i=0; i<pm.no_bolt; ++i) {
-            float theta = i*TWOPI/pm.no_bolt;
-            Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
-            vox.BoolAdd(new Pipe(
-                frame,
-                pm.flange_thickness,
-                pm.Bsz_bolt/2f
-            ).extended(EXTRA, EXTEND_DOWN)
-             .voxels());
-            vox.BoolAdd(new Pipe(
-                frame.transz(pm.flange_thickness),
-                3f*EXTRA,
-                pm.Bsz_bolt/2f + 3f
-            ).voxels());
+        using (key.like()) {
+            List<int> keys = new(pm.no_bolt);
+            for (int i=0; i<pm.no_bolt; ++i) {
+                float theta = i*TWOPI/pm.no_bolt;
+                Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
+                Pipe hole = new Pipe(frame, pm.flange_thickness, pm.Bsz_bolt/2f);
+                keys.Add(Geez.pipe(hole));
+
+                vox.BoolAdd(hole.extended(EXTRA, EXTEND_DOWN).voxels());
+                vox.BoolAdd(new Pipe(
+                    frame.transz(pm.flange_thickness),
+                    3f*EXTRA,
+                    pm.Bsz_bolt/2f + 3f
+                ).voxels());
+            }
+            key <<= Geez.group(keys);
         }
         return vox;
     }
@@ -1273,6 +1276,7 @@ public class Chamber {
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
         Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
+        Geez.Cycle key_bolts = new(colour: COLOUR_BLACK);
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
 
         Voxels gas = voxels_cnt_gas();
@@ -1295,6 +1299,22 @@ public class Chamber {
         using (key_tc.like())
             key_tc <<= Geez.voxels(pos_tc);
         PicoGK.Library.Log("created thermocouples.");
+
+        Voxels neg_bolts = voxels_neg_bolts(ref key_bolts);
+
+        // Also view o-ring grooves.
+        Geez.pipe(new Pipe(
+            new(ZERO3, -uZ3),
+            pm.Lz_Ioring,
+            pm.Ir_Ioring,
+            pm.Or_Ioring
+        ), colour: COLOUR_BLACK, rings: 2, bars: 6);
+        Geez.pipe(new Pipe(
+            new(ZERO3, -uZ3),
+            pm.Lz_Ooring,
+            pm.Ir_Ooring,
+            pm.Or_Ooring
+        ), colour: COLOUR_BLACK, rings: 2, bars: 6);
 
         Voxels flange = voxels_flange();
         using (key_flange.like())
@@ -1333,8 +1353,7 @@ public class Chamber {
         PicoGK.Library.Log("subtracted negative manifold.");
         sub(ref neg_tc);
         PicoGK.Library.Log("subtracted negative thermocouples.");
-        Voxels neg_bolts = voxels_neg_bolts();
-        sub(ref neg_bolts);
+        sub(ref neg_bolts, key_bolts);
         PicoGK.Library.Log("subtracted bolt holes.");
 
         Voxels bot_excess = new Pipe(
@@ -1369,11 +1388,11 @@ public class Chamber {
 
         PicoGK.Library.Log("Drawings:");
 
-        Frame frame_xy = new Frame(ZERO3, uX3, uZ3);
+        Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
         Drawing.to_file(fromroot($"exports/chamber_xy.svg"), part, frame_xy);
         PicoGK.Library.Log("  xy done.");
 
-        Frame frame_yz = new Frame(ZERO3, uY3, uX3);
+        Frame frame_yz = new(ZERO3, uY3, uX3);
         Drawing.to_file(fromroot($"exports/chamber_yz.svg"), part, frame_yz);
         PicoGK.Library.Log("  yz done.");
 

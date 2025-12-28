@@ -74,12 +74,17 @@ public static class Geez {
     }
 
 
-    private static Dictionary<int, (List<PolyLine>, List<Mesh>)> _geezed
+    private static Dictionary<int, object> _geezed
             = new();
     private static int _next = 1; // must leave 0 as illegal.
     private static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
         int key = _next++;
         _geezed.Add(key, (lines, meshes));
+        return key;
+    }
+    private static int _track(in List<int> group) {
+        int key = _next++;
+        _geezed.Add(key, group);
         return key;
     }
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
@@ -149,13 +154,19 @@ public static class Geez {
         if (key <= 0) // noop.
             return;
 
-        (List<PolyLine> lines, List<Mesh> meshes) = _geezed[key];
+        object item = _geezed[key];
         _geezed.Remove(key);
 
-        foreach (Mesh mesh in meshes)
-            PicoGK.Library.oViewer().Remove(mesh);
-        foreach (PolyLine line in lines)
-            PicoGK.Library.oViewer().Remove(line);
+        if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
+            foreach (Mesh mesh in meshes)
+                PicoGK.Library.oViewer().Remove(mesh);
+            foreach (PolyLine line in lines)
+                PicoGK.Library.oViewer().Remove(line);
+        } else if (item is List<int> group) {
+            remove(group);
+        } else {
+            assert(false);
+        }
     }
     public static void remove(List<int> keys) {
         foreach (int key in keys)
@@ -164,6 +175,9 @@ public static class Geez {
     public static void clear() {
         List<int> keys = new(_geezed.Keys);
         remove(keys);
+    }
+    public static int group(List<int> keys) {
+        return _track(keys);
     }
 
 
@@ -327,16 +341,8 @@ public static class Geez {
     }
 
     public static int bbox(in BBox3 bbox, Colour? colour=null) {
-        return Geez.bboxes([bbox], colour: colour);
+        return Geez.cuboid(new Cuboid(bbox), colour: colour);
     }
-    public static int bboxes(in List<BBox3> bboxes, Colour? colour=null) {
-        List<PolyLine> lines = new();
-        using (dflt_like(colour: COLOUR_BLUE))
-            foreach (BBox3 bbox in bboxes)
-                _cuboid_lines(lines, new Cuboid(bbox), colour: colour);
-        return _push(lines);
-    }
-
 
     public static int pipe(in Pipe pipe, Colour? colour=null, int? rings=null,
             int bars=6) {
@@ -426,77 +432,63 @@ public static class Geez {
         return _push(lines);
     }
 
-
     private static void _cuboid_lines(List<PolyLine> lines, in Cuboid cuboid,
             Colour? colour) {
-        Frame frame = cuboid.centre;
-        float Lx = cuboid.Lx;
-        float Ly = cuboid.Ly;
-        float Lz = cuboid.Lz;
-
-        Vec3 p000 = frame * new Vec3(-Lx/2f, -Ly/2f, 0f);
-        Vec3 p001 = frame * new Vec3(-Lx/2f, -Ly/2f, Lz);
-        Vec3 p010 = frame * new Vec3(-Lx/2f, +Ly/2f, 0f);
-        Vec3 p011 = frame * new Vec3(-Lx/2f, +Ly/2f, Lz);
-        Vec3 p100 = frame * new Vec3(+Lx/2f, -Ly/2f, 0f);
-        Vec3 p101 = frame * new Vec3(+Lx/2f, -Ly/2f, Lz);
-        Vec3 p110 = frame * new Vec3(+Lx/2f, +Ly/2f, 0f);
-        Vec3 p111 = frame * new Vec3(+Lx/2f, +Ly/2f, Lz);
-
+        List<Vec3> corners = cuboid.get_corners();
         Colour col = colour ?? Geez.colour ?? Geez.dflt_colour;
         PolyLine l;
 
         // Each corner (+3+3), then the zigzag joining (+6).
 
         l = new(col);
-        l.nAddVertex(p000);
-        l.nAddVertex(p100);
+        l.nAddVertex(corners[0b000]);
+        l.nAddVertex(corners[0b100]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p000);
-        l.nAddVertex(p010);
+        l.nAddVertex(corners[0b000]);
+        l.nAddVertex(corners[0b010]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p000);
-        l.nAddVertex(p001);
-        lines.Add(l);
-
-        l = new(col);
-        l.nAddVertex(p111);
-        l.nAddVertex(p011);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(p111);
-        l.nAddVertex(p101);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(p111);
-        l.nAddVertex(p110);
+        l.nAddVertex(corners[0b000]);
+        l.nAddVertex(corners[0b001]);
         lines.Add(l);
 
         l = new(col);
-        l.nAddVertex(p100);
-        l.nAddVertex(p101);
+        l.nAddVertex(corners[0b111]);
+        l.nAddVertex(corners[0b011]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p101);
-        l.nAddVertex(p001);
+        l.nAddVertex(corners[0b111]);
+        l.nAddVertex(corners[0b101]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p001);
-        l.nAddVertex(p011);
+        l.nAddVertex(corners[0b111]);
+        l.nAddVertex(corners[0b110]);
+        lines.Add(l);
+
+        l = new(col);
+        l.nAddVertex(corners[0b100]);
+        l.nAddVertex(corners[0b101]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p011);
-        l.nAddVertex(p010);
+        l.nAddVertex(corners[0b101]);
+        l.nAddVertex(corners[0b001]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p010);
-        l.nAddVertex(p110);
+        l.nAddVertex(corners[0b001]);
+        l.nAddVertex(corners[0b011]);
         lines.Add(l);
         l = new(col);
-        l.nAddVertex(p110);
-        l.nAddVertex(p100);
+        l.nAddVertex(corners[0b011]);
+        l.nAddVertex(corners[0b010]);
+        lines.Add(l);
+        l = new(col);
+        l.nAddVertex(corners[0b010]);
+        l.nAddVertex(corners[0b110]);
+        lines.Add(l);
+        l = new(col);
+        l.nAddVertex(corners[0b110]);
+        l.nAddVertex(corners[0b100]);
         lines.Add(l);
     }
 
