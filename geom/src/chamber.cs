@@ -565,6 +565,8 @@ public class Chamber {
     }
 
     protected float cnt_widened_sdf(in Vec3 p) {
+        // Note that its not universally true that the min function is the true
+        // sdf union, but in this case (where the two removed)
         return min(cnt_sdf(p), cnt_wid_sdf(p) + cnt_wid_off);
     }
 
@@ -589,26 +591,6 @@ public class Chamber {
     protected Voxels voxels_cnt_ow_filled() {
         SDFfilled sdf = new(cnt_widened_sdf, th_iw + th_chnl + th_ow);
         return sdf.voxels(bbox_cnt_widened(sdf.max_off), enforce_faces: false);
-    }
-    protected Voxels voxels_cnt_chnl() {
-        SDFshelled sdf = new(cnt_widened_sdf, th_iw, th_chnl);
-        sdf = sdf.innered();
-        // Clip the top to not have fuel shoot out the end of the nozzle.
-        float max_z = cnt_z6 - th_omani;
-        float min_z = cnt_z0 - EXTRA;
-        BBox3 bbox = bbox_cnt_widened(sdf.max_off);
-        bbox.vecMax.Z = max_z;
-        bbox.vecMin.Z = min_z;
-        Voxels vox = sdf.voxels(bbox);
-        // Extend it radially outwards at the nozzle exit to interface with
-        // manifold.
-        Frame exit = new(max_z*uZ3, -uZ3);
-        float Ir = cnt_radius_at(max_z, th_iw);
-        float Or = cnt_radius_at(max_z, th_iw + th_chnl + th_imani);
-        Ir += 0.1f; // safety.
-        Or += 0.1f;
-        vox.BoolAdd(new Pipe(exit, th_chnl, Ir, Or).voxels());
-        return vox;
     }
 
     protected float cnt_radius_at(float z, float signed_dist=0f,
@@ -658,108 +640,121 @@ public class Chamber {
     }
 
 
-    protected Mesh mesh_chnl(float rlo, float rhi, float theta0) {
-        List<Vec3> points = new();
-        for (int i=0; i<=DIVISIONS; ++i) {
-            float z = cnt_z0 + i*(cnt_z6 - cnt_z0)/DIVISIONS;
-            float r = cnt_radius_at(z, -0.1f);
-            float theta = theta0 + theta_chnl(z);
-            points.Add(tocart(r, theta, z));
+    protected void mesh_chnl(float theta0, out Mesh wall, out Mesh top) {
+        Mesh mesh_points(in List<Vec3> ps) {
+            Mesh mesh = new();
+            List<Vec3> V = new();
+            for (int i=1; i<numel(ps)/4; ++i) {
+                Vec3 p000 = ps[i*4 - 4];
+                Vec3 p100 = ps[i*4 - 3];
+                Vec3 p010 = ps[i*4 - 2];
+                Vec3 p110 = ps[i*4 - 1];
+                Vec3 p001 = ps[i*4 + 0];
+                Vec3 p101 = ps[i*4 + 1];
+                Vec3 p011 = ps[i*4 + 2];
+                Vec3 p111 = ps[i*4 + 3];
+
+                if (i == 1) {
+                    V.Add(p000);
+                    V.Add(p100);
+                    V.Add(p010);
+                    V.Add(p110);
+                }
+                V.Add(p001);
+                V.Add(p101);
+                V.Add(p011);
+                V.Add(p111);
+                int a = numel(V) - 8;
+                int b = numel(V) - 4;
+                // Front face.
+                mesh.nAddTriangle(a, b, b + 2);
+                mesh.nAddTriangle(a, b + 2, a + 2);
+                // Back face.
+                mesh.nAddTriangle(a + 1, a + 3, b + 3);
+                mesh.nAddTriangle(a + 1, b + 3, b + 1);
+                // Left face.
+                mesh.nAddTriangle(a, a + 1, b + 1);
+                mesh.nAddTriangle(a, b + 1, b);
+                // Right face.
+                mesh.nAddTriangle(a + 3, a + 2, b + 2);
+                mesh.nAddTriangle(a + 3, b + 2, b + 3);
+            }
+            // Bottom face.
+            mesh.nAddTriangle(0, 2, 3);
+            mesh.nAddTriangle(0, 3, 1);
+            // Top face.
+            int off = numel(V) - 4;
+            mesh.nAddTriangle(off + 0, off + 1, off + 3);
+            mesh.nAddTriangle(off + 0, off + 3, off + 2);
+
+            mesh.AddVertices(V, out _);
+            return mesh;
         }
-        points.Insert(0, points[0] - uZ3*EXTRA);
-        points.Add(points[^1] + uZ3*EXTRA);
+
 
         float Dt = 0.5f*Ltheta_chnl; // t for theta.
+        List<Vec3> points = new(DIVISIONS*4 + 4);
+        float zlo = cnt_z0;
+        float zhi = cnt_z6 - th_omani;
+        for (int i=0; i<DIVISIONS; ++i) {
+            float z = zlo + i*(zhi - zlo)/(DIVISIONS - 1);
+            float theta = theta0 + theta_chnl(z);
+            float thetalo = theta - Dt;
+            float thetahi = theta + Dt;
+            float rlo = cnt_radius_at(z, th_iw, widened: true);
+            float rhi = cnt_radius_at(z, th_iw + th_chnl, widened: true);
 
-        Mesh mesh = new();
-        List<Vec3> V = new();
-        for (int i=1; i<numel(points); ++i) {
-            Vec3 A = points[i - 1];
-            Vec3 B = points[i];
-            assert(B.Z > A.Z, $"A.Z={A.Z}, B.Z={B.Z}");
-          // PREPROCESSOR MY BELOVED.
-          // c sharp has spared you.
-          // LONG LIVE THE PREPROCESSOR.
-          #if true
-            float tA = argxy(A);
-            float tB = argxy(B);
-            Vec3 p000 = tocart(rlo, tA - Dt, A.Z);
-            Vec3 p100 = tocart(rhi, tA - Dt, A.Z);
-            Vec3 p010 = tocart(rlo, tA + Dt, A.Z);
-            Vec3 p110 = tocart(rhi, tA + Dt, A.Z);
-            Vec3 p001 = tocart(rlo, tB - Dt, B.Z);
-            Vec3 p101 = tocart(rhi, tB - Dt, B.Z);
-            Vec3 p011 = tocart(rlo, tB + Dt, B.Z);
-            Vec3 p111 = tocart(rhi, tB + Dt, B.Z);
-          #else
-            float tA = argxy(A);
-            float tB = argxy(B);
-            float semith = (rhi - rlo)/2f;
-            float semiwi = r_tht*Ltheta_chnl/2f;
-            Vec3 p000 = A + rejxy(rotate(new Vec2(-semith, -semiwi), tA), A.Z);
-            Vec3 p100 = A + rejxy(rotate(new Vec2(+semith, -semiwi), tA), A.Z);
-            Vec3 p010 = A + rejxy(rotate(new Vec2(-semith, +semiwi), tA), A.Z);
-            Vec3 p110 = A + rejxy(rotate(new Vec2(+semith, +semiwi), tA), A.Z);
-            Vec3 p001 = B + rejxy(rotate(new Vec2(-semith, -semiwi), tB), B.Z);
-            Vec3 p101 = B + rejxy(rotate(new Vec2(+semith, -semiwi), tB), B.Z);
-            Vec3 p011 = B + rejxy(rotate(new Vec2(-semith, +semiwi), tB), B.Z);
-            Vec3 p111 = B + rejxy(rotate(new Vec2(+semith, +semiwi), tB), B.Z);
-          #endif
-            if (i == 1) {
-                V.Add(p000);
-                V.Add(p100);
-                V.Add(p010);
-                V.Add(p110);
-            }
-            V.Add(p001);
-            V.Add(p101);
-            V.Add(p011);
-            V.Add(p111);
-            int a = numel(V) - 8;
-            int b = numel(V) - 4;
-            // Front face.
-            mesh.nAddTriangle(a, b, b + 2);
-            mesh.nAddTriangle(a, b + 2, a + 2);
-            // Back face.
-            mesh.nAddTriangle(a + 1, a + 3, b + 3);
-            mesh.nAddTriangle(a + 1, b + 3, b + 1);
-            // Left face.
-            mesh.nAddTriangle(a, a + 1, b + 1);
-            mesh.nAddTriangle(a, b + 1, b);
-            // Right face.
-            mesh.nAddTriangle(a + 3, a + 2, b + 2);
-            mesh.nAddTriangle(a + 3, b + 2, b + 3);
+            points.Add(tocart(rlo, thetalo, z));
+            points.Add(tocart(rhi, thetalo, z));
+            points.Add(tocart(rlo, thetahi, z));
+            points.Add(tocart(rhi, thetahi, z));
         }
-        // Bottom face.
-        mesh.nAddTriangle(0, 2, 3);
-        mesh.nAddTriangle(0, 3, 1);
-        // Top face.
-        mesh.nAddTriangle(numel(V)-4 + 0, numel(V)-4 + 1, numel(V)-4 + 3);
-        mesh.nAddTriangle(numel(V)-4 + 0, numel(V)-4 + 3, numel(V)-4 + 2);
+        points.Insert(0, points[3] - uZ3*EXTRA);
+        points.Insert(0, points[3] - uZ3*EXTRA);
+        points.Insert(0, points[3] - uZ3*EXTRA);
+        points.Insert(0, points[3] - uZ3*EXTRA);
 
-        mesh.AddVertices(V, out _);
-        return mesh;
+        wall = mesh_points(points);
+
+        zlo = cnt_z6 - th_omani - th_chnl;
+        zhi = cnt_z6 - th_omani;
+        points = new(DIVISIONS/20*4);
+        for (int i=0; i<DIVISIONS/20; ++i) {
+            float z = zlo + i*(zhi - zlo)/(DIVISIONS/20 - 1);
+            float theta = theta0 + theta_chnl(z);
+            float thetalo = theta - Dt;
+            float thetahi = theta + Dt;
+            float rlo = cnt_radius_at(z, th_iw);
+            float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani);
+            rhi += th_chnl/4f; // safety.
+
+            points.Add(tocart(rlo, thetalo, z));
+            points.Add(tocart(rhi, thetalo, z));
+            points.Add(tocart(rlo, thetahi, z));
+            points.Add(tocart(rhi, thetahi, z));
+        }
+        top = mesh_points(points);
     }
 
-    protected Voxels voxels_chnl(List<int>? keys=null) {
-        float min_r = r_tht;
-        float max_r = pm.Mr_chnl + 0.5f*th_chnl;
-        max_r = max(max_r, r_exit + th_iw + th_chnl + th_ow);
-        max_r += EXTRA;
+    protected Voxels voxels_chnl(ref Geez.Cycle key) {
         Voxels vox = new();
-        for (int i=0; i<no_chnl; ++i) {
-            float theta0 = theta0_chnl + i*TWOPI/no_chnl;
-            Mesh mesh = mesh_chnl(min_r, max_r, theta0);
-            if (keys != null) {
-                int key = Geez.mesh(mesh);
-                keys.Add(key);
+        using (key.like()) {
+            List<int> mesh_keys = new();
+            for (int i=0; i<no_chnl; ++i) {
+                float theta = theta0_chnl + i*TWOPI/no_chnl;
+                mesh_chnl(theta, out Mesh wall, out Mesh top);
+                mesh_keys.Add(Geez.mesh(wall));
+                mesh_keys.Add(Geez.mesh(top));
+                vox.BoolAdd(new Voxels(wall));
+                vox.BoolAdd(new Voxels(top));
             }
-            vox.BoolAdd(new Voxels(mesh));
+            key <<= Geez.voxels(vox);
+            Geez.remove(mesh_keys);
+
+            Fillet.convex(vox, 0.4f, inplace: true);
+            key <<= Geez.voxels(vox);
         }
         return vox;
-        // Voxels inv = new Cuboid(vox.oCalculateBoundingBox()).voxels();
-        // inv.BoolSubtract(vox);
-        // return inv;
     }
 
     protected const float min_A_neg_mani = 16f; // mm^2
@@ -1283,58 +1278,74 @@ public class Chamber {
         Voxels gas = voxels_cnt_gas();
         using (key_gas.like())
             key_gas <<= Geez.voxels(gas);
+        PicoGK.Library.Log("created gas.");
 
         Voxels neg_mani = voxels_neg_mani(out Frame inlet);
         using (key_mani.like())
             key_mani <<= Geez.voxels(neg_mani);
+        PicoGK.Library.Log("created negative manifold.");
+
         Voxels pos_mani = voxels_pos_mani(inlet);
+        PicoGK.Library.Log("created positive manifold.");
 
-        Voxels chnl;
-        using (key_chnl.like()) {
-            List<int> keys_chnl = new();
-            chnl = voxels_chnl(keys_chnl);
-            key_chnl <<= Geez.voxels(chnl);
-            Geez.remove(keys_chnl);
-
-            Voxels cnt_chnl = voxels_cnt_chnl();
-            chnl.BoolIntersect(cnt_chnl);
-            key_chnl <<= Geez.voxels(chnl);
-
-            Fillet.convex(chnl, 0.4f, inplace: true);
-            key_chnl <<= Geez.voxels(chnl);
-        }
+        Voxels chnl = voxels_chnl(ref key_chnl);
+        PicoGK.Library.Log("created channels.");
 
         voxels_tc(out Voxels neg_tc, out Voxels pos_tc);
         using (key_tc.like())
             key_tc <<= Geez.voxels(pos_tc);
+        PicoGK.Library.Log("created thermocouples.");
 
         Voxels flange = voxels_flange();
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
+        PicoGK.Library.Log("created flange.");
 
-        Voxels neg_bolts = voxels_neg_bolts();
-
-        Voxels cnt_ow_filled = voxels_cnt_ow_filled();
-
-        add(ref cnt_ow_filled);
+        part = voxels_cnt_ow_filled();
+        PicoGK.Library.Log("created outer wall.");
         add(ref pos_mani, key_mani);
+        PicoGK.Library.Log("added positive manifold.");
         add(ref pos_tc, key_tc);
+        PicoGK.Library.Log("added positive thermocouples.");
         add(ref flange, key_flange);
+        PicoGK.Library.Log("added flange.");
 
-        part.IntersectImplicit(new Space(new Frame(), -INF, cnt_z6));
+        Voxels top_excess = new Pipe(
+            new Frame(cnt_z6*uZ3),
+            cnt_zR - cnt_z6 + th_iw + th_chnl + th_ow + EXTRA,
+            cnt_rR + th_iw + th_chnl + th_ow + EXTRA
+        ).voxels();
+        part.BoolSubtract(top_excess);
+        using (key_part.like())
+            key_part <<= Geez.voxels(part);
+        PicoGK.Library.Log("clipped top excess.");
+
         Fillet.concave(part, 3f, inplace: true);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
+        PicoGK.Library.Log("filleted.");
 
         sub(ref gas, key_gas);
+        PicoGK.Library.Log("subtracted gas cavity.");
         sub(ref chnl, key_chnl);
+        PicoGK.Library.Log("subtracted channels.");
         sub(ref neg_mani);
+        PicoGK.Library.Log("subtracted negative manifold.");
         sub(ref neg_tc);
+        PicoGK.Library.Log("subtracted negative thermocouples.");
+        Voxels neg_bolts = voxels_neg_bolts();
         sub(ref neg_bolts);
+        PicoGK.Library.Log("subtracted bolt holes.");
 
-        part.IntersectImplicit(new Space(new Frame(), 0f, INF));
+        Voxels bot_excess = new Pipe(
+            new Frame(ZERO3, -uZ3),
+            max(-cnt_zQ, -cnt_wid_zS) + th_iw + th_chnl + th_ow + EXTRA,
+            pm.Mr_bolt + pm.Bsz_bolt/2f + pm.thickness_around_bolt + EXTRA
+        ).voxels();
+        part.BoolSubtract(bot_excess);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
+        PicoGK.Library.Log("clipped bottom excess.");
 
 
         PicoGK.Library.Log("Baby made.");
