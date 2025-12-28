@@ -192,7 +192,6 @@ public static class Geez {
             // implement a custom zoom-re-scaler and also initialise zoom at
             // scale.
             float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            Console.WriteLine(zoom);
             if (!(_prev_zoom == zoom)) {
                 if (nonnan(_prev_zoom)) {
                     float Dzoom = (zoom - _prev_zoom)*_zoom_scale;
