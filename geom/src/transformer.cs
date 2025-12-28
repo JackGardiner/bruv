@@ -22,6 +22,7 @@ public class Transformer {
     public Transformer() : this(Mat4.Identity) {}
 
     public Mat4 mat => Mat4.Transpose(_m);
+    public Mat4 mat_T => _m;
 
     public Vec3 get_translation()
         => new(_m[3, 0], _m[3, 1], _m[3, 2]);

@@ -1,6 +1,7 @@
 using static br.Br;
 
 using Vec3 = System.Numerics.Vector3;
+using Mat4 = System.Numerics.Matrix4x4;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
@@ -8,6 +9,8 @@ using Triangle = PicoGK.Triangle;
 using PolyLine = PicoGK.PolyLine;
 using BBox3 = PicoGK.BBox3;
 using Colour = PicoGK.ColorFloat;
+using Viewer = PicoGK.Viewer;
+using System.Numerics;
 
 namespace br {
 
@@ -87,32 +90,210 @@ public static class Geez {
         _geezed.Add(key, group);
         return key;
     }
+
+
+    public class HackView : Viewer.IViewerAction, Viewer.IKeyHandler {
+        private static Vec3 _shift = ZERO3;
+        private static float _zoom = NAN;
+
+      #if false
+        [InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+        [InteropServices.StructLayout(InteropServices.LayoutKind.Sequential)]
+        private struct RECT {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+      #endif
+
+        private static void make_shit_happen() {
+            Perv.invoke(PICOGK_VIEWER, "RecalculateBoundingBox");
+            BBox3 bbox = Perv.get<BBox3>(PICOGK_VIEWER, "m_oBBox");
+            Vec3 centre = bbox.vecCenter();
+            Vec3 size = bbox.vecSize();
+
+            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
+
+          #if false
+            // Leaving this here just so you can see how cooked the required
+            // workaround is to get picogk's own orthographic projection working
+            // correctly regardless of window size. Follow pointer to viewer
+            // object, then to glfwWindow object, then find the win32 api window
+            // handle at byte 872.
+            IntPtr hwnd_ptr_ptr = Perv.get<IntPtr>(PICOGK_VIEWER, "m_hThis");
+            IntPtr hwnd_ptr = InteropServices.Marshal.ReadIntPtr(hwnd_ptr_ptr);
+            IntPtr hwnd = InteropServices.Marshal.ReadIntPtr(hwnd_ptr, 872);
+
+            float aspect_ratio = 1f;
+            if (hwnd == IntPtr.Zero) {
+                Console.WriteLine("HWND is null.");
+            } else if (!GetClientRect(hwnd, out RECT rect)) {
+                Console.WriteLine("GetClientRect failed.");
+            } else {
+                int width = rect.Right - rect.Left;
+                int height = rect.Bottom - rect.Top;
+                if (height == 0) {
+                    Console.WriteLine("Invalid viewport size.");
+                } else {
+                    aspect_ratio = (float)width / height;
+                }
+            }
+
+            if (max(size.X, size.Y) > size.Z) {
+                size.X = max(size.X, size.Y);
+                size.Y = size.X / aspect_ratio;
+            } else {
+                size.Y = size.Z;
+                size.X = size.Z * aspect_ratio;
+            }
+            size /= 1.5f;
+            size *= pow(zoom, 3f);
+          #endif
+
+            // We pretend our object is 50x smaller to get a 50x further away far
+            // clip plane, but this also means our zoom scales 50x slower. So,
+            // we implement a custom zoom-re-scaler and also initialise zoom to
+            // 50x.
+            size /= 50f;
+            if (_zoom != zoom) {
+                if (nonnan(_zoom)) {
+                    float Dzoom = zoom - _zoom;
+                    Dzoom *= 1f + pow(zoom, 1.3f);
+                    zoom = _zoom + Dzoom;
+                    zoom = max(0.1f, zoom);
+                    Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
+                }
+                _zoom = zoom;
+            }
+
+            BBox3 newbbox = new BBox3(-size/2f, size/2f);
+            // For some reason, if the bbox is the max finite size (like after)
+            // initialisation, picogk cracks it if u change that without viewing
+            // something.
+            if (bbox.Equals(new BBox3()))
+                newbbox = new BBox3();
+            Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
+
+            Transformer t = new();
+            t = t.translate(_shift - centre);
+            _set_all_transforms(t.mat_T);
+        }
+
+        public static void make_shit_happen_in_the_future() {
+            var actions = Perv.get<Queue<Viewer.IViewerAction>>(
+                PICOGK_VIEWER,
+                "m_oActions"
+            );
+            lock (actions)
+                actions.Enqueue(new HackView());
+        }
+
+        private static async Task make_shit_happen_continuously() {
+            for (;;) {
+                make_shit_happen_in_the_future();
+                await Task.Delay(16);
+            }
+        }
+
+        /* Viewer.IViewerAction */
+        public void Do(Viewer viewer) {
+            make_shit_happen();
+        }
+
+        /* Viewer.IKeyHandler */
+        public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
+                bool shift, bool ctrl, bool alt, bool cmd) {
+            if (!pressed)
+                return false;
+
+            Vec3 eye = Perv.get<Vec3>(PICOGK_VIEWER, "m_vecEye");
+            eye = normalise(eye);
+            Vec3 X = (closeto(eye, uZ3) || closeto(eye, -uZ3))
+                   ? uX3
+                   : cross(-eye, uZ3);
+            Frame frame = new(ZERO3, X, -eye);
+            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
+            float by = pow(3f*zoom, (3f*zoom < 1f) ? 3f : 1/3f);
+
+            switch (key) {
+                case Viewer.EKeys.Key_W: _shift -= 2f*by*frame.Z; break;
+                case Viewer.EKeys.Key_S: _shift += 2f*by*frame.Z; break;
+                case Viewer.EKeys.Key_A: _shift -= by*frame.X; break;
+                case Viewer.EKeys.Key_D: _shift += by*frame.X; break;
+                case Viewer.EKeys.Key_Space:
+                    _shift += shift ? by*uZ3 : -by*uZ3; break;
+            }
+            return true;
+        }
+
+        public static void initialise() {
+            Perv.set(PICOGK_VIEWER, "m_fZoom", 50f);
+            PICOGK_VIEWER.AddKeyHandler(new HackView());
+            _ = make_shit_happen_continuously();
+        }
+    }
+
+    public static void initialise() {
+        HackView.initialise();
+    }
+
+
+
+    private static int _materials = 2;
+    private static bool _dummy_materialed = false;
+    private static int _dummy_material() {
+        int group_id = 1;
+        if (!_dummy_materialed) {
+            PICOGK_VIEWER.SetGroupMaterial(
+                group_id,
+                COLOUR_BLACK,
+                0f,
+                0f
+            );
+        }
+        return group_id;
+    }
+    private static int _material() {
+        int group_id = _materials++;
+        Colour col = new(colour ?? dflt_colour, alpha ?? dflt_alpha);
+        PICOGK_VIEWER.SetGroupMaterial(
+            group_id,
+            col,
+            metallic ?? dflt_metallic,
+            roughness?? dflt_roughness
+        );
+        return group_id;
+    }
+    private static void _set_all_transforms(Mat4 m) {
+        for (int i=1; i<_materials; ++i)
+            PICOGK_VIEWER.SetGroupMatrix(i, m);
+    }
+
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
+        int group_id = _material();
         Vec3? point = null;
         foreach (PolyLine line in lines) {
-            PicoGK.Library.oViewer().Add(line);
+            PICOGK_VIEWER.Add(line, group_id);
             if (point == null && line.nVertexCount() > 0)
                 point = line.vecVertexAt(0);
         }
-        foreach (Mesh mesh in meshes) {
-            Leap71.ShapeKernel.Sh.PreviewMesh(
-                mesh,
-                clrColor: colour ?? dflt_colour,
-                fTransparency: alpha ?? dflt_alpha,
-                fMetallic: metallic ?? dflt_metallic,
-                fRoughness: roughness ?? dflt_roughness
-            );
-        }
+        foreach (Mesh mesh in meshes)
+            PICOGK_VIEWER.Add(mesh, group_id);
+
         // Dummy mesh to fix bug in picogk polyline colouring. Basically just
         // ensure a mesh is rendered after every line, otherwise the lines are
         // drawn white.
         if (_dummy != null)
-            PicoGK.Library.oViewer().Remove(_dummy);
+            PICOGK_VIEWER.Remove(_dummy);
         _dummy = null;
         if (point != null) {
             _dummy = _dummy_og.mshCreateTransformed(ONE3, point.Value);
-            Leap71.ShapeKernel.Sh.PreviewMesh(_dummy, COLOUR_BLACK);
+            PICOGK_VIEWER.Add(_dummy, _dummy_material());
         }
+
+        HackView.make_shit_happen_in_the_future();
     }
     private static int _push(in List<Mesh> meshes) {
         _view([], meshes);
@@ -130,6 +311,7 @@ public static class Geez {
         _view(lines, meshes);
         return _track(lines, meshes);
     }
+
 
 
     public static int recent(int ignore=0) {
@@ -159,9 +341,10 @@ public static class Geez {
 
         if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
             foreach (Mesh mesh in meshes)
-                PicoGK.Library.oViewer().Remove(mesh);
+                PICOGK_VIEWER.Remove(mesh);
             foreach (PolyLine line in lines)
-                PicoGK.Library.oViewer().Remove(line);
+                PICOGK_VIEWER.Remove(line);
+            HackView.make_shit_happen_in_the_future();
         } else if (item is List<int> group) {
             remove(group);
         } else {

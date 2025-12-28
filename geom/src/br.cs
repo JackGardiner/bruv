@@ -59,6 +59,7 @@ public static partial class Br {
     public static Colour COLOUR_WHITE => new("#FFFFFF");
 
     public static float VOXEL_SIZE => PicoGK.Library.fVoxelSizeMM;
+    public static PicoGK.Viewer PICOGK_VIEWER => PicoGK.Library.oViewer();
 
     public const float INF = float.PositiveInfinity;
     public const float NAN = float.NaN;

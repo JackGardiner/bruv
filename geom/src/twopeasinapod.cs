@@ -24,6 +24,8 @@ public class TwoPeasInAPod {
     public Injector injector { get; init; }
 
     public TwoPeasInAPod() {
+        Geez.initialise();
+
         string path_all = fromroot("../config/all.json");
         string path_extra = fromroot("../config/ammendments.json");
         Jason config = new(path_all);
