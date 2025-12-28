@@ -1,5 +1,6 @@
 /exports/
 /obj/
 /bin/
+/tmp/
 
 !/.editorconfig

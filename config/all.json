@@ -46,8 +46,10 @@
         "th_omani": 2.5,
 
         "theta_inlet": -1.5707963267948966,
+        "L_inlet": 15.0,
         "D_inlet": 10.0,
         "th_inlet": 3.0,
+        "Fr_inlet": 7.0,
 
         "theta_tc": 1.5707963267948966,
         "no_tc": 6,

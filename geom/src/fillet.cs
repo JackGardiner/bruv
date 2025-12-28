@@ -29,6 +29,17 @@ public static class Fillet {
         }
         return v;
     }
+
+    public static Voxels ring(Frame ring, float Ir, float Fr,
+            float inset=0.05f) {
+        float Dz = -inset*Fr;
+        float Dr = -inset*Fr;
+        ring = ring.transz(Dz);
+        Ir += Dr;
+        Voxels vox = new Pipe(ring, Fr, Ir + Fr).voxels();
+        vox.BoolSubtract(new Donut(ring.transz(Fr), Ir + Fr, Fr).voxels());
+        return vox;
+    }
 }
 
 }

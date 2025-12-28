@@ -127,9 +127,11 @@ public class Chamber {
     public required float phi_mani { get; init; }
 
     public required float theta_inlet { get; init; }
+    public required float L_inlet { get; init; }
     public required float D_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float phi_inlet { get; init; }
+    public required float Fr_inlet { get; init; }
 
     public required float theta_tc { get; init; }
     public required int no_tc { get; init; }
@@ -261,8 +263,10 @@ public class Chamber {
     }
     protected Dictionary<Vec2, float>? _cnt_cache = null;
     protected Dictionary<Vec2, float>? _cnt_wid_cache = null;
-    protected int _cnt_cache_hits = int.MinValue;
-    protected int _cnt_wid_cache_hits = int.MinValue;
+    protected long _cnt_cache_hits = long.MinValue;
+    protected long _cnt_wid_cache_hits = long.MinValue;
+    protected long _cnt_cache_total = long.MinValue;
+    protected long _cnt_wid_cache_total = long.MinValue;
 
     protected void initialise_cnt() {
         // The wid sdf gives the distance to the channel mid-contour.
@@ -365,6 +369,8 @@ public class Chamber {
         _cnt_wid_cache = new(10000000 /* ten milly */, new cnt_vec2eq());
         _cnt_cache_hits = 0;
         _cnt_wid_cache_hits = 0;
+        _cnt_cache_total = 0;
+        _cnt_wid_cache_total = 0;
     }
 
     protected float cnt_sdf(in Vec3 p) {
@@ -372,6 +378,7 @@ public class Chamber {
         float r = magxy(p);
         Vec2 q = new(z, r);
         // CACHE ME.
+        ++_cnt_cache_total;
         if (_cnt_cache!.TryGetValue(q, out float cached)) {
             ++_cnt_cache_hits; // HIIIIIIT
             return cached;
@@ -500,6 +507,7 @@ public class Chamber {
         float z = p.Z;
         float r = magxy(p);
         Vec2 q = new(z, r);
+        ++_cnt_wid_cache_total;
         if (_cnt_wid_cache!.TryGetValue(q, out float cached)) {
             ++_cnt_wid_cache_hits;
             return cached;
@@ -865,7 +873,7 @@ public class Chamber {
 
         // Place the inlet some way up the lower edge. Note the last coordinate
         // stores the axial angle.
-        inlet = rejxy((2f*b + 3f*c)/5f, phi_inlet);
+        inlet = rejxy((2f*b + 3f*c)/5f, phi_inlet + PI);
 
         // Output the lower edge projected length to hugely aid the numerical
         // search for matching area.
@@ -913,6 +921,7 @@ public class Chamber {
             pos.Add(tocart(p.Y, theta, p.X));
         inlet = new(
             tocart(inlet_ZRp.Y, theta, inlet_ZRp.X),
+            tocart(1f, theta + PI_2, 0f),
             tocart(1f, theta, as_phi(inlet_ZRp.Z))
         );
     }
@@ -955,14 +964,7 @@ public class Chamber {
         return mesh;
     }
 
-    protected void voxels_mani(out Frame inlet, out Voxels neg, out Voxels pos) {
-        PointsManiF get_pos = (List<Vec3> points, float theta) => {
-            points_mani(theta, out _, out List<Vec3> pos, out _);
-            points.AddRange(pos);
-        };
-        Mesh mesh_pos = mesh_mani(get_pos);
-        pos = new(mesh_pos);
-
+    protected Voxels voxels_neg_mani(out Frame inlet) {
         Frame? inlet_fr = null;
         PointsManiF get_neg = (List<Vec3> points, float theta) => {
             points_mani(theta, out List<Vec3> neg, out _, out Frame maybeinlet);
@@ -972,28 +974,76 @@ public class Chamber {
             }
             points.AddRange(neg);
         };
-        Mesh mesh_neg = mesh_mani(get_neg);
-        neg = new(mesh_neg);
-        assert(inlet_fr != null);
+        Mesh mesh = mesh_mani(get_neg);
+        Voxels vox = new(mesh);
+
         inlet = inlet_fr!;
+
+        float zextra = 1.5f;
+        vox.BoolAdd(new Pipe(
+            inlet,
+            L_inlet,
+            D_inlet/2f
+        ).extended(zextra, EXTEND_DOWN)
+         .voxels());
+
+        Voxels mask = new Pipe(
+            inlet.transz(-zextra),
+            zextra + 1.1f*Fr_inlet,
+            D_inlet/2f + 1.1f*Fr_inlet
+        ).voxels();
+        using (Lifted l = new(vox, mask))
+            Fillet.concave(l.vox, Fr_inlet, inplace: true);
+
+        return vox;
     }
 
-    protected void voxels_inlet(in Frame inlet, out Voxels neg, out Voxels pos) {
-        float L = 15f;
-        float L_extra = 2f;
-        Vec3 a = inlet * new Vec3(0f, 0f, L_extra);
-        Vec3 b = inlet * new Vec3(0f, 0f, -L);
-        float phi = -argphi(inlet.Z) - PI_2;
-        Vec3 c = b + tocart((r_tht - magxy(b))/cos(phi), argxy(b), as_phi(phi));
-        pos = new Tubing([a, b], D_inlet + 2f*th_inlet).voxels();
-        pos.BoolAdd(new Cuboid(
-            new Frame(0.5f*(b + c), cross(inlet.Z, uZ3), inlet.Z),
+    protected Voxels voxels_pos_mani(Frame inlet) {
+        PointsManiF get_pos = (List<Vec3> points, float theta) => {
+            points_mani(theta, out _, out List<Vec3> pos, out _);
+            points.AddRange(pos);
+        };
+        Mesh mesh = mesh_mani(get_pos);
+        Voxels vox = new(mesh);
+
+        float zextra = 2.5f;
+        float Lr = D_inlet/2f + th_inlet;
+
+        Frame inlet_end = inlet.transz(L_inlet).flipxz().rotxy(PI_2);
+
+        float phi = PI_2 + phi_inlet;
+        float ell = (magxy(inlet_end.pos) - r_tht)/cos(phi);
+        vox.BoolAdd(new Pipe(
+            inlet_end,
+            L_inlet,
+            Lr
+        ).extended(zextra, EXTEND_UP)
+         .voxels());
+
+        Voxels mask = new Pipe(
+            inlet.transz(-zextra),
+            zextra + 1.1f*Fr_inlet,
+            D_inlet/2f + 1.1f*Fr_inlet
+        ).voxels();
+        using (Lifted l = new(vox, mask))
+            Fillet.concave(l.vox, Fr_inlet, inplace: true);
+
+        vox.BoolAdd(new Cuboid(
+            inlet_end.rotxy(-PI_4),
+            L_inlet,
+            Lr
+        ).extended(zextra, EXTEND_UP)
+         .at_corner(CORNER_x0y0z0)
+         .voxels());
+        vox.BoolAdd(new Cuboid(
+            inlet_end,
+            ell,
             4.5f,
-            mag(b - c),
-            L + L_extra
-        ).voxels());
-        Fillet.concave(pos, 6f, inplace: true);
-        neg = new Tubing([a, b], D_inlet).voxels();
+            L_inlet + zextra
+        ).at_edge(EDGE_x0z0)
+         .voxels());
+
+        return vox;
     }
 
     protected List<Vec3> points_tc() {
@@ -1234,11 +1284,10 @@ public class Chamber {
         using (key_gas.like())
             key_gas <<= Geez.voxels(gas);
 
-        voxels_mani(out Frame inlet, out Voxels neg_mani, out Voxels pos_mani);
+        Voxels neg_mani = voxels_neg_mani(out Frame inlet);
         using (key_mani.like())
             key_mani <<= Geez.voxels(neg_mani);
-
-        voxels_inlet(inlet, out Voxels neg_inlet, out Voxels pos_inlet);
+        Voxels pos_mani = voxels_pos_mani(inlet);
 
         Voxels chnl;
         using (key_chnl.like()) {
@@ -1269,7 +1318,6 @@ public class Chamber {
 
         add(ref cnt_ow_filled);
         add(ref pos_mani, key_mani);
-        add(ref pos_inlet);
         add(ref pos_tc, key_tc);
         add(ref flange, key_flange);
 
@@ -1281,7 +1329,6 @@ public class Chamber {
         sub(ref gas, key_gas);
         sub(ref chnl, key_chnl);
         sub(ref neg_mani);
-        sub(ref neg_inlet);
         sub(ref neg_tc);
         sub(ref neg_bolts);
 
@@ -1292,23 +1339,19 @@ public class Chamber {
 
         PicoGK.Library.Log("Baby made.");
 
-        int cnt_hits = _cnt_cache_hits;
-        int cnt_total = cnt_hits + numel(_cnt_cache!);
-        int cnt_wid_hits = _cnt_wid_cache_hits;
-        int cnt_wid_total = cnt_wid_hits + numel(_cnt_wid_cache!);
-        if (cnt_total == 0) {
+        if (_cnt_cache_total == 0) {
             PicoGK.Library.Log($"  cache sdf: unused");
         } else {
             PicoGK.Library.Log($"  cache sdf: "
-                    + $"{cnt_hits:N0} / {cnt_total:N0} "
-                    + $"({cnt_hits * 100f / cnt_total:F2}%)");
+                    + $"{_cnt_cache_hits:N0} / {_cnt_cache_total:N0} "
+                    + $"({_cnt_cache_hits*100f/_cnt_cache_total:F2}%)");
         }
-        if (cnt_wid_total == 0) {
+        if (_cnt_wid_cache_total == 0) {
             PicoGK.Library.Log($"  cache wid_sdf: unused");
         } else {
             PicoGK.Library.Log($"  cache wid_sdf: "
-                    + $"{cnt_wid_hits:N0} / {cnt_wid_total:N0} "
-                    + $"({cnt_wid_hits * 100f / cnt_wid_total:F2}%)");
+                    + $"{_cnt_wid_cache_hits:N0} / {_cnt_wid_cache_total:N0} "
+                    + $"({_cnt_wid_cache_hits*100f/_cnt_wid_cache_total:F2}%)");
         }
         PicoGK.Library.Log("  bang.");
 

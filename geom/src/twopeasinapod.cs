@@ -15,7 +15,7 @@ public class TwoPeasInAPod {
     public static float voxel_size_mm = 0.7f;
     public static bool transparent = true;
     public static bool section_view = true;
-    public static bool section_stl = false;
+    public static bool section_export = false;
     public static Sectioner sectioner = new();
 
 
@@ -88,15 +88,28 @@ public class TwoPeasInAPod {
 
         // Save the voxels.
         if (vox != null && name != null) {
-            if (section_stl)
+            if (section_export)
                 vox = sectioner.cut(vox, inplace: true);
+
+            string path_vdb = fromroot($"exports/{name}.vdb");
+            try {
+                vox.SaveToVdbFile(path_vdb);
+                PicoGK.Library.Log($"Exported to vdb: '{path_vdb}'");
+            } catch (Exception e) {
+                PicoGK.Library.Log($"Failed to export to vdb at '{path_vdb}'.");
+                PicoGK.Library.Log("Exception log:");
+                PicoGK.Library.Log(e.ToString());
+                PicoGK.Library.Log("");
+            }
+
             string path_stl = fromroot($"exports/{name}.stl");
             try {
                 Mesh mesh = new(vox);
                 mesh.SaveToStlFile(path_stl);
-                PicoGK.Library.Log($"Exported to stl: {path_stl}");
+                PicoGK.Library.Log($"Exported to stl: '{path_stl}'");
             } catch (Exception e) {
-                PicoGK.Library.Log("Failed to export to stl. Exception log:");
+                PicoGK.Library.Log($"Failed to export to stl at '{path_stl}'.");
+                PicoGK.Library.Log("Exception log:");
                 PicoGK.Library.Log(e.ToString());
                 PicoGK.Library.Log("");
             }
