@@ -340,11 +340,11 @@ public class Cuboid {
 
     public Cuboid at_corner(int corner) {
         Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
-        if ((corner & 0x1) == 1)
+        if (isset(corner, 0x1))
             trans.X += Lx;
-        if ((corner & 0x2) == 1)
+        if (isset(corner, 0x2))
             trans.Y += Ly;
-        if ((corner & 0x4) == 1)
+        if (isset(corner, 0x4))
             trans.Z += Lz;
         return new(centre.translate(trans), Lx, Ly, Lz);
     }
@@ -381,6 +381,13 @@ public class Cuboid {
             case EXTEND_UPDOWN: Dz = -Lz/2f; break;
         }
         return new(centre.transz(Dz), Lx, Ly, this.Lz + Lz);
+    }
+
+    public Cuboid as_sized(float Lx, float Ly, float Lz) {
+        return new(centre, Lx, Ly, Lz);
+    }
+    public Cuboid as_scaled(float Px, float Py, float Pz) {
+        return new(centre, Px*Lx, Py*Ly, Pz*Lz);
     }
 
 

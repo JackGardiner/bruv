@@ -122,6 +122,7 @@ public class TwoPeasInAPod {
             log($"Making '{name}' drawings...");
             log();
             drawings_f(part);
+            log();
         }
     }
 
@@ -191,7 +192,24 @@ public class TwoPeasInAPod {
             log("Exception log:");
             log(e.ToString());
             log();
+            goto SKIP_VOXEL_SIZE;
         }
+        // Save voxel size explicitly, since the vdb cant/doesnt check it matches
+        // when loading it.
+        string path_voxsize = fromroot($"exports/{name}.voxel_size");
+        try {
+            string text = VOXEL_SIZE.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+            File.WriteAllText(path_voxsize, text);
+            log($"  (saved voxel size to: '{path_voxsize}')");
+        } catch (Exception e) {
+            log($"Failed to save voxel size at '{path_voxsize}'.");
+            log("Exception log:");
+            log(e.ToString());
+            log();
+            /* fallthrough */
+        }
+      SKIP_VOXEL_SIZE:;
 
         if (stl) {
             string path_stl = fromroot($"exports/{name}.stl");
@@ -210,20 +228,52 @@ public class TwoPeasInAPod {
 
     public static bool load_voxels(in string name, out Voxels? vox) {
         string path_vdb = fromroot($"exports/{name}.vdb");
-        if (File.Exists(path_vdb)) {
-            try {
-                vox = Voxels.voxFromVdbFile(path_vdb);
-                log($"Loaded from vdb: '{path_vdb}'");
-                return true;
-            } catch (Exception e) {
-                log($"Failed to load from vdb at '{path_vdb}'.");
-                log("Exception log:");
-                log(e.ToString());
-                log();
-            }
-        } else {
+        string path_voxsize = fromroot($"exports/{name}.voxel_size");
+        // Ensure all files are chilling.
+        if (!File.Exists(path_vdb)) {
             log($"No voxels at: '{path_vdb}'");
+            goto FAILED;
         }
+        FileInfo fileInfo = new(path_voxsize);
+        if (!fileInfo.Exists) {
+            log($"Missing voxel size at: '{path_voxsize}'");
+            goto FAILED;
+        }
+        if (fileInfo.Length > 1024*1024 /* 1MB */) {
+            log($"Voxel size file invalid (too large) at: '{path_voxsize}'");
+            goto FAILED;
+        }
+        // Ensure voxel size matches.
+        try {
+            string text = File.ReadAllText(path_voxsize);
+            float voxsize = float.Parse(text,
+                    System.Globalization.CultureInfo.InvariantCulture);
+            if (voxsize != VOXEL_SIZE) {
+                log($"Voxel size mismatch at: '{path_voxsize}'");
+                log($"  (needed {VOXEL_SIZE}, found {voxsize})");
+                goto FAILED;
+            }
+        } catch (Exception e) {
+            log($"Failed to read voxel size at '{path_vdb}'.");
+            log("Exception log:");
+            log(e.ToString());
+            log();
+            goto FAILED;
+        }
+        // Read dem voxels.
+        try {
+            vox = Voxels.voxFromVdbFile(path_vdb);
+            log($"Loaded from vdb: '{path_vdb}'");
+            return true;
+        } catch (Exception e) {
+            log($"Failed to load from vdb at '{path_vdb}'.");
+            log("Exception log:");
+            log(e.ToString());
+            log();
+            goto FAILED;
+        }
+
+      FAILED:;
         vox = null;
         return false;
     }

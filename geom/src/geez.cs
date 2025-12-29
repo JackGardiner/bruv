@@ -922,10 +922,28 @@ public static class Geez {
         lines.Add(l);
     }
 
-    public static int cuboid(in Cuboid cuboid, Colour? colour=null) {
+    public static int cuboid(in Cuboid cuboid, Colour? colour=null,
+            int divide_x=1, int divide_y=1, int divide_z=1) {
         List<PolyLine> lines = new();
-        using (dflt_like(colour: COLOUR_BLUE))
-            _cuboid_lines(lines, cuboid, colour: colour);
+        using (dflt_like(colour: COLOUR_BLUE)) {
+            float Lx = cuboid.Lx / divide_x;
+            float Ly = cuboid.Ly / divide_y;
+            float Lz = cuboid.Lz / divide_z;
+            for (int x=0; x<divide_x; ++x)
+            for (int y=0; y<divide_y; ++y)
+            for (int z=0; z<divide_z; ++z) {
+                Vec3 pos = new(
+                    (1f - divide_x)*Lx/2f + x*Lx,
+                    (1f - divide_y)*Ly/2f + y*Ly,
+                    (1f - divide_z)*Lz/2f + z*Lz
+                );
+                _cuboid_lines(
+                    lines,
+                    new Cuboid(cuboid.centre.translate(pos), Lx, Ly, Lz),
+                    colour: colour
+                );
+            }
+        }
         return _push(lines);
     }
 

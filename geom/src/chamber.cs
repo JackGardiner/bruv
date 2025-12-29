@@ -1391,14 +1391,28 @@ public class Chamber {
 
     public void drawings(in Voxels part) {
         Geez.voxels(part); // someting to look at.
+        Cuboid bounds;
 
         Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
         log("cross-sectioning xy...");
-        Drawing.to_file(fromroot($"exports/chamber_xy.svg"), part, frame_xy);
+        Drawing.to_file(
+            fromroot($"exports/chamber_xy.svg"),
+            part,
+            frame_xy,
+            out bounds
+        );
+        using (Geez.like(colour: COLOUR_BLUE))
+            Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
 
         Frame frame_yz = new(ZERO3, uY3, uX3);
         log("cross-sectioning yz...");
-        Drawing.to_file(fromroot($"exports/chamber_yz.svg"), part, frame_yz);
+        Drawing.to_file(
+            fromroot($"exports/chamber_yz.svg"),
+            part,
+            frame_yz,
+            out bounds);
+        using (Geez.like(colour: COLOUR_GREEN))
+            Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
     }
 
 
