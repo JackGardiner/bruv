@@ -114,7 +114,8 @@ public static class Geez {
         private static float _speed_responsiveness = 20f;
 
         private static float _ortho = 1f;
-        private static float _ortho_responsiveness = 15f;
+        private static float _ortho_in_responsiveness = 25f;
+        private static float _ortho_out_responsiveness = 15f;
 
         private static Vec2 _snap_ang = NAN2;
         private static Vec3 _snap_pos = NAN3;
@@ -124,17 +125,16 @@ public static class Geez {
         private static float _snap_ang_responsiveness = 25f;
         private static float _snap_pos_responsiveness = 25f;
 
-        private static float _target_fov = torad(70f);
+        private static float _target_fov = torad(65f);
         private static float _fov_responsiveness = 20f;
 
-        private const int KEY_SPACE = 0b00000001;
-        private const int KEY_SHIFT = 0b00000010;
-        private const int KEY_W     = 0b00000100;
-        private const int KEY_S     = 0b00001000;
-        private const int KEY_A     = 0b00010000;
-        private const int KEY_D     = 0b00100000;
-        private const int KEY_Z     = 0b01000000;
-        private const int KEY_CTRL  = 0b10000000; /* must be last. */
+        private const int KEY_SPACE = 0b0000001;
+        private const int KEY_SHIFT = 0b0000010;
+        private const int KEY_W     = 0b0000100;
+        private const int KEY_S     = 0b0001000;
+        private const int KEY_A     = 0b0010000;
+        private const int KEY_D     = 0b0100000;
+        private const int KEY_CTRL  = 0b1000000;
         private static int _held = 0;
 
       #if false
@@ -208,17 +208,15 @@ public static class Geez {
 
             // Rescale their zoom handler too bc the linear one is bad.
             float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            if (!(_last_zoom == zoom)) {
-                if (nonnan(_last_zoom)) {
-                    float Dzoom = zoom - _last_zoom;
-                    Dzoom *= log(zoom/_zoom_scale + 1f);
-                    Dzoom *= 5f * _zoom_scale;
-                    zoom = _last_zoom + Dzoom;
-                    zoom = clamp(zoom, 0.1f, 2.5f * _zoom_scale);
-                    Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
-                }
-                _last_zoom = zoom;
+            if (nonnan(_last_zoom)) {
+                float Dzoom = zoom - _last_zoom;
+                Dzoom *= log(zoom/_zoom_scale + 1f);
+                Dzoom *= 5f * _zoom_scale;
+                zoom = _last_zoom + Dzoom;
+                zoom = clamp(zoom, 0.1f, 2.5f * _zoom_scale);
+                Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
             }
+            _last_zoom = zoom;
 
             // Get angles of camera position (note this is not camera looking
             // angles).
@@ -253,9 +251,13 @@ public static class Geez {
                 _stopwatch.Restart();
 
                 // Handle perspective/orthogonal switch.
-                float target_ortho = _orbit ? 1f : 0f;
-                _ortho += (target_ortho - _ortho)
-                        * (1f - exp(-_ortho_responsiveness * Dt));
+                if (_orbit) {
+                    _ortho += (1f - _ortho)
+                            * (1f - exp(-_ortho_in_responsiveness * Dt));
+                } else {
+                    _ortho += (0f - _ortho)
+                            * (1f - exp(-_ortho_out_responsiveness * Dt));
+                }
 
                 // Do any view snapping.
                 _snap_ang_time += Dt;
@@ -291,15 +293,14 @@ public static class Geez {
                 Frame frame = new(ZERO3, -tocart(1f, theta, 0f), uZ3);
                 Vec3 target_vel = ZERO3;
                 if (isset(_held, KEY_SPACE)) target_vel += frame.Z;
-                if (isset(_held, KEY_SHIFT) /* several ways to go down (dujj) */
-                    || isset(_held, KEY_Z))  target_vel -= frame.Z;
+                if (isset(_held, KEY_SHIFT)) target_vel -= frame.Z;
                 if (isset(_held, KEY_W))     target_vel += frame.X;
                 if (isset(_held, KEY_S))     target_vel -= frame.X;
                 if (isset(_held, KEY_A))     target_vel += frame.Y;
                 if (isset(_held, KEY_D))     target_vel -= frame.Y;
                 if (target_vel != ZERO3) {
                     target_vel = normalise(target_vel) * _target_speed;
-                    if ((_held & KEY_CTRL) != 0)
+                    if (isset(_held, KEY_CTRL))
                        target_vel *= 3f;
                 }
                 _vel += (target_vel - _vel)
@@ -375,10 +376,6 @@ public static class Geez {
             float dist = mag(_size) * (zoom/_zoom_scale) * 0.8f;
             float height = 2f * dist * tan(fov/2f);
 
-            float near = dist*0.01f;
-            float far  = dist*10f;
-            // thats farkin heaps deep enough jeff.
-
             // Get the "closeness", which is 0-1 where 0 is fully at camera
             // centre and 1 is infintiely far away (ortho).
             float closeness = lerp(0f, 1f, _ortho / (2f - _ortho));
@@ -389,6 +386,10 @@ public static class Geez {
             Mat4 view;
             Mat4 projection;
             if (_ortho > 0.99f) {
+                float near = dist*0.05f;
+                float far  = dist*50f;
+                // thats farkin heaps deep enough jeff.
+
                 view = Mat4.CreateLookTo(
                     camera,
                     look,
@@ -406,8 +407,8 @@ public static class Geez {
                 // focal plane static.
                 float newfov = lerp(fov, 1e-2f, _ortho);
                 float newdist = height / 2f / tan(newfov/2f);
-                near = newdist*0.05f;
-                far  = newdist*50f;
+                float near = newdist*0.05f;
+                float far  = newdist*50f;
 
                 // Want ultra deep clipping area when in perspective.
                 near *= lerp(0.05f/(zoom/_zoom_scale), 1f, _ortho);
@@ -478,6 +479,7 @@ public static class Geez {
             _last_theta = NAN;
             _last_phi = NAN;
 
+            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
             _last_zoom = NAN;
 
             _pos = ZERO3;
@@ -490,9 +492,8 @@ public static class Geez {
             _snap_ang_time = 0f;
             _snap_pos_time = 0f;
 
-            _target_fov = torad(70f);
-
-            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
+            _target_fov = torad(65f);
+            Perv.set(PICOGK_VIEWER, "m_fFov", todeg(_target_fov));
         }
         public static void recalc() {
             _get_a_word_in_edgewise = 5;
@@ -500,10 +501,50 @@ public static class Geez {
         public static void change(bool orbit) {
             _orbit = orbit;
         }
+
         private static Vec3 looking(out float theta, out float phi) {
             theta = torad(PICOGK_VIEWER.m_fOrbit);
             phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
             return -tocart(1f, theta, as_phi(phi));
+        }
+
+        private static Vec2 get_snap_ang() {
+            Vec2 ang;
+            Vec3 look = looking(out _, out _);
+            if (abs(look.X) >= abs(look.Y)) {
+                ang.X = (look.X < 0f) ? 0f : PI;
+            } else {
+                ang.X = (look.Y < 0f) ? PI_2 : 1.5f*PI;
+            }
+            if (abs(look.Z)/2f >= max(abs(look.X), abs(look.Y))) {
+                ang.Y = (look.Z < 0f) ? 1e-3f : PI - 1e-3f;
+            } else {
+                ang.Y = PI_2;
+            }
+            return ang;
+        }
+
+        private static Vec3 get_snap_pos_AXISZ(float along_camera=NAN) {
+            Vec3 look = looking(out float theta, out _);
+            // cheeky plane line intersection.
+            Vec3 point = _pos;
+            Vec3 normal = cross(look, tocart(1f, theta + PI_2, 0f));
+            float z = -dot(normal, -point) / dot(normal, uZ3);
+            Vec3 pos = -_origin;
+            pos.Z = z;
+            return pos;
+        }
+
+        private static Vec3 get_snap_pos_middleground() {
+            Vec3 look = looking(out _, out _);
+            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
+            float dist = mag(_size) * (zoom/_zoom_scale) * 0.8f;
+            Vec3 pos = _pos;
+            if (_orbit)
+                pos -= dist * look;
+            else
+                pos += dist * look;
+            return pos;
         }
 
         /* Viewer.IViewerAction */
@@ -514,24 +555,36 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
+            // dont do anything before first render.
+            if (isnan(_origin))
+                return false;
+
             int keycode;
+            // couple of these keys are inexplicably unlabelled by picogk.
             switch (key) {
+                case Viewer.EKeys.Key_W: keycode = KEY_W; goto MOVEMENT;
+                case Viewer.EKeys.Key_S: keycode = KEY_S; goto MOVEMENT;
+                case Viewer.EKeys.Key_A: keycode = KEY_A; goto MOVEMENT;
+                case Viewer.EKeys.Key_D: keycode = KEY_D; goto MOVEMENT;
                 case Viewer.EKeys.Key_Space:
-                    // Gotta turn off both shift and space upon space release.
-                    // Otherwise we have no way of catching the shift up event.
-                    keycode = pressed
-                            ? (shift ? KEY_SHIFT : KEY_SPACE)
-                            : (KEY_SHIFT | KEY_SPACE);
-                    goto RECOGNISED;
-                case Viewer.EKeys.Key_W: keycode = KEY_W; goto RECOGNISED;
-                case Viewer.EKeys.Key_S: keycode = KEY_S; goto RECOGNISED;
-                case Viewer.EKeys.Key_A: keycode = KEY_A; goto RECOGNISED;
-                case Viewer.EKeys.Key_D: keycode = KEY_D; goto RECOGNISED;
-                case Viewer.EKeys.Key_Z: keycode = KEY_Z; goto RECOGNISED;
+                    keycode = KEY_SPACE;
+                    goto MOVEMENT;
+                case (Viewer.EKeys)340 /* shift */:
+                    keycode = KEY_SHIFT;
+                    goto MOVEMENT;
+                case (Viewer.EKeys)341 /* ctrl */:
+                    keycode = KEY_CTRL;
+                    goto MOVEMENT;
 
                 case Viewer.EKeys.Key_Tab:
                     if (!pressed)
                         break;
+                    change(!_orbit);
+                    return true;
+                case (Viewer.EKeys)'`':
+                    if (!pressed)
+                        break;
+                    _snap_pos = get_snap_pos_middleground();
                     change(!_orbit);
                     return true;
 
@@ -561,56 +614,36 @@ public static class Geez {
                 case Viewer.EKeys.Key_E:
                     if (!pressed || _orbit)
                         break;
-                    _target_fov += (0f - _target_fov)/15f;
+                    _target_fov += (0f - _target_fov)/25f;
                     return true;
 
                 case Viewer.EKeys.Key_N: {
                     if (!pressed || !_orbit)
                         break;
                     // get snapping.
-                    Vec3 look = looking(out _, out _);
-                    if (abs(look.X) >= abs(look.Y)) {
-                        _snap_ang.X = (look.X < 0f) ? 0f : PI;
-                    } else {
-                        _snap_ang.X = (look.Y < 0f) ? PI_2 : 1.5f*PI;
-                    }
-                    if (abs(look.Z)/2f >= max(abs(look.X), abs(look.Y))) {
-                        _snap_ang.Y = (look.Z < 0f) ? 1e-3f : PI - 1e-3f;
-                    } else {
-                        _snap_ang.Y = PI_2;
-                    }
+                    _snap_ang = get_snap_ang();
                 } return true;
 
                 case Viewer.EKeys.Key_M: {
                     if (!pressed || !_orbit)
                         break;
                     // snap snap.
-                    Vec3 look = looking(out float theta, out _);
-                    // cheeky plane line intersection.
-                    Vec3 point = _pos;
-                    Vec3 normal = cross(look, tocart(1f, theta + PI_2, 0f));
-                    float z = -dot(normal, -point) / dot(normal, uZ3);
-                    _snap_pos = -_origin;
-                    _snap_pos.Z = z;
+                    _snap_pos = get_snap_pos_AXISZ();
                 } return true;
             }
             return false;
 
-          RECOGNISED:;
-            if (pressed) {
-                if (ctrl)
-                    _held |= KEY_CTRL;
+          MOVEMENT:;
+            if (pressed)
                 _held |= keycode;
-            } else {
+            else
                 _held &= ~keycode;
-                if (isclr(_held, KEY_CTRL - 1))
-                    _held &= ~KEY_CTRL;
-            }
             return true;
         }
 
         public static void initialise() {
             Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
+            Perv.set(PICOGK_VIEWER, "m_fFov", todeg(_target_fov));
             PICOGK_VIEWER.AddKeyHandler(new HackView());
             _ = make_shit_happen_continuously();
         }
@@ -620,18 +653,18 @@ public static class Geez {
         HackView.initialise();
         log();
         log("[Geez] using a new hacked-in camera, keybinds:");
-        log("     - W/A/S/D        move camera horizontally");
-        log("     - space          move camera up");
-        log("     - Z/shift+space  move camera down");
-        log("     - ctrl           sprint on movement key-down");
-        log("     - tab            toggle orbit/free mode");
-        log("     - scroll         orbit zoom in/out + move slower/faster");
-        log("     - ctrl+R         rescale for window size");
-        log("     - backspace      reset view");
-        log("     - N              orbit snap to normal");
-        log("     - M              orbit snap to Z axis");
-        log("     - Q/E            dial up/down free fov");
-        log("     - T              toggle transparency");
+        log("     - W/A/S/D         move camera horizontally");
+        log("     - space/shift     move camera up/down");
+        log("     - ctrl            sprint (when held)");
+        log("     - tab             toggle orbit/free mode about centre");
+        log("     - backtick [`/~]  toggle orbit/free mode about middleground");
+        log("     - scroll up/down  orbit zoom in/out + move slower/faster");
+        log("     - ctrl+R          rescale for window aspect ratio");
+        log("     - backspace       reset view");
+        log("     - N               orbit snap view along nearest axis");
+        log("     - M               orbit snap centre to Z axis");
+        log("     - Q/E             dial up/down free fov");
+        log("     - T               toggle transparency");
         log();
     }
 
