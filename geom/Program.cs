@@ -4,7 +4,7 @@ using br;
 
 using TPIAP = TwoPeasInAPod;
 
-float voxel_size_mm = 0.8f;
+float voxel_size_mm = 0.4f;
 TPIAP.make = TPIAP.MAKE_INJECTOR;
 TPIAP.transparent = true; // only affects viewing (duh?)
 TPIAP.section_view = true;

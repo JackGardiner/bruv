@@ -6,7 +6,7 @@ using PicoGK;
 using System.Runtime.Intrinsics.Arm;
 using System.Runtime.InteropServices;
 
-public class injector
+public class Injector
 {
     public required PartMating pm { get; init; }
     public float Ir_chnl;
@@ -217,7 +217,7 @@ public class injector
         Voxels voxShearChamber = new();
         voxOxPostFluid = new();
 
-        foreach (Vector3 aPoint in points_inj)
+        foreach (Vector3 aPoint in points_inj!)
         {
             voxOxPostWall += new BasePipe(
                 new LocalFrame(aPoint),
@@ -369,9 +369,9 @@ public class injector
         Voxels voxThrustRods = new();
         Voxels voxStrutHoles = new();
 
-        for (int i=0; i<points_bolts.Count(); i++)
+        for (int i=0; i<points_bolts!.Count(); i++)
         {
-            Vector3 oBoltPos = points_bolts[i];
+            Vector3 oBoltPos = points_bolts![i];
             LocalFrame oGussetFrame = new LocalFrame(oBoltPos, Vector3.UnitZ, oBoltPos);
             voxGussetBox += new BaseBox(
                 oGussetFrame,
@@ -445,7 +445,7 @@ public class injector
         float fZVal = (Or_chnl - fRadius)*tan(fPrintAngle) + fInjectorPlateThickness;  // outer wall case
         // calculate vertical offset required (for now use cone mid-plane)
         float fConeOffset = fLOxPostLength - (fCoreExitRadius+fLOxPostWT)*tan(fPrintAngle);
-        List<Vector3> aAllPoints = new List<Vector3>(points_inj) { new Vector3(0f, 0f, 0f) };
+        List<Vector3> aAllPoints = new List<Vector3>(points_inj!) { new Vector3(0f, 0f, 0f) };
 
         foreach (Vector3 aPoint in aAllPoints)
         {
@@ -540,7 +540,7 @@ public class injector
         using (key_gusset.like())
             key_gusset <<= Geez.voxels(gussets);
 
-        //////
+
         Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid);
         part += inj_elements;
         part -= voxOxPostFluid;
@@ -548,8 +548,8 @@ public class injector
             key_inj_elements <<= Geez.voxels(inj_elements);
 
         // external fillets
-        Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop;
-        Voxels voxNoCropZone = part & (cone_roof_upper_crop() + voxInnerPipeCrop);
+        Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
+        Voxels voxNoCropZone = part & (cone_roof_upper_crop() + voxInnerPipeCrop!);
         voxCropZone.OverOffset(5f);
         Library.Log("Filleting completed");
         part = voxCropZone + voxNoCropZone;

@@ -21,7 +21,7 @@ public class TwoPeasInAPod {
 
     public PartMating pm { get; init; }
     public Chamber chamber { get; init; }
-    public injector injector { get; init; }
+    public Injector injector { get; init; }
 
     public TwoPeasInAPod() {
 
@@ -47,7 +47,7 @@ public class TwoPeasInAPod {
         chamber = config.deserialise<Chamber>("chamber");
         chamber.initialise();
 
-        injector = config.deserialise<injector>("injector");
+        injector = config.deserialise<Injector>("injector");
         injector.initialise();
     }
 
