@@ -3,8 +3,7 @@ using static br.Br;
 using br;
 using Leap71.ShapeKernel;
 using PicoGK;
-using System.Runtime.Intrinsics.Arm;
-using System.Runtime.InteropServices;
+using ports;
 
 public class Injector
 {
@@ -16,18 +15,19 @@ public class Injector
         Ir_chnl = pm.Mr_chnl - 0.5f*pm.min_wi_chnl;
         Or_chnl = pm.Mr_chnl + 0.5f*pm.min_wi_chnl;
     }
-
     // manufacturing vars
     public required float fPrintAngle { get; init; }
 
-    // swirl injector vars
+    // injector plate vars
     public required List<int> no_inj { get; init; }
     public required List<float> r_inj { get; init; }
     public required List<float> theta0_inj { get; init; }
+    public int iTotalElementCount;
     public List<Vector3>? points_inj = null;
     protected void initialise_inj()
     {
         points_inj = new();
+        iTotalElementCount = 0;
         for (int n=0; n<numel(no_inj); ++n) {
             List<Vector3> ps = circularly_distributed(
                 no:     no_inj[n],
@@ -36,6 +36,7 @@ public class Injector
                 theta0: theta0_inj[n]
             );
             points_inj.AddRange(ps);
+            iTotalElementCount += no_inj[n];
         }
     }
     public required float fTargetdPFrac { get; init; }
@@ -44,7 +45,6 @@ public class Injector
     public float fLOxPostLength;
     public float fLOxPostWT;
     public float fFuelAnnulusOR;
-    public int iTotalElementCount;
     public float fOxElementMFR;
     public float fFuelElementMFR;
     public float fCoreExitArea;
@@ -55,22 +55,23 @@ public class Injector
     public float fTargetCdFuel;
     protected void initialise_swirl()
     {
-        iTotalElementCount = numel(no_inj);
         fOxElementMFR = pm.fOxMassFlowRate / iTotalElementCount;
         fFuelElementMFR = pm.fFuelMassFlowRate / iTotalElementCount;
 
         fTargetdP = fTargetdPFrac*pm.fChamberPressure;
         fLOxPostLength = 10f;
         fLOxPostWT = 1f;
-        fFuelAnnulusOR = 4f;
+        fFuelAnnulusOR = 5f;
 
         iOxSwirlInlets = 4;
         iFuelSwirlInlets = 4;
         fTargetCdOx = 0.25f;
         fTargetCdFuel = 0.25f;
         fCoreExitArea = fOxElementMFR/(fTargetCdOx*sqrt(2*pm.fOxInjectionRho*fTargetdP));
-        fCoreExitRadius = sqrt(4*fCoreExitArea/PI);
-
+        // A = PI*r^2
+        // r = sqrt(A/pi)
+        fCoreExitRadius = sqrt(fCoreExitArea/PI) * 1e3f; // mm(!)
+        Library.Log($"core exit rad = {fCoreExitRadius}");
     }
 
     // film cooling vars
@@ -157,6 +158,7 @@ public class Injector
     }
 
     // coneroof helper methods
+    // TODO: make these const. vox vars
     public Voxels cone_roof_upper_crop()
     {
         BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
@@ -174,39 +176,27 @@ public class Injector
     public Voxels cone_roof_lox_crop()
     {
         BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
-        oCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetConeRoofCropHeight));
+        oCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetAtticLowerHeight));
         return oCrop.voxConstruct();
     }
 
-    // MARK: cone_roof
-    // vox builder
     public Voxels voxels_cone_roof()
     {
-        // returns a roof structure constructed using cones originating at each point in aPointsList
+        // structure constructed using cones originating at each point in aPointsList
 
-        BaseLens oRoof = new BaseLens(new LocalFrame(), fRoofThickness, 0f, Or_chnl);
-        oRoof.SetHeight(new SurfaceModulation(fGetConeRoofLowerHeight), new SurfaceModulation(fGetConeRoofUpperHeight));
+        BaseLens oRoof = new BaseLens(
+            new LocalFrame(),
+            fRoofThickness,
+            0f,
+            Or_chnl
+        );
 
-        Voxels voxRoof = oRoof.voxConstruct();
-        Voxels voxTopCrop = cone_roof_upper_crop();
-        Voxels voxLowCrop = cone_roof_lower_crop();
-        Voxels voxLOxCrop = cone_roof_lox_crop();
-        Library.Log("Middle roof and crop zones constructed");
+        oRoof.SetHeight(
+            new SurfaceModulation(fGetConeRoofLowerHeight),
+            new SurfaceModulation(fGetConeRoofUpperHeight)
+            );
 
-
-        Library.Log("Injector elements constructed");
-
-
-        Library.Log("Attic constructed");
-
-        Library.Log("ASI port constructed");
-
-        Library.Log("Flange constructed");
-
-
-        Library.Log("Flange details (gussets etc.) added");
-
-        return voxRoof;
+        return oRoof.voxConstruct();
     }
 
     public Voxels vox_inj_elements(out Voxels voxOxPostFluid)
@@ -233,9 +223,8 @@ public class Injector
                 fCoreExitRadius
             ).voxConstruct();
 
-            float fSwirlChamberStraightHeight = 10f;
-            float fSwirlChamberRadius = 3f;
-            float fShearChamberRadius = 4f;
+            float fSwirlChamberStraightHeight = 12f;
+            float fSwirlChamberRadius = 4f;
 
             // build upper/inner swirl chamber
             // calculate upper wall height
@@ -245,7 +234,7 @@ public class Injector
                 );
             LocalFrame oSwirlChamberFrame = new LocalFrame(aPoint + new Vector3(0f, 0f, fSwirlChamberLowerBound));
 
-            Voxels voxNextSwirlChamber = new(); // make a new voxelfield so we don't cook old one with offsets
+            Voxels voxNextSwirlChamber = new(); // temp so we don't cook old one w offsets
             voxNextSwirlChamber += new BasePipe(
                 oSwirlChamberFrame,
                 fSwirlChamberStraightHeight,
@@ -279,12 +268,13 @@ public class Injector
             voxShearChamber += new BasePipe(
                 oShearChamberFrame,
                 2*fShearChamberUpperBound,
-                fShearChamberRadius,
-                fShearChamberRadius+1f
+                fFuelAnnulusOR,
+                fFuelAnnulusOR+1f
             ).voxConstruct();
 
         }
         voxSwirlChamber -= cone_roof_lower_crop();
+        voxShearChamber -= cone_roof_lox_crop();
         return voxOxPostWall + voxSwirlChamber + voxShearChamber;
     }
 
@@ -310,9 +300,13 @@ public class Injector
     public Voxels voxels_asi(out Voxels oASIFluid)
     {
         // create augmented spark igniter through-port
+        GPort ASIPort = new GPort("1/4in", 6.35f); // 1/4in OD for SS insert?
+        Voxels voxPort = ASIPort.voxConstruct(new LocalFrame(new Vector3(0,0,50)));
+
         BasePipe oASIWall = new BasePipe(new LocalFrame(), 50f, 6.35f, 10.35f);
         oASIFluid = new BasePipe(new LocalFrame(), 50f, 0, 6.35f).voxConstruct();
-        return oASIWall.voxConstruct();
+
+        return voxPort + oASIWall.voxConstruct();
     }
 
     public Voxels voxels_flange()
@@ -356,7 +350,7 @@ public class Injector
         return voxFlange;
     }
 
-    public Voxels voxels_gussets()
+    public Voxels voxels_gussets(out Voxels voxStrutHoles)
     {
         // make gussets
         // create cone shape
@@ -367,7 +361,7 @@ public class Injector
         Voxels voxGussetBox = new();
         Voxels voxBoltHoles = new();
         Voxels voxThrustRods = new();
-        Voxels voxStrutHoles = new();
+        voxStrutHoles = new();
 
         for (int i=0; i<points_bolts!.Count(); i++)
         {
@@ -412,33 +406,103 @@ public class Injector
                 voxStrutHoles += new BaseCylinder(oTopFrame, -10f, 3f).voxConstruct();
                 voxThrustRods += new Voxels(oStrut.mshConstruct()) + new Voxels(oBridgeBox.mshConstruct());
             }
-
-            // bolt holes
-            BasePipe oBoltHole = new BasePipe(
-                new LocalFrame(oBoltPos),
-                2*pm.inj_flange_thickness,
-                0f,
-                pm.thickness_around_bolt
-            );
-            BasePipe oWasherHole = new BasePipe(
-                new LocalFrame(oBoltPos+new Vector3(0f,0f,pm.inj_flange_thickness)),
-                2*pm.inj_flange_thickness,
-                0f,
-                pm.Or_washer+0.5f
-            );
-            voxBoltHoles += oBoltHole.voxConstruct() + oWasherHole.voxConstruct() + voxStrutHoles;
         }
         Library.Log("Flange details (gussets etc.) created");
 
 
         // booleans
         voxInnerPipeCrop = new BasePipe(new LocalFrame(), 2*fMaxAtticZ, 0f, fMaxAtticR).voxConstruct();
-        Voxels voxGusset = (voxGussetCone & voxGussetBox) + voxThrustRods - cone_roof_upper_crop() - voxInnerPipeCrop;
+        Voxels voxGusset = (voxGussetCone & voxGussetBox)
+            + voxThrustRods
+            - cone_roof_upper_crop() - voxInnerPipeCrop;
 
         return voxGusset;
     }
 
+    public Voxels voxels_ports(out Voxels voxFluids)
+    {
+        Voxels voxLOXCrop = cone_roof_upper_crop();
+        Voxels voxIPACrop = cone_roof_lower_crop();
+
+        // determine vertical height of ports:  for now use placeholder
+        float fPortsHeight = 54f; // TODO: magic nom
+        // determine spacing:  ASI in middle, LOX inlet and 3x PT spaced evenly
+        float fPortRadialDistance = 0.8f*pm.Or_cc;
+
+        // create vectors
+        LocalFrame aLOXInlet = new LocalFrame(new Vector3(-fPortRadialDistance, 0, fPortsHeight));
+        LocalFrame aLOXPT =  new LocalFrame(new Vector3(fPortRadialDistance, 0, fPortsHeight));
+        LocalFrame aChamberPT =  new LocalFrame(new Vector3(0, -fPortRadialDistance, fPortsHeight));
+        LocalFrame aIPAPT =  new LocalFrame(new Vector3(0, fPortRadialDistance, fPortsHeight));
+
+        GPort oLOXInlet = new GPort("1/2in", 14f);
+        BasePipe oLOXInletPipe = new BasePipe(aLOXInlet, -fPortsHeight, 0f, 14f/2);
+        Voxels voxLOXInletFluid = oLOXInlet.voxConstruct(aLOXInlet) + oLOXInletPipe.voxConstruct();
+        Voxels voxLOXInletWall = voxLOXInletFluid.voxOffset(2f);
+        voxLOXInletFluid = voxLOXInletFluid - voxLOXCrop;
+        voxLOXInletWall = voxLOXInletWall - voxLOXCrop;
+
+        GPort oLOXPT = new GPort("1/4in", 7.5f);
+        BasePipe oLOXPTPipe = new BasePipe(aLOXPT, -fPortsHeight, 0f, 7.5f/2);
+        Voxels voxLOXPTFluid = oLOXPT.voxConstruct(aLOXPT) + oLOXPTPipe.voxConstruct();
+        Voxels voxLOXPTWall = voxLOXPTFluid.voxOffset(2f);
+        voxLOXPTFluid = voxLOXPTFluid - voxLOXCrop;
+        voxLOXPTWall = voxLOXPTWall - voxLOXCrop;
+
+        GPort oIPAPT = new GPort("1/4in", 7.5f);
+        BasePipe oIPAPTPipe = new BasePipe(aIPAPT, -fPortsHeight, 0f, 7.5f/2);
+        Voxels voxIPAPTFluid = oIPAPT.voxConstruct(aIPAPT) + oIPAPTPipe.voxConstruct();
+        Voxels voxIPAPTWall = voxIPAPTFluid.voxOffset(2f);
+        voxIPAPTFluid = voxIPAPTFluid - voxIPACrop;
+        voxIPAPTWall = voxIPAPTWall - voxIPACrop;
+
+        GPort oChamberPT = new GPort("1/8in", 4.5f);
+        BasePipe oChamberPTPipe = new BasePipe(aChamberPT, -fPortsHeight, 0f, 7.5f/2);
+        Voxels voxChamberPTFluid = oChamberPT.voxConstruct(aChamberPT) + oChamberPTPipe.voxConstruct();
+        Voxels voxChamberPTWall = voxChamberPTFluid.voxOffset(2f);
+
+        Sh.PreviewFrame(aLOXInlet, 5f);
+        Sh.PreviewFrame(aLOXPT, 5f);
+        Sh.PreviewFrame(aChamberPT, 5f);
+        Sh.PreviewFrame(aIPAPT, 5f);
+
+        voxFluids = voxLOXInletFluid + voxLOXPTFluid + voxIPAPTFluid + voxChamberPTFluid;
+        Voxels voxWalls = voxLOXInletWall + voxLOXPTWall + voxIPAPTWall + voxChamberPTWall
+            - voxCropBoxZ(fPortsHeight) - voxCropBoxZ(0f, 100f, -10f);
+
+        return voxWalls;
+    }
+
+    private Voxels voxels_bolts()
+    {
+        Voxels bolt_holes = new();
+        for (int i=0; i<pm.no_bolt; i++)
+        {
+            Vector3 bolt_pos = points_bolts![i];
+            BasePipe oBoltHole = new BasePipe(
+                new LocalFrame(bolt_pos),
+                2*pm.inj_flange_thickness,
+                0f,
+                pm.Bsz_bolt/2);
+
+            BasePipe oWasherHole = new BasePipe(
+                new LocalFrame(bolt_pos+new Vector3(0f,0f,pm.inj_flange_thickness)),
+                2*pm.inj_flange_thickness,
+                0f,
+                pm.Or_washer+0.5f);
+
+            bolt_holes += oBoltHole.voxConstruct() + oWasherHole.voxConstruct();
+        }
+        return bolt_holes;
+    }
+
     // private helpers
+
+    private Voxels voxCropBoxZ(float fZ, float fR=100, float fH=100)
+    {
+        BaseCylinder oCropCyl = new BaseCylinder(new LocalFrame(new Vector3(0f, 0f, fZ)), fH, fR);
+        return oCropCyl.voxConstruct();
+    }
     private float fGetConeRoofSurfaceModulation(float fPhi, float fLengthRatio)
     {
         float fRadius = fLengthRatio * Or_chnl;
@@ -471,12 +535,6 @@ public class Injector
         return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio);
     }
 
-    // TODO: fix whatever is going on here
-    private float fGetConeRoofCropHeight(float fPhi, float fLengthRatio)
-    {
-        return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio) + cos(fPrintAngle)*fRoofThickness*2f;
-    }
-
     private float fGetAtticSurfaceModulation(float fPhi, float fLengthRatio)
     {
         float fRadius = fLengthRatio * Or_chnl;
@@ -507,6 +565,7 @@ public class Injector
         Geez.Cycle key_asi = new(colour: COLOUR_WHITE);
         Geez.Cycle key_attic = new(colour: COLOUR_GREEN);
         Geez.Cycle key_inj_elements = new(colour: COLOUR_RED);
+        Geez.Cycle key_ports = new(colour: Cp.clrRandom());
 
         Voxels voxInjectorPlate = voxels_injector_plate();
         part += voxInjectorPlate;
@@ -524,22 +583,21 @@ public class Injector
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic);
 
-        Voxels asi = voxels_asi(out Voxels asi_wall);
+        Voxels asi = voxels_asi(out Voxels asi_fluid);
         part += asi;
-        part -= asi_wall;
+        part -= asi_fluid;
         using (key_asi.like())
-            key_asi <<= Geez.voxels(asi);
+            key_asi <<= Geez.voxels(asi - asi_fluid);
 
         Voxels flange = voxels_flange();
         part += flange;
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
 
-        Voxels gussets = voxels_gussets();
+        Voxels gussets = voxels_gussets(out Voxels voxStrutHoles);
         part += gussets;
         using (key_gusset.like())
-            key_gusset <<= Geez.voxels(gussets);
-
+            key_gusset <<= Geez.voxels(gussets - voxStrutHoles);
 
         Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid);
         part += inj_elements;
@@ -547,19 +605,29 @@ public class Injector
         using (key_inj_elements.like())
             key_inj_elements <<= Geez.voxels(inj_elements);
 
+        Voxels ports = voxels_ports(out Voxels ports_fluids);
+        part += ports;
+        using (key_ports.like())
+            key_ports <<= Geez.voxels(ports-ports_fluids);
+
         // external fillets
         Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
         Voxels voxNoCropZone = part & (cone_roof_upper_crop() + voxInnerPipeCrop!);
         voxCropZone.OverOffset(5f);
         Library.Log("Filleting completed");
         part = voxCropZone + voxNoCropZone;
+
+        Voxels bolt_holes = voxels_bolts();
+        part -= ports_fluids;
+        part -= bolt_holes;
+        part -= voxStrutHoles;
+
         Geez.clear();
         using (key_part.like())
             key_part <<= Geez.voxels(part);
 
-        // part -= voxBoltHoles;
 
-        PicoGK.Library.Log("Baby made.");
+        Library.Log("Baby made.");
 
         return part;
     }
