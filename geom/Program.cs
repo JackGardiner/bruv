@@ -1,22 +1,28 @@
 ﻿
 using static br.Br;
 using br;
-
 using TPIAP = TwoPeasInAPod;
 
-float voxel_size_mm = 0.25f;
-TPIAP.make = TPIAP.CHAMBER | TPIAP.VOXELS;
-TPIAP.sectionview = true;
-TPIAP.sectioner = Sectioner.pie(torad(0f), torad(270f));
 
+/* Boot up options: */
+float voxel_size_mm = 0.5f;
+int make = TPIAP.CHAMBER | TPIAP.VOXELS;
+// See TPIAP for construction guide of `make`.
+bool sectionview = false;
+Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
+
+
+
+/* ok don touch anything else in the file. */
 
 // Task wrapper to configure some things and have nicer exception handling.
 void wrapped_task() {
     try {
         log();
         log("whas good");
+        log();
 
-        TPIAP.entrypoint();
+        TPIAP.entrypoint(make, sectionview ? sectioner : null);
 
         log("Don.");
         log();

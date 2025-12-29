@@ -8,7 +8,7 @@ using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 using BBox3 = PicoGK.BBox3;
 
-public class Chamber {
+public class Chamber : TwoPeasInAPod.Pea {
 
     // Bit how ya going.
     //
@@ -100,7 +100,8 @@ public class Chamber {
     public float A_chnl_exit = NAN;
     protected float theta_chnl(float z) {
         z = z/cnt_z6 - 0.5f;
-        return 4*TWOPI/no_chnl * 0.5f*sin(PI*z);
+        assert(pm.no_bolt == 8, "change special constant smile");
+        return 7.7f*TWOPI/no_chnl * 0.5f*sin(PI*z);
     }
     protected void initialise_chnl() {
         no_chnl = no_web;
@@ -764,9 +765,30 @@ public class Chamber {
         float Dtheta = wraprad(theta - theta_inlet);
         // in one half-turn, no_chnl/2 channels are passed.
         float t = abs(Dtheta) / (PI / (0.5f*no_chnl));
+        // Note however that we cant end with a zero area manifold, so we instead
+        // limit it to some minimum. Buuut this would cause a kink so we fillet
+        // the function itself lmao:
+        // https://www.desmos.com/calculator/l75u4xcn9c
+        float x = t * A_chnl_exit;
+        /* using this x, As == 1 */
         float A0 = 0.5f*no_chnl*A_chnl_exit;
-        float A = A0 - A_chnl_exit*t;
-        A = max(A, min_A_neg_mani);
+        float Am = min_A_neg_mani;
+        float F0 = A0/8f;
+        float y0 = A0 - F0*SQRT2;
+        float x0h = F0*SQRTH;
+        float F1 = 2f*Am;
+        float y1 = Am + F1;
+        float x1l = A0 - Am + F1*(SQRTH - 1f);
+        float x1h = A0 - Am + F1/(1f + SQRT2);
+        float A;
+        if (x < x0h)
+            A = y0 + sqrt(squared(F0) - squared(x));
+        else if (x <= x1l)
+            A = A0 - x;
+        else if (x < x1h)
+            A = y1 - sqrt(squared(F1) - squared(x - x1h));
+        else
+            A = Am;
         return A;
     }
 
@@ -1248,6 +1270,11 @@ public class Chamber {
         return vox;
     }
 
+
+
+    /* pea interface: */
+
+
     public Voxels voxels() {
         Voxels part = new();
         Geez.Cycle key_part = new();
@@ -1384,6 +1411,7 @@ public class Chamber {
                     + $"({_cnt_wid_cache_hits*100f/_cnt_wid_cache_total:F2}%)");
         }
         log("  bang.");
+        log();
 
         return part;
     }
@@ -1413,7 +1441,26 @@ public class Chamber {
             out bounds);
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
+
+        log();
     }
+
+
+    public void anything() {
+        List<Vec3> a = new();
+        int N = 1000;
+        for (int i=0; i<N; ++i) {
+            float theta = theta_inlet + i*TWOPI/N;
+            float A = A_neg_mani(theta);
+            A /= 0.5f*no_chnl*A_chnl_exit;
+            a.Add(new(theta, 0f, A));
+        }
+        Geez.frame(new());
+        Geez.points(a, r: 0.01f);
+    }
+
+
+    public string name => "chamber";
 
 
     public void initialise() {

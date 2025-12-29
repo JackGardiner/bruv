@@ -5,7 +5,7 @@ using Leap71.ShapeKernel;
 using PicoGK;
 using ports;
 
-public class Injector
+public class Injector : TwoPeasInAPod.Pea
 {
     public required PartMating pm { get; init; }
     public float Ir_chnl;
@@ -71,7 +71,6 @@ public class Injector
         // A = PI*r^2
         // r = sqrt(A/pi)
         fCoreExitRadius = sqrt(fCoreExitArea/PI) * 1e3f; // mm(!)
-        Library.Log($"core exit rad = {fCoreExitRadius}");
     }
 
     // film cooling vars
@@ -628,9 +627,21 @@ public class Injector
 
 
         Library.Log("Baby made.");
+        log();
 
         return part;
     }
+
+    public void drawings(in Voxels part) {
+        /* HI JACK do some doodles here. */
+    }
+
+    public void anything() {
+        /* testing playground if you wish. */
+    }
+
+    public string name => "injector";
+
 
     public void initialise()
     {

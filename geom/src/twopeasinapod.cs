@@ -6,50 +6,42 @@ using Mesh = PicoGK.Mesh;
 
 public class TwoPeasInAPod {
 
+    /* GUIDE: how to create `make` (for smarties) */
+    /* bitwise or (|) ANY/SEVERAL/ALL of these actions: */
+    public const int ANYTHING = 0x1;
+    public const int DRAWINGS = 0x2;
+    public const int VOXELS   = 0x4;
+    public const int LOOKSIE  = 0x8;
+    /* bitwise or (|) ONE(1) of these peas: */
+    public const int CHAMBER  = 1 << BITC_ACTION;
+    public const int INJECTOR = 2 << BITC_ACTION;
+    /* THATS ALL FOLKS */
+
+
     public const int DUMMY = 0;
-    public const int MASK_ACTION = 0b0011;
-    public const int DRAWINGS    = 0b0001;
-    public const int VOXELS      = 0b0010;
-    public const int MASK_OBJECT = 0b1100;
-    public const int CHAMBER     = 0b0100;
-    public const int INJECTOR    = 0b1000;
-    public const int CHAMBER_VOXELS    = CHAMBER | VOXELS;
-    public const int CHAMBER_DRAWINGS  = CHAMBER | DRAWINGS;
-    public const int INJECTOR_VOXELS   = INJECTOR | VOXELS;
-    public const int INJECTOR_DRAWINGS = INJECTOR | DRAWINGS;
-
-    public static int make = DUMMY; // ^ one of those constants.
-
-    public static float voxel_size_mm = 0.7f;
-    public static bool transparent = true;
-    public static bool sectionview = true;
-    public static Sectioner sectioner = new();
+    public const int BITC_ACTION = 4;
+    public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
+    public const int MASK_PEA = ~MASK_ACTION;
 
 
-    public PartMating pm { get; init; }
+    public interface Pea {
+        string name { get; }
+        Voxels voxels();
+        void drawings(in Voxels vox);
+        void anything();
+    }
+
+
     public Chamber chamber { get; init; }
     public Injector injector { get; init; }
 
     public TwoPeasInAPod() {
-        // Configure some viewing options.
-        Geez.initialise();
-        PICOGK_VIEWER.SetFov(70f);
-        PICOGK_VIEWER.SetBackgroundColor(new("#202020"));
-        Geez.dflt_colour = new("#AB331A"); // copperish.
-        Geez.dflt_metallic = 0.35f;
-        Geez.dflt_roughness = 0.8f;
-        if (sectionview)
-            Geez.dflt_sectioner = sectioner;
-
         // Load the config files.
         string path_all = fromroot("../config/all.json");
         string path_extra = fromroot("../config/ammendments.json");
         Jason config = new(path_all);
         if (File.Exists(path_extra))
             config.overwrite_from(path_extra);
-
-        // Create the shared info struct.
-        pm = config.deserialise<PartMating>("part_mating");
 
         { // Construct the chamber object.
             float max_phi = config.get<float>("printer/max_print_angle");
@@ -76,56 +68,16 @@ public class TwoPeasInAPod {
         return null;
     }
 
-    private delegate Voxels voxelsF();
-    private class GetVoxels {
-        public string name { get; set; }
-        public voxelsF voxels_f { get; set; }
-        public bool neednew { get; set; }
-        public GetVoxels(string name, voxelsF voxels_f, bool neednew=true) {
-            this.name = name;
-            this.voxels_f = voxels_f;
-            this.neednew = neednew;
-        }
-        public Voxels? voxels() {
-            string path_vdb = fromroot($"exports/{name}.vdb");
-            Voxels? vox;
-            if (!neednew) {
-                if (load_voxels(name, out vox)) {
-                    log();
-                    return vox;
-                }
-            }
-            log(neednew
-                ? $"Generating '{name}' voxels..."
-                : $"Regenerating '{name}' voxels..."
-            );
-            log();
-            vox = voxels_f();
-            log();
-            save_voxels(name, vox);
-            log();
-            if (!neednew)
-                Geez.clear();
-            return vox;
-        }
-    }
-    private delegate void drawingsF(in Voxels part);
-    private class Drawer { // cupboard type shi
-        public string name { get; set; }
-        public drawingsF drawings_f { get; set; }
-        public Drawer(string name, drawingsF drawings_f) {
-            this.name = name;
-            this.drawings_f = drawings_f;
-        }
-        public void drawings(in Voxels part) {
-            log($"Making '{name}' drawings...");
-            log();
-            drawings_f(part);
-            log();
-        }
-    }
+    public static void entrypoint(int make, in Sectioner? sectioner) {
+        // Configure some viewing options.
+        PICOGK_VIEWER.SetBackgroundColor(new("#202020"));
+        Geez.dflt_colour = new("#AB331A"); // copperish.
+        Geez.dflt_metallic = 0.35f;
+        Geez.dflt_roughness = 0.8f;
+        if (sectioner != null)
+            Geez.dflt_sectioner = sectioner;
+        Geez.initialise();
 
-    public static void entrypoint() {
         // Check dummy method.
         if (make == DUMMY) {
             Voxels? dummy_vox = dummy(out string? dummy_name);
@@ -134,47 +86,41 @@ public class TwoPeasInAPod {
             return;
         }
 
-        // Gotta be either voxels or drawings and either chamber or injector.
+        // Check a pea and at least one action was given.
         assert(!isclr(make, MASK_ACTION));
-        assert(!isclr(make, MASK_OBJECT));
+        assert(!isclr(make, MASK_PEA));
 
         // Parse the objects.
-        TwoPeasInAPod tpiap = new();
-
-        // Make the voxels.
-        bool neednew = isset(make, VOXELS);
-        GetVoxels getter;
-        switch (make & MASK_OBJECT) {
-            case CHAMBER:
-                getter = new("chamber", tpiap.chamber.voxels);
-                break;
-            case INJECTOR:
-                getter = new("injector", tpiap.injector.voxels);
-                break;
-            default:
-                throw new Exception("missing object");
+        TwoPeasInAPod tpiap = new TwoPeasInAPod();
+        Pea pea;
+        switch (make & MASK_PEA) {
+            case CHAMBER:  pea = tpiap.chamber; break;
+            case INJECTOR: pea = tpiap.injector; break;
+            default: throw new Exception("invalid pea");
         }
-        getter.neednew = isset(make, VOXELS);
-        Voxels? vox = getter.voxels();
+
+        // Test me.
+        if (isset(make, ANYTHING))
+            pea.anything();
+
+        // Gimme voxels.
+        Voxels? vox = get_voxels(pea, neednew: isset(make, VOXELS));
         if (vox == null) // unlucky.
             return;
 
-        // Do drawings if requested.
+        // Drawing sidequest.
         if (isset(make, DRAWINGS)) {
-            Drawer drawer;
-            switch (make & MASK_OBJECT) {
-                case CHAMBER:
-                    drawer = new("chamber", tpiap.chamber.drawings);
-                    break;
-                case INJECTOR:
-                    drawer = new("chamber", tpiap.chamber.drawings);
-                    // drawer = new("injector", tpiap.injector.drawings);
-                    // TODO: uncomment ^
-                    break;
-                default:
-                    throw new Exception("missing object");
-            }
-            drawer.drawings(vox);
+            log($"Making '{pea.name}' drawings...");
+            log();
+            pea.drawings(vox);
+        }
+
+        // Proper looksie.
+        if (isset(make, LOOKSIE)) {
+            log($"Giving '{pea.name}' a looksie...");
+            log();
+            Geez.clear();
+            Geez.voxels(vox);
         }
     }
 
@@ -220,9 +166,9 @@ public class TwoPeasInAPod {
                 log($"Failed to export to stl at '{path_stl}'.");
                 log("Exception log:");
                 log(e.ToString());
-                log();
             }
         }
+        log();
     }
 
     public static bool load_voxels(in string name, out Voxels? vox) {
@@ -231,16 +177,19 @@ public class TwoPeasInAPod {
         // Ensure all files are chilling.
         if (!File.Exists(path_vdb)) {
             log($"No voxels at: '{path_vdb}'");
+            log();
             goto FAILED;
         }
         FileInfo file_info = new(path_voxsize);
         if (!file_info.Exists) {
             log($"Missing voxel size at: '{path_voxsize}'");
+            log();
             goto FAILED;
         }
         if (file_info.Length > 1024*1024 /* 1MB */) {
             log($"Voxel size file invalid at: '{path_voxsize}'");
             log($"  (sus, file over 1MB)");
+            log();
             goto FAILED;
         }
         // Ensure voxel size matches.
@@ -251,6 +200,7 @@ public class TwoPeasInAPod {
             if (voxsize != VOXEL_SIZE) {
                 log($"Voxel size mismatch at: '{path_voxsize}'");
                 log($"  (needed {VOXEL_SIZE}, found {voxsize})");
+                log();
                 goto FAILED;
             }
         } catch (Exception e) {
@@ -264,6 +214,7 @@ public class TwoPeasInAPod {
         try {
             vox = Voxels.voxFromVdbFile(path_vdb);
             log($"Loaded from vdb: '{path_vdb}'");
+            log();
             return true;
         } catch (Exception e) {
             log($"Failed to load from vdb at '{path_vdb}'.");
@@ -277,4 +228,23 @@ public class TwoPeasInAPod {
         vox = null;
         return false;
     }
+
+    private static Voxels? get_voxels(in Pea pea, bool neednew=true) {
+        Voxels? vox;
+        if (!neednew) {
+            if (load_voxels(pea.name, out vox))
+                return vox;
+        }
+        log(neednew
+            ? $"Generating '{pea.name}' voxels..."
+            : $"Regenerating '{pea.name}' voxels..."
+        );
+        log();
+        vox = pea.voxels();
+        save_voxels(pea.name, vox);
+        if (!neednew)
+            Geez.clear();
+        return vox;
+    }
+
 }
