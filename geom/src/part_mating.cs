@@ -1,10 +1,10 @@
-public class PartMating
-{
+
+public class PartMating {
     /* Cheeky parts interface diagram.
                     ,- fuel channel
        cc wall -,      '
-                '      : :      :__|  |_
-    ___________________| |_________|  |_|  ___,- this plane is top of cc
+                '      : :       :__|  |_
+    ___________________| |__________|  |_|  ___,- this plane is top of cc
                 | '-'  | |   '-' ,--|  |-'
                 :      : :      :
                    ,         ,      ,
@@ -12,15 +12,16 @@ public class PartMating
           o-rings
     */
 
-    // --- Required for realisable mate (Short-hand) ---
+    // --- Required for realisable mate: ---
+
     public required float Or_cc { get; init; }
 
     public required float Mr_chnl { get; init; }
     public required float min_wi_chnl { get; init; }
 
     public required float Ir_Ioring { get; init; }
-    public required float Or_Ioring { get; init; }
     public required float Ir_Ooring { get; init; }
+    public required float Or_Ioring { get; init; }
     public required float Or_Ooring { get; init; }
     public required float Lz_Ioring { get; init; }
     public required float Lz_Ooring { get; init; }
@@ -30,7 +31,8 @@ public class PartMating
     public required float Bsz_bolt { get; init; }
     public required float Bln_bolt { get; init; }
     public required float Or_washer { get; init; }
-    // --- Descriptive Geometry (Matches flattened JSON) ---
+
+    // --- Descriptive geometry ---
 
     // --- Physics/Inlet Data ---
     public required float fChamberPressure { get; init; }

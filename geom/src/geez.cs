@@ -1,5 +1,6 @@
 using static br.Br;
 
+using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 using Mat4 = System.Numerics.Matrix4x4;
 
@@ -104,6 +105,7 @@ public static class Geez {
 
         private static System.Diagnostics.Stopwatch _stopwatch = new();
 
+        private static float _zoom_scale = 10f;
         private static float _last_zoom = NAN;
 
         private static Vec3 _pos = ZERO3;
@@ -113,6 +115,17 @@ public static class Geez {
 
         private static float _ortho = 1f;
         private static float _ortho_responsiveness = 15f;
+
+        private static Vec2 _snap_ang = NAN2;
+        private static Vec3 _snap_pos = NAN3;
+        private static float _snap_ang_time = 0f;
+        private static float _snap_pos_time = 0f;
+        private static float _snap_max_time = 0.2f;
+        private static float _snap_ang_responsiveness = 25f;
+        private static float _snap_pos_responsiveness = 25f;
+
+        private static float _target_fov = torad(70f);
+        private static float _fov_responsiveness = 20f;
 
         private const int KEY_SPACE = 0b00000001;
         private const int KEY_SHIFT = 0b00000010;
@@ -198,10 +211,10 @@ public static class Geez {
             if (!(_last_zoom == zoom)) {
                 if (nonnan(_last_zoom)) {
                     float Dzoom = zoom - _last_zoom;
-                    Dzoom *= log(zoom + 1f);
-                    Dzoom *= 5f;
+                    Dzoom *= log(zoom/_zoom_scale + 1f);
+                    Dzoom *= 5f * _zoom_scale;
                     zoom = _last_zoom + Dzoom;
-                    zoom = clamp(zoom, 0.1f, 5f);
+                    zoom = clamp(zoom, 0.1f, 2.5f * _zoom_scale);
                     Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
                 }
                 _last_zoom = zoom;
@@ -212,7 +225,7 @@ public static class Geez {
             float theta = torad(PICOGK_VIEWER.m_fOrbit);
             float phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
 
-            // In non-orbit, we scale-down the sensitivity.
+            // In perspective, we scale-down the sensitivity.
             if (!_orbit && nonnan(_last_theta) && nonnan(_last_phi)) {
                 float Dtheta = theta - _last_theta;
                 float Dphi = phi - _last_phi;
@@ -228,13 +241,6 @@ public static class Geez {
             }
             theta = wraprad(theta - PI) + PI; // [0,TWOPI), to match picogk.
             phi = clamp(phi, 1e-3f, PI - 1e-3f);
-            _last_theta = theta;
-            _last_phi = phi;
-
-            // Keep the viewer in the loop. Note this also fixed picogk's broken
-            // elevation clamp.
-            PICOGK_VIEWER.m_fOrbit = todeg(theta);
-            PICOGK_VIEWER.m_fElevation = todeg(PI_2 - phi);
 
             // we could bypass picogk fov store but lets not.
             float fov = torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
@@ -246,8 +252,43 @@ public static class Geez {
                 float Dt = (float)_stopwatch.Elapsed.TotalSeconds;
                 _stopwatch.Restart();
 
+                // Handle perspective/orthogonal switch.
+                float target_ortho = _orbit ? 1f : 0f;
+                _ortho += (target_ortho - _ortho)
+                        * (1f - exp(-_ortho_responsiveness * Dt));
+
+                // Do any view snapping.
+                _snap_ang_time += Dt;
+                if (nonnan(_snap_ang)) {
+                    float Dtheta = _snap_ang.X - theta;
+                    float Dphi   = _snap_ang.Y - phi;
+                    // Same take-shortest-path as before.
+                    if (Dtheta > PI)
+                        Dtheta -= TWOPI;
+                    else if (Dtheta < -PI)
+                        Dtheta += TWOPI;
+                    Dtheta *= 1f - exp(-_snap_ang_responsiveness * Dt);
+                    Dphi   *= 1f - exp(-_snap_ang_responsiveness * Dt);
+                    theta += Dtheta;
+                    phi   += Dphi;
+                    bool snap = (_snap_ang_time >= _snap_max_time)
+                             || closeto(
+                                    new Vec2(theta, phi),
+                                    _snap_ang,
+                                    atol: 5e-2f
+                                );
+                    if (snap) {
+                        theta = _snap_ang.X;
+                        phi   = _snap_ang.Y;
+                        _snap_ang = NAN2;
+                    }
+                }
+                if (isnan(_snap_ang))
+                    _snap_ang_time = 0f;
+
+
                 // Handle accel/vel/pos.
-                Frame frame = new(ZERO3, tocart(1f, theta + PI, 0f), uZ3);
+                Frame frame = new(ZERO3, -tocart(1f, theta, 0f), uZ3);
                 Vec3 target_vel = ZERO3;
                 if (isset(_held, KEY_SPACE)) target_vel += frame.Z;
                 if (isset(_held, KEY_SHIFT) /* several ways to go down (dujj) */
@@ -267,15 +308,42 @@ public static class Geez {
                     _vel = ZERO3;
 
                 // Scale velocity impact with zoom level also.
-                float by = zoom * 8f;
-                by *= lerp(0.5f, 1f, _ortho); // also slower on non-ortho.
+                float by = zoom/_zoom_scale;
+                // https://www.desmos.com/calculator/jyn4eclrcf
+                by *= 0.0190255f * mag(_size) + 0.00951883f;
+                by *= lerp(0.5f, 1f, _ortho); // also slower on perspective.
                 _pos += by*_vel*Dt;
 
-                // Handle perspective/orthogonal switch.
-                float target_ortho = _orbit ? 1f : 0f;
-                _ortho += (target_ortho - _ortho)
-                        * (1f - exp(-_ortho_responsiveness * Dt));
+
+                // Do any position snapping.
+                _snap_pos_time += Dt;
+                if (nonnan(_snap_pos)) {
+                    _pos += (_snap_pos - _pos)
+                          * (1f - exp(-_snap_pos_responsiveness * Dt));
+                    bool snap = (_snap_pos_time >= _snap_max_time)
+                             || closeto(_pos, _snap_pos, atol: 5e-2f);
+                    if (snap) {
+                        _pos = _snap_pos;
+                        _snap_pos = NAN3;
+                    }
+                }
+                if (isnan(_snap_pos))
+                    _snap_pos_time = 0f;
+
+
+                // fov change.
+                fov += (_target_fov - fov)
+                     * (1f - exp(-_fov_responsiveness * Dt));
+                Perv.set(PICOGK_VIEWER, "m_fFov", todeg(fov));
             }
+
+            // Keep everyone informed. Note that also by handling our own view
+            // angles (and splicing them into picogk) we fix picogk's broken
+            // elevation clamp.
+            _last_theta = theta;
+            _last_phi = phi;
+            PICOGK_VIEWER.m_fOrbit = todeg(theta);
+            PICOGK_VIEWER.m_fElevation = todeg(PI_2 - phi);
 
             // Setup box to trick picogk into thinking its the origin.
             BBox3 newbbox = new BBox3(-_size/2f, _size/2f);
@@ -303,8 +371,8 @@ public static class Geez {
 
             // Create the mvp matrix, perhaps blending between perspective and
             // ortho.
-            Vec3 look = -tocart(1f, theta, as_phi(phi));
-            float dist = mag(_size) * zoom * 0.8f;
+            Vec3 look = looking(out _, out _);
+            float dist = mag(_size) * (zoom/_zoom_scale) * 0.8f;
             float height = 2f * dist * tan(fov/2f);
 
             float near = dist*0.01f;
@@ -316,7 +384,7 @@ public static class Geez {
             float closeness = lerp(0f, 1f, _ortho / (2f - _ortho));
 
             float orthodist = 1e4f;
-            Vec3 camera = tocart(1f, theta, as_phi(phi));
+            Vec3 camera = -look;
             Vec3 shift = ZERO3;
             Mat4 view;
             Mat4 projection;
@@ -342,8 +410,8 @@ public static class Geez {
                 far  = newdist*50f;
 
                 // Want ultra deep clipping area when in perspective.
-                near *= lerp(0.05f/zoom, 1f, _ortho);
-                far  *= lerp(0.2f/zoom, 1f, _ortho);
+                near *= lerp(0.05f/(zoom/_zoom_scale), 1f, _ortho);
+                far  *= lerp(0.2f/(zoom/_zoom_scale), 1f, _ortho);
 
                 // Move camera pos to "origin", to ensure mouse directly drags
                 // view.
@@ -417,13 +485,25 @@ public static class Geez {
 
             _ortho = 1f;
 
-            Perv.set(PICOGK_VIEWER, "m_fZoom", 1f);
+            _snap_ang = NAN2;
+            _snap_pos = NAN3;
+            _snap_ang_time = 0f;
+            _snap_pos_time = 0f;
+
+            _target_fov = torad(70f);
+
+            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
         }
         public static void recalc() {
             _get_a_word_in_edgewise = 5;
         }
         public static void change(bool orbit) {
             _orbit = orbit;
+        }
+        private static Vec3 looking(out float theta, out float phi) {
+            theta = torad(PICOGK_VIEWER.m_fOrbit);
+            phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
+            return -tocart(1f, theta, as_phi(phi));
         }
 
         /* Viewer.IViewerAction */
@@ -472,6 +552,47 @@ public static class Geez {
                         break;
                     _set_all_alpha(!transparent);
                     return true;
+
+                case Viewer.EKeys.Key_Q:
+                    if (!pressed || _orbit)
+                        break;
+                    _target_fov += (PI - _target_fov)/15f;
+                    return true;
+                case Viewer.EKeys.Key_E:
+                    if (!pressed || _orbit)
+                        break;
+                    _target_fov += (0f - _target_fov)/15f;
+                    return true;
+
+                case Viewer.EKeys.Key_N: {
+                    if (!pressed || !_orbit)
+                        break;
+                    // get snapping.
+                    Vec3 look = looking(out _, out _);
+                    if (abs(look.X) >= abs(look.Y)) {
+                        _snap_ang.X = (look.X < 0f) ? 0f : PI;
+                    } else {
+                        _snap_ang.X = (look.Y < 0f) ? PI_2 : 1.5f*PI;
+                    }
+                    if (abs(look.Z)/2f >= max(abs(look.X), abs(look.Y))) {
+                        _snap_ang.Y = (look.Z < 0f) ? 1e-3f : PI - 1e-3f;
+                    } else {
+                        _snap_ang.Y = PI_2;
+                    }
+                } return true;
+
+                case Viewer.EKeys.Key_M: {
+                    if (!pressed || !_orbit)
+                        break;
+                    // snap snap.
+                    Vec3 look = looking(out float theta, out _);
+                    // cheeky plane line intersection.
+                    Vec3 point = _pos;
+                    Vec3 normal = cross(look, tocart(1f, theta + PI_2, 0f));
+                    float z = -dot(normal, -point) / dot(normal, uZ3);
+                    _snap_pos = -_origin;
+                    _snap_pos.Z = z;
+                } return true;
             }
             return false;
 
@@ -489,6 +610,7 @@ public static class Geez {
         }
 
         public static void initialise() {
+            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
             PICOGK_VIEWER.AddKeyHandler(new HackView());
             _ = make_shit_happen_continuously();
         }
@@ -503,9 +625,12 @@ public static class Geez {
         log("     - Z/shift+space  move camera down");
         log("     - ctrl           sprint on movement key-down");
         log("     - tab            toggle orbit/free mode");
-        log("     - scroll         orbit zoom in-out + move slower/faster");
+        log("     - scroll         orbit zoom in/out + move slower/faster");
         log("     - ctrl+R         rescale for window size");
         log("     - backspace      reset view");
+        log("     - N              orbit snap to normal");
+        log("     - M              orbit snap to Z axis");
+        log("     - Q/E            dial up/down free fov");
         log("     - T              toggle transparency");
         log();
     }
