@@ -7,6 +7,7 @@ namespace br {
 
 public static partial class Br {
 
+    /* assertions. */
     public class AssertionFailed : Exception {
         public AssertionFailed(string message) : base(message) {}
     }
@@ -35,6 +36,13 @@ public static partial class Br {
                 file: file, line: line, member: member);
     }
 
+    /* picogk aliases. */
+    public static float VOXEL_SIZE => PicoGK.Library.fVoxelSizeMM;
+    public static PicoGK.Viewer PICOGK_VIEWER => PicoGK.Library.oViewer();
+    public static void log() => PicoGK.Library.Log("");
+    public static void log(in string msg) => PicoGK.Library.Log(msg);
+
+    /* paths. */
     public static string PATH_ROOT
         => Directory.GetParent(AppContext.BaseDirectory)
             !.Parent
@@ -43,12 +51,20 @@ public static partial class Br {
             !.FullName;
     public static string fromroot(string rel) => Path.Combine(PATH_ROOT, rel);
 
+    /* element count. */
     public static int numel<T>(T[] x) => x.Length;
     public static int numel<T>(List<T> x) => x.Count;
     public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
 
+    /* bit tricks. */
+    public static bool isset(int x, int mask) => (x & mask) == mask;
+    public static bool isclr(int x, int mask) => (x & mask) == 0;
+
+    /* vec -> string. */
+    public static string vecstr(in Vec2 a) => $"({a.X}, {a.Y})";
     public static string vecstr(in Vec3 a) => $"({a.X}, {a.Y}, {a.Z})";
 
+    /* colours. */
     public static Colour COLOUR_BLACK => new("#000000");
     public static Colour COLOUR_RED => new("#FF0000");
     public static Colour COLOUR_GREEN => new("#00FF00");
@@ -58,9 +74,7 @@ public static partial class Br {
     public static Colour COLOUR_YELLOW => new("#FFFF00");
     public static Colour COLOUR_WHITE => new("#FFFFFF");
 
-    public static float VOXEL_SIZE => PicoGK.Library.fVoxelSizeMM;
-    public static PicoGK.Viewer PICOGK_VIEWER => PicoGK.Library.oViewer();
-
+    /* inf/nan. */
     public const float INF = float.PositiveInfinity;
     public const float NAN = float.NaN;
 
@@ -83,6 +97,9 @@ public static partial class Br {
     public static bool isgood(float a) => !isnan(a) && !isinf(a);
     public static bool isgood(Vec2 a) => !isnan(a) && !isinf(a);
     public static bool isgood(Vec3 a) => !isnan(a) && !isinf(a);
+
+
+    /* MATHEMATICS */
 
     public const float SQRTH = 0.70710677f; // sqrt(1/2)
     public const float SQRT2 = 1.4142135f;
@@ -156,6 +173,13 @@ public static partial class Br {
         => closeto(a.X, b.X, rtol: rtol, atol: atol) &&
            closeto(a.Y, b.Y, rtol: rtol, atol: atol) &&
            closeto(a.Z, b.Z, rtol: rtol, atol: atol);
+
+    public static float lerp(float a, float b, float t)
+        => a + clamp(t, 0f, 1f)*(b - a);
+    public static Vec2 lerp(Vec2 a, Vec2 b, float t)
+        => a + clamp(t, 0f, 1f)*(b - a);
+    public static Vec3 lerp(Vec3 a, Vec3 b, float t)
+        => a + clamp(t, 0f, 1f)*(b - a);
 
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));

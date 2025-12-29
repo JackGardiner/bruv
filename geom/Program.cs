@@ -4,24 +4,23 @@ using br;
 
 using TPIAP = TwoPeasInAPod;
 
-float voxel_size_mm = 0.4f;
-TPIAP.make = TPIAP.MAKE_INJECTOR;
+float voxel_size_mm = 1f;
+TPIAP.make = TPIAP.CHAMBER | TPIAP.DRAWINGS;
 TPIAP.transparent = true; // only affects viewing (duh?)
-TPIAP.section_view = true;
-TPIAP.section_export = false;
+TPIAP.sectionview = true;
 TPIAP.sectioner = Sectioner.pie(torad(0f), torad(270f));
 
 
 // Task wrapper to configure some things and have nicer exception handling.
 void wrapped_task() {
     try {
-        PicoGK.Library.Log("");
-        PicoGK.Library.Log("whas good");
+        log();
+        log("whas good");
 
         TPIAP.entrypoint();
 
-        PicoGK.Library.Log("Don.");
-        PicoGK.Library.Log("");
+        log("Don.");
+        log();
 
         // Now loop until window is closed, since picogk will stop the instant
         // this function returns (and the thread is terminated).
@@ -39,10 +38,10 @@ void wrapped_task() {
             Thread.Sleep(50);
         }
     } catch (Exception e) {
-        PicoGK.Library.Log("FAILED when running task.");
-        PicoGK.Library.Log("Exception log:");
-        PicoGK.Library.Log(e.ToString());
-        PicoGK.Library.Log("");
+        log("FAILED when running task.");
+        log("Exception log:");
+        log(e.ToString());
+        log();
     }
 }
 

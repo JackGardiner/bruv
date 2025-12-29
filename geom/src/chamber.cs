@@ -725,7 +725,7 @@ public class Chamber {
             float thetahi = theta + Dt;
             float rlo = cnt_radius_at(z, th_iw);
             float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani);
-            rhi += th_chnl/4f; // safety.
+            rhi += th_chnl/2f; // safety.
 
             points.Add(tocart(rlo, thetalo, z));
             points.Add(tocart(rhi, thetalo, z));
@@ -1282,23 +1282,23 @@ public class Chamber {
         Voxels gas = voxels_cnt_gas();
         using (key_gas.like())
             key_gas <<= Geez.voxels(gas);
-        PicoGK.Library.Log("created gas.");
+        log("created gas.");
 
         Voxels neg_mani = voxels_neg_mani(out Frame inlet);
         using (key_mani.like())
             key_mani <<= Geez.voxels(neg_mani);
-        PicoGK.Library.Log("created negative manifold.");
+        log("created negative manifold.");
 
         Voxels pos_mani = voxels_pos_mani(inlet);
-        PicoGK.Library.Log("created positive manifold.");
+        log("created positive manifold.");
 
         Voxels chnl = voxels_chnl(ref key_chnl);
-        PicoGK.Library.Log("created channels.");
+        log("created channels.");
 
         voxels_tc(out Voxels neg_tc, out Voxels pos_tc);
         using (key_tc.like())
             key_tc <<= Geez.voxels(pos_tc);
-        PicoGK.Library.Log("created thermocouples.");
+        log("created thermocouples.");
 
         Voxels neg_bolts = voxels_neg_bolts(ref key_bolts);
 
@@ -1319,16 +1319,16 @@ public class Chamber {
         Voxels flange = voxels_flange();
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
-        PicoGK.Library.Log("created flange.");
+        log("created flange.");
 
         part = voxels_cnt_ow_filled();
-        PicoGK.Library.Log("created outer wall.");
+        log("created outer wall.");
         add(ref pos_mani, key_mani);
-        PicoGK.Library.Log("added positive manifold.");
+        log("added positive manifold.");
         add(ref pos_tc, key_tc);
-        PicoGK.Library.Log("added positive thermocouples.");
+        log("added positive thermocouples.");
         add(ref flange, key_flange);
-        PicoGK.Library.Log("added flange.");
+        log("added flange.");
 
         Voxels top_excess = new Pipe(
             new Frame(cnt_z6*uZ3),
@@ -1338,23 +1338,23 @@ public class Chamber {
         part.BoolSubtract(top_excess);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
-        PicoGK.Library.Log("clipped top excess.");
+        log("clipped top excess.");
 
         Fillet.concave(part, 3f, inplace: true);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
-        PicoGK.Library.Log("filleted.");
+        log("filleted.");
 
         sub(ref gas, key_gas);
-        PicoGK.Library.Log("subtracted gas cavity.");
+        log("subtracted gas cavity.");
         sub(ref chnl, key_chnl);
-        PicoGK.Library.Log("subtracted channels.");
+        log("subtracted channels.");
         sub(ref neg_mani);
-        PicoGK.Library.Log("subtracted negative manifold.");
+        log("subtracted negative manifold.");
         sub(ref neg_tc);
-        PicoGK.Library.Log("subtracted negative thermocouples.");
+        log("subtracted negative thermocouples.");
         sub(ref neg_bolts, key_bolts);
-        PicoGK.Library.Log("subtracted bolt holes.");
+        log("subtracted bolt holes.");
 
         Voxels bot_excess = new Pipe(
             new Frame(ZERO3, -uZ3),
@@ -1364,40 +1364,41 @@ public class Chamber {
         part.BoolSubtract(bot_excess);
         using (key_part.like())
             key_part <<= Geez.voxels(part);
-        PicoGK.Library.Log("clipped bottom excess.");
+        log("clipped bottom excess.");
 
 
-        PicoGK.Library.Log("Baby made.");
+        log("Baby made.");
 
         if (_cnt_cache_total == 0) {
-            PicoGK.Library.Log($"  cache sdf: unused");
+            log($"  cache sdf: unused");
         } else {
-            PicoGK.Library.Log($"  cache sdf: "
+            log($"  cache sdf: "
                     + $"{_cnt_cache_hits:N0} / {_cnt_cache_total:N0} "
                     + $"({_cnt_cache_hits*100f/_cnt_cache_total:F2}%)");
         }
         if (_cnt_wid_cache_total == 0) {
-            PicoGK.Library.Log($"  cache wid_sdf: unused");
+            log($"  cache wid_sdf: unused");
         } else {
-            PicoGK.Library.Log($"  cache wid_sdf: "
+            log($"  cache wid_sdf: "
                     + $"{_cnt_wid_cache_hits:N0} / {_cnt_wid_cache_total:N0} "
                     + $"({_cnt_wid_cache_hits*100f/_cnt_wid_cache_total:F2}%)");
         }
-        PicoGK.Library.Log("  bang.");
-
-
-        PicoGK.Library.Log("Drawings:");
-
-        Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
-        Drawing.to_file(fromroot($"exports/chamber_xy.svg"), part, frame_xy);
-        PicoGK.Library.Log("  xy done.");
-
-        Frame frame_yz = new(ZERO3, uY3, uX3);
-        Drawing.to_file(fromroot($"exports/chamber_yz.svg"), part, frame_yz);
-        PicoGK.Library.Log("  yz done.");
-
+        log("  bang.");
 
         return part;
+    }
+
+
+    public void drawings(in Voxels part) {
+        Geez.voxels(part); // someting to look at.
+
+        Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
+        log("cross-sectioning xy...");
+        Drawing.to_file(fromroot($"exports/chamber_xy.svg"), part, frame_xy);
+
+        Frame frame_yz = new(ZERO3, uY3, uX3);
+        log("cross-sectioning yz...");
+        Drawing.to_file(fromroot($"exports/chamber_yz.svg"), part, frame_yz);
     }
 
 

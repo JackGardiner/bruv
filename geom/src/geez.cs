@@ -92,25 +92,35 @@ public static class Geez {
 
 
     public class HackView : Viewer.IViewerAction, Viewer.IKeyHandler {
-        private static BBox3? _scoped = null;
+        private static Vec3 _origin = NAN3;
+        private static Vec3 _size = NAN3;
+        private static int _get_a_word_in_edgewise = 5;
+
+        private static bool _orbit = true;
+        private static float _last_theta = NAN;
+        private static float _last_phi = NAN;
 
         private static System.Diagnostics.Stopwatch _stopwatch = new();
 
-        private static float _prev_zoom = NAN;
-        private static float _zoom_scale = 100f;
+        private static float _last_zoom = NAN;
 
         private static Vec3 _pos = ZERO3;
         private static Vec3 _vel = ZERO3;
         private static float _target_speed = 50f;
-        private static float _responsiveness = 20f;
+        private static float _speed_responsiveness = 20f;
 
-        private const int KEY_SPACE = 0;
-        private const int KEY_SHIFT = 1;
-        private const int KEY_W = 2;
-        private const int KEY_S = 3;
-        private const int KEY_A = 4;
-        private const int KEY_D = 5;
-        private static bool[] _held = new bool[6];
+        private static float _ortho = 1f;
+        private static float _ortho_responsiveness = 15f;
+
+        private const int KEY_SPACE = 0b00000001;
+        private const int KEY_SHIFT = 0b00000010;
+        private const int KEY_W     = 0b00000100;
+        private const int KEY_S     = 0b00001000;
+        private const int KEY_A     = 0b00010000;
+        private const int KEY_D     = 0b00100000;
+        private const int KEY_Z     = 0b01000000;
+        private const int KEY_CTRL  = 0b10000000; /* must be last. */
+        private static int _held = 0;
 
       #if false
         // Leaving this here just so you can see how cooked the required
@@ -174,68 +184,188 @@ public static class Geez {
             BBox3 bbox = Perv.get<BBox3>(PICOGK_VIEWER, "m_oBBox");
 
             // Only set the initial box once, on the first thing rendered.
-            if (_scoped == null && !bbox.Equals(new BBox3()))
-                _scoped = bbox;
-            if (_scoped == null)
-                return;
-
-            // Get Dt across calls.
-            if (!_stopwatch.IsRunning) {
-                _stopwatch.Start();
-                return;
+            if (isnan(_origin) || isnan(_size)) {
+                if (bbox.Equals(new BBox3()))
+                    return;
+                _origin = bbox.vecCenter();
+                _size = bbox.vecSize();
             }
-            float Dt = (float)_stopwatch.Elapsed.TotalSeconds;
-            _stopwatch.Restart();
 
-            // We pretend our object is scaled smaller to enable higher zooms,
-            // but this also means our zoom scales waaay slower. So, we
-            // implement a custom zoom-re-scaler and also initialise zoom at
-            // scale.
+            // Rescale their zoom handler too bc the linear one is bad.
             float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            if (!(_prev_zoom == zoom)) {
-                if (nonnan(_prev_zoom)) {
-                    float Dzoom = (zoom - _prev_zoom)*_zoom_scale;
-                    Dzoom *= log(zoom/_zoom_scale + 1f);
+            if (!(_last_zoom == zoom)) {
+                if (nonnan(_last_zoom)) {
+                    float Dzoom = zoom - _last_zoom;
+                    Dzoom *= log(zoom + 1f);
                     Dzoom *= 5f;
-                    zoom = _prev_zoom + Dzoom;
+                    zoom = _last_zoom + Dzoom;
                     zoom = max(zoom, 0.1f);
                     Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
                 }
-                _prev_zoom = zoom;
+                _last_zoom = zoom;
             }
 
-            // Handle accel/vel/pos.
-            float theta = PI + torad(PICOGK_VIEWER.m_fOrbit);
-            Frame frame = new(ZERO3, tocart(1f, theta, 0f), uZ3);
-            Vec3 target = ZERO3;
-            if (_held[KEY_SPACE]) target += frame.Z;
-            if (_held[KEY_SHIFT]) target -= frame.Z;
-            if (_held[KEY_W])     target += frame.X;
-            if (_held[KEY_S])     target -= frame.X;
-            if (_held[KEY_A])     target += frame.Y;
-            if (_held[KEY_D])     target -= frame.Y;
-            if (target != ZERO3)
-                target = normalise(target) * _target_speed;
-            _vel += (target - _vel)*(1f - exp(-_responsiveness * Dt));
-            if (mag(_vel) < 1e-3f && mag(target) < 1e-3f)
-                _vel = ZERO3;
+            // Get angles of camera position (note this is not camera looking
+            // angles).
+            float theta = torad(PICOGK_VIEWER.m_fOrbit);
+            float phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
 
-            // Scale velocity impact with zoom level also.
-            float by = 5f * zoom / _zoom_scale;
-            _pos += by*_vel*Dt;
+            // In non-orbit, we scale-down the sensitivity.
+            if (!_orbit && nonnan(_last_theta) && nonnan(_last_phi)) {
+                float Dtheta = theta - _last_theta;
+                float Dphi = phi - _last_phi;
+                // Assume wrapping caused any larger-than-half turns.
+                if (Dtheta > PI)
+                    Dtheta -= TWOPI;
+                else if (Dtheta < -PI)
+                    Dtheta += TWOPI;
+                Dtheta /= 1.5f;
+                Dphi /= 1.5f;
+                theta = _last_theta + Dtheta;
+                phi = _last_phi + Dphi;
+            }
+            theta = wraprad(theta - PI) + PI; // [0,TWOPI), to match picogk.
+            phi = clamp(phi, 1e-3f, PI - 1e-3f);
+            _last_theta = theta;
+            _last_phi = phi;
+
+            // Keep the viewer in the loop. Note this also fixed picogk's broken
+            // elevation clamp.
+            PICOGK_VIEWER.m_fOrbit = todeg(theta);
+            PICOGK_VIEWER.m_fElevation = todeg(PI_2 - phi);
+
+            // we could bypass picogk fov store but lets not.
+            float fov = torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
+
+            // Get Dt across calls for movement.
+            if (!_stopwatch.IsRunning) {
+                _stopwatch.Start();
+            } else {
+                float Dt = (float)_stopwatch.Elapsed.TotalSeconds;
+                _stopwatch.Restart();
+
+                // Handle accel/vel/pos.
+                Frame frame = new(ZERO3, tocart(1f, theta + PI, 0f), uZ3);
+                Vec3 target_vel = ZERO3;
+                if (isset(_held, KEY_SPACE)) target_vel += frame.Z;
+                if (isset(_held, KEY_SHIFT) /* several ways to go down (dujj) */
+                    || isset(_held, KEY_Z))  target_vel -= frame.Z;
+                if (isset(_held, KEY_W))     target_vel += frame.X;
+                if (isset(_held, KEY_S))     target_vel -= frame.X;
+                if (isset(_held, KEY_A))     target_vel += frame.Y;
+                if (isset(_held, KEY_D))     target_vel -= frame.Y;
+                if (target_vel != ZERO3) {
+                    target_vel = normalise(target_vel) * _target_speed;
+                    if ((_held & KEY_CTRL) != 0)
+                       target_vel *= 3f;
+                }
+                _vel += (target_vel - _vel)
+                      * (1f - exp(-_speed_responsiveness * Dt));
+                if (mag(_vel) < 1e-3f && mag(target_vel) < 1e-3f)
+                    _vel = ZERO3;
+
+                // Scale velocity impact with zoom level also.
+                float by = zoom * 8f;
+                by *= lerp(0.5f, 1f, _ortho); // also slower on non-ortho.
+                _pos += by*_vel*Dt;
+
+                // Handle perspective/orthogonal switch.
+                float target_ortho = _orbit ? 1f : 0f;
+                _ortho += (target_ortho - _ortho)
+                        * (1f - exp(-_ortho_responsiveness * Dt));
+            }
 
             // Setup box to trick picogk into thinking its the origin.
-            Vec3 origin = _scoped.Value.vecCenter();
-            Vec3 size = _scoped.Value.vecSize();
-            size /= _zoom_scale;
-            BBox3 newbbox = new BBox3(-size/2f, size/2f);
+            BBox3 newbbox = new BBox3(-_size/2f, _size/2f);
             Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
+
+
+            // HOLD ON. if we never allow bbox to be non-empty, picogk wont even
+            // generate the matrices and we are free to splice our own in. fuck
+            // yes. the clipping plane has been defeated.
+            // weeeeeeeeeeeellllllllll actually we still sometimes need to let
+            // picogk get a fuckin' word in edgewise (shut up) so that the
+            // projection matrix actually has the correct/latest aspect ratio.
+            // im hot dawg.
+            if (_get_a_word_in_edgewise > 0) {
+                --_get_a_word_in_edgewise;
+            } else {
+                Perv.set(PICOGK_VIEWER, "m_oBBox", new BBox3());
+            }
+
+            // Get aspect ratio by backing it out of the static projection
+            // matrix.
+            Mat4 proj_static = Perv.get<Mat4>(PICOGK_VIEWER,
+                                              "m_matProjectionStatic");
+            float aspect_ratio = proj_static[1,1] / proj_static[0,0];
+
+            // Create the mvp matrix, perhaps blending between perspective and
+            // ortho.
+            Vec3 look = -tocart(1f, theta, as_phi(phi));
+            float dist = mag(_size) * zoom * 0.8f;
+            float height = 2f * dist * tan(fov/2f);
+
+            float near = dist*0.05f;
+            float far  = dist*50f;
+            // thats farkin heaps deep enough jeff.
+
+            Vec3 camera = tocart(dist, theta, as_phi(phi));
+            Vec3 shift = ZERO3;
+            Mat4 view;
+            Mat4 projection;
+            if (_ortho > 0.99f) {
+                view = Mat4.CreateLookTo(
+                    camera,
+                    look,
+                    uZ3
+                );
+                projection = Mat4.CreateOrthographic(
+                    height * aspect_ratio,
+                    height,
+                    near,
+                    far
+                );
+            } else {
+                float newfov = lerp(fov, 1e-2f, _ortho);
+                float newdist = height / 2f / tan(newfov/2f);
+                near = newdist*0.05f;
+                far  = newdist*50f;
+
+                float move = lerp(0f, 1f, _ortho / (2f - _ortho));
+                newdist *= move;
+
+                view = Mat4.CreateLookTo(
+                    camera / dist * newdist,
+                    look,
+                    uZ3
+                );
+                projection = Mat4.CreatePerspectiveFieldOfView(
+                    newfov,
+                    aspect_ratio,
+                    near,
+                    far
+                );
+
+                // Move camera pos to "origin", to ensure mouse directly drags
+                // view.
+                camera *= move;
+                shift = camera;
+            }
+            Perv.set(
+                PICOGK_VIEWER,
+                "m_matModelViewProjection",
+                view * projection
+            );
+            Perv.set( // important to keep updated for lighting purposes.
+                PICOGK_VIEWER,
+                "m_vecEye",
+                camera
+            );
 
             // Shift all objects into the origin established by first rendered
             // object and then to camera.
-            Transformer t = new Transformer()
-                .translate(-_pos - origin);
-            _set_all_transforms(t.mat_T);
+            Vec3 translate = -_pos - _origin - shift;
+            _set_all_transforms(Mat4.CreateTranslation(translate));
         }
 
         public static void make_shit_happen_in_the_future() {
@@ -250,17 +380,33 @@ public static class Geez {
         private static async Task make_shit_happen_continuously() {
             for (;;) {
                 make_shit_happen_in_the_future();
-                await Task.Delay(5);
+                await Task.Delay(15);
             }
         }
 
-        public static void reset_view() {
+        public static void reset() {
             // Cheeky reset.
+            _origin = NAN3;
+            _size = NAN3;
+
+            _orbit = true;
+            _last_theta = NAN;
+            _last_phi = NAN;
+
+            _last_zoom = NAN;
+
             _pos = ZERO3;
             _vel = ZERO3;
-            _scoped = null;
-            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
-            _prev_zoom = NAN;
+
+            _ortho = 1f;
+
+            Perv.set(PICOGK_VIEWER, "m_fZoom", 1f);
+        }
+        public static void recalc() {
+            _get_a_word_in_edgewise = 5;
+        }
+        public static void change(bool orbit) {
+            _orbit = orbit;
         }
 
         /* Viewer.IViewerAction */
@@ -271,31 +417,55 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
+            int keycode;
             switch (key) {
-                case Viewer.EKeys.Key_W: _held[KEY_W] = pressed; return true;
-                case Viewer.EKeys.Key_S: _held[KEY_S] = pressed; return true;
-                case Viewer.EKeys.Key_A: _held[KEY_A] = pressed; return true;
-                case Viewer.EKeys.Key_D: _held[KEY_D] = pressed; return true;
                 case Viewer.EKeys.Key_Space:
-                    if (!pressed) {
-                        _held[KEY_SHIFT] = false;
-                        _held[KEY_SPACE] = false;
-                    } else {
-                        _held[shift ? KEY_SHIFT : KEY_SPACE] = true;
-                    }
+                    // Gotta turn off both shift and space upon space release.
+                    // Otherwise we have no way of catching the shift up event.
+                    keycode = pressed
+                            ? (shift ? KEY_SHIFT : KEY_SPACE)
+                            : (KEY_SHIFT | KEY_SPACE);
+                    goto RECOGNISED;
+                case Viewer.EKeys.Key_W: keycode = KEY_W; goto RECOGNISED;
+                case Viewer.EKeys.Key_S: keycode = KEY_S; goto RECOGNISED;
+                case Viewer.EKeys.Key_A: keycode = KEY_A; goto RECOGNISED;
+                case Viewer.EKeys.Key_D: keycode = KEY_D; goto RECOGNISED;
+                case Viewer.EKeys.Key_Z: keycode = KEY_Z; goto RECOGNISED;
+
+                case Viewer.EKeys.Key_Tab:
+                    if (!pressed)
+                        break;
+                    change(!_orbit);
                     return true;
 
                 case Viewer.EKeys.Key_Backspace:
                     if (!pressed)
                         break;
-                    reset_view();
+                    reset();
+                    return true;
+
+                case Viewer.EKeys.Key_R:
+                    if (!pressed || !ctrl)
+                        break;
+                    recalc();
                     return true;
             }
             return false;
+
+          RECOGNISED:;
+            if (pressed) {
+                if (ctrl)
+                    _held |= KEY_CTRL;
+                _held |= keycode;
+            } else {
+                _held &= ~keycode;
+                if (isclr(_held, KEY_CTRL - 1))
+                    _held &= ~KEY_CTRL;
+            }
+            return true;
         }
 
         public static void initialise() {
-            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
             PICOGK_VIEWER.AddKeyHandler(new HackView());
             _ = make_shit_happen_continuously();
         }
@@ -303,6 +473,17 @@ public static class Geez {
 
     public static void initialise() {
         HackView.initialise();
+        log();
+        log("[Geez] using a new hacked-in camera, keybinds:");
+        log("     - w/a/s/d        move camera horizontally");
+        log("     - space          move camera up");
+        log("     - z/shift+space  move camera down");
+        log("     - ctrl           sprint on movement key-down");
+        log("     - tab            toggle orbit/free mode");
+        log("     - scroll         orbit zoom in-out + move slower/faster");
+        log("     - ctrl+r         rescale for window size");
+        log("     - backspace      reset view");
+        log();
     }
 
 
@@ -757,7 +938,7 @@ public static class Geez {
         // Dummy mesh to fix polyline colouring bug.
         _dummy_og = new();
         _dummy_og.AddVertices(
-            [new(0,0,0), new(1e-3f,0,0), new(0,1e-3f,0), new(0,0,1e-3f)],
+            [new(0,0,0), new(1e-1f,0,0), new(0,1e-1f,0), new(0,0,1e-1f)],
             out _
         );
         _dummy_og.nAddTriangle(0, 2, 1);
