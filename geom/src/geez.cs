@@ -199,7 +199,7 @@ public static class Geez {
                     Dzoom *= log(zoom + 1f);
                     Dzoom *= 5f;
                     zoom = _last_zoom + Dzoom;
-                    zoom = max(zoom, 0.1f);
+                    zoom = clamp(zoom, 0.1f, 5f);
                     Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
                 }
                 _last_zoom = zoom;
@@ -305,11 +305,16 @@ public static class Geez {
             float dist = mag(_size) * zoom * 0.8f;
             float height = 2f * dist * tan(fov/2f);
 
-            float near = dist*0.05f;
-            float far  = dist*50f;
+            float near = dist*0.01f;
+            float far  = dist*10f;
             // thats farkin heaps deep enough jeff.
 
-            Vec3 camera = tocart(dist, theta, as_phi(phi));
+            // Get the "closeness", which is 0-1 where 0 is fully at camera
+            // centre and 1 is infintiely far away (ortho).
+            float closeness = lerp(0f, 1f, _ortho / (2f - _ortho));
+
+            float orthodist = 1e4f;
+            Vec3 camera = tocart(1f, theta, as_phi(phi));
             Vec3 shift = ZERO3;
             Mat4 view;
             Mat4 projection;
@@ -325,17 +330,25 @@ public static class Geez {
                     near,
                     far
                 );
+                camera *= orthodist;
             } else {
+                // Move camera back at the exact inverse of fov increase to keep
+                // focal plane static.
                 float newfov = lerp(fov, 1e-2f, _ortho);
                 float newdist = height / 2f / tan(newfov/2f);
                 near = newdist*0.05f;
                 far  = newdist*50f;
 
-                float move = lerp(0f, 1f, _ortho / (2f - _ortho));
-                newdist *= move;
+                // Want ultra deep clipping area when in perspective.
+                near *= lerp(0.05f/zoom, 1f, _ortho);
+                far  *= lerp(0.2f/zoom, 1f, _ortho);
+
+                // Move camera pos to "origin", to ensure mouse directly drags
+                // view.
+                camera *= closeness;
 
                 view = Mat4.CreateLookTo(
-                    camera / dist * newdist,
+                    camera * newdist,
                     look,
                     uZ3
                 );
@@ -346,10 +359,12 @@ public static class Geez {
                     far
                 );
 
-                // Move camera pos to "origin", to ensure mouse directly drags
-                // view.
-                camera *= move;
-                shift = camera;
+                // shift is irrelevant in ortho, so just use the value for
+                // perspective.
+                shift = camera * dist;
+
+                // Camera somewhere between here and there.
+                camera *= lerp(dist, orthodist, closeness);
             }
             Perv.set(
                 PICOGK_VIEWER,

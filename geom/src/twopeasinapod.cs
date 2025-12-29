@@ -234,13 +234,14 @@ public class TwoPeasInAPod {
             log($"No voxels at: '{path_vdb}'");
             goto FAILED;
         }
-        FileInfo fileInfo = new(path_voxsize);
-        if (!fileInfo.Exists) {
+        FileInfo file_info = new(path_voxsize);
+        if (!file_info.Exists) {
             log($"Missing voxel size at: '{path_voxsize}'");
             goto FAILED;
         }
-        if (fileInfo.Length > 1024*1024 /* 1MB */) {
-            log($"Voxel size file invalid (too large) at: '{path_voxsize}'");
+        if (file_info.Length > 1024*1024 /* 1MB */) {
+            log($"Voxel size file invalid at: '{path_voxsize}'");
+            log($"  (sus, file over 1MB)");
             goto FAILED;
         }
         // Ensure voxel size matches.
