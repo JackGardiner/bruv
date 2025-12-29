@@ -4,10 +4,10 @@ using br;
 
 using TPIAP = TwoPeasInAPod;
 
-float voxel_size_mm = 0.9f;
-TPIAP.make = TPIAP.MAKE_CHAMBER;
+float voxel_size_mm = 0.8f;
+TPIAP.make = TPIAP.MAKE_INJECTOR;
 TPIAP.transparent = true; // only affects viewing (duh?)
-TPIAP.section_view = false;
+TPIAP.section_view = true;
 TPIAP.section_export = false;
 TPIAP.sectioner = Sectioner.pie(torad(0f), torad(270f));
 

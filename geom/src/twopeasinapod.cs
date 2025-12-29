@@ -21,9 +21,10 @@ public class TwoPeasInAPod {
 
     public PartMating pm { get; init; }
     public Chamber chamber { get; init; }
-    public Injector injector { get; init; }
+    public injector injector { get; init; }
 
     public TwoPeasInAPod() {
+
         Geez.initialise();
 
         string path_all = fromroot("../config/all.json");
@@ -38,15 +39,16 @@ public class TwoPeasInAPod {
         config.set("chamber/phi_tc", max_phi);
         config.set("chamber/pm", config.get_map("part_mating"));
 
+        config.set("injector/fPrintAngle", max_phi);
+        config.set("injector/pm", config.get_map("part_mating"));
+
         pm = config.deserialise<PartMating>("part_mating");
 
         chamber = config.deserialise<Chamber>("chamber");
         chamber.initialise();
 
-        // TODO:
-        // injector = config.deserialise<Injector>("injector");
-        // injector.initialise(pm);
-        injector = null;
+        injector = config.deserialise<injector>("injector");
+        injector.initialise();
     }
 
     public static Voxels? dummy() {
@@ -80,8 +82,8 @@ public class TwoPeasInAPod {
                 name = "chamber";
                 break;
             case MAKE_INJECTOR:
-                // vox = tpiap.injector.voxels();
-                // name = "injector";
+                vox = tpiap.injector.voxels();
+                name = "injector";
                 break;
             case MAKE_BOTH:
                 // TODO:

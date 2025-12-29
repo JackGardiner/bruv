@@ -1,13 +1,13 @@
 {
     "inj": {
-        "aElementCount": [5, 10],
-        "aElementRadii": [16, 31],
-        "aElementClocking": [0, 0, 0],
+        "aElementCount": [9],
+        "aElementRadii": [31],
+        "aElementClocking": [0],
         "aFilmHoleCount": [30],
-        "aFilmHoleRadii": [45],
+        "aFilmHoleRadii": [48.5],
         "aFilmHoleClocking": [0],
-        "fLOxPostFluidRad": 2.5,
-        "fLOxPostLength": 10.0,
+        "fLOxPostFluidRad": 2.0,
+        "fLOxPostLength": 8.0,
         "fLOxSwirlMflFluidRad": 3.5,
         "fLOxSwirlMfldAngleDeg": 45.0,
         "fLOxSwirlMfldLength": 12.0,
@@ -26,7 +26,11 @@
         "fPrintAngle": 0.785398163397
     },
     "eng": {
-        "fChamberRadius": 50.0
+        "fChamberRadius": 50.0,
+        "fOxMassFlowRate": 1.2,
+        "FuelMassFlowRate": 0.8,
+        "fChamberPressure": 3.5e6,
+        "fOxInjectionRho": 1140
     },
     "mat": {
         "sName": "CuCr1Zr-NHT",

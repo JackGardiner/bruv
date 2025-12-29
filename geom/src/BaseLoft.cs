@@ -194,7 +194,8 @@ class BaseLoft
 
             // map old weighting (linear) to new weighting (sinusoidal)
             // https://www.desmos.com/calculator/8u2dfbdkgl
-            float fVSmoov = 0.5f*(-MathF.Cos(MathF.PI*fV)+1f);
+            float fFlatLengthRatio = 0.05f;
+            float fVSmoov = 0.5f*(-MathF.Cos(1/(1-fFlatLengthRatio)*MathF.PI*(fV-fFlatLengthRatio))+1f);
             Vector3 vecCurPt = new Vector3(float.Lerp(vecPtBtm.X, vecPtTop.X, fVSmoov),
                                                 float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
                                                 float.Lerp(vecPtBtm.Z, vecPtTop.Z, fV));

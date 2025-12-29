@@ -12,16 +12,24 @@
         "Lz_Ioring": 2.0,
         "Lz_Ooring": 2.0,
 
-        "no_bolt": 10,
+        "no_bolt": 8,
         "Mr_bolt": 76.0,
-        "Bsz_bolt": 8.0,
+        "Bsz_bolt": 6.0,
         "Bln_bolt": 20.0,
+        "Or_bolt": 3.0,
+        "Or_washer": 6.0,
 
         "thickness_around_bolt": 5.0,
         "flange_thickness": 7.0,
+        "inj_flange_thickness": 7.0,
         "flange_outer_radius": 78.0,
         "radial_fillet_radius": 5.0,
-        "axial_fillet_radius": 10.0
+        "axial_fillet_radius": 10.0,
+
+        "fOxMassFlowRate": 2.5,
+        "fFuelMassFlowRate": 1.2,
+        "fOxInjectionRho": 1141.0,
+        "fChamberPressure": 3.5e6
     },
     "chamber": {
         "L_cc": 100.0,
@@ -58,12 +66,17 @@
         "L_tc": 15.0
     },
     "injector": {
-        "aElementCount": [5, 10],
-        "aElementRadii": [16, 31],
-        "aElementClocking": [0, 0, 0],
-        "aFilmHoleCount": [30],
-        "aFilmHoleRadii": [45],
-        "aFilmHoleClocking": [0],
+        "no_inj": [9],
+        "r_inj": [31.0],
+        "theta0_inj": [0.0],
+
+        "no_fc": [30],
+        "r_fc": [48.5],
+        "theta0_fc": [0.0],
+        "Or_fc": 0.5,
+
+        "fTargetdPFrac": 0.25,
+
         "fLOxPostFluidRad": 2.5,
         "fLOxPostLength": 10.0,
         "fLOxSwirlMflFluidRad": 3.5,
@@ -72,13 +85,21 @@
         "fLOxPostWT": 1.0,
         "fInjectorPlateThickness": 3.0,
         "fFuelAnnulusOR": 4.5,
+
         "fInnerOringPadW": 10.0,
         "fInnerOringW": 5.0,
         "fInnerOringMR": 50.0,
         "fInnerOringDepth": 1.5,
         "fOuterOringW": 5.0,
         "fOuterOringMR": 60.0,
-        "fOuterOringDepth": 1.5
+        "fOuterOringDepth": 1.5,
+
+        "fTargetCdOx": 0.35,
+        "fTargetCdFuel": 0.35,
+        "iOxSwirlInlets": 4,
+        "iFuelSwirlInlets": 4,
+
+        "fRoofThickness": 2.0
     },
     "printer": {
         "name": "Nikon SLM280 2.0",
