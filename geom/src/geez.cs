@@ -21,10 +21,12 @@ public static class Geez {
     public static Sectioner? sectioner = null;
 
     public static Colour dflt_colour = new Colour("#FFFFFF");
-    public static float dflt_alpha = 1f;
+    public static float dflt_alpha = 0.8f;
     public static float dflt_metallic = 0.35f;
     public static float dflt_roughness = 0.5f;
     public static Sectioner dflt_sectioner = new();
+
+    public static bool transparent = true;
 
 
     public static IDisposable like(Colour? colour=null, float? alpha=null,
@@ -464,6 +466,12 @@ public static class Geez {
                         break;
                     recalc();
                     return true;
+
+                case Viewer.EKeys.Key_T:
+                    if (!pressed)
+                        break;
+                    _set_all_alpha(!transparent);
+                    return true;
             }
             return false;
 
@@ -490,20 +498,27 @@ public static class Geez {
         HackView.initialise();
         log();
         log("[Geez] using a new hacked-in camera, keybinds:");
-        log("     - w/a/s/d        move camera horizontally");
+        log("     - W/A/S/D        move camera horizontally");
         log("     - space          move camera up");
-        log("     - z/shift+space  move camera down");
+        log("     - Z/shift+space  move camera down");
         log("     - ctrl           sprint on movement key-down");
         log("     - tab            toggle orbit/free mode");
         log("     - scroll         orbit zoom in-out + move slower/faster");
-        log("     - ctrl+r         rescale for window size");
+        log("     - ctrl+R         rescale for window size");
         log("     - backspace      reset view");
+        log("     - T              toggle transparency");
         log();
     }
 
 
 
-    private static int _materials = 2;
+    private static int _material_next = 2;
+    private class _Material {
+        public required Colour colour { get; init; }
+        public required float metallic { get; init; }
+        public required float roughness { get; init; }
+    };
+    private static List<_Material> _materials = new();
     private static bool _dummy_materialed = false;
     private static int _dummy_material() {
         int group_id = 1;
@@ -518,19 +533,35 @@ public static class Geez {
         return group_id;
     }
     private static int _material() {
-        int group_id = _materials++;
+        int group_id = _material_next++;
         Colour col = new(colour ?? dflt_colour, alpha ?? dflt_alpha);
-        PICOGK_VIEWER.SetGroupMaterial(
-            group_id,
-            col,
-            metallic ?? dflt_metallic,
-            roughness?? dflt_roughness
-        );
+        float metal = metallic ?? dflt_metallic;
+        float rough = roughness ?? dflt_roughness;
+        _materials.Add(new _Material{
+            colour=col,
+            metallic=metal,
+            roughness=rough,
+        });
+        if (!transparent)
+            col.A = 1f;
+        PICOGK_VIEWER.SetGroupMaterial(group_id, col, metal, rough);
         return group_id;
     }
     private static void _set_all_transforms(Mat4 m) {
-        for (int i=1; i<_materials; ++i)
+        for (int i=1; i<_material_next; ++i)
             PICOGK_VIEWER.SetGroupMatrix(i, m);
+    }
+    private static void _set_all_alpha(bool transparent) {
+        for (int i=2; i<_material_next; ++i) {
+            _Material mat = _materials[i - 2];
+            Colour col = mat.colour;
+            if (!transparent)
+                col.A = 1f;
+            float metal = mat.metallic;
+            float rough = mat.roughness;
+            PICOGK_VIEWER.SetGroupMaterial(i, col, metal, rough);
+        }
+        Geez.transparent = transparent;
     }
 
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {

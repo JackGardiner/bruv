@@ -4,9 +4,8 @@ using br;
 
 using TPIAP = TwoPeasInAPod;
 
-float voxel_size_mm = 1f;
-TPIAP.make = TPIAP.CHAMBER | TPIAP.DRAWINGS;
-TPIAP.transparent = true; // only affects viewing (duh?)
+float voxel_size_mm = 0.25f;
+TPIAP.make = TPIAP.CHAMBER | TPIAP.VOXELS;
 TPIAP.sectionview = true;
 TPIAP.sectioner = Sectioner.pie(torad(0f), torad(270f));
 

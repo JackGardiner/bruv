@@ -36,7 +36,6 @@ public class TwoPeasInAPod {
         PICOGK_VIEWER.SetFov(70f);
         PICOGK_VIEWER.SetBackgroundColor(new("#202020"));
         Geez.dflt_colour = new("#AB331A"); // copperish.
-        Geez.dflt_alpha = transparent ? 0.8f : 1f;
         Geez.dflt_metallic = 0.35f;
         Geez.dflt_roughness = 0.8f;
         if (sectionview)
