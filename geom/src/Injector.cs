@@ -39,6 +39,12 @@ public class Injector : TwoPeasInAPod.Pea
     public int iFuelSwirlInlets;
     public float fTargetCdOx;
     public float fTargetCdFuel;
+    public int no_annulus_rib;
+    public float annulus_rib_width;
+    public float area_swinlet_perinj;
+    public int no_swinlet;
+    public float aspect_swinlet;
+    public float rad_offset_swinlet;
     public int iTotalElementCount;
     public List<Vector3>? points_inj = null;
     protected void initialise_inj()
@@ -62,6 +68,8 @@ public class Injector : TwoPeasInAPod.Pea
         fLOxPostLength = 10f;
         fLOxPostWT = 1f;
         fFuelAnnulusOR = 5f;
+        no_annulus_rib = 6;
+        annulus_rib_width = 1f;
 
         iOxSwirlInlets = 4;
         iFuelSwirlInlets = 4;
@@ -71,6 +79,11 @@ public class Injector : TwoPeasInAPod.Pea
         // A = PI*r^2
         // r = sqrt(A/pi)
         fCoreExitRadius = sqrt(fCoreExitArea/PI) * 1e3f; // mm(!)
+
+        area_swinlet_perinj = 10f; // mm^2
+        no_swinlet = 3;
+        aspect_swinlet = 5f; // height/width
+        rad_offset_swinlet = 2f;
     }
 
     // film cooling vars
@@ -119,12 +132,28 @@ public class Injector : TwoPeasInAPod.Pea
         // remove holes to create IPA annulus
         if (points_inj != null)
         {
-            foreach (Vector3 aElement in points_inj)
+            foreach (Vector3 point in points_inj)
             {
                 voxPlate -= new BaseCylinder(
-                    new LocalFrame(aElement),
+                    new LocalFrame(point),
                     fInjectorPlateThickness,
-                    fFuelAnnulusOR).voxConstruct();
+                    fFuelAnnulusOR
+                ).voxConstruct();
+
+                // add ribs for future annulus
+                Frame rib_frame = new Frame(point, uY3).transx(-fInjectorPlateThickness/2);
+                Voxels ribs = new();
+                for (int i=0; i<no_annulus_rib; i++)
+                {
+                    ribs += new Cuboid(
+                        rib_frame,
+                        fInjectorPlateThickness,
+                        annulus_rib_width,
+                        fFuelAnnulusOR
+                    ).voxels();
+                    rib_frame = rib_frame.rotyz(TWOPI/no_annulus_rib);
+                }
+                voxPlate += ribs;
             }
         }
 
@@ -150,13 +179,14 @@ public class Injector : TwoPeasInAPod.Pea
         return voxPlate;
     }
 
-    protected Voxels vox_inj_elements(out Voxels voxOxPostFluid)
+    protected Voxels vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets)
     {
         // iterate through each injector element and create wall section and fluid section
         Voxels voxOxPostWall = new();
         Voxels voxSwirlChamber = new();
         Voxels voxShearChamber = new();
         voxOxPostFluid = new();
+        swirl_inlets = new();
 
         foreach (Vector3 aPoint in points_inj!)
         {
@@ -184,6 +214,7 @@ public class Injector : TwoPeasInAPod.Pea
                 (aPoint.R()+fSwirlChamberRadius)/Or_chnl
                 );
             LocalFrame oSwirlChamberFrame = new LocalFrame(aPoint + new Vector3(0f, 0f, fSwirlChamberLowerBound));
+            Frame swirl_chamber_frame = new Frame(aPoint).transz(fSwirlChamberLowerBound); // https://www.youtube.com/watch?v=TZtiJN6yiik
 
             Voxels voxNextSwirlChamber = new(); // temp so we don't cook old one w offsets
             voxNextSwirlChamber += new BasePipe(
@@ -207,7 +238,38 @@ public class Injector : TwoPeasInAPod.Pea
                 fSwirlChamberRadius
             ).voxConstruct();
 
-            voxNextSwirlChamber = voxNextSwirlChamber.voxOffset(1.5f) - voxNextSwirlChamber;
+            // construct tangential swirl inlets
+            float sw_a = area_swinlet_perinj / no_swinlet;
+            float sw_w = sqrt(sw_a/(aspect_swinlet-0.25f));
+            float sw_h_t = sw_w/2;  // triangle height
+            float sw_h_r = sw_w * (aspect_swinlet - 0.5f);
+
+            Voxels inlets = new();
+            Frame swinlet_frame = new Frame(aPoint);
+            swinlet_frame = swinlet_frame.transz(fSwirlChamberLowerBound+fSwirlChamberStraightHeight);
+            Vector3 rot_point = swinlet_frame.pos;
+            for (int i=0; i<no_swinlet; i++)
+            {
+                Frame shifted_frame = new Frame(rot_point, uZ3, uY3);
+                shifted_frame = shifted_frame.rotyz(TWOPI*((float)i/no_swinlet));
+                shifted_frame = shifted_frame.rotxy(DEG90);
+                shifted_frame = shifted_frame.transx(rad_offset_swinlet);
+
+                inlets += new Polygon(
+                    shifted_frame,
+                    fSwirlChamberRadius*4,
+                    [
+                        new(0, 0),
+                        new(sw_w, sw_h_t),
+                        new(sw_w, sw_h_t+sw_h_r),
+                        new(-sw_w, sw_h_t+sw_h_r),
+                        new(-sw_w, sw_h_t),
+                    ]
+                ).voxels();
+
+            }
+
+            voxNextSwirlChamber = voxNextSwirlChamber.voxOffset(1.5f) - voxNextSwirlChamber - inlets;
             voxSwirlChamber += voxNextSwirlChamber;
 
             // build lower/outer shear chamber
@@ -226,7 +288,7 @@ public class Injector : TwoPeasInAPod.Pea
         }
         voxSwirlChamber -= cone_roof_lower_crop();
         voxShearChamber -= cone_roof_lox_crop();
-        return voxOxPostWall + voxSwirlChamber + voxShearChamber;
+        return voxOxPostWall + voxSwirlChamber;// + voxShearChamber;
     }
 
     protected Voxels voxels_attic()
@@ -343,7 +405,6 @@ public class Injector : TwoPeasInAPod.Pea
                 );
                 float fStrutArea = pow(2f*(pm.Bsz_bolt/2)+4, 2);
                 float fStrutRadius = sqrt(fStrutArea/PI);
-                Library.Log($"Strut radius = {fStrutRadius}");
                 Rectangle oRectangle = new Rectangle(2*(pm.Or_washer+2f), 2*(pm.Or_washer+2f));
                 Circle oCircle = new Circle(fStrutRadius);
                 float fLoftHeight = oTopFrame.vecGetPosition().Z - oBottomFrame.vecGetPosition().Z;
@@ -645,9 +706,10 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_gusset.like())
             key_gusset <<= Geez.voxels(gussets - voxStrutHoles);
 
-        Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid);
+        Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets);
         part += inj_elements;
         part -= voxOxPostFluid;
+        part -= swirl_inlets;
         using (key_inj_elements.like())
             key_inj_elements <<= Geez.voxels(inj_elements - voxOxPostFluid);
 
