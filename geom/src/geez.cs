@@ -581,9 +581,8 @@ public static class Geez {
                     far
                 );
 
-                eye = camera;
                 // Eye somewhere between here and there.
-                eye *= lerp(lerp_focal_dist, ortho_dist, closeness);
+                eye = camera * ortho_dist * squared(closeness);
             }
             Perv.set(
                 PICOGK_VIEWER,
