@@ -196,14 +196,22 @@ class BaseLoft
             // map old weighting (linear) to new weighting (sinusoidal)
             // https://www.desmos.com/calculator/8u2dfbdkgl
             float fFlatLengthRatio = 0.05f;
-            float fVSmoov = 0.5f*(-MathF.Cos(1/(1-fFlatLengthRatio)*MathF.PI*(fV-fFlatLengthRatio))+1f);
-            Vector3 vecCurPt = new Vector3(float.Lerp(vecPtBtm.X, vecPtTop.X, fVSmoov),
-                                                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
-                                                float.Lerp(vecPtBtm.Z, vecPtTop.Z, fV));
+            float fVSmoov;
+            if (fV > fFlatLengthRatio)
+                fVSmoov = 0.5f*(-MathF.Cos(1/(1-fFlatLengthRatio)*MathF.PI*(fV-fFlatLengthRatio))+1f);
+            else fVSmoov = 0;
 
-            Vector3 vecCurNo = Vector3.Normalize(new Vector3(float.Lerp(vecNoBtm.X, vecNoTop.X, fVSmoov),
+            Vector3 vecCurPt = new Vector3(
+                float.Lerp(vecPtBtm.X, vecPtTop.X, fVSmoov),
+                                                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
+                float.Lerp(vecPtBtm.Z, vecPtTop.Z, fV)
+            );
+
+            Vector3 vecCurNo = Vector3.Normalize(new Vector3(
+                float.Lerp(vecNoBtm.X, vecNoTop.X, fVSmoov),
                                                                 float.Lerp(vecNoBtm.Y, vecNoTop.Y, fVSmoov),
-                                                                float.Lerp(vecNoBtm.Z, vecNoTop.Z, fV)));
+                float.Lerp(vecNoBtm.Z, vecNoTop.Z, fV))
+            );
 
             float fU = u / (float)nSubDiv;
 
