@@ -166,7 +166,8 @@ class BaseLoft
     ISurfaceModulation m_xModulation = new SurfaceModulationNoop();
     float m_fModulationHeight = 0f;
 
-    private int[] anGenerateEdgeVertices(ref Mesh msh,
+    private int[] anGenerateEdgeVertices(
+        ref Mesh msh,
                                             OrientedContour oBtm,
                                             OrientedContour oTop,
                                             float fV,

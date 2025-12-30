@@ -7,6 +7,8 @@ using ports;
 
 public class Injector : TwoPeasInAPod.Pea
 {
+    // Initialise the variables
+    // coolin channel vars
     public required PartMating pm { get; init; }
     public float Ir_chnl;
     public float Or_chnl;
@@ -15,6 +17,7 @@ public class Injector : TwoPeasInAPod.Pea
         Ir_chnl = pm.Mr_chnl - 0.5f*pm.min_wi_chnl;
         Or_chnl = pm.Mr_chnl + 0.5f*pm.min_wi_chnl;
     }
+
     // manufacturing vars
     public required float fPrintAngle { get; init; }
 
@@ -22,6 +25,20 @@ public class Injector : TwoPeasInAPod.Pea
     public required List<int> no_inj { get; init; }
     public required List<float> r_inj { get; init; }
     public required List<float> theta0_inj { get; init; }
+    public required float fTargetdPFrac { get; init; }
+    public required float fInjectorPlateThickness { get; init; }
+    public float fTargetdP;
+    public float fLOxPostLength;
+    public float fLOxPostWT;
+    public float fFuelAnnulusOR;
+    public float fOxElementMFR;
+    public float fFuelElementMFR;
+    public float fCoreExitArea;
+    public float fCoreExitRadius;
+    public int iOxSwirlInlets;
+    public int iFuelSwirlInlets;
+    public float fTargetCdOx;
+    public float fTargetCdFuel;
     public int iTotalElementCount;
     public List<Vector3>? points_inj = null;
     protected void initialise_inj()
@@ -38,23 +55,6 @@ public class Injector : TwoPeasInAPod.Pea
             points_inj.AddRange(ps);
             iTotalElementCount += no_inj[n];
         }
-    }
-    public required float fTargetdPFrac { get; init; }
-    public required float fInjectorPlateThickness { get; init; }
-    public float fTargetdP;
-    public float fLOxPostLength;
-    public float fLOxPostWT;
-    public float fFuelAnnulusOR;
-    public float fOxElementMFR;
-    public float fFuelElementMFR;
-    public float fCoreExitArea;
-    public float fCoreExitRadius;
-    public int iOxSwirlInlets;
-    public int iFuelSwirlInlets;
-    public float fTargetCdOx;
-    public float fTargetCdFuel;
-    protected void initialise_swirl()
-    {
         fOxElementMFR = pm.fOxMassFlowRate / iTotalElementCount;
         fFuelElementMFR = pm.fFuelMassFlowRate / iTotalElementCount;
 
@@ -97,21 +97,15 @@ public class Injector : TwoPeasInAPod.Pea
     public float fMaxAtticR;
     public float fMaxAtticZ;
     List<Vector3>? points_bolts = null;
-    protected void initialise_bolts()
+    public Voxels? voxInnerPipeCrop;
+    public required float fRoofThickness {get; init; }
+    protected void initialise_construction()
     {
         points_bolts = circularly_distributed(pm.no_bolt, 0f, pm.Mr_bolt, 0f);
     }
-    public Voxels? voxInnerPipeCrop;
-    public required float fRoofThickness {get; init; }
 
-    protected List<Vector3> circularly_distributed(int no, float z, float r,
-            float theta0) {
-        List<Vector3> points = new();
-        for (int i=0; i<no; ++i)
-            points.Add(tocart(r, theta0 + i*TWOPI/no, z));
-        return points;
-    }
 
+    // voxel builder functions
     protected Voxels voxels_injector_plate()
     {
         // generate initial base plate
@@ -119,7 +113,7 @@ public class Injector : TwoPeasInAPod.Pea
             new LocalFrame(),
             fInjectorPlateThickness,
             0,
-            Or_chnl
+            Ir_chnl
         ).voxConstruct();
 
         // remove holes to create IPA annulus
@@ -156,49 +150,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxPlate;
     }
 
-    // coneroof helper methods
-    // TODO: make these const. vox vars
-    public Voxels cone_roof_upper_crop()
-    {
-        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
-        oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetAtticLowerHeight));
-        return oCrop.voxConstruct();
-    }
-
-    public Voxels cone_roof_lower_crop()
-    {
-        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
-        oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetConeRoofLowerHeight));
-        return oCrop.voxConstruct();
-    }
-
-    public Voxels cone_roof_lox_crop()
-    {
-        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
-        oCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetAtticLowerHeight));
-        return oCrop.voxConstruct();
-    }
-
-    public Voxels voxels_cone_roof()
-    {
-        // structure constructed using cones originating at each point in aPointsList
-
-        BaseLens oRoof = new BaseLens(
-            new LocalFrame(),
-            fRoofThickness,
-            0f,
-            Or_chnl
-        );
-
-        oRoof.SetHeight(
-            new SurfaceModulation(fGetConeRoofLowerHeight),
-            new SurfaceModulation(fGetConeRoofUpperHeight)
-            );
-
-        return oRoof.voxConstruct();
-    }
-
-    public Voxels vox_inj_elements(out Voxels voxOxPostFluid)
+    protected Voxels vox_inj_elements(out Voxels voxOxPostFluid)
     {
         // iterate through each injector element and create wall section and fluid section
         Voxels voxOxPostWall = new();
@@ -277,7 +229,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxOxPostWall + voxSwirlChamber + voxShearChamber;
     }
 
-    public Voxels voxels_attic()
+    protected Voxels voxels_attic()
     {
         // add top roof (attic)
         BaseLens oAttic = new BaseLens(
@@ -296,7 +248,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxAttic;
     }
 
-    public Voxels voxels_asi(out Voxels oASIFluid)
+    protected Voxels voxels_asi(out Voxels oASIFluid)
     {
         // create augmented spark igniter through-port
         GPort ASIPort = new GPort("1/4in", 6.35f); // 1/4in OD for SS insert?
@@ -308,7 +260,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxPort + oASIWall.voxConstruct();
     }
 
-    public Voxels voxels_flange()
+    protected Voxels voxels_flange()
     {
         // create flange
         BasePipe oFlangeBase = new BasePipe(
@@ -349,7 +301,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxFlange;
     }
 
-    public Voxels voxels_gussets(out Voxels voxStrutHoles)
+    protected Voxels voxels_gussets(out Voxels voxStrutHoles)
     {
         // make gussets
         // create cone shape
@@ -418,7 +370,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxGusset;
     }
 
-    public Voxels voxels_ports(out Voxels voxFluids)
+    protected Voxels voxels_ports(out Voxels voxFluids)
     {
         Voxels voxLOXCrop = cone_roof_upper_crop();
         Voxels voxIPACrop = cone_roof_lower_crop();
@@ -460,11 +412,6 @@ public class Injector : TwoPeasInAPod.Pea
         Voxels voxChamberPTFluid = oChamberPT.voxConstruct(aChamberPT) + oChamberPTPipe.voxConstruct();
         Voxels voxChamberPTWall = voxChamberPTFluid.voxOffset(2f);
 
-        Sh.PreviewFrame(aLOXInlet, 5f);
-        Sh.PreviewFrame(aLOXPT, 5f);
-        Sh.PreviewFrame(aChamberPT, 5f);
-        Sh.PreviewFrame(aIPAPT, 5f);
-
         voxFluids = voxLOXInletFluid + voxLOXPTFluid + voxIPAPTFluid + voxChamberPTFluid;
         Voxels voxWalls = voxLOXInletWall + voxLOXPTWall + voxIPAPTWall + voxChamberPTWall
             - voxCropBoxZ(fPortsHeight) - voxCropBoxZ(0f, 100f, -10f);
@@ -472,7 +419,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxWalls;
     }
 
-    private Voxels voxels_bolts()
+    protected Voxels voxels_bolts()
     {
         Voxels bolt_holes = new();
         for (int i=0; i<pm.no_bolt; i++)
@@ -495,13 +442,109 @@ public class Injector : TwoPeasInAPod.Pea
         return bolt_holes;
     }
 
+    protected Voxels voxels_oring_grooves()
+    {
+        Voxels oring_inner = new BasePipe(
+            new LocalFrame(),
+            pm.Lz_Ioring,
+            pm.Ir_Ioring,
+            pm.Or_Ioring
+        ).voxConstruct();
+
+        Voxels oring_outer = new BasePipe(
+            new LocalFrame(),
+            pm.Lz_Ooring,
+            pm.Ir_Ooring,
+            pm.Or_Ooring
+        ).voxConstruct();
+
+        return oring_inner + oring_outer;
+    }
+
+    protected Voxels voxels_supports()
+    {
+        List<Vector3> points_supports = circularly_distributed(
+            no_fc[0],
+            0f,
+            45,
+            PI/no_fc[0]
+        );
+        Voxels supports = new();
+        foreach (Vector3 point in points_supports)
+        {
+            Frame support_frame = new(point, point, uZ3);
+            supports += new Polygon(
+                support_frame,
+                fMaxAtticZ,
+                [
+                    new (-4f, 0f),
+                    new (0f, 2f),
+                    new (4f, 0f),
+                    new (0f, -2f),
+                ]
+            ).voxels();
+        }
+
+        supports = supports & cone_roof_lower_crop();
+
+        return supports;
+    }
+
     // private helpers
+    private List<Vector3> circularly_distributed(int no, float z, float r, float theta0)
+    {
+        List<Vector3> points = new();
+        for (int i=0; i<no; ++i)
+            points.Add(tocart(r, theta0 + i*TWOPI/no, z));
+        return points;
+    }
+
+    private Voxels cone_roof_upper_crop()
+    {
+        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
+        oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetAtticLowerHeight));
+        return oCrop.voxConstruct();
+    }
+
+    private Voxels cone_roof_lower_crop()
+    {
+        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
+        oCrop.SetHeight(new SurfaceModulation(-100f), new SurfaceModulation(fGetConeRoofLowerHeight));
+        return oCrop.voxConstruct();
+    }
+
+    private Voxels cone_roof_lox_crop()
+    {
+        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
+        oCrop.SetHeight(new SurfaceModulation(fGetConeRoofUpperHeight), new SurfaceModulation(fGetAtticLowerHeight));
+        return oCrop.voxConstruct();
+    }
+
+    private Voxels voxels_cone_roof()
+    {
+        // structure constructed using cones originating at each point in aPointsList
+
+        BaseLens oRoof = new BaseLens(
+            new LocalFrame(),
+            fRoofThickness,
+            0f,
+            Or_chnl
+        );
+
+        oRoof.SetHeight(
+            new SurfaceModulation(fGetConeRoofLowerHeight),
+            new SurfaceModulation(fGetConeRoofUpperHeight)
+            );
+
+        return oRoof.voxConstruct();
+    }
 
     private Voxels voxCropBoxZ(float fZ, float fR=100, float fH=100)
     {
         BaseCylinder oCropCyl = new BaseCylinder(new LocalFrame(new Vector3(0f, 0f, fZ)), fH, fR);
         return oCropCyl.voxConstruct();
     }
+
     private float fGetConeRoofSurfaceModulation(float fPhi, float fLengthRatio)
     {
         float fRadius = fLengthRatio * Or_chnl;
@@ -582,6 +625,10 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic);
 
+        Voxels supports = voxels_supports();
+        Geez.voxels(supports, Cp.clrRandom());
+        part += supports;
+
         Voxels asi = voxels_asi(out Voxels asi_fluid);
         part += asi;
         part -= asi_fluid;
@@ -602,12 +649,12 @@ public class Injector : TwoPeasInAPod.Pea
         part += inj_elements;
         part -= voxOxPostFluid;
         using (key_inj_elements.like())
-            key_inj_elements <<= Geez.voxels(inj_elements);
+            key_inj_elements <<= Geez.voxels(inj_elements - voxOxPostFluid);
 
         Voxels ports = voxels_ports(out Voxels ports_fluids);
         part += ports;
         using (key_ports.like())
-            key_ports <<= Geez.voxels(ports-ports_fluids);
+            key_ports <<= Geez.voxels(ports - ports_fluids);
 
         // external fillets
         Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
@@ -616,10 +663,10 @@ public class Injector : TwoPeasInAPod.Pea
         Library.Log("Filleting completed");
         part = voxCropZone + voxNoCropZone;
 
-        Voxels bolt_holes = voxels_bolts();
         part -= ports_fluids;
-        part -= bolt_holes;
+        part -= voxels_bolts();
         part -= voxStrutHoles;
+        part -= voxels_oring_grooves();
 
         Geez.clear();
         using (key_part.like())
@@ -646,10 +693,9 @@ public class Injector : TwoPeasInAPod.Pea
     public void initialise()
     {
         initialise_inj();
-        initialise_swirl();
         initialise_fc();
         initialise_chnl();
-        initialise_bolts();
+        initialise_construction();
     }
 
 }
