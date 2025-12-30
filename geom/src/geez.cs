@@ -297,13 +297,15 @@ public static class Geez {
         private static float last_zoom = NAN;
 
         /* key held-state. */
-        private const int KEY_SPACE = 0b0000001;
-        private const int KEY_SHIFT = 0b0000010;
-        private const int KEY_W     = 0b0000100;
-        private const int KEY_S     = 0b0001000;
-        private const int KEY_A     = 0b0010000;
-        private const int KEY_D     = 0b0100000;
-        private const int KEY_CTRL  = 0b1000000;
+        private const int KEY_SHIFT = 0b1;
+        private const int KEY_CTRL  = 0b10;
+        private const int KEY_ALT   = 0b100;
+        private const int KEY_SUPER = 0b1000;
+        private const int KEY_SPACE = 0b10000;
+        private const int KEY_W     = 0b100000;
+        private const int KEY_A     = 0b1000000;
+        private const int KEY_S     = 0b10000000;
+        private const int KEY_D     = 0b100000000;
         private static int held = 0;
 
 
@@ -668,25 +670,31 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
+            // couple of these keys are inexplicably unlabelled by picogk.
+            const Viewer.EKeys Viewer_EKeys_Key_Shift = (Viewer.EKeys)340;
+            const Viewer.EKeys Viewer_EKeys_Key_Ctrl  = (Viewer.EKeys)341;
+            const Viewer.EKeys Viewer_EKeys_Key_Alt   = (Viewer.EKeys)342;
+            const Viewer.EKeys Viewer_EKeys_Key_Super = (Viewer.EKeys)343;
+
             // dont do some things before first render.
             bool first_render = nonnan(origin);
 
+            // Dont handle any messages if super key pressed.
+            if ((key != Viewer_EKeys_Key_Super && isset(held, KEY_SUPER))
+                    || cmd) // or cmd.
+                return false;
+
             int keycode;
-            // couple of these keys are inexplicably unlabelled by picogk.
             switch (key) {
-                case Viewer.EKeys.Key_W: keycode = KEY_W; goto MOVEMENT;
-                case Viewer.EKeys.Key_S: keycode = KEY_S; goto MOVEMENT;
-                case Viewer.EKeys.Key_A: keycode = KEY_A; goto MOVEMENT;
-                case Viewer.EKeys.Key_D: keycode = KEY_D; goto MOVEMENT;
-                case Viewer.EKeys.Key_Space:
-                    keycode = KEY_SPACE;
-                    goto MOVEMENT;
-                case (Viewer.EKeys)340 /* shift */:
-                    keycode = KEY_SHIFT;
-                    goto MOVEMENT;
-                case (Viewer.EKeys)341 /* ctrl */:
-                    keycode = KEY_CTRL;
-                    goto MOVEMENT;
+                case Viewer.EKeys.Key_W:     keycode = KEY_W;     goto TRACKED;
+                case Viewer.EKeys.Key_S:     keycode = KEY_S;     goto TRACKED;
+                case Viewer.EKeys.Key_A:     keycode = KEY_A;     goto TRACKED;
+                case Viewer.EKeys.Key_D:     keycode = KEY_D;     goto TRACKED;
+                case Viewer.EKeys.Key_Space: keycode = KEY_SPACE; goto TRACKED;
+                case Viewer_EKeys_Key_Shift: keycode = KEY_SHIFT; goto TRACKED;
+                case Viewer_EKeys_Key_Ctrl:  keycode = KEY_CTRL;  goto TRACKED;
+                case Viewer_EKeys_Key_Alt:   keycode = KEY_ALT;   goto TRACKED;
+                case Viewer_EKeys_Key_Super: keycode = KEY_SUPER; goto TRACKED;
 
                 case Viewer.EKeys.Key_Tab:
                     if (pressed && first_render) {
@@ -755,7 +763,7 @@ public static class Geez {
             }
             return false;
 
-          MOVEMENT:;
+          TRACKED:;
             if (first_render) {
                 if (pressed)
                     held |= keycode;
