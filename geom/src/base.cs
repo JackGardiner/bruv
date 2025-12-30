@@ -270,7 +270,7 @@ public class Pill : SDF {
         : this(centre.pos, centre * (L*uZ3), r) {}
     public Pill(Vec3 a, Vec3 b, float r) {
         assert(r > 0f, $"r={r}");
-        assert(!closeto(a, b), $"a={vecstr(a)}, b={vecstr(b)}");
+        assert(!closeto(a, b), $"a={a}, b={b}");
         this.a = a;
         this.b = b;
         this.r = r;

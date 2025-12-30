@@ -94,40 +94,202 @@ public static class Geez {
     }
 
 
-    public class HackView : Viewer.IViewerAction, Viewer.IKeyHandler {
-        private static Vec3 _origin = NAN3;
-        private static Vec3 _size = NAN3;
-        private static int _get_a_word_in_edgewise = 5;
 
-        private static bool _orbit = true;
-        private static float _last_theta = NAN;
-        private static float _last_phi = NAN;
+    public class ViewerHack : Viewer.IViewerAction, Viewer.IKeyHandler {
+        private class SnapTo {
+            public float[] targets;
+            public float responsiveness;
+            public float elapsed_time;
+            public float max_time;
+            public float atol;
+            public float rtol;
 
-        private static System.Diagnostics.Stopwatch _stopwatch = new();
+            public SnapTo(float responsiveness, float[] targets,
+                    float max_time=NAN, float atol=5e-3f, float rtol=5e-3f) {
+                assert(numel(targets) > 0);
+                this.targets = targets;
+                this.responsiveness = responsiveness;
+                this.elapsed_time = 0f;
+                this.max_time = max_time;
+                this.atol = atol;
+                this.rtol = rtol;
+            }
 
-        private static float _zoom_scale = 10f;
-        private static float _last_zoom = NAN;
+            public delegate float get_difference_f(float target, float value);
+            public float[] Dvalue(float Dt, float[] value,
+                    get_difference_f? get_difference=null) {
+                assert(numel(value) == numel(targets));
+                if (get_difference == null)
+                    get_difference = (float t, float v) => t - v;
 
-        private static Vec3 _pos = ZERO3;
-        private static Vec3 _vel = ZERO3;
-        private static float _target_speed = 50f;
-        private static float _speed_responsiveness = 20f;
+                elapsed_time += Dt;
+                if (elapsed_time >= max_time)
+                    untarget();
 
-        private static float _ortho = 1f;
-        private static float _ortho_in_responsiveness = 25f;
-        private static float _ortho_out_responsiveness = 15f;
+                float[] Dvalue = new float[numel(targets)];
+                for (int i=0; i<numel(targets); ++i) {
+                    if (isnan(targets[i])) {
+                        Dvalue[i] = 0f;
+                    } else {
+                        Dvalue[i] = get_difference(targets[i], value[i]);
+                        if (abs(Dvalue[i]) > max(atol, rtol*targets[i]))
+                            Dvalue[i] *= 1f - exp(-responsiveness * Dt);
+                    }
+                }
 
-        private static Vec2 _snap_ang = NAN2;
-        private static Vec3 _snap_pos = NAN3;
-        private static float _snap_ang_time = 0f;
-        private static float _snap_pos_time = 0f;
-        private static float _snap_max_time = 0.2f;
-        private static float _snap_ang_responsiveness = 25f;
-        private static float _snap_pos_responsiveness = 25f;
+                if (isnan(targets[0]))
+                    elapsed_time = 0f;
 
-        private static float _target_fov = torad(65f);
-        private static float _fov_responsiveness = 20f;
+                return Dvalue;
+            }
 
+            public void retarget(float[] newtargets) {
+                assert(numel(newtargets) == numel(targets));
+                for (int i=0; i<numel(newtargets); ++i)
+                    assert(isgood(newtargets[i]));
+                targets = newtargets;
+                elapsed_time = 0f;
+            }
+
+            public void untarget() {
+                for (int i=0; i<numel(targets); ++i)
+                    targets[i] = NAN;
+            }
+
+
+            public float target {
+                get {
+                    assert(numel(targets) == 1);
+                    return targets[0];
+                }
+            }
+            public Vec2 target2 {
+                get {
+                    assert(numel(targets) == 2);
+                    return arr_to_vec2(targets);
+                }
+            }
+            public Vec3 target3 {
+                get {
+                    assert(numel(targets) == 3);
+                    return arr_to_vec3(targets);
+                }
+            }
+
+            public SnapTo(float responsiveness, float target, float max_time=NAN,
+                    float atol=5e-3f, float rtol=5e-3f)
+                : this(responsiveness, [target],
+                       max_time, atol, rtol) {}
+            public SnapTo(float responsiveness, Vec2 target, float max_time=NAN,
+                    float atol=5e-3f, float rtol=5e-3f)
+                : this(responsiveness, vec_to_arr(target),
+                       max_time, atol, rtol) {}
+            public SnapTo(float responsiveness, Vec3 target, float max_time=NAN,
+                    float atol=5e-3f, float rtol=5e-3f)
+                : this(responsiveness, vec_to_arr(target),
+                       max_time, atol, rtol) {}
+
+            public float Dvalue(float Dt, float value,
+                    get_difference_f? get_D=null) {
+                return Dvalue(Dt, [value], get_D)[0];
+            }
+            public Vec2 Dvalue(float Dt, Vec2 value,
+                    get_difference_f? get_D=null) {
+                return arr_to_vec2(Dvalue(Dt, vec_to_arr(value), get_D));
+            }
+            public Vec3 Dvalue(float Dt, Vec3 value,
+                    get_difference_f? get_D=null) {
+                return arr_to_vec3(Dvalue(Dt, vec_to_arr(value), get_D));
+            }
+
+            public void retarget(float newtarget) {
+                retarget([newtarget]);
+            }
+            public void retarget(Vec2 newtarget) {
+                retarget(vec_to_arr(newtarget));
+            }
+            public void retarget(Vec3 newtarget) {
+                retarget(vec_to_arr(newtarget));
+            }
+        }
+
+        private static System.Diagnostics.Stopwatch stopwatch = new();
+
+        /* middle pos and min->max size of canonical objects. */
+        private static Vec3 origin = NAN3;
+        private static Vec3 size = NAN3;
+
+        /* number of times to skip overriding picogk so they can make the static
+           projection matrix. */
+        private static int get_a_word_in_edgewise = 5;
+
+        /* camera pos (relative to origin) and velocity. */
+        public static Vec3 pos = ZERO3;
+        private static Vec3 vel = ZERO3;
+        public static float speed = 50f;
+        public static float sprint = 3f;
+        private static SnapTo snap_pos = new(25f, NAN3, 0.25f /* don freeze */);
+        private static SnapTo snap_vel = new(20f, NAN3);
+
+        /* looking vector. */
+        public static float theta {
+            // need picogk to enable mouse->camera. note picogk stores camera
+            // theta, not looking theta.
+            get => PI + torad(PICOGK_VIEWER.m_fOrbit);
+            set => PICOGK_VIEWER.m_fOrbit = todeg(value - PI);
+        }
+        public static float phi {
+            // need picogk to enable mouse->camera. note picogk stores camera
+            // elevation, not looking phi. aaalso note that by handling our own
+            // view angles (and splicing them into picogk) we fix picogk's broken
+            // elevation clamp.
+            get => PI_2 + torad(PICOGK_VIEWER.m_fElevation);
+            set => PICOGK_VIEWER.m_fElevation = todeg(value - PI_2);
+        }
+        private static SnapTo snap_ang = new(25f, NAN2, 0.25f /* don freeze */);
+        private static float get_focal_dist() => mag(size) * zoom * 0.8f;
+        private static float get_ortho_dist() => mag(size) * zoom_max * 10f;
+        private static Vec3 get_looking() => tocart(1f, theta, as_phi(phi));
+        private static Vec3 get_camera() => -tocart(1f, theta, as_phi(phi));
+
+        /* ortho zoom value (and speed dial), scaled up by some amount to get
+          around picogk's minimum of 0.1. */
+        public static float zoom {
+            // need picogk to enable scroll->zoom in/out.
+            get => Perv.get<float>(PICOGK_VIEWER, "m_fZoom") / zoom_scale;
+            set => Perv.set(PICOGK_VIEWER, "m_fZoom", value * zoom_scale);
+        }
+        public static float zoom_scale = 10f;
+        // note zoom minimum is enforced by picogk (which is the whole reason we
+        // use a scaler).
+        private static float zoom_min => 0.1f / zoom_scale;
+        private static float zoom_max = 2.5f;
+
+        /* free field of view. */
+        public static float fov {
+            // could bypass picogk, we dont.
+            get => torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
+            set => Perv.set(PICOGK_VIEWER, "m_fFov", todeg(value));
+        }
+        private static SnapTo snap_fov = new(20f, torad(65f));
+
+        /* orbit/free mode + ortho/perspective proportion. */
+        private static bool orbit = true;
+        private static float ortho = 1f;
+        private static SnapTo snap_ortho = new(25f /* variable */, 1f);
+        private static float extra_dist = 0f;
+        private static SnapTo snap_extra_dist = new(20f, 0f);
+        public static void set_mode(bool neworbit) {
+            orbit = neworbit;
+            snap_ortho.retarget(neworbit ? 1f : 0f);
+        }
+
+        /* prev variable caches, to change the scaling of them over time. */
+        private static float last_theta = NAN;
+        private static float last_phi = NAN;
+        private static float last_zoom = NAN;
+
+        /* key held-state. */
         private const int KEY_SPACE = 0b0000001;
         private const int KEY_SHIFT = 0b0000010;
         private const int KEY_W     = 0b0000100;
@@ -135,7 +297,53 @@ public static class Geez {
         private const int KEY_A     = 0b0010000;
         private const int KEY_D     = 0b0100000;
         private const int KEY_CTRL  = 0b1000000;
-        private static int _held = 0;
+        private static int held = 0;
+
+
+        public static void reset() {
+            // Cheeky reset.
+
+            stopwatch.Stop();
+
+            origin = NAN3;
+            size = NAN3;
+
+            // leave `get_a_word_in_edgewise`.
+
+            pos = ZERO3;
+            vel = ZERO3;
+            snap_pos.untarget();
+            snap_vel.untarget();
+
+            theta = torad(225f);
+            phi = torad(120f);
+            snap_ang.untarget();
+
+            zoom = 1f;
+
+            fov = torad(65f);
+            snap_fov.retarget(fov);
+
+            orbit = true;
+            ortho = 1f;
+            snap_ortho.responsiveness = 25f;
+            snap_ortho.retarget(ortho);
+            extra_dist = 0f;
+            snap_extra_dist.retarget(0f);
+
+            last_theta = NAN;
+            last_phi = NAN;
+            last_zoom = NAN;
+        }
+
+        public static void initialise() {
+            zoom = 1f;
+            fov = snap_fov.target;
+            ortho = snap_ortho.target;
+            PICOGK_VIEWER.AddKeyHandler(new ViewerHack());
+            _ = make_shit_happen_continuously();
+        }
+
 
       #if false
         // Leaving this here just so you can see how cooked the required
@@ -199,157 +407,99 @@ public static class Geez {
             BBox3 bbox = Perv.get<BBox3>(PICOGK_VIEWER, "m_oBBox");
 
             // Only set the initial box once, on the first thing rendered.
-            if (isnan(_origin) || isnan(_size)) {
+            if (isnan(origin) || isnan(size)) {
                 if (bbox.Equals(new BBox3()))
                     return;
-                _origin = bbox.vecCenter();
-                _size = bbox.vecSize();
+                origin = bbox.vecCenter();
+                size = bbox.vecSize();
             }
 
             // Rescale their zoom handler too bc the linear one is bad.
-            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            if (nonnan(_last_zoom)) {
-                float Dzoom = zoom - _last_zoom;
-                Dzoom *= log(zoom/_zoom_scale + 1f);
-                Dzoom *= 5f * _zoom_scale;
-                zoom = _last_zoom + Dzoom;
-                zoom = clamp(zoom, 0.1f, 2.5f * _zoom_scale);
-                Perv.set(PICOGK_VIEWER, "m_fZoom", zoom);
-            }
-            _last_zoom = zoom;
+            if (nonnan(last_zoom)) {
+                float Dzoom = zoom - last_zoom;
+                // since i dont like picogk's linearly scaling zoom:
+                Dzoom *= 5f*log(zoom + 1f);
+                // since picogk doesnt know about the scale:
+                Dzoom *= zoom_scale;
 
-            // Get angles of camera position (note this is not camera looking
-            // angles).
-            float theta = torad(PICOGK_VIEWER.m_fOrbit);
-            float phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
+                zoom = last_zoom + Dzoom;
+                zoom = clamp(zoom, zoom_min, zoom_max);
+            }
+            last_zoom = zoom;
+
+            // Since angles are typically wrapped before we see their change, we
+            // cant get the raw difference. Instead we get the difference which
+            // is at-most 1 half-turn.
+            float get_Dangle(float curr, float prev) => wraprad(curr - prev);
 
             // In perspective, we scale-down the sensitivity.
-            if (!_orbit && nonnan(_last_theta) && nonnan(_last_phi)) {
-                float Dtheta = theta - _last_theta;
-                float Dphi = phi - _last_phi;
-                // Assume wrapping caused any larger-than-half turns.
-                if (Dtheta > PI)
-                    Dtheta -= TWOPI;
-                else if (Dtheta < -PI)
-                    Dtheta += TWOPI;
-                Dtheta /= 1.5f;
-                Dphi /= 1.5f;
-                theta = _last_theta + Dtheta;
-                phi = _last_phi + Dphi;
+            if (!orbit && nonnan(last_theta) && nonnan(last_phi)) {
+                float Dtheta = get_Dangle(theta, last_theta);
+                float Dphi = get_Dangle(phi, last_phi);
+                theta = last_theta + 0.7f*Dtheta;
+                phi   = last_phi   + 0.7f*Dphi;
             }
             theta = wraprad(theta - PI) + PI; // [0,TWOPI), to match picogk.
             phi = clamp(phi, 1e-3f, PI - 1e-3f);
-
-            // we could bypass picogk fov store but lets not.
-            float fov = torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
+            // dont save last_ yet, there be more to happen.
 
             // Get Dt across calls for movement.
-            if (!_stopwatch.IsRunning) {
-                _stopwatch.Start();
+            if (!stopwatch.IsRunning) {
+                stopwatch.Start();
             } else {
-                float Dt = (float)_stopwatch.Elapsed.TotalSeconds;
-                _stopwatch.Restart();
+                float Dt = (float)stopwatch.Elapsed.TotalSeconds;
+                stopwatch.Restart();
 
                 // Handle perspective/orthogonal switch.
-                if (_orbit) {
-                    _ortho += (1f - _ortho)
-                            * (1f - exp(-_ortho_in_responsiveness * Dt));
-                } else {
-                    _ortho += (0f - _ortho)
-                            * (1f - exp(-_ortho_out_responsiveness * Dt));
-                }
+                ortho += snap_ortho.Dvalue(Dt, ortho);
+                extra_dist += snap_extra_dist.Dvalue(Dt, extra_dist);
+
+                // Update fov.
+                fov += snap_fov.Dvalue(Dt, fov);
 
                 // Do any view snapping.
-                _snap_ang_time += Dt;
-                if (nonnan(_snap_ang)) {
-                    float Dtheta = _snap_ang.X - theta;
-                    float Dphi   = _snap_ang.Y - phi;
-                    // Same take-shortest-path as before.
-                    if (Dtheta > PI)
-                        Dtheta -= TWOPI;
-                    else if (Dtheta < -PI)
-                        Dtheta += TWOPI;
-                    Dtheta *= 1f - exp(-_snap_ang_responsiveness * Dt);
-                    Dphi   *= 1f - exp(-_snap_ang_responsiveness * Dt);
-                    theta += Dtheta;
-                    phi   += Dphi;
-                    bool snap = (_snap_ang_time >= _snap_max_time)
-                             || closeto(
-                                    new Vec2(theta, phi),
-                                    _snap_ang,
-                                    atol: 5e-2f
-                                );
-                    if (snap) {
-                        theta = _snap_ang.X;
-                        phi   = _snap_ang.Y;
-                        _snap_ang = NAN2;
-                    }
-                }
-                if (isnan(_snap_ang))
-                    _snap_ang_time = 0f;
-
+                float[] Dang = snap_ang.Dvalue(Dt, [theta, phi], get_Dangle);
+                theta += Dang[0];
+                phi   += Dang[1];
 
                 // Handle accel/vel/pos.
-                Frame frame = new(ZERO3, -tocart(1f, theta, 0f), uZ3);
+                Frame frame = new(ZERO3, tocart(1f, theta, 0f), uZ3);
                 Vec3 target_vel = ZERO3;
-                if (isset(_held, KEY_SPACE)) target_vel += frame.Z;
-                if (isset(_held, KEY_SHIFT)) target_vel -= frame.Z;
-                if (isset(_held, KEY_W))     target_vel += frame.X;
-                if (isset(_held, KEY_S))     target_vel -= frame.X;
-                if (isset(_held, KEY_A))     target_vel += frame.Y;
-                if (isset(_held, KEY_D))     target_vel -= frame.Y;
-                if (target_vel != ZERO3) {
-                    target_vel = normalise(target_vel) * _target_speed;
-                    if (isset(_held, KEY_CTRL))
-                       target_vel *= 3f;
+                if (isset(held, KEY_SPACE)) target_vel += frame.Z;
+                if (isset(held, KEY_SHIFT)) target_vel -= frame.Z;
+                if (isset(held, KEY_W))     target_vel += frame.X;
+                if (isset(held, KEY_S))     target_vel -= frame.X;
+                if (isset(held, KEY_A))     target_vel += frame.Y;
+                if (isset(held, KEY_D))     target_vel -= frame.Y;
+                if (!closeto(target_vel, ZERO3)) {
+                    target_vel = normalise(target_vel) * speed;
+                    if (isset(held, KEY_CTRL))
+                       target_vel *= sprint;
                 }
-                _vel += (target_vel - _vel)
-                      * (1f - exp(-_speed_responsiveness * Dt));
-                if (mag(_vel) < 1e-3f && mag(target_vel) < 1e-3f)
-                    _vel = ZERO3;
+                snap_vel.retarget(target_vel);
+                vel += snap_vel.Dvalue(Dt, vel);
 
-                // Scale velocity impact with zoom level also.
-                float by = zoom/_zoom_scale;
+                float by = 1f;
+                // Scale velocity with zoom level.
+                by *= zoom;
+                // Scale velocity with total viewed size.
                 // https://www.desmos.com/calculator/jyn4eclrcf
-                by *= 0.0190255f * mag(_size) + 0.00951883f;
-                by *= lerp(0.5f, 1f, _ortho); // also slower on perspective.
-                _pos += by*_vel*Dt;
+                by *= 0.0190255f * mag(size) + 0.00951883f;
+                // Move slower in perspective mode.
+                by *= lerp(0.5f, 1f, ortho);
+                pos += by*vel*Dt;
 
-
-                // Do any position snapping.
-                _snap_pos_time += Dt;
-                if (nonnan(_snap_pos)) {
-                    _pos += (_snap_pos - _pos)
-                          * (1f - exp(-_snap_pos_responsiveness * Dt));
-                    bool snap = (_snap_pos_time >= _snap_max_time)
-                             || closeto(_pos, _snap_pos, atol: 5e-2f);
-                    if (snap) {
-                        _pos = _snap_pos;
-                        _snap_pos = NAN3;
-                    }
-                }
-                if (isnan(_snap_pos))
-                    _snap_pos_time = 0f;
-
-
-                // fov change.
-                fov += (_target_fov - fov)
-                     * (1f - exp(-_fov_responsiveness * Dt));
-                Perv.set(PICOGK_VIEWER, "m_fFov", todeg(fov));
+                // Do any position snapping (after movement keys).
+                pos += snap_pos.Dvalue(Dt, pos);
             }
 
-            // Keep everyone informed. Note that also by handling our own view
-            // angles (and splicing them into picogk) we fix picogk's broken
-            // elevation clamp.
-            _last_theta = theta;
-            _last_phi = phi;
-            PICOGK_VIEWER.m_fOrbit = todeg(theta);
-            PICOGK_VIEWER.m_fElevation = todeg(PI_2 - phi);
+            // Keep everyone informed.
+            last_theta = theta;
+            last_phi = phi;
 
             // Setup box to trick picogk into thinking its the origin.
-            BBox3 newbbox = new BBox3(-_size/2f, _size/2f);
+            BBox3 newbbox = new BBox3(-size/2f, size/2f);
             Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
-
 
             // HOLD ON. if we never allow bbox to be non-empty, picogk wont even
             // generate the matrices and we are free to splice our own in. fuck
@@ -358,8 +508,8 @@ public static class Geez {
             // picogk get a fuckin' word in edgewise (shut up) so that the
             // projection matrix actually has the correct/latest aspect ratio.
             // im hot dawg.
-            if (_get_a_word_in_edgewise > 0) {
-                --_get_a_word_in_edgewise;
+            if (get_a_word_in_edgewise > 0) {
+                --get_a_word_in_edgewise;
             } else {
                 Perv.set(PICOGK_VIEWER, "m_oBBox", new BBox3());
             }
@@ -372,70 +522,68 @@ public static class Geez {
 
             // Create the mvp matrix, perhaps blending between perspective and
             // ortho.
-            Vec3 look = looking(out _, out _);
-            float dist = mag(_size) * (zoom/_zoom_scale) * 0.8f;
-            float height = 2f * dist * tan(fov/2f);
+            Vec3 looking = get_looking();
+            Vec3 camera = get_camera();
+            float focal_dist = get_focal_dist() + extra_dist;
+            float focal_height = 2f * focal_dist * tan(fov/2f);
+            float ortho_dist = get_ortho_dist();
 
-            // Get the "closeness", which is 0-1 where 0 is fully at camera
-            // centre and 1 is infintiely far away (ortho).
-            float closeness = lerp(0f, 1f, _ortho / (2f - _ortho));
+            // Get the "closeness", which is just ortho but rescaled to be slower
+            // (i.e. looks like x^2 kinda).
+            float closeness = ortho / (2f - ortho);
 
-            float orthodist = 1e4f;
-            Vec3 camera = -look;
-            Vec3 shift = ZERO3;
+            Vec3 shift = camera * extra_dist;
+            Vec3 eye;
             Mat4 view;
             Mat4 projection;
-            if (_ortho > 0.99f) {
-                float near = dist*0.05f;
-                float far  = dist*50f;
+            if (ortho > 0.99f) {
+                float near = ortho_dist*0.05f;
+                float far  = ortho_dist*50f;
                 // thats farkin heaps deep enough jeff.
 
                 view = Mat4.CreateLookTo(
                     camera,
-                    look,
+                    looking,
                     uZ3
                 );
                 projection = Mat4.CreateOrthographic(
-                    height * aspect_ratio,
-                    height,
+                    focal_height * aspect_ratio,
+                    focal_height,
                     near,
                     far
                 );
-                camera *= orthodist;
+                eye = camera * ortho_dist; // very far.
             } else {
                 // Move camera back at the exact inverse of fov increase to keep
                 // focal plane static.
-                float newfov = lerp(fov, 1e-2f, _ortho);
-                float newdist = height / 2f / tan(newfov/2f);
-                float near = newdist*0.05f;
-                float far  = newdist*50f;
+                float lerp_fov = lerp(fov, 1e-2f, ortho);
+                float lerp_focal_dist = focal_height / 2f / tan(lerp_fov/2f);
+                float near = lerp_focal_dist*0.05f;
+                float far  = lerp_focal_dist*50f;
 
                 // Want ultra deep clipping area when in perspective.
-                near *= lerp(0.05f/(zoom/_zoom_scale), 1f, _ortho);
-                far  *= lerp(0.2f/(zoom/_zoom_scale), 1f, _ortho);
+                near *= lerp(0.05f/zoom, 1f, ortho);
+                far  *= lerp(0.2f/zoom, 1f, ortho);
 
-                // Move camera pos to "origin", to ensure mouse directly drags
-                // view.
-                camera *= closeness;
+                // shift is irrelevant in ortho, so just use the value for
+                // perspective.
+                shift += camera * closeness * focal_dist;
 
                 view = Mat4.CreateLookTo(
-                    camera * newdist,
-                    look,
+                    camera * closeness * lerp_focal_dist,
+                    looking,
                     uZ3
                 );
                 projection = Mat4.CreatePerspectiveFieldOfView(
-                    newfov,
+                    lerp_fov,
                     aspect_ratio,
                     near,
                     far
                 );
 
-                // shift is irrelevant in ortho, so just use the value for
-                // perspective.
-                shift = camera * dist;
-
-                // Camera somewhere between here and there.
-                camera *= lerp(dist, orthodist, closeness);
+                eye = camera;
+                // Eye somewhere between here and there.
+                eye *= lerp(lerp_focal_dist, ortho_dist, closeness);
             }
             Perv.set(
                 PICOGK_VIEWER,
@@ -445,13 +593,13 @@ public static class Geez {
             Perv.set( // important to keep updated for lighting purposes.
                 PICOGK_VIEWER,
                 "m_vecEye",
-                camera
+                eye
             );
 
             // Shift all objects into the origin established by first rendered
             // object and then to camera.
-            Vec3 translate = -_pos - _origin - shift;
-            _set_all_transforms(Mat4.CreateTranslation(translate));
+            Vec3 translate = origin + pos + shift;
+            _set_all_transforms(Mat4.CreateTranslation(-translate));
         }
 
         public static void make_shit_happen_in_the_future() {
@@ -460,7 +608,7 @@ public static class Geez {
                 "m_oActions"
             );
             lock (actions)
-                actions.Enqueue(new HackView());
+                actions.Enqueue(new ViewerHack());
         }
 
         private static async Task make_shit_happen_continuously() {
@@ -470,81 +618,40 @@ public static class Geez {
             }
         }
 
-        public static void reset() {
-            // Cheeky reset.
-            _origin = NAN3;
-            _size = NAN3;
 
-            _orbit = true;
-            _last_theta = NAN;
-            _last_phi = NAN;
-
-            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
-            _last_zoom = NAN;
-
-            _pos = ZERO3;
-            _vel = ZERO3;
-
-            _ortho = 1f;
-
-            _snap_ang = NAN2;
-            _snap_pos = NAN3;
-            _snap_ang_time = 0f;
-            _snap_pos_time = 0f;
-
-            _target_fov = torad(65f);
-            Perv.set(PICOGK_VIEWER, "m_fFov", todeg(_target_fov));
-        }
-        public static void recalc() {
-            _get_a_word_in_edgewise = 5;
-        }
-        public static void change(bool orbit) {
-            _orbit = orbit;
-        }
-
-        private static Vec3 looking(out float theta, out float phi) {
-            theta = torad(PICOGK_VIEWER.m_fOrbit);
-            phi = PI_2 - torad(PICOGK_VIEWER.m_fElevation);
-            return -tocart(1f, theta, as_phi(phi));
-        }
-
-        private static Vec2 get_snap_ang() {
+        private static Vec2 get_ang_axis_aligned() {
             Vec2 ang;
-            Vec3 look = looking(out _, out _);
-            if (abs(look.X) >= abs(look.Y)) {
-                ang.X = (look.X < 0f) ? 0f : PI;
+            Vec3 looking = get_looking();
+            if (abs(looking.X) >= abs(looking.Y)) {
+                ang.X = (looking.X < 0f) ? PI : 0f;
             } else {
-                ang.X = (look.Y < 0f) ? PI_2 : 1.5f*PI;
+                ang.X = (looking.Y < 0f) ? 1.5f*PI : PI_2;
             }
-            if (abs(look.Z)/2f >= max(abs(look.X), abs(look.Y))) {
-                ang.Y = (look.Z < 0f) ? 1e-3f : PI - 1e-3f;
+            if (abs(looking.Z)/2f >= max(abs(looking.X), abs(looking.Y))) {
+                ang.Y = (looking.Z < 0f) ? PI - 1e-3f : 1e-3f;
             } else {
                 ang.Y = PI_2;
             }
             return ang;
         }
 
-        private static Vec3 get_snap_pos_AXISZ(float along_camera=NAN) {
-            Vec3 look = looking(out float theta, out _);
+        private static Vec3 get_pos_on_z_axis() {
             // cheeky plane line intersection.
-            Vec3 point = _pos;
-            Vec3 normal = cross(look, tocart(1f, theta + PI_2, 0f));
+            Vec3 point = pos;
+            Vec3 normal = cross(get_looking(), tocart(1f, theta + PI_2, 0f));
             float z = -dot(normal, -point) / dot(normal, uZ3);
-            Vec3 pos = -_origin;
-            pos.Z = z;
-            return pos;
+            Vec3 newpos = -origin;
+            newpos.Z = z;
+            return newpos;
         }
 
-        private static Vec3 get_snap_pos_middleground() {
-            Vec3 look = looking(out _, out _);
-            float zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
-            float dist = mag(_size) * (zoom/_zoom_scale) * 0.8f;
-            Vec3 pos = _pos;
-            if (_orbit)
-                pos -= dist * look;
+        private static Vec3 get_pos_focal_point() {
+            Vec3 newpos = pos;
+            if (orbit)
+                newpos -= get_focal_dist() * get_looking();
             else
-                pos += dist * look;
-            return pos;
+                newpos += get_focal_dist() * get_looking();
+            return newpos;
         }
 
         /* Viewer.IViewerAction */
@@ -556,7 +663,7 @@ public static class Geez {
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
             // dont do anything before first render.
-            if (isnan(_origin))
+            if (isnan(origin))
                 return false;
 
             int keycode;
@@ -577,87 +684,82 @@ public static class Geez {
                     goto MOVEMENT;
 
                 case Viewer.EKeys.Key_Tab:
-                    if (!pressed)
-                        break;
-                    change(!_orbit);
+                    if (pressed) {
+                        pos = get_pos_focal_point();
+                        if (!orbit)
+                            extra_dist = get_focal_dist();
+                        snap_ortho.responsiveness = orbit ? 24f : 18f;
+                        set_mode(!orbit);
+                    }
                     return true;
                 case (Viewer.EKeys)'`':
-                    if (!pressed)
-                        break;
-                    _snap_pos = get_snap_pos_middleground();
-                    change(!_orbit);
+                    if (pressed) {
+                        snap_ortho.responsiveness = orbit ? 25f : 18f;
+                        set_mode(!orbit);
+                    }
                     return true;
 
                 case Viewer.EKeys.Key_Backspace:
-                    if (!pressed)
-                        break;
-                    reset();
+                    if (pressed)
+                        reset();
                     return true;
 
                 case Viewer.EKeys.Key_R:
-                    if (!pressed || !ctrl)
-                        break;
-                    recalc();
+                    if (pressed && ctrl)
+                        get_a_word_in_edgewise = 5;
                     return true;
 
                 case Viewer.EKeys.Key_T:
-                    if (!pressed)
-                        break;
-                    _set_all_alpha(!transparent);
+                    if (pressed)
+                        _set_all_alpha(!transparent);
                     return true;
 
                 case Viewer.EKeys.Key_Q:
-                    if (!pressed || _orbit)
-                        break;
-                    _target_fov += (PI - _target_fov)/15f;
+                    if (pressed && !orbit) {
+                        float target = snap_fov.target;
+                        target += (PI - target)/15f;
+                        snap_fov.retarget(target);
+                    }
                     return true;
                 case Viewer.EKeys.Key_E:
-                    if (!pressed || _orbit)
-                        break;
-                    _target_fov += (0f - _target_fov)/25f;
+                    if (pressed && !orbit) {
+                        float target = snap_fov.target;
+                        target += (0f - target)/15f;
+                        snap_fov.retarget(target);
+                    }
                     return true;
 
-                case Viewer.EKeys.Key_N: {
-                    if (!pressed || !_orbit)
-                        break;
+                case Viewer.EKeys.Key_N:
                     // get snapping.
-                    _snap_ang = get_snap_ang();
-                } return true;
-
-                case Viewer.EKeys.Key_M: {
-                    if (!pressed || !_orbit)
-                        break;
+                    if (pressed && orbit)
+                        snap_ang.retarget(get_ang_axis_aligned());
+                    return true;
+                case Viewer.EKeys.Key_M:
                     // snap snap.
-                    _snap_pos = get_snap_pos_AXISZ();
-                } return true;
+                    if (pressed && orbit)
+                        snap_pos.retarget(get_pos_on_z_axis());
+                    return true;
             }
             return false;
 
           MOVEMENT:;
             if (pressed)
-                _held |= keycode;
+                held |= keycode;
             else
-                _held &= ~keycode;
+                held &= ~keycode;
             return true;
-        }
-
-        public static void initialise() {
-            Perv.set(PICOGK_VIEWER, "m_fZoom", _zoom_scale);
-            Perv.set(PICOGK_VIEWER, "m_fFov", todeg(_target_fov));
-            PICOGK_VIEWER.AddKeyHandler(new HackView());
-            _ = make_shit_happen_continuously();
         }
     }
 
     public static void initialise() {
-        HackView.initialise();
+        ViewerHack.initialise();
         log();
         log("[Geez] using a new hacked-in camera, keybinds:");
         log("     - W/A/S/D         move camera horizontally");
         log("     - space/shift     move camera up/down");
         log("     - ctrl            sprint (when held)");
-        log("     - tab             toggle orbit/free mode about centre");
-        log("     - backtick [`/~]  toggle orbit/free mode about middleground");
+        log("     - tab             toggle orbit/free mode at focal point");
+        log("     - backtick [`/~]  toggle orbit/free mode at centre");
         log("     - scroll up/down  orbit zoom in/out + move slower/faster");
         log("     - ctrl+R          rescale for window aspect ratio");
         log("     - backspace       reset view");
@@ -744,7 +846,7 @@ public static class Geez {
             PICOGK_VIEWER.Add(_dummy, _dummy_material());
         }
 
-        HackView.make_shit_happen_in_the_future();
+        ViewerHack.make_shit_happen_in_the_future();
     }
     private static int _push(in List<Mesh> meshes) {
         _view([], meshes);
@@ -795,7 +897,7 @@ public static class Geez {
                 PICOGK_VIEWER.Remove(mesh);
             foreach (PolyLine line in lines)
                 PICOGK_VIEWER.Remove(line);
-            HackView.make_shit_happen_in_the_future();
+            ViewerHack.make_shit_happen_in_the_future();
         } else if (item is List<int> group) {
             remove(group);
         } else {
@@ -905,7 +1007,7 @@ public static class Geez {
         Mesh ball = hires ? _ball_hires : _ball_lores;
         List<Mesh> meshes = new();
         foreach (Vec3 p in ps) {
-            assert(isgood(p), $"p={vecstr(p)}");
+            assert(isgood(p), $"p={p}");
             Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
             meshes.Add(mesh);
         }

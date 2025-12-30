@@ -60,9 +60,17 @@ public static partial class Br {
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
 
-    /* vec -> string. */
-    public static string vecstr(in Vec2 a) => $"({a.X}, {a.Y})";
-    public static string vecstr(in Vec3 a) => $"({a.X}, {a.Y}, {a.Z})";
+    /* vec -> array. */
+    public static float[] vec_to_arr(in Vec2 a) => [a.X, a.Y];
+    public static float[] vec_to_arr(in Vec3 a) => [a.X, a.Y, a.Z];
+    public static Vec2 arr_to_vec2(in float[] a) {
+        assert(numel(a) == 2, $"numel={numel(a)}");
+        return new(a[0], a[1]);
+    }
+    public static Vec3 arr_to_vec3(in float[] a) {
+        assert(numel(a) == 3, $"numel={numel(a)}");
+        return new(a[0], a[1], a[2]);
+    }
 
     /* colours. */
     public static Colour COLOUR_BLACK => new("#000000");
