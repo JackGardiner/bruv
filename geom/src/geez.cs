@@ -527,7 +527,9 @@ public static class Geez {
             // matrix.
             Mat4 proj_static = Perv.get<Mat4>(PICOGK_VIEWER,
                                               "m_matProjectionStatic");
-            float aspect_ratio = proj_static[1,1] / proj_static[0,0];
+            float aspect_x_on_y = (proj_static[0,0] == 0f)
+                                ? 1f
+                                : proj_static[1,1] / proj_static[0,0];
 
             // Create the mvp matrix, perhaps blending between perspective and
             // ortho.
@@ -556,7 +558,7 @@ public static class Geez {
                     uZ3
                 );
                 projection = Mat4.CreateOrthographic(
-                    focal_height * aspect_ratio,
+                    focal_height * aspect_x_on_y,
                     focal_height,
                     near,
                     far
@@ -585,7 +587,7 @@ public static class Geez {
                 );
                 projection = Mat4.CreatePerspectiveFieldOfView(
                     lerp_fov,
-                    aspect_ratio,
+                    aspect_x_on_y,
                     near,
                     far
                 );
@@ -608,6 +610,47 @@ public static class Geez {
             // object and then to camera.
             Vec3 translate = origin + pos + shift;
             _set_all_transforms(Mat4.CreateTranslation(-translate));
+
+
+            // Ok now we gotta handle the compass.
+            Geez._make_compass();
+            Mat4 compass;
+            // First things first, we gotta cancel the current static transform
+            // being applied by picogk.
+            Mat4 view_s = PicoGK.Utils.matLookAt(
+                Perv.get<Vec3>(PICOGK_VIEWER, "m_vecEyeStatic"),
+                ZERO3
+            );
+            Mat4 projection_s = Mat4.CreateOrthographic(
+                100f * aspect_x_on_y,
+                100f,
+                0.1f,
+                100f
+            );
+            assert(Mat4.Invert(view_s * projection_s, out compass));
+            // Now scale to have even y and x (and ensure it doesnt leave the
+            // screen in either direction).
+            Vec3 compass_scale = (aspect_x_on_y > 1f)
+                               ? new(1f/aspect_x_on_y, 1f, 1f)
+                               : new(1f, aspect_x_on_y, 1f);
+            compass = Mat4.CreateScale(compass_scale)
+                    * compass;
+            // Scale down and shift into corner. Note that (1,1) is at the edge
+            // of the screen, and makes a 45deg angle with (0,0).
+            float compass_size = 0.15f;
+            Vec3 compass_shift = (aspect_x_on_y > 1f)
+                               ? new(aspect_x_on_y, 1f, 0f)
+                               : new(1f, 1f/aspect_x_on_y, 0f);
+            compass_shift -= 1.3f*compass_size*(uX3 + uY3);
+            compass = Mat4.CreateTranslation(compass_shift)
+                    * compass;
+            compass = Mat4.CreateScale(compass_size)
+                    * compass;
+            // Finally rotate to actually show our orientation.
+            compass = Mat4.CreateLookAt(camera, ZERO3, uZ3)
+                    * compass;
+            // SEND IT
+            _set_compass_transform(compass);
         }
 
         public static void make_shit_happen_in_the_future() {
@@ -775,6 +818,8 @@ public static class Geez {
     }
 
     public static void initialise() {
+        _initialise_dummy();
+        _initialise_compass();
         ViewerHack.initialise();
         log();
         log("[Geez] using a new hacked-in camera, keybinds:");
@@ -796,25 +841,63 @@ public static class Geez {
 
 
 
-    private static int _material_next = 2;
+    private const int _MATERIAL_DUMMY = 1;
+    private const int _MATERIAL_COMPASS = 2;
+    private const int _MATERIAL_START = 3;
+    private static int _material_next = 3;
     private class _Material {
         public required Colour colour { get; init; }
         public required float metallic { get; init; }
         public required float roughness { get; init; }
     };
     private static List<_Material> _materials = new();
-    private static bool _dummy_materialed = false;
-    private static int _dummy_material() {
-        int group_id = 1;
-        if (!_dummy_materialed) {
-            PICOGK_VIEWER.SetGroupMaterial(
-                group_id,
-                COLOUR_BLACK,
-                0f,
-                0f
-            );
+    private static void _initialise_dummy() {
+        PICOGK_VIEWER.SetGroupMaterial(
+            _MATERIAL_DUMMY,
+            COLOUR_BLACK,
+            0f,
+            0f
+        );
+    }
+    private static void _initialise_compass() {
+        PICOGK_VIEWER.SetGroupMaterial(
+            _MATERIAL_COMPASS,
+            COLOUR_BLACK,
+            0f,
+            0f
+        );
+        PICOGK_VIEWER.SetGroupStatic(_MATERIAL_COMPASS, true);
+    }
+    private static bool _made_compass = false;
+    private static void _make_compass() {
+        if (_made_compass)
+            return;
+        List<PolyLine> lines = new();
+        _frame_lines(out _, lines, new Frame(), size: 1f, mark_pos: false);
+        foreach (PolyLine line in lines)
+            PICOGK_VIEWER.Add(line, _MATERIAL_COMPASS);
+        _made_compass = true;
+    }
+    private static void _set_compass_transform(Mat4 m) {
+        PICOGK_VIEWER.SetGroupMatrix(_MATERIAL_COMPASS, m);
+    }
+    private static void _set_all_transforms(Mat4 m) {
+        for (int i=_MATERIAL_START; i<_material_next; ++i)
+            PICOGK_VIEWER.SetGroupMatrix(i, m);
+        // also dummy.
+        PICOGK_VIEWER.SetGroupMatrix(_MATERIAL_DUMMY, m);
+    }
+    private static void _set_all_alpha(bool transparent) {
+        for (int i=_MATERIAL_START; i<_material_next; ++i) {
+            _Material mat = _materials[i - _MATERIAL_START];
+            Colour col = mat.colour;
+            if (!transparent)
+                col.A = 1f;
+            float metal = mat.metallic;
+            float rough = mat.roughness;
+            PICOGK_VIEWER.SetGroupMaterial(i, col, metal, rough);
         }
-        return group_id;
+        Geez.transparent = transparent;
     }
     private static int _material() {
         int group_id = _material_next++;
@@ -830,22 +913,6 @@ public static class Geez {
             col.A = 1f;
         PICOGK_VIEWER.SetGroupMaterial(group_id, col, metal, rough);
         return group_id;
-    }
-    private static void _set_all_transforms(Mat4 m) {
-        for (int i=1; i<_material_next; ++i)
-            PICOGK_VIEWER.SetGroupMatrix(i, m);
-    }
-    private static void _set_all_alpha(bool transparent) {
-        for (int i=2; i<_material_next; ++i) {
-            _Material mat = _materials[i - 2];
-            Colour col = mat.colour;
-            if (!transparent)
-                col.A = 1f;
-            float metal = mat.metallic;
-            float rough = mat.roughness;
-            PICOGK_VIEWER.SetGroupMaterial(i, col, metal, rough);
-        }
-        Geez.transparent = transparent;
     }
 
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
@@ -867,7 +934,7 @@ public static class Geez {
         _dummy = null;
         if (point != null) {
             _dummy = _dummy_og.mshCreateTransformed(ONE3, point.Value);
-            PICOGK_VIEWER.Add(_dummy, _dummy_material());
+            PICOGK_VIEWER.Add(_dummy, _MATERIAL_DUMMY);
         }
 
         ViewerHack.make_shit_happen_in_the_future();
