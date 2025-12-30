@@ -69,8 +69,8 @@ public class TwoPeasInAPod {
     }
 
     public static void entrypoint(int make, in Sectioner? sectioner) {
-        // Configure some viewing options.
-        PICOGK_VIEWER.SetBackgroundColor(new("#202020"));
+        // Setup geez.
+        Geez.set_background_colour(dark: true);
         Geez.dflt_colour = new("#AB331A"); // copperish.
         Geez.dflt_metallic = 0.35f;
         Geez.dflt_roughness = 0.8f;

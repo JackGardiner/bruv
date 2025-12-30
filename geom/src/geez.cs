@@ -29,6 +29,13 @@ public static class Geez {
 
     public static bool transparent = true;
 
+    public static Colour get_background_colour() {
+        return Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
+    }
+    public static void set_background_colour(bool dark) {
+        Colour bgcol = dark ? new("#202020") : new("#FFFFFF");
+        PICOGK_VIEWER.SetBackgroundColor(bgcol);
+    }
 
     public static IDisposable like(Colour? colour=null, float? alpha=null,
             float? metallic=null, float? roughness=null,
@@ -661,9 +668,8 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
-            // dont do anything before first render.
-            if (isnan(origin))
-                return false;
+            // dont do some things before first render.
+            bool first_render = nonnan(origin);
 
             int keycode;
             // couple of these keys are inexplicably unlabelled by picogk.
@@ -683,7 +689,7 @@ public static class Geez {
                     goto MOVEMENT;
 
                 case Viewer.EKeys.Key_Tab:
-                    if (pressed) {
+                    if (pressed && first_render) {
                         pos = get_pos_focal_point();
                         if (!orbit)
                             extra_dist = get_focal_dist();
@@ -692,19 +698,45 @@ public static class Geez {
                     }
                     return true;
                 case (Viewer.EKeys)'`':
-                    if (pressed) {
+                    if (pressed && first_render) {
                         snap_ortho.responsiveness = orbit ? 25f : 18f;
                         set_mode(!orbit);
                     }
                     return true;
 
+                case Viewer.EKeys.Key_Z:
+                    // get snapping.
+                    if (pressed && first_render && orbit)
+                        snap_ang.retarget(get_ang_axis_aligned());
+                    return true;
+                case Viewer.EKeys.Key_X:
+                    // snap snap.
+                    if (pressed && first_render && orbit)
+                        snap_pos.retarget(get_pos_on_z_axis());
+                    return true;
+
+                case Viewer.EKeys.Key_Q:
+                    if (pressed && first_render && !orbit) {
+                        float target = snap_fov.target;
+                        target += (PI - target)/15f;
+                        snap_fov.retarget(target);
+                    }
+                    return true;
+                case Viewer.EKeys.Key_E:
+                    if (pressed && first_render && !orbit) {
+                        float target = snap_fov.target;
+                        target += (0f - target)/15f;
+                        snap_fov.retarget(target);
+                    }
+                    return true;
+
                 case Viewer.EKeys.Key_Backspace:
-                    if (pressed)
+                    if (pressed && first_render)
                         reset();
                     return true;
 
                 case Viewer.EKeys.Key_R:
-                    if (pressed && ctrl)
+                    if (pressed && first_render && ctrl)
                         get_a_word_in_edgewise = 5;
                     return true;
 
@@ -713,39 +745,23 @@ public static class Geez {
                         _set_all_alpha(!transparent);
                     return true;
 
-                case Viewer.EKeys.Key_Q:
-                    if (pressed && !orbit) {
-                        float target = snap_fov.target;
-                        target += (PI - target)/15f;
-                        snap_fov.retarget(target);
+                case Viewer.EKeys.Key_Y:
+                    if (pressed) {
+                        bool light = get_background_colour()
+                                    .Equals(new Colour("#FFFFFF"));
+                        set_background_colour(light);
                     }
-                    return true;
-                case Viewer.EKeys.Key_E:
-                    if (pressed && !orbit) {
-                        float target = snap_fov.target;
-                        target += (0f - target)/15f;
-                        snap_fov.retarget(target);
-                    }
-                    return true;
-
-                case Viewer.EKeys.Key_N:
-                    // get snapping.
-                    if (pressed && orbit)
-                        snap_ang.retarget(get_ang_axis_aligned());
-                    return true;
-                case Viewer.EKeys.Key_M:
-                    // snap snap.
-                    if (pressed && orbit)
-                        snap_pos.retarget(get_pos_on_z_axis());
                     return true;
             }
             return false;
 
           MOVEMENT:;
-            if (pressed)
-                held |= keycode;
-            else
-                held &= ~keycode;
+            if (first_render) {
+                if (pressed)
+                    held |= keycode;
+                else
+                    held &= ~keycode;
+            }
             return true;
         }
     }
@@ -762,10 +778,11 @@ public static class Geez {
         log("     - scroll up/down  orbit zoom in/out + move slower/faster");
         log("     - ctrl+R          rescale for window aspect ratio");
         log("     - backspace       reset view");
-        log("     - N               orbit snap view along nearest axis");
-        log("     - M               orbit snap centre to Z axis");
+        log("     - Z               orbit snap view along nearest axis");
+        log("     - X               orbit snap centre to Z axis");
         log("     - Q/E             dial up/down free fov");
         log("     - T               toggle transparency");
+        log("     - Y               toggle background dark-mode");
         log();
     }
 
