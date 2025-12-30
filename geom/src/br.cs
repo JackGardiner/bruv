@@ -60,27 +60,16 @@ public static partial class Br {
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
 
-    /* vec -> array. */
-    public static float[] vec_to_arr(in Vec2 a) => [a.X, a.Y];
-    public static float[] vec_to_arr(in Vec3 a) => [a.X, a.Y, a.Z];
-    public static Vec2 arr_to_vec2(in float[] a) {
-        assert(numel(a) == 2, $"numel={numel(a)}");
-        return new(a[0], a[1]);
-    }
-    public static Vec3 arr_to_vec3(in float[] a) {
-        assert(numel(a) == 3, $"numel={numel(a)}");
-        return new(a[0], a[1], a[2]);
-    }
-
     /* colours. */
-    public static Colour COLOUR_BLACK => new("#000000");
-    public static Colour COLOUR_RED => new("#FF0000");
-    public static Colour COLOUR_GREEN => new("#00FF00");
-    public static Colour COLOUR_BLUE => new("#0000FF");
-    public static Colour COLOUR_CYAN => new("#00FFFF");
-    public static Colour COLOUR_PINK => new("#FF00FF");
+    public static Colour COLOUR_BLACK  => new("#000000");
+    public static Colour COLOUR_RED    => new("#FF0000");
+    public static Colour COLOUR_GREEN  => new("#00FF00");
+    public static Colour COLOUR_BLUE   => new("#0000FF");
+    public static Colour COLOUR_CYAN   => new("#00FFFF");
+    public static Colour COLOUR_PINK   => new("#FF00FF");
     public static Colour COLOUR_YELLOW => new("#FFFF00");
-    public static Colour COLOUR_WHITE => new("#FFFFFF");
+    public static Colour COLOUR_WHITE  => new("#FFFFFF");
+    public static Colour COLOUR_BLANK  => new("#000000", 0f);
 
     /* inf/nan. */
     public const float INF = float.PositiveInfinity;
@@ -128,12 +117,6 @@ public static partial class Br {
     public const float DEG90 = PI_2;
     public const float DEG180 = PI;
 
-    public const int AXISX = 0;
-    public const int AXISY = 1;
-    public const int AXISZ = 2;
-    public static bool isaxis(int axis)
-        => (axis == AXISX) || (axis == AXISY) || (axis == AXISZ);
-
     public static Vec2 ZERO2 => Vec2.Zero;
     public static Vec3 ZERO3 => Vec3.Zero;
     public static Vec2 ONE2 => Vec2.One;
@@ -170,17 +153,34 @@ public static partial class Br {
             return true;
         if (isnan(a) || isnan(b)) // for nans.
             return false;
-        return abs(a - b) <= (atol + rtol*abs(b));
+        return mag(a - b) <= (atol + rtol*mag(b));
     }
     public static bool closeto(Vec2 a, Vec2 b, float rtol=1e-4f,
-            float atol=1e-5f)
-        => closeto(a.X, b.X, rtol: rtol, atol: atol) &&
-           closeto(a.Y, b.Y, rtol: rtol, atol: atol);
+            float atol=1e-5f) {
+        if (a == b) // for infs.
+            return true;
+        if (isnan(a) || isnan(b)) // for nans.
+            return false;
+        return mag(a - b) <= (atol + rtol*mag(b));
+    }
     public static bool closeto(Vec3 a, Vec3 b, float rtol=1e-4f,
-            float atol=1e-5f)
-        => closeto(a.X, b.X, rtol: rtol, atol: atol) &&
-           closeto(a.Y, b.Y, rtol: rtol, atol: atol) &&
-           closeto(a.Z, b.Z, rtol: rtol, atol: atol);
+            float atol=1e-5f) {
+        if (a == b) // for infs.
+            return true;
+        if (isnan(a) || isnan(b)) // for nans.
+            return false;
+        return mag(a - b) <= (atol + rtol*mag(b));
+    }
+
+    public static bool nearzero(float a) => closeto(mag(a), 0f);
+    public static bool nearzero(Vec2 a)  => closeto(mag(a), 0f);
+    public static bool nearzero(Vec3 a)  => closeto(mag(a), 0f);
+
+    public static bool nearunit(float a) => closeto(mag(a), 1f);
+    public static bool nearunit(Vec2 a)  => closeto(mag(a), 1f);
+    public static bool nearunit(Vec3 a)  => closeto(mag(a), 1f);
+
+    public static float round(float a) => float.Round(a);
 
     public static float lerp(float a, float b, float t)
         => a + clamp(t, 0f, 1f)*(b - a);
@@ -266,10 +266,10 @@ public static partial class Br {
 
     public static float torad(float deg) => deg * (PI / 180f);
     public static float todeg(float rad) => rad * (180f / PI);
-    public static float wraprad(float rad)
+    public static float wraprad(float rad) // [-PI, PI)
         // shitass c sharp non-positive modulo.
         => ((rad + PI)%TWOPI + TWOPI)%TWOPI - PI;
-    public static float wrapdeg(float deg)
+    public static float wrapdeg(float deg) // [-180, 180)
         => ((deg + 180f)%360f + 360f)%360f - 180f;
 
     public static float sin(float a) => MathF.Sin(a);
@@ -279,79 +279,103 @@ public static partial class Br {
     public static float asin(float a) => MathF.Asin(a);
     public static float acos(float a) => MathF.Acos(a);
     public static float atan(float a) => MathF.Atan(a);
+    public static float atan2(float y, float x, float ifzero=0f)
+        => (nearzero(y) && nearzero(x)) ? ifzero : MathF.Atan2(y, x);
 
     public static float hypot(float x, float y) => sqrt(x*x + y*y);
     public static float hypot(float x, float y, float z)
         => sqrt(x*x + y*y + z*z);
-    public static float atan2(float y, float x) => MathF.Atan2(y, x);
+    public static float nonhypot(float x, float y) // an instant classic.
+        => sqrt(x*x - y*y);
 
+    public static float mag(float a) => abs(a); // same difference type shi.
     public static float mag(Vec2 a) => a.Length();
     public static float mag(Vec3 a) => a.Length();
-    public static float arg(Vec2 a) => atan2(a.Y, a.X);
 
-    public static float magxy(Vec3 a) => hypot(a.X, a.Y);
-    public static float magxz(Vec3 a) => hypot(a.X, a.Z);
-    public static float magyz(Vec3 a) => hypot(a.Y, a.Z);
+    public static float mag2(float a) => a*a; // this ones kinda weird.
+    public static float mag2(Vec2 a) => a.LengthSquared();
+    public static float mag2(Vec3 a) => a.LengthSquared();
 
-    public static float argxy(Vec3 a) => atan2(a.Y, a.X); // angle from +x.
-    public static float argxz(Vec3 a) => atan2(a.X, a.Z); // angle from +z.
-    public static float argyz(Vec3 a) => atan2(a.Y, a.Z); // angle from +z.
+    public static float magxy(Vec3 a) => hypot(a.Y, a.X);
+    public static float magzx(Vec3 a) => hypot(a.X, a.Z);
+    public static float magyz(Vec3 a) => hypot(a.Z, a.Y);
 
-    public static float argphi(Vec3 a) => acos(a.Z / mag(a));
+    public static float arg(Vec2 a, float ifzero=0f)
+        => nearzero(a) ? ifzero : atan2(a.Y, a.X);
 
-    public static Vec2 tocart(float r, float theta)
+    public static float argxy(Vec3 a, float ifzero=0f) // angle from +x.
+        => arg(projxy(a), ifzero);
+    public static float argzx(Vec3 a, float ifzero=0f) // angle from +z.
+        => arg(projzx(a), ifzero);
+    public static float argyz(Vec3 a, float ifzero=0f) // angle from +y.
+        => arg(projyz(a), ifzero);
+
+    public static float argphi(Vec3 a, float ifzero=PI_2)
+        => nearzero(a) ? ifzero : acos(a.Z/mag(a));
+
+    public static float argbeta(Vec2 a, Vec2 b) => argbeta(rejxy(a), rejxy(b));
+    public static float argbeta(Vec3 a, Vec3 b) {
+        float maga = mag(a);
+        float magb = mag(b);
+        if (nearzero(maga) || nearzero(magb))
+            return 0;
+        return acos(clamp(dot(a, b) / maga / magb, -1f, 1f));
+    }
+
+    public static Vec2 normalise(Vec2 a) {
+        assert(!nearzero(a));
+        return Vec2.Normalize(a);
+    }
+    public static Vec3 normalise(Vec3 a) {
+        assert(!nearzero(a));
+        return Vec3.Normalize(a);
+    }
+    public static Vec2 normalise_nonzero(Vec2 a)
+        => nearzero(a) ? a : normalise(a);
+    public static Vec3 normalise_nonzero(Vec3 a)
+        => nearzero(a) ? a : normalise(a);
+
+    public static float dot(Vec2 a, Vec2 b) => Vec2.Dot(a, b);
+    public static float dot(Vec3 a, Vec3 b) => Vec3.Dot(a, b);
+
+    public static float cross(Vec2 a, Vec2 b) => a.X*b.Y - a.Y*b.X;
+    public static Vec3 cross(Vec3 a, Vec3 b) => Vec3.Cross(a, b);
+
+    public static Vec2 frompol(float r, float theta)
         => new(r*cos(theta), r*sin(theta));
-    public static Vec3 tocart(float r, float theta, float z)
+    public static Vec3 fromcyl(float r, float theta, float z)
         => new(r*cos(theta), r*sin(theta), z);
+    public static Vec3 fromsph(float r, float theta, float phi)
+        => new(r*cos(theta)*sin(phi), r*sin(theta)*sin(phi), r*cos(phi));
 
-    public struct AsPhi { public required float v { get; init; } };
-    public static AsPhi as_phi(float phi) => new AsPhi{v=phi};
-    public static Vec3 tocart(float r, float theta, AsPhi phi)
-        => new(r*cos(theta)*sin(phi.v), r*sin(theta)*sin(phi.v), r*cos(phi.v));
-
-    public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
-    public static Vec2 projxz(Vec3 a) => new(a.X, a.Z);
-    public static Vec2 projyz(Vec3 a) => new(a.Y, a.Z);
-    public static Vec2 project(Vec3 a, int axis) {
-        assert(isaxis(axis), $"axis={axis}");
-        if (axis == AXISX)
-            return projyz(a);
-        if (axis == AXISY)
-            return projxz(a);
-        return projxy(a);
+    public static float magpara(Vec3 a, Vec3 b) {
+        assert(!nearzero(b));
+        return dot(a, b)/mag(b);
+    }
+    public static Vec3 projpara(Vec3 a, Vec3 b) {
+        assert(!nearzero(b));
+        return dot(a, b)/mag2(b) * b;
     }
 
-    public static Vec3 rejxy(Vec2 a, float b=0f) => new(a.X, a.Y, b);
-    public static Vec3 rejxz(Vec2 a, float b=0f) => new(a.X, b, a.Y);
-    public static Vec3 rejyz(Vec2 a, float b=0f) => new(b, a.X, a.Y);
-    public static Vec3 reject(Vec2 a, int axis, float b=0f) {
-        assert(isaxis(axis), $"axis={axis}");
-        if (axis == AXISX)
-            return rejyz(a, b);
-        if (axis == AXISY)
-            return rejxz(a, b);
-        return rejxy(a, b);
+    public static float magperp(Vec3 a, Vec3 b)
+        => nonhypot(mag(a), magpara(a, b));
+    public static Vec3 projperp(Vec3 a, Vec3 b)
+        => a - projpara(a, b);
+
+    public static Vec2 projspan(Vec3 a, Vec3 u, Vec3 v) {
+        assert(!nearzero(u));
+        assert(!nearzero(v));
+        Vec3 n = cross(u, v);
+        assert(!nearzero(n));
+        float mag2n = mag2(n);
+        return new(
+            dot(cross(a, v), n) / mag2n,
+            dot(cross(u, a), n) / mag2n
+        );
     }
 
-    public static Vec2 rot90ccw(Vec2 a) => new(-a.Y, a.X);
-    public static Vec2 rot90cw(Vec2 a) => new(a.Y, -a.X);
     public static Vec2 rotate(Vec2 a, float b)
         => new(a.X*cos(b) - a.Y*sin(b), a.X*sin(b) + a.Y*cos(b));
-    public static Vec2 rotxy(Vec2 a, float b) => rotate(a, b);
-    public static Vec3 rotxy(Vec3 a, float b)
-        => rejxy(rotate(projxy(a), b), a.Z);
-    public static Vec3 rotxz(Vec3 a, float b)
-        => rejxz(rotate(projxz(a), b), a.Y);
-    public static Vec3 rotyz(Vec3 a, float b)
-        => rejyz(rotate(projyz(a), b), a.X);
-    public static Vec3 rotate(Vec3 a, int axis, float b) {
-        assert(isaxis(axis), $"axis={axis}");
-        if (axis == AXISX)
-            return rotyz(a, b);
-        if (axis == AXISY)
-            return rotxz(a, b);
-        return rotxy(a, b);
-    }
     public static Vec3 rotate(Vec3 p, Vec3 about, float by) {
         about = normalise(about);
         float cosby = cos(by);
@@ -361,24 +385,20 @@ public static partial class Br {
              + about*dot(about, p)*(1f - cosby);
     }
 
-    public static Vec2 normalise(Vec2 a) {
-        assert(!closeto(mag(a), 0f));
-        return Vec2.Normalize(a);
-    }
-    public static Vec3 normalise(Vec3 a) {
-        assert(!closeto(mag(a), 0f));
-        return Vec3.Normalize(a);
-    }
-    public static Vec2 normalise_nonzero(Vec2 a)
-        => closeto(mag(a), 0f) ? a : normalise(a);
-    public static Vec3 normalise_nonzero(Vec3 a)
-        => closeto(mag(a), 0f) ? a : normalise(a);
+    public static Vec2 rot90ccw(Vec2 a) => new(-a.Y, a.X);
+    public static Vec2 rot90cw(Vec2 a) => new(a.Y, -a.X);
 
-    public static float dot(Vec2 a, Vec2 b) => Vec2.Dot(a, b);
-    public static float dot(Vec3 a, Vec3 b) => Vec3.Dot(a, b);
+    public static Vec2 projxy(Vec3 a) => new(a.X, a.Y);
+    public static Vec2 projzx(Vec3 a) => new(a.Z, a.X);
+    public static Vec2 projyz(Vec3 a) => new(a.Y, a.Z);
 
-    public static float cross(Vec2 a, Vec2 b) => a.X*b.Y - a.Y*b.X;
-    public static Vec3 cross(Vec3 a, Vec3 b) => Vec3.Cross(a, b);
+    public static Vec3 rejxy(Vec2 a, float b=0f) => new(a.X, a.Y, b);
+    public static Vec3 rejzx(Vec2 a, float b=0f) => new(a.Y, b, a.X);
+    public static Vec3 rejyz(Vec2 a, float b=0f) => new(b, a.X, a.Y);
+
+    public static Vec3 rotxy(Vec3 a, float b) => rotate(a, uZ3, b);
+    public static Vec3 rotzx(Vec3 a, float b) => rotate(a, uY3, b);
+    public static Vec3 rotyz(Vec3 a, float b) => rotate(a, uX3, b);
 }
 
 }

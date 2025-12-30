@@ -36,12 +36,11 @@ public class Frame {
 
         public Frame axial(Vec3 pos) {
             Vec3 q = origin.from_global(pos);
-            bool on_z = closeto(q.X, 0f) && closeto(q.Y, 0f);
             // default to as-if lies on x.
-            float theta = on_z ? 0f : argxy(q);
+            float theta = argxy(q, ifzero: 0f);
 
-            Vec3 Rad = tocart(1f, theta, 0f);
-            Vec3 Cir = tocart(1f, theta + PI_2, 0f);
+            Vec3 Rad = fromcyl(1f, theta, 0f);
+            Vec3 Cir = fromcyl(1f, theta + PI_2, 0f);
             Vec3 Axi = uZ3;
             Rad = origin.to_global_rot(Rad);
             Cir = origin.to_global_rot(Cir);
@@ -65,15 +64,13 @@ public class Frame {
 
         public Frame normal(Vec3 pos) {
             Vec3 q = origin.from_global(pos);
-            bool on_z = closeto(q.X, 0f) && closeto(q.Y, 0f);
-            bool at_0 = closeto(q, ZERO3);
             // default to as-if lies on x.
-            float theta = on_z ? 0f : argxy(q);
-            float phi = at_0 ? PI_2 : argphi(q);
+            float theta = argxy(q, ifzero: 0f);
+            float phi = argphi(q, ifzero: PI_2);
 
-            Vec3 Lon = tocart(1f, theta, as_phi(phi + PI_2));
-            Vec3 Lat = tocart(1f, theta + PI_2, 0f);
-            Vec3 Nor = tocart(1f, theta, as_phi(phi));
+            Vec3 Lon = fromsph(1f, theta, phi + PI_2);
+            Vec3 Lat = fromcyl(1f, theta + PI_2, 0f);
+            Vec3 Nor = fromsph(1f, theta, phi);
             Lon = origin.to_global_rot(Lon);
             Lat = origin.to_global_rot(Lat);
             Nor = origin.to_global_rot(Nor);
@@ -129,10 +126,10 @@ public class Frame {
             return new(pos, Br.rotate(X, Z, by), Z);
         return new(pos, Br.rotxy(X, by), Br.rotxy(Z, by));
     }
-    public Frame rotxz(float by, bool relative=true) {
+    public Frame rotzx(float by, bool relative=true) {
         if (relative)
             return new(pos, Br.rotate(X, Y, by), Br.rotate(Z, Y, by));
-        return new(pos, Br.rotxz(X, by), Br.rotxz(Z, by));
+        return new(pos, Br.rotzx(X, by), Br.rotzx(Z, by));
     }
     public Frame rotyz(float by, bool relative=true) {
         if (relative)
@@ -148,18 +145,18 @@ public class Frame {
     public Frame flipxy() {
         return new(pos, -X, -Y, Z);
     }
-    public Frame flipxz() {
+    public Frame flipzx() {
         return new(pos, -X, Y, -Z);
     }
     public Frame flipyz() {
         return new(pos, X, -Y, -Z);
     }
 
-    public Frame swapxz() {
-        return new(pos, Z, -Y, X);
-    }
     public Frame swapxy() {
         return new(pos, Y, X, -Z);
+    }
+    public Frame swapzx() {
+        return new(pos, Z, -Y, X);
     }
     public Frame swapyz() {
         return new(pos, -X, Z, Y);
@@ -188,6 +185,9 @@ public class Frame {
         p -= pos;
         return new(dot(p, X), dot(p, Y), dot(p, Z));
     }
+    public static Vec3 operator*(in Frame frame, Vec3 p) => frame.to_global(p);
+    public static Vec3 operator/(in Frame frame, Vec3 p) => frame.from_global(p);
+
 
     public Vec3 to_global_rot(Vec3 p) {
         return p.X*X + p.Y*Y + p.Z*Z;
@@ -196,7 +196,7 @@ public class Frame {
         return new(dot(p, X), dot(p, Y), dot(p, Z));
     }
 
-    public BBox3 to_global(BBox3 bbox) {
+    public BBox3 to_global_bbox(BBox3 bbox) {
         Vec3 v000 = bbox.vecMin;
         Vec3 v111 = bbox.vecMax;
         Vec3 v001 = new(v000.X, v000.Y, v111.Z);
@@ -217,7 +217,7 @@ public class Frame {
         Vec3 vmax = max(v000, v001, v010, v011, v100, v101, v110, v111);
         return new(vmin, vmax);
     }
-    public BBox3 from_global(BBox3 bbox) {
+    public BBox3 from_global_bbox(BBox3 bbox) {
         Vec3 v000 = bbox.vecMin;
         Vec3 v111 = bbox.vecMax;
         Vec3 v001 = new(v000.X, v000.Y, v111.Z);
@@ -240,17 +240,6 @@ public class Frame {
     }
 
 
-    public static Vec3 operator*(in Frame frame, in Vec3 p)
-        => frame.to_global(p);
-    public static Vec3 operator/(in Frame frame, in Vec3 p)
-        => frame.from_global(p);
-
-    public static BBox3 operator*(in Frame frame, in BBox3 bbox)
-        => frame.to_global(bbox);
-    public static BBox3 operator/(in Frame frame, in BBox3 bbox)
-        => frame.from_global(bbox);
-
-
     public Vec3 to_other(Frame other, Vec3 p) {
         Vec3 q = to_global(p);
         return other.from_global(q);
@@ -269,18 +258,9 @@ public class Frame {
         return from_global_rot(q);
     }
 
-    public BBox3 to_other(Frame other, BBox3 p) {
-        BBox3 q = to_global(p);
-        return other.from_global(q);
-    }
-    public BBox3 from_other(Frame other, BBox3 p) {
-        BBox3 q = other.to_global(p);
-        return from_global(q);
-    }
-
 
     protected static Vec3 arbitrary_perpendicular(Vec3 Z) {
-        assert(!closeto(mag(Z), 0f), "gotta be non-zero");
+        assert(!nearzero(Z), "gotta be non-zero");
         Z = normalise(Z);
         Vec3 O = uY3; // dflt to getting unit X as perp to z.
         if (abs(dot(Z, O)) > 0.99f) // too close to parallel.
@@ -290,12 +270,15 @@ public class Frame {
 
     protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
         assert(isgood(pos));
-        assert(closeto(mag(X), 1f));
-        assert(closeto(mag(Y), 1f));
-        assert(closeto(mag(Z), 1f));
-        assert(closeto(dot(X, Y), 0f));
-        assert(closeto(dot(X, Z), 0f));
-        assert(closeto(dot(Y, Z), 0f));
+        assert(isgood(X));
+        assert(isgood(Y));
+        assert(isgood(Z));
+        assert(nearunit(X));
+        assert(nearunit(Y));
+        assert(nearunit(Z));
+        assert(nearzero(dot(X, Y)));
+        assert(nearzero(dot(X, Z)));
+        assert(nearzero(dot(Y, Z)));
         assert(closeto(cross(Z, X), Y)); // rhs
         this.pos = pos;
         this.X = X;

@@ -604,14 +604,13 @@ public class Chamber : TwoPeasInAPod.Pea {
         if (z <= cnt_z1) {
             r = cnt_r0;
         } else if (z <= cnt_z2) {
-            r = cnt_r1 - cnt_r_conv + sqrt(cnt_r_conv*cnt_r_conv
-                                         - squared(z - cnt_z1));
+            r = cnt_r1 - cnt_r_conv + nonhypot(cnt_r_conv, z - cnt_z1);
         } else if (z <= cnt_z3) {
             r = tan(phi_conv)*(z - cnt_z3) + cnt_r3;
         } else if (z <= cnt_z4) {
-            r = 2.5f*r_tht - sqrt(2.25f*r_tht*r_tht - squared(z - cnt_z4));
+            r = 2.5f*r_tht - nonhypot(1.5f*r_tht, z - cnt_z4);
         } else if (z <= cnt_z5) {
-            r = 1.382f*r_tht - sqrt(0.145924f*r_tht*r_tht - squared(z - cnt_z4));
+            r = 1.382f*r_tht - nonhypot(0.382f*r_tht, z - cnt_z4);
         } else if (z <= cnt_z6) {
             float p;
             p = 4f*cnt_para_az*(cnt_para_cz - z);
@@ -704,10 +703,10 @@ public class Chamber : TwoPeasInAPod.Pea {
             float rlo = cnt_radius_at(z, th_iw, widened: true);
             float rhi = cnt_radius_at(z, th_iw + th_chnl, widened: true);
 
-            points.Add(tocart(rlo, thetalo, z));
-            points.Add(tocart(rhi, thetalo, z));
-            points.Add(tocart(rlo, thetahi, z));
-            points.Add(tocart(rhi, thetahi, z));
+            points.Add(fromcyl(rlo, thetalo, z));
+            points.Add(fromcyl(rhi, thetalo, z));
+            points.Add(fromcyl(rlo, thetahi, z));
+            points.Add(fromcyl(rhi, thetahi, z));
         }
         points.Insert(0, points[3] - uZ3*EXTRA);
         points.Insert(0, points[3] - uZ3*EXTRA);
@@ -728,10 +727,10 @@ public class Chamber : TwoPeasInAPod.Pea {
             float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani);
             rhi += th_chnl/2f; // safety.
 
-            points.Add(tocart(rlo, thetalo, z));
-            points.Add(tocart(rhi, thetalo, z));
-            points.Add(tocart(rlo, thetahi, z));
-            points.Add(tocart(rhi, thetahi, z));
+            points.Add(fromcyl(rlo, thetalo, z));
+            points.Add(fromcyl(rhi, thetalo, z));
+            points.Add(fromcyl(rlo, thetahi, z));
+            points.Add(fromcyl(rhi, thetahi, z));
         }
         top = mesh_points(points);
     }
@@ -782,11 +781,11 @@ public class Chamber : TwoPeasInAPod.Pea {
         float x1h = A0 - Am + F1/(1f + SQRT2);
         float A;
         if (x < x0h)
-            A = y0 + sqrt(squared(F0) - squared(x));
+            A = y0 + nonhypot(F0, x);
         else if (x <= x1l)
             A = A0 - x;
         else if (x < x1h)
-            A = y1 - sqrt(squared(F1) - squared(x - x1h));
+            A = y1 - nonhypot(F1, x - x1h);
         else
             A = Am;
         return A;
@@ -855,7 +854,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         );
 
         float phi_aA = 1.25f*PI - 0.5f*phi_mani;
-        Vec2 A = a + tocart(th_omani/cos(phi_aA), phi_aA);
+        Vec2 A = a + frompol(th_omani/cos(phi_aA), phi_aA);
         Vec2 C = c + uY2*th_omani/cos(phi_mani);
         Vec2 d = new(cnt_z6, r_tht); // throat radius reasonable lower extreme.
         Vec2 e = new(
@@ -931,14 +930,14 @@ public class Chamber : TwoPeasInAPod.Pea {
         }
         neg = new();
         foreach (Vec2 p in neg2)
-            neg.Add(tocart(p.Y, theta, p.X));
+            neg.Add(fromcyl(p.Y, theta, p.X));
         pos = new();
         foreach (Vec2 p in pos2)
-            pos.Add(tocart(p.Y, theta, p.X));
+            pos.Add(fromcyl(p.Y, theta, p.X));
         inlet = new(
-            tocart(inlet_ZRp.Y, theta, inlet_ZRp.X),
-            tocart(1f, theta + PI_2, 0f),
-            tocart(1f, theta, as_phi(inlet_ZRp.Z))
+            fromcyl(inlet_ZRp.Y, theta, inlet_ZRp.X),
+            fromcyl(1f, theta + PI_2, 0f),
+            fromsph(1f, theta, inlet_ZRp.Z)
         );
     }
 
@@ -1025,7 +1024,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         float zextra = 2.5f;
         float Lr = D_inlet/2f + th_inlet;
 
-        Frame inlet_end = inlet.transz(L_inlet).flipxz().rotxy(PI_2);
+        Frame inlet_end = inlet.transz(L_inlet).flipzx().rotxy(PI_2);
 
         float phi = PI_2 + phi_inlet;
         float ell = (magxy(inlet_end.pos) - r_tht)/cos(phi);
@@ -1073,7 +1072,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             float z = min_z + i*(max_z - min_z)/(DIVISIONS - 1);
             float theta = theta0_chnl + theta_chnl(z);
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, widened: true);
-            line.Add(tocart(r, theta, z));
+            line.Add(fromcyl(r, theta, z));
         }
 
         List<float> dists = new(numel(line)){ 0f };
@@ -1182,7 +1181,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             float r = pm.Mr_bolt;
             float Lz = pm.flange_thickness;
             float Lr = pm.Bsz_bolt/2f + pm.thickness_around_bolt;
-            Vec3 p = tocart(r, theta, 0f);
+            Vec3 p = fromcyl(r, theta, 0f);
 
             List<Vec2> tracezr = new();
             float rlo = pm.Or_cc + th_iw + th_chnl + th_ow - r;
@@ -1204,13 +1203,13 @@ public class Chamber : TwoPeasInAPod.Pea {
                 float t = -PI + j*TWOPI/N;
                 if (abs(wraprad(t + PI)) < theta_stop)
                     continue;
-                tracexy.Add(tocart(Lr, t));
+                tracexy.Add(frompol(Lr, t));
             }
             float length = 2f*(r - pm.Or_cc - th_iw - th_chnl - th_ow);
-            Vec2 A = tocart(Lr, -PI - theta_stop)
-                   + tocart(length, -PI - theta_stop + PI_2);
-            Vec2 B = tocart(Lr, -PI + theta_stop)
-                   + tocart(length, -PI + theta_stop - PI_2);
+            Vec2 A = frompol(Lr, -PI - theta_stop)
+                   + frompol(length, -PI - theta_stop + PI_2);
+            Vec2 B = frompol(Lr, -PI + theta_stop)
+                   + frompol(length, -PI + theta_stop - PI_2);
             if (A.Y < B.Y) {
                 Vec2 C = Polygon.line_intersection(
                     A, tracexy[^1],
@@ -1254,7 +1253,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             List<int> keys = new(pm.no_bolt);
             for (int i=0; i<pm.no_bolt; ++i) {
                 float theta = i*TWOPI/pm.no_bolt;
-                Frame frame = new Frame(tocart(pm.Mr_bolt, theta, 0f));
+                Frame frame = new Frame(fromcyl(pm.Mr_bolt, theta, 0f));
                 Pipe hole = new Pipe(frame, pm.flange_thickness, pm.Bsz_bolt/2f);
                 keys.Add(Geez.pipe(hole));
 
@@ -1303,7 +1302,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
         Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
-        Geez.Cycle key_bolts = new(colour: COLOUR_BLACK);
+        Geez.Cycle key_bolts = new(colour: new("#404040"));
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
 
         Voxels gas = voxels_cnt_gas();
@@ -1330,18 +1329,20 @@ public class Chamber : TwoPeasInAPod.Pea {
         Voxels neg_bolts = voxels_neg_bolts(ref key_bolts);
 
         // Also view o-ring grooves.
-        Geez.pipe(new Pipe(
-            new(ZERO3, -uZ3),
-            pm.Lz_Ioring,
-            pm.Ir_Ioring,
-            pm.Or_Ioring
-        ), colour: COLOUR_BLACK, rings: 2, bars: 6);
-        Geez.pipe(new Pipe(
-            new(ZERO3, -uZ3),
-            pm.Lz_Ooring,
-            pm.Ir_Ooring,
-            pm.Or_Ooring
-        ), colour: COLOUR_BLACK, rings: 2, bars: 6);
+        using (key_bolts.like()) {
+            Geez.pipe(new Pipe(
+                new(ZERO3, -uZ3),
+                pm.Lz_Ioring,
+                pm.Ir_Ioring,
+                pm.Or_Ioring
+            ), rings: 2, bars: 6);
+            Geez.pipe(new Pipe(
+                new(ZERO3, -uZ3),
+                pm.Lz_Ooring,
+                pm.Ir_Ooring,
+                pm.Or_Ooring
+            ), rings: 2, bars: 6);
+        }
 
         Voxels flange = voxels_flange();
         using (key_flange.like())
@@ -1447,16 +1448,23 @@ public class Chamber : TwoPeasInAPod.Pea {
 
 
     public void anything() {
-        List<Vec3> a = new();
-        int N = 1000;
-        for (int i=0; i<N; ++i) {
-            float theta = theta_inlet + i*TWOPI/N;
-            float A = A_neg_mani(theta);
-            A /= 0.5f*no_chnl*A_chnl_exit;
-            a.Add(new(theta, 0f, A));
-        }
-        Geez.frame(new());
-        Geez.points(a, r: 0.01f);
+        int key = Geez.voxels(new Cuboid(new(100f*uZ3), 10f, 10f, 10f).voxels());
+        PICOGK_VIEWER.SetGroupVisible(3, false);
+        Vec3 a = new(4f, 1f, 0f);
+        Vec3 b = new(-2f, 1f, 0f);
+        Vec3 c = ONE3;
+        Geez.vec(a, COLOUR_RED, 0.2f);
+        Geez.vec(b, COLOUR_GREEN, 0.2f);
+        Geez.vec(c, COLOUR_BLUE, 0.2f);
+        Vec2 decomp = projspan(c, a, b);
+        Console.WriteLine(decomp);
+        Console.WriteLine(decomp.X * a + decomp.Y * b);
+        Console.WriteLine(c);
+        Geez.vec(decomp.X * a, COLOUR_PINK, 0.2f);
+        Geez.vec(decomp.Y * b, new(decomp.X * a), COLOUR_CYAN, 0.2f);
+        Thread.Sleep(20);
+        // Geez.remove(key);
+        Geez.remove(key);
     }
 
 

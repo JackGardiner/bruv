@@ -556,7 +556,7 @@ public class Injector : TwoPeasInAPod.Pea
     {
         List<Vector3> points = new();
         for (int i=0; i<no; ++i)
-            points.Add(tocart(r, theta0 + i*TWOPI/no, z));
+            points.Add(fromcyl(r, theta0 + i*TWOPI/no, z));
         return points;
     }
 

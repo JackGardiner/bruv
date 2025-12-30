@@ -218,8 +218,8 @@ public class Sectioner {
     public static Sectioner pie(float min_theta, float max_theta) {
         assert(min_theta < max_theta);
         float Dtheta = max_theta - min_theta;
-        Frame frame0 = new(ZERO3, tocart(1f, min_theta + PI_2, 0f));
-        Frame frame1 = new(ZERO3, tocart(1f, max_theta - PI_2, 0f));
+        Frame frame0 = new(ZERO3, fromcyl(1f, min_theta + PI_2, 0f));
+        Frame frame1 = new(ZERO3, fromcyl(1f, max_theta - PI_2, 0f));
         Space space0 = new(frame0, 0f, +INF);
         Space space1 = new(frame1, 0f, +INF);
         Sectioner sectioner = new();
@@ -457,7 +457,7 @@ public class Pipe : SDF {
                 new Vec3(-rhi, -rhi, 0f),
                 new Vec3(+rhi, +rhi, Lz)
             );
-            set_bounds(centre * bbox);
+            set_bounds(centre.to_global_bbox(bbox));
         }
     }
 
@@ -525,7 +525,7 @@ public class Donut : SDF {
                 new Vec3(-R - r, -R - r, -r),
                 new Vec3(+R + r, +R + r, +r)
             );
-            set_bounds(centre * bbox);
+            set_bounds(centre.to_global_bbox(bbox));
         }
     }
 
@@ -737,7 +737,7 @@ public class Polygon {
         Vec2 Da = a1 - a0;
         Vec2 Db = b1 - b0;
         float den = cross(Da, Db);
-        assert(!closeto(den, 0));
+        assert(!nearzero(den));
         float t = cross(b0 - a0, Db) / den;
         outside = within(t, 0f, 1f);
         return a0 + t*Da;
@@ -788,13 +788,13 @@ public class Polygon {
         float mag_ba = mag(a - b);
         float mag_bc = mag(c - b);
         // Points too close.
-        assert(!closeto(mag_ba, 0f));
-        assert(!closeto(mag_bc, 0f));
+        assert(!nearzero(mag_ba));
+        assert(!nearzero(mag_bc));
         Vec2 BA = (a - b) / mag_ba;
         Vec2 BC = (c - b) / mag_bc;
         float beta = acos(clamp(dot(BA, BC), -1f, 1f));
         // Insanely sharp point.
-        assert(!closeto(beta, 0f));
+        assert(!nearzero(beta));
         // Already a straight line.
         if (closeto(abs(beta), PI))
             return;
@@ -848,7 +848,7 @@ public class Polygon {
         List<Vec2> replace_b = new(divs);
         for (int j=0; j<divs; ++j) {
             float theta = theta0 + j*Ltheta/(divs - 1);
-            replace_b.Add(centre + tocart(Fr, theta));
+            replace_b.Add(centre + frompol(Fr, theta));
         }
         ps.RemoveAt(i);
         ps.InsertRange(i, replace_b);
