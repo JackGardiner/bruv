@@ -168,11 +168,11 @@ class BaseLoft
 
     private int[] anGenerateEdgeVertices(
         ref Mesh msh,
-                                            OrientedContour oBtm,
-                                            OrientedContour oTop,
-                                            float fV,
-                                            int nSubDiv,
-                                            float fBtmCorr)
+        OrientedContour oBtm,
+        OrientedContour oTop,
+        float fV,
+        int nSubDiv,
+        float fBtmCorr)
     {
         int[] anIndices = new int[nSubDiv];
 
@@ -203,13 +203,13 @@ class BaseLoft
 
             Vector3 vecCurPt = new Vector3(
                 float.Lerp(vecPtBtm.X, vecPtTop.X, fVSmoov),
-                                                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
+                float.Lerp(vecPtBtm.Y, vecPtTop.Y, fVSmoov),
                 float.Lerp(vecPtBtm.Z, vecPtTop.Z, fV)
             );
 
             Vector3 vecCurNo = Vector3.Normalize(new Vector3(
                 float.Lerp(vecNoBtm.X, vecNoTop.X, fVSmoov),
-                                                                float.Lerp(vecNoBtm.Y, vecNoTop.Y, fVSmoov),
+                float.Lerp(vecNoBtm.Y, vecNoTop.Y, fVSmoov),
                 float.Lerp(vecNoBtm.Z, vecNoTop.Z, fV))
             );
 
