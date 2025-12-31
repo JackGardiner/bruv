@@ -260,6 +260,8 @@ public static class Geez {
             public void retarget(float new_target_theta, float new_target_phi) {
                 assert(isgood(new_target_theta));
                 assert(isgood(new_target_phi));
+                new_target_theta = wraprad(new_target_theta - PI) + PI;
+                new_target_phi = clamp(new_target_phi, 0f, PI);
                 target_theta = new_target_theta;
                 target_phi   = new_target_phi;
                 elapsed_time = 0f;
@@ -272,10 +274,7 @@ public static class Geez {
 
 
             public void retarget(Vec2 new_target_theta_phi) {
-                assert(isgood(new_target_theta_phi));
-                target_theta = new_target_theta_phi.X;
-                target_phi   = new_target_theta_phi.Y;
-                elapsed_time = 0f;
+                retarget(new_target_theta_phi.X, new_target_theta_phi.Y);
             }
         }
 
@@ -299,6 +298,10 @@ public static class Geez {
         private static SnapTo<SnapVec3, Vec3> snap_pos
             = new(25f, NAN3, max_time: 0.25f /* don freeze */);
 
+        private static Vec3 future_pos => nonnan(snap_pos.target)
+                                        ? snap_pos.target
+                                        : pos;
+
         /* looking vector. */
         public static float theta {
             // need picogk to enable mouse->camera. note picogk stores camera
@@ -318,16 +321,27 @@ public static class Geez {
             // elevation clamp.
             get => PI_2 + torad(PICOGK_VIEWER.m_fElevation);
             set {
-                // value = clamp(value, 1e-3f, PI - 1e-3f);
                 value = clamp(value, 0f, PI);
                 PICOGK_VIEWER.m_fElevation = todeg(value - PI_2);
             }
         }
         private static SnapRotation snap_ang = new(25f, NAN, NAN, 0.25f);
-        private static float get_focal_dist() => mag(size) * zoom * 0.8f;
-        private static float get_ortho_dist() => mag(size) * zoom_max * 10f;
         private static Vec3 get_looking() => fromsph(1f, theta, phi);
         private static Vec3 get_camera() => -fromsph(1f, theta, phi);
+        private static float get_focal_dist() => mag(size) * zoom * 0.8f;
+        private static float get_ortho_dist() => mag(size) * zoom_max * 10f;
+
+        private static float future_theta => nonnan(snap_ang.target_theta)
+                                           ? snap_ang.target_theta
+                                           : theta;
+        private static float future_phi => nonnan(snap_ang.target_phi)
+                                         ? snap_ang.target_phi
+                                         : phi;
+        private static Vec3 get_future_looking()
+            => fromsph(1f, future_theta, future_phi);
+        private static Vec3 get_future_camera()
+            => -fromsph(1f, future_theta, future_phi);
+
 
         /* ortho zoom value (and speed dial), scaled up by some amount to get
           around picogk's minimum of 0.1. */
@@ -773,17 +787,23 @@ public static class Geez {
 
 
         private static Vec2 get_ang_axis_aligned() {
-            float newtheta = wraprad(round(theta / PI_2) * PI_2);
-            float newphi = (phi < PI/6f) ? 0f
-                         : (phi > PI*5f/6f) ? PI
+            float newtheta = wraprad(round(future_theta / PI_2) * PI_2);
+            float newphi = (future_phi < PI/6f) ? 0f
+                         : (future_phi > PI*5f/6f) ? PI
                          : PI_2;
+            return new(newtheta, newphi);
+        }
+
+        private static Vec2 get_ang_quarter_aligned() {
+            float newtheta = wraprad(round(future_theta / PI_4) * PI_4);
+            float newphi = round(future_phi / PI_4) * PI_4;
             return new(newtheta, newphi);
         }
 
         private static Vec2 get_ang_origin() {
             Vec3 looking = -centre - pos;
-            float newtheta = argxy(looking, ifzero: theta);
-            float newphi = argphi(looking, ifzero: phi);
+            float newtheta = argxy(looking, ifzero: future_theta);
+            float newphi = argphi(looking, ifzero: future_phi);
             return new(newtheta, newphi);
         }
 
@@ -795,14 +815,15 @@ public static class Geez {
             Vec3 newpos = -centre;
             if (orbit) {
                 // cheeky plane line intersection.
-                Vec3 point = pos;
-                Vec3 looking = get_looking();
-                Vec3 normal = cross(looking, fromcyl(1f, theta + PI_2, 0f));
+                Vec3 point = future_pos;
+                Vec3 looking = get_future_looking();
+                Vec3 right = fromcyl(1f, future_theta - PI_2, 0f);
+                Vec3 normal = cross(right, looking);
                 float z = -dot(normal, -point) / dot(normal, uZ3);
                 newpos.Z = z;
             } else {
                 // otherwise jus dont change z.
-                newpos.Z = pos.Z;
+                newpos.Z = future_pos.Z;
             }
             return newpos;
         }
@@ -812,11 +833,11 @@ public static class Geez {
         }
 
         private static Vec3 get_pos_focal_point() {
-            Vec3 newpos = pos;
+            Vec3 newpos = future_pos;
             if (orbit)
-                newpos -= get_focal_dist() * get_looking();
+                newpos -= get_focal_dist() * get_future_looking();
             else
-                newpos += get_focal_dist() * get_looking();
+                newpos += get_focal_dist() * get_future_looking();
             return newpos;
         }
 
@@ -879,6 +900,36 @@ public static class Geez {
                     if (pressed && started) {
                         snap_ortho.responsiveness = orbit ? 25f : 18f;
                         set_mode(!orbit);
+                    }
+                    return true;
+
+                // Override picogks bad view rotater to use our snap.
+                case Viewer.EKeys.Key_Left:
+                    if (pressed && started) {
+                        Vec2 ang = get_ang_quarter_aligned();
+                        ang.X += PI_4;
+                        snap_ang.retarget(ang);
+                    }
+                    return true;
+                case Viewer.EKeys.Key_Right:
+                    if (pressed && started) {
+                        Vec2 ang = get_ang_quarter_aligned();
+                        ang.X -= PI_4;
+                        snap_ang.retarget(ang);
+                    }
+                    return true;
+                case Viewer.EKeys.Key_Up:
+                    if (pressed && started) {
+                        Vec2 ang = get_ang_quarter_aligned();
+                        ang.Y -= PI_4;
+                        snap_ang.retarget(ang);
+                    }
+                    return true;
+                case Viewer.EKeys.Key_Down:
+                    if (pressed && started) {
+                        Vec2 ang = get_ang_quarter_aligned();
+                        ang.Y += PI_4;
+                        snap_ang.retarget(ang);
                     }
                     return true;
 
