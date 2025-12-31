@@ -218,11 +218,9 @@ public static class Geez {
             public float elapsed_time;
             public float max_time;
             public float atol;
-            public bool travel_direct;
 
             public SnapRotation(float responsiveness, float target_theta,
-                    float target_phi, float max_time=NAN, float atol=1e-2f,
-                    bool travel_direct=false) {
+                    float target_phi, float max_time=NAN, float atol=1e-2f) {
                 assert(isnan(target_theta) == isnan(target_phi));
                 assert(noninf(target_theta));
                 assert(noninf(target_phi));
@@ -232,7 +230,6 @@ public static class Geez {
                 this.elapsed_time = 0f;
                 this.max_time = max_time;
                 this.atol = atol;
-                this.travel_direct = travel_direct;
             }
 
             public void Dvalue(float Dt, float theta, float phi,
@@ -244,50 +241,17 @@ public static class Geez {
                 if (isnan(target_theta)) {
                     Dtheta = 0f;
                     Dphi = 0f;
-                    goto SKIP;
-                }
-
-                if (!travel_direct) {
+                } else {
                     // lowkey just snapping theta and phi individually has much
-                    // better results around the poles.
+                    // better results around the poles than a true lerped
+                    // rotation.
                     Dtheta = wraprad(target_theta - theta);
                     if (abs(Dtheta) > atol)
                         Dtheta *= 1f - exp(-responsiveness * Dt);
                     Dphi = wraprad(target_phi - phi);
                     if (abs(Dphi) > atol)
                         Dphi *= 1f - exp(-responsiveness * Dt);
-                    goto SKIP;
                 }
-
-                // We want to go from U->V.
-                Vec3 U = fromsph(1f, theta, phi);
-                Vec3 V = fromsph(1f, target_theta, target_phi);
-                float beta = argbeta(U, V);
-                // we wanna go some proportion of the angle between U and V.
-                float alpha = beta;
-                if (abs(alpha) > atol)
-                    alpha *= 1f - exp(-responsiveness * Dt);
-
-                Vec3 about = cross(U, V);
-                if (nearzero(about)) {
-                    // U and V are parallel.
-                    if (beta > PI_2) {
-                        // opposite, can travel in any direction. we prefer a
-                        // path which crosses the xy plane exactly half-way.
-                        about = (!closeto(phi, 0f) && !closeto(phi, PI_2))
-                              ? uZ3
-                              : uY3;
-                    } else {
-                        // same direction.
-                        about = uZ3;
-                        alpha = 0f;
-                    }
-                }
-                Vec3 W = rotate(U, about, alpha);
-                // We've found the new rotation vector.
-                Dtheta = argxy(W) - theta;
-                Dphi   = argphi(W) - phi;
-              SKIP:;
 
                 if (isnan(target_theta))
                     elapsed_time = 0f;
@@ -395,6 +359,7 @@ public static class Geez {
         public static void set_mode(bool now_orbiting) {
             orbit = now_orbiting;
             snap_ortho.retarget(now_orbiting ? 1f : 0f);
+            extra_dist = 0f;
         }
 
         /* prev variable caches, to change the scaling of them over time. */
@@ -423,7 +388,7 @@ public static class Geez {
             centre = NAN3;
             size = NAN3;
 
-            // leave `get_a_word_in_edgewise`.
+            get_a_word_in_edgewise = 5;
 
             pos = ZERO3;
             vel = ZERO3;
@@ -448,6 +413,22 @@ public static class Geez {
             last_theta = NAN;
             last_phi = NAN;
             last_zoom = NAN;
+        }
+
+        public static void rescope() {
+            // Reframes the viewer for current scene objects.
+
+            centre = NAN3;
+            size = NAN3;
+
+            snap_pos.retarget(ZERO3);
+
+            snap_ang.retarget(new(torad(225f), torad(120f)));
+
+            zoom = 1f;
+            last_zoom = NAN;
+
+            set_mode(true);
         }
 
         public static void initialise() {
@@ -647,7 +628,7 @@ public static class Geez {
 
             // Get an up vector which wont break the view matrix on perfectly
             // up/down.
-            Vec3 up = nearzero(projxy(camera))
+            Vec3 up = nearvert(camera)
                     ? fromcyl(1f, theta + ((camera.Z < 0f) ? PI : 0f), 0f)
                     : uZ3;
 
@@ -786,7 +767,7 @@ public static class Geez {
         private static async Task make_shit_happen_continuously() {
             for (;;) {
                 make_shit_happen_in_the_future();
-                await Task.Delay(5);
+                await Task.Delay(15);
             }
         }
 
@@ -804,6 +785,10 @@ public static class Geez {
             float newtheta = argxy(looking, ifzero: theta);
             float newphi = argphi(looking, ifzero: phi);
             return new(newtheta, newphi);
+        }
+
+        private static Vec2 get_ang_isometric() {
+            return new(torad(225f), torad(135f));
         }
 
         private static Vec3 get_pos_on_z_axis() {
@@ -849,6 +834,7 @@ public static class Geez {
             const Viewer.EKeys Viewer_EKeys_Key_Alt      = (Viewer.EKeys)342;
             const Viewer.EKeys Viewer_EKeys_Key_Super    = (Viewer.EKeys)343;
             const Viewer.EKeys Viewer_EKeys_Key_Backtick = (Viewer.EKeys)'`';
+            const Viewer.EKeys Viewer_EKeys_Key_Equals   = (Viewer.EKeys)'=';
 
             // Check the tracked keys.
             int keycode;
@@ -883,10 +869,10 @@ public static class Geez {
                 case Viewer.EKeys.Key_Tab:
                     if (pressed && started) {
                         pos = get_pos_focal_point();
-                        if (!orbit)
-                            extra_dist = get_focal_dist();
                         snap_ortho.responsiveness = orbit ? 24f : 18f;
                         set_mode(!orbit);
+                        if (orbit)
+                            extra_dist = get_focal_dist();
                     }
                     return true;
                 case Viewer_EKeys_Key_Backtick:
@@ -912,6 +898,23 @@ public static class Geez {
                                         : get_pos_on_z_axis());
                     }
                     return true;
+                case Viewer.EKeys.Key_R:
+                    // dujj.
+                    if (pressed && started) {
+                        snap_ang.retarget(get_ang_isometric());
+                        if (ctrl)
+                            snap_pos.retarget(get_pos_origin());
+                    }
+                    return true;
+
+                case Viewer_EKeys_Key_Equals:
+                    if (pressed && started)
+                        rescope();
+                    return true;
+                case Viewer.EKeys.Key_Backspace:
+                    if (pressed && started)
+                        reset();
+                    return true;
 
                 case Viewer.EKeys.Key_K:
                     if (pressed && started && !orbit) {
@@ -926,16 +929,6 @@ public static class Geez {
                         target += (0f - target)/15f;
                         snap_fov.retarget(target);
                     }
-                    return true;
-
-                case Viewer.EKeys.Key_Backspace:
-                    if (pressed && started)
-                        reset();
-                    return true;
-
-                case Viewer.EKeys.Key_R:
-                    if (pressed && started && ctrl)
-                        get_a_word_in_edgewise = 5;
                     return true;
 
                 case Viewer.EKeys.Key_T:
@@ -970,8 +963,11 @@ public static class Geez {
         log("     - ctrl+Q          snap view to origin");
         log("     - E               snap centre to Z axis");
         log("     - ctrl+E          snap centre to origin");
-        log("     - ctrl+R          rescale for window aspect ratio");
-        log("     - backspace       reset view");
+        log("     - R               snap view to isometric angle");
+        log("     - ctrl+R          snap view to isometric angle and centre to "
+                                 + "origin");
+        log("     - equals [+/=]    rescope view");
+        log("     - backspace       reset view (+fix window aspect ratio)");
         log("     - K/L             dial up/down free fov");
         log("     - T               toggle transparency");
         log("     - Y               toggle background dark-mode");
@@ -984,29 +980,34 @@ public static class Geez {
     private static int _next = 1; // must leave 0 as illegal.
     private static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
         int key = _next++;
-        _geezed.Add(key, (lines, meshes));
+        lock (_geezed)
+            _geezed.Add(key, (lines, meshes));
         return key;
     }
     private static int _track(in List<int> group) {
         int key = _next++;
-        _geezed.Add(key, group);
+        lock (_geezed)
+            _geezed.Add(key, group);
         return key;
     }
     private static bool _the_box_that_bounds_them_all(out BBox3 bbox) {
         bbox = new();
         bool nonempty = false;
-        foreach (object item in _geezed.Values) {
-            if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
-                foreach (Mesh mesh in meshes) {
-                    if (mesh.nVertexCount() > 0 && mesh.nTriangleCount() > 0) {
-                        nonempty = true;
-                        bbox.Include(mesh.oBoundingBox());
+        lock (_geezed) {
+            foreach (object item in _geezed.Values) {
+                if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
+                    foreach (Mesh mesh in meshes) {
+                        if (mesh.nVertexCount() > 0
+                                && mesh.nTriangleCount() > 0) {
+                            nonempty = true;
+                            bbox.Include(mesh.oBoundingBox());
+                        }
                     }
-                }
-                foreach (PolyLine line in lines) {
-                    if (line.nVertexCount() > 0) {
-                        nonempty = true;
-                        bbox.Include(line.oBoundingBox());
+                    foreach (PolyLine line in lines) {
+                        if (line.nVertexCount() > 0) {
+                            nonempty = true;
+                            bbox.Include(line.oBoundingBox());
+                        }
                     }
                 }
             }
@@ -1140,18 +1141,19 @@ public static class Geez {
 
 
     public static int recent(int ignore=0) {
-        assert(numel(_geezed) > 0);
-        assert(ignore >= 0);
         int key = _next;
-        for (int i=-1; i<ignore; ++i) {
-            while (!_geezed.ContainsKey(key - 1)) // O(n) skull emoji.
+        lock (_geezed) {
+            assert(numel(_geezed) > 0);
+            assert(ignore >= 0);
+            for (int i=-1; i<ignore; ++i) {
+                while (!_geezed.ContainsKey(key - 1)) // O(n) skull emoji.
+                    --key;
                 --key;
-            --key;
+            }
         }
         return key;
     }
     public static void pop(int count, int ignore=0) {
-        assert(count <= numel(_geezed));
         assert(count >= 0);
         assert(ignore >= 0);
         while (count --> 0) // so glad down-to operator made it into c#.
@@ -1161,8 +1163,11 @@ public static class Geez {
         if (key <= 0) // noop.
             return;
 
-        object item = _geezed[key];
-        _geezed.Remove(key);
+        object item;
+        lock (_geezed) {
+            item = _geezed[key];
+            _geezed.Remove(key);
+        }
 
         if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
             foreach (Mesh mesh in meshes)
@@ -1181,7 +1186,9 @@ public static class Geez {
             remove(key);
     }
     public static void clear() {
-        List<int> keys = new(_geezed.Keys);
+        List<int> keys;
+        lock (_geezed)
+            keys = new(_geezed.Keys);
         remove(keys);
     }
     public static int group(List<int> keys) {
@@ -1336,15 +1343,21 @@ public static class Geez {
              : _ball_lores.mshCreateTransformed(0.05f*size*ONE3, frame.pos);
     }
     public static int frame(in Frame frame, float size=5f, bool mark_pos=true,
-            Colour? colour=null) {
-        return Geez.frames([frame], size: size, mark_pos: mark_pos,
-                colour: colour);
+            Colour? pos_colour=null) {
+        return Geez.frames(new FramesSequence([frame]), size: size,
+                mark_pos: mark_pos, pos_colour: pos_colour);
     }
     public static int frames(in List<Frame> frames, float size=5f,
-            bool mark_pos=true, Colour? colour=null) {
+            bool mark_pos=false, Colour? pos_colour=null) {
+        return Geez.frames(new FramesSequence(frames), size: size,
+                mark_pos: mark_pos, pos_colour: pos_colour);
+    }
+    public static int frames(in Frames frames, float size=5f,
+            bool mark_pos=false, Colour? pos_colour=null) {
         List<PolyLine> lines = new();
         List<Mesh> meshes = new();
-        foreach (Frame frame in frames) {
+        for (int i=0; i<numel(frames); ++i) {
+            Frame frame = frames.at(i);
             _frame_lines(out Mesh? mesh, lines, frame, size, mark_pos);
             if (mesh != null)
                 meshes.Add(mesh);
@@ -1357,17 +1370,17 @@ public static class Geez {
             return key_line;
         int key_mesh;
         using (dflt_like(colour: COLOUR_WHITE, alpha: 1f, metallic: 0.1f,
-                roughness: 0.8f))
-        using (like(colour: colour))
+                         roughness: 0.8f))
+        using (like(colour: pos_colour))
             key_mesh = _push(meshes);
         return group([key_line, key_mesh]);
     }
 
-    public static int vec(in Vec3 vec, Colour? colour=null, float arrow=3f) {
-        return Geez.vec(vec, new Frame(), colour: colour, arrow: arrow);
+    public static int vec(in Vec3 vec, Colour? colour=null, float arrow=1f) {
+        return Geez.vec(new Frame(), vec, colour: colour, arrow: arrow);
     }
-    public static int vec(in Vec3 vec, in Frame frame, Colour? colour=null,
-            float arrow=3f) {
+    public static int vec(in Frame frame, in Vec3 vec, Colour? colour=null,
+            float arrow=1f) {
         PolyLine line = new(colour ?? Geez.colour ?? COLOUR_WHITE);
         line.nAddVertex(frame * ZERO3);
         line.nAddVertex(frame * vec);

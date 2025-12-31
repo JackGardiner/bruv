@@ -270,16 +270,21 @@ public static class Polygon {
 
     public static Mesh mesh_revolved(
             in Frame frame,
-            in List<Vec2> vertices, /* (z,r), any winding (but direction of
-                                       travel will be taken s.t. winding is cw
-                                       about it) */
-            int slicesize=-1, int slicecount=-1,
-            bool donut=false, float theta0=0f
+            in List<Vec2> vertices, /* (z,r), any winding */
+            float by=TWOPI,
+            int slicesize=-1, int slicecount=-1, bool donut=false
         ) {
-        bool sliced = slicesize >= 0;
+
+        // Clamp to at-most a full revolve.
+        by = clamp(by, -TWOPI, TWOPI);
+        assert(abs(by) > 0f, "skinnyyyyyy");
+
+        // Closed if a full revolve. Ringed only if donut.
+        bool closed = abs(by) == TWOPI;
+        bool ringed = donut;
 
         int repcount;
-        if (sliced) {
+        if (slicesize >= 0) {
             int count = mesh_divided_into(numel(vertices), slicesize);
             assert(slicecount == -1 || slicecount == count,
                    $"supplied slicecount doesn't match (got {slicecount}, "
@@ -288,65 +293,59 @@ public static class Polygon {
             repcount = 1;
         } else {
             slicesize = numel(vertices);
-            repcount = (slicecount == -1) ? 200 : slicecount;
+            repcount = (slicecount == -1)
+                     ? max((int)(abs(by)*200/TWOPI), 10)
+                     : slicecount;
             slicecount = 1;
         }
-        int slicestep = slicesize;
+        assert(slicesize >= 3, "each slice is not a polygon");
+        assert(slicecount*repcount >= (closed ? 3 : 2), "too few slices to "
+                                                      + "create a solid");
+
+        // Ensure legal revolve.
         if (!donut) {
-            assert(slicesize >= 2);
-            slicesize += 2;
-        }
-        assert(slicesize >= 3);
-        assert(slicecount*repcount >= 3);
-
-        // Make the full list of vertices for sweep.
-        List<Vec2> slice_vertices;
-        if (donut) {
-            slice_vertices = vertices;
-        } else {
-            slice_vertices = new(slicecount * slicesize);
-
             float zstart0 = vertices[0].X;
-            float zstart1 = vertices[(slicecount - 1)*slicestep].X;
-            float zend0   = vertices[slicestep - 1].X;
-            float zend1   = vertices[slicecount*slicestep - 1].X;
+            float zstart1 = vertices[(slicecount - 1)*slicesize].X;
+            float zend0   = vertices[slicesize - 1].X;
+            float zend1   = vertices[slicecount*slicesize - 1].X;
             assert(zstart0 == zstart1, "revolve would not be closed");
             assert(zend0 == zend1, "revolve would not be closed");
 
             for (int n=0; n<slicecount; ++n) {
-                Vec2 start = new(vertices[n*slicestep].X, 0f);
-                Vec2 end   = new(vertices[n*slicestep + slicestep - 1].X, 0f);
-                slice_vertices.AddRange([
-                    start,
-                    ..vertices.GetRange(n*slicestep, slicestep),
-                    end,
-                ]);
+                assert(nearzero(vertices[n*slicesize].Y),
+                       "revolve would not be closed");
+                assert(nearzero(vertices[n*slicesize + slicesize - 1].Y),
+                       "revolve would not be closed");
             }
         }
-        List<Vec2> swept_vertices;
-        if (repcount == 1) {
-            swept_vertices = slice_vertices;
-        } else {
-            swept_vertices = new(repcount * slicesize);
-            for (int n=0; n<repcount; ++n)
-                swept_vertices.AddRange(slice_vertices);
-        }
 
-        // Make the full list of frames for sweep.
-        bool ccw = area(swept_vertices.GetRange(0, slicesize), true) >= 0f;
-        List<Frame> swept_frames = new(slicecount * repcount);
-        for (int n=0; n<slicecount*repcount; ++n) {
-            float theta = theta0
-                        + (ccw ? 1f : -1f) * n*TWOPI/slicecount/repcount;
-            swept_frames.Add(new(
-                frame.pos,
-                uZ3,
-                fromcyl(1f, theta + PI_2, 0f)
-            ));
+        // Make the full list of vertices for sweep.
+        bool ccw = area(vertices, true) >= 0f;
+        List<Vec2> swept_vertices = new(vertices);
+        if (ccw != (by > 0f)) // ccw when travelling +circum.
+            swept_vertices.Reverse();
+        if (!donut) {
+            // Set to perfectly along axis.
+            for (int n=0; n<slicecount; ++n) {
+                swept_vertices[n*slicesize] *= uX2;
+                swept_vertices[n*slicesize + slicesize - 1] *= uX2;
+            }
         }
+        for (int n=1; n<repcount; ++n)
+            swept_vertices.AddRange(swept_vertices.GetRange(0, slicesize));
 
-        return mesh_swept(swept_frames, swept_vertices, closed: false,
-                          ringed: donut);
+        // Get the spinning frame for sweep.
+        FramesSpin swept_frames = new FramesSpin(
+            slicecount * repcount,
+            frame.cyclecw(),
+            about: uX3,
+            by: by
+        );
+        if (closed)
+            swept_frames = swept_frames.excluding_end();
+
+        return mesh_swept(swept_frames, swept_vertices, closed: closed,
+                          ringed: ringed);
     }
 
 
@@ -405,9 +404,9 @@ public static class Polygon {
 
 
     public static Mesh mesh_swept(
-            in List<Frame> frames,
+            in Frames frames,
             in List<Vec2> vertices, /* (x,y), winding ccw */
-            bool closed=true, bool ringed=true
+            bool closed=false, bool ringed=true
         ) {
 
         int N = numel(vertices);
@@ -420,7 +419,7 @@ public static class Polygon {
         assert(is_simple(vertices.GetRange(0, slicesize)), "come on man");
 
         // Mesh bottom and top faces.
-        if (closed) {
+        if (!closed) {
             List<Vec2> bot = vertices.GetRange(0, slicesize);
             List<Vec2> top = vertices.GetRange(N - slicesize, slicesize);
             mesh_face_indices(ref mesh, bot, 0, true, false);
@@ -429,7 +428,7 @@ public static class Polygon {
 
         // Mesh sides as quads.
         for (int n=0; n<slicecount; ++n) {
-            if (closed && n >= slicecount - 1)
+            if (!closed && n >= slicecount - 1)
                 break;
 
             int i = n*slicesize;
@@ -462,7 +461,7 @@ public static class Polygon {
         // Make all the vertices.
         List<Vec3> V = new();
         for (int n=0; n<slicecount; ++n) {
-            Frame frame = frames[n];
+            Frame frame = frames.at(n);
             for (int i=0; i<slicesize; ++i) {
                 int idx = n*slicesize + i;
                 V.Add(frame * rejxy(vertices[idx], 0f));

@@ -154,50 +154,6 @@ public static partial class Br {
     public static bool within(float a, float lo, float hi)
         => (lo <= a) && (a <= hi);
 
-    public static bool closeto(float a, float b, float rtol=1e-4f,
-            float atol=1e-5f) {
-        if (a == b) // for infs.
-            return true;
-        if (isnan(a) || isnan(b)) // for nans.
-            return false;
-        return mag(a - b) <= (atol + rtol*mag(b));
-    }
-    public static bool closeto(Vec2 a, Vec2 b, float rtol=1e-4f,
-            float atol=1e-5f) {
-        if (a == b) // for infs.
-            return true;
-        if (isnan(a) || isnan(b)) // for nans.
-            return false;
-        return mag(a - b) <= (atol + rtol*mag(b));
-    }
-    public static bool closeto(Vec3 a, Vec3 b, float rtol=1e-4f,
-            float atol=1e-5f) {
-        if (a == b) // for infs.
-            return true;
-        if (isnan(a) || isnan(b)) // for nans.
-            return false;
-        return mag(a - b) <= (atol + rtol*mag(b));
-    }
-
-    public static bool nearzero(float a) => closeto(mag(a), 0f);
-    public static bool nearzero(Vec2 a)  => closeto(mag(a), 0f);
-    public static bool nearzero(Vec3 a)  => closeto(mag(a), 0f);
-
-    public static bool nearunit(float a) => closeto(mag(a), 1f);
-    public static bool nearunit(Vec2 a)  => closeto(mag(a), 1f);
-    public static bool nearunit(Vec3 a)  => closeto(mag(a), 1f);
-
-    public static float round(float a) => float.Round(a);
-
-    public static float lerp(float a, float b, float t)
-        => a + clamp(t, 0f, 1f)*(b - a);
-    public static Vec2 lerp(Vec2 a, Vec2 b, float t)
-        => a + clamp(t, 0f, 1f)*(b - a);
-    public static Vec3 lerp(Vec3 a, Vec3 b, float t)
-        => a + clamp(t, 0f, 1f)*(b - a);
-    public static float lerp(float a, float b, int n, int d)
-        => a + clamp(n/(float)d, 0f, 1f)*(b - a);
-
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
 
@@ -261,6 +217,33 @@ public static partial class Br {
         return sum(vs) / numel(vs);
     }
 
+    public static float round(float a) => float.Round(a);
+
+    public static bool closeto(float a, float b, float rtol=1e-4f,
+            float atol=1e-5f) {
+        if (a == b) // for infs.
+            return true;
+        if (isnan(a) || isnan(b)) // for nans.
+            return false;
+        return mag(a - b) <= (atol + rtol*mag(b));
+    }
+    public static bool closeto(Vec2 a, Vec2 b, float rtol=1e-4f,
+            float atol=1e-5f) {
+        if (a == b) // for infs.
+            return true;
+        if (isnan(a) || isnan(b)) // for nans.
+            return false;
+        return mag(a - b) <= (atol + rtol*mag(b));
+    }
+    public static bool closeto(Vec3 a, Vec3 b, float rtol=1e-4f,
+            float atol=1e-5f) {
+        if (a == b) // for infs.
+            return true;
+        if (isnan(a) || isnan(b)) // for nans.
+            return false;
+        return mag(a - b) <= (atol + rtol*mag(b));
+    }
+
     public static float pow(float a, float b) => MathF.Pow(a, b);
     public static float exp(float a) => MathF.Exp(a);
     public static float log(float a) => MathF.Log(a);
@@ -294,8 +277,28 @@ public static partial class Br {
     public static float hypot(float x, float y) => sqrt(x*x + y*y);
     public static float hypot(float x, float y, float z)
         => sqrt(x*x + y*y + z*z);
-    public static float nonhypot(float x, float y) // an instant classic.
-        => sqrt(x*x - y*y);
+    public static float nonhypot(float hypot, float other) // an instant classic.
+        => sqrt(hypot*hypot - other*other);
+
+    public static bool nearzero(float a) => closeto(mag(a), 0f);
+    public static bool nearzero(Vec2 a)  => closeto(mag(a), 0f);
+    public static bool nearzero(Vec3 a)  => closeto(mag(a), 0f);
+
+    public static bool nearunit(float a) => closeto(mag(a), 1f);
+    public static bool nearunit(Vec2 a)  => closeto(mag(a), 1f);
+    public static bool nearunit(Vec3 a)  => closeto(mag(a), 1f);
+
+    public static bool nearvert(Vec3 a) {
+        assert(!nearzero(a));
+        float phi = argphi(a);
+        return closeto(phi, 0f) || closeto(phi, PI);
+    }
+
+    public static float lerp(float a, float b, float t) => a + t*(b - a);
+    public static Vec2 lerp(Vec2 a, Vec2 b, float t)    => a + t*(b - a);
+    public static Vec3 lerp(Vec3 a, Vec3 b, float t)    => a + t*(b - a);
+    public static float lerp(float a, float b, int i, int N)
+            => a + i*(b - a)/(N - 1);
 
     public static float mag(float a) => abs(a); // same difference type shi.
     public static float mag(Vec2 a) => a.Length();
@@ -392,6 +395,38 @@ public static partial class Br {
         return p*cosby
              + cross(about, p)*sinby
              + about*dot(about, p)*(1f - cosby);
+    }
+
+    public static void rotfromto(Vec3 a, Vec3 b, out Vec3 about, out float by) {
+        // We want to go from a->b.
+        assert(!nearzero(a));
+        assert(!nearzero(b));
+        Vec3 A = normalise(a);
+        Vec3 B = normalise(b);
+        by = argbeta(A, B);
+        about = cross(A, B);
+        if (nearzero(about)) { // a and b are parallel.
+            if (by > PI_2) {
+                // opposite, can travel in any direction. we prefer a path which
+                // crosses the xy plane exactly half-way and travels +circum.
+                float theta = argxy(A);
+                about = nearvert(A)
+                      ? uY3
+                      : cross(A, fromcyl(1f, theta + PI_2, 0f));
+            } else {
+                // same direction, no rotation.
+                about = uZ3;
+                by = 0f;
+            }
+        }
+        about = normalise(about);
+    }
+
+    public static Vec3 lerpdir(Vec3 A, Vec3 B, float t) {
+        assert(nearunit(A));
+        assert(nearunit(B));
+        rotfromto(A, B, out Vec3 about, out float by);
+        return rotate(A, about, by * t);
     }
 
     public static Vec2 rot90ccw(Vec2 a) => new(-a.Y, a.X);

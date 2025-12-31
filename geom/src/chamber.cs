@@ -6,7 +6,6 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
-using BBox3 = PicoGK.BBox3;
 
 public class Chamber : TwoPeasInAPod.Pea {
 
@@ -114,7 +113,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         float ave_theta = 0f;
         int N = 10000;
         for (int i=0; i<N; ++i) {
-            float z = lerp(cnt_z0, cnt_z6, i, N - 1);
+            float z = lerp(cnt_z0, cnt_z6, i, N);
             float theta = theta_chnl(z);
             ave_theta += (theta - ave_theta) / (i + 1);
         }
@@ -334,7 +333,7 @@ public class Chamber : TwoPeasInAPod.Pea {
 
         cnt_wid_z0 = 0f;
 
-        cnt_wid_z1 = 0.5f*-phi_wid*cnt_wid_r_s;
+        cnt_wid_z1 = -phi_wid*cnt_wid_r_s;
         cnt_wid_r1 = cnt_wid_r0;
 
         cnt_wid_z2 = cnt_wid_z1 - cnt_wid_r_s*sin(phi_wid);
@@ -628,10 +627,12 @@ public class Chamber : TwoPeasInAPod.Pea {
         List<Vec2> V = new();
         float zlo = cnt_z0 - EXTRA;
         float zhi = cnt_z6 + EXTRA;
+        V.Add(new(zlo, 0f));
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS - 1);
+            float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, max_off, widened)));
         }
+        V.Add(new(zhi, 0f));
         Mesh mesh = Polygon.mesh_revolved(new Frame(), V, slicecount: DIVISIONS);
         return new(mesh);
     }
@@ -640,11 +641,11 @@ public class Chamber : TwoPeasInAPod.Pea {
         float zlo = cnt_z0 - EXTRA;
         float zhi = cnt_z6 + EXTRA;
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS - 1);
+            float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off + th, widened)));
         }
         for (int i=DIVISIONS - 1; i>-1; --i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS - 1);
+            float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off, widened)));
         }
         Mesh mesh = Polygon.mesh_revolved(new Frame(), V, donut: true,
@@ -679,26 +680,26 @@ public class Chamber : TwoPeasInAPod.Pea {
 
 
     protected Mesh mesh_chnl(float theta0) {
-        List<Frame> frames = new((int)(DIVISIONS*1.1f));
+        List<Vec3> frames = new((int)(DIVISIONS*1.1f));
         List<Vec2> vertices = new((int)(DIVISIONS*5f));
         float Dt = 0.5f*Ltheta_chnl; // t for theta.
         float zlo = cnt_z0;
         float zhi = cnt_z6 - th_omani - th_chnl;
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS - 1);
+            float z = lerp(zlo, zhi, i, DIVISIONS);
             float theta = theta0 + theta_chnl(z);
             float thetalo = theta - Dt;
             float thetahi = theta + Dt;
             float rlo = cnt_radius_at(z, th_iw, true);
             float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
 
-            frames.Add(new(z*uZ3));
+            frames.Add(z*uZ3);
             vertices.Add(frompol(rlo, thetalo));
             vertices.Add(frompol(rhi, thetalo));
             vertices.Add(frompol(rhi, thetahi));
             vertices.Add(frompol(rlo, thetahi));
         }
-        frames.Insert(0, frames[0].transz(-EXTRA));
+        frames.Insert(0, frames[0] - EXTRA*uZ3);
         vertices.Insert(0, vertices[3]);
         vertices.Insert(0, vertices[3]);
         vertices.Insert(0, vertices[3]);
@@ -707,7 +708,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         zlo = zhi;
         zhi = cnt_z6 - th_omani;
         for (int i=0; i<DIVISIONS/20; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS/20 - 1);
+            float z = lerp(zlo, zhi, i, DIVISIONS/20);
             float theta = theta0 + theta_chnl(z);
             float thetalo = theta - Dt;
             float thetahi = theta + Dt;
@@ -715,14 +716,14 @@ public class Chamber : TwoPeasInAPod.Pea {
             float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani, false);
             rhi += th_chnl/2f; // safety.
 
-            frames.Add(new(z*uZ3));
+            frames.Add(z*uZ3);
             vertices.Add(frompol(rlo, thetalo));
             vertices.Add(frompol(rhi, thetalo));
             vertices.Add(frompol(rhi, thetahi));
             vertices.Add(frompol(rlo, thetahi));
         }
 
-        return Polygon.mesh_swept(frames, vertices);
+        return Polygon.mesh_swept(new FramesCart(frames), vertices);
     }
 
     protected Voxels voxels_chnl(ref Geez.Cycle key) {
@@ -820,7 +821,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         neg = new();
         float neg_max_z = cnt_z6 - th_omani;
         for (int i=0; i<DIVISIONS/8; ++i) {
-            float z = lerp(neg_max_z, neg_min_z, i, DIVISIONS/8 - 1);
+            float z = lerp(neg_max_z, neg_min_z, i, DIVISIONS/8);
             float r = cnt_radius_at(z, th_iw + th_chnl + th_imani, false);
             neg.Add(new(z, r));
         }
@@ -920,19 +921,18 @@ public class Chamber : TwoPeasInAPod.Pea {
     }
 
     protected Voxels voxels_neg_mani(ref Geez.Cycle key, out Frame inlet) {
-        inlet = new();
-        List<Vec2> vertices = new();
-        for (int n=DIVISIONS - 1; n>-1; --n) {
+        List<Vec2> vertices;
+        points_mani(theta_inlet, out vertices, out _, out inlet);
+        for (int n=1; n<DIVISIONS; ++n) {
             float theta = theta_inlet + n*TWOPI/DIVISIONS;
-            points_mani(theta, out List<Vec2> more, out _, out inlet);
+            points_mani(theta, out List<Vec2> more, out _, out _);
             vertices.AddRange(more);
         }
         Mesh mesh = Polygon.mesh_revolved(
-            new Frame(),
+            new Frame().rotxy(theta_inlet),
             vertices,
             slicesize: numel(vertices) / DIVISIONS,
-            donut: true,
-            theta0: theta_inlet + (DIVISIONS - 1)*TWOPI/DIVISIONS
+            donut: true
         );
         using (key.like())
             key <<= Geez.mesh(mesh);
@@ -944,6 +944,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             L_inlet,
             D_inlet/2f
         ).extended(zextra, EXTEND_DOWN)
+         .extended(EXTRA, EXTEND_UP)
          .voxels());
         using (key.like())
             key <<= Geez.voxels(vox);
@@ -970,11 +971,10 @@ public class Chamber : TwoPeasInAPod.Pea {
             vertices.AddRange(more);
         }
         Mesh mesh = Polygon.mesh_revolved(
-            new Frame(),
+            new Frame().rotxy(theta_inlet),
             vertices,
             slicesize: numel(vertices) / DIVISIONS,
-            donut: true,
-            theta0: theta_inlet
+            donut: true
         );
         Voxels vox = new(mesh);
 
@@ -1056,7 +1056,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         max_z -= dif;
         List<Vec3> line = new();
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(min_z, max_z, i, DIVISIONS - 1);
+            float z = lerp(min_z, max_z, i, DIVISIONS);
             float theta = theta0_chnl + theta_chnl(z);
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
             line.Add(fromcyl(r, theta, z));
@@ -1333,7 +1333,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             key_part <<= Geez.voxels(part);
         log("created outer wall.");
 
-        add(ref pos_mani, key_mani);
+        add(ref pos_mani);
         log("added positive manifold.");
         add(ref pos_tc, key_tc);
         log("added positive thermocouples.");
@@ -1356,7 +1356,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         log("subtracted gas cavity.");
         sub(ref chnl, key_chnl);
         log("subtracted channels.");
-        sub(ref neg_mani);
+        sub(ref neg_mani, key_mani);
         log("subtracted negative manifold.");
         sub(ref neg_tc);
         log("subtracted negative thermocouples.");
@@ -1420,34 +1420,35 @@ public class Chamber : TwoPeasInAPod.Pea {
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
 
+        log("Baby drawed.");
         log();
     }
 
 
     public void anything() {
 
-        List<Vec2> V =
-            [
-                new(-1f, -1f),
-                new(1f, -1f),
-                new(1f, 1f),
-                new(-2f, 3f),
-            ];
-        Polygon.fillet(V, 1, 1f, divisions: 1000);
-        V = Polygon.resample(V, 30, false);
-        Mesh m = Polygon.mesh_extruded(
-            new Frame(),
-            1f,
-            V,
-            at_middle: true
-        );
+        // List<Vec2> V =
+        //     [
+        //         new(-1f, -1f),
+        //         new(1f, -1f),
+        //         new(1f, 1f),
+        //         new(-2f, 3f),
+        //     ];
+        // Polygon.fillet(V, 1, 1f, divisions: 1000);
+        // V = Polygon.resample(V, 30, false);
+        // Mesh m = Polygon.mesh_extruded(
+        //     new Frame(),
+        //     1f,
+        //     V,
+        //     at_middle: true
+        // );
 
 
         // List<Vec2> V =
         //     [
         //         new(-1f, -1f), new(1f, -1f), new(0, 1f),
         //         new(-2f, -3f), new(0.5f, -2f), new(0, 2f),
-        //         new(-1f, -1f), new(1f, -1f), new(0, 1f),
+        //         new(-1f, -1f), new(1f, -1f), new(0, 5f),
         //     ];
         // Mesh m = Polygon.mesh_swept(
         //     [
@@ -1472,17 +1473,85 @@ public class Chamber : TwoPeasInAPod.Pea {
         //     at_middle: true
         // );
         // Mesh m = Polygon.mesh_revolved(
-        //     new Frame(ONE3, uY3, uX3),
+        //     new Frame(),
         //     [
-        //         new(-1f, 1f),
-        //         new(0f, 0.5f),
-        //         new(2f, 1f),
+        //         new(3f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.1f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.2f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.3f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.4f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.5f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.6f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.7f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.8f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.9f, 0f), new(2f, 2f), new(1f, 0f),
+        //         new(3.8f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.7f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.6f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.5f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.4f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.3f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.2f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.1f, 0f), new(2f, 1f), new(1f, 0f),
+        //         new(3.0f, 0f), new(2f, 1f), new(1f, 0f),
         //     ],
-        //     donut: true, slicecount: 100
+        //     slicesize: 3,
+        //     by: PI/3f
         // );
+        // Geez.Cycle key = new();
+        // key <<= Geez.mesh(m);
+        // Thread.Sleep(3000);
+        // key <<= Geez.voxels(new(m));
+
+        // Frame f = new Frame(ONE3).rotate(new(-1f,1f, -2f), PI/7f);
+        // f.rot_to_global(out Vec3 about, out float by);
+        // Geez.frame(f);
+        // Geez.frame(new(f.pos));
+        // Geez.vec(new(f.pos), 5*about, colour: COLOUR_WHITE);
+        // Console.WriteLine(about);
+        // Console.WriteLine(todeg(by));
+
+        // FramesLerp f = new(10, new Frame(), new Frame(2*9*uZ3).rotxy(PI_2).rotzx(PI_4));
+        // Geez.Cycle key = new();
+        // key <<= Geez.frames(f);
+        // Geez.frame(f.at(4));
+        // Thread.Sleep(2000);
+        // key <<= Geez.frames(f.skipping(end: 5));
+        // Thread.Sleep(2000);
+        // key <<= Geez.frames(f.without(end: 5));
+
+        // FramesSpin f = new(5);
+
+        // List<Frame> frames = new();
+        // for (int i=0; i<numel(f); ++i)
+        //     frames.Add(f.at(i).transz(i));
+        // Geez.Cycle key = new();
+        // key <<= Geez.frames(frames, size: 1f);
+
+
+        // Thread.Sleep(3000);
+        // f = f.skipping(end: 3);
+
+        // frames = new();
+        // for (int i=0; i<numel(f); ++i)
+        //     frames.Add(f.at(i).transz(i));
+        // key <<= Geez.frames(frames, size: 1f);
+
+
+        List<Vec2> V = new();
+        float thetalo = arg(new Vec2(+nonhypot(2f, 1f), -1f));
+        float thetahi = PI - thetalo;
+        swap(ref thetalo, ref thetahi);
+        for (int i=0; i<4; ++i) {
+            float theta = lerp(thetalo, thetahi, i, 4);
+            V.Add(uY2 + frompol(2f, theta));
+            assert(nearzero(V[^1].Y) || V[^1].Y > 0f);
+        }
+        Mesh m = Polygon.mesh_revolved(new(), V, PI_2);
         Geez.mesh(m);
 
-        //TODO: TEST RESAMPLE
+        // Geez.voxels(new(m));
+
     }
 
 
