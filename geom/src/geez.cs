@@ -589,6 +589,9 @@ public static class Geez {
                 target_vel = normalise_nonzero(target_vel) * speed;
                 if (isset(held, KEY_CTRL))
                     target_vel *= sprint;
+                // Dont let movement happen while super key held.
+                if (isset(held, KEY_SUPER))
+                    target_vel *= 0f;
                 snap_vel.retarget(target_vel);
                 vel += snap_vel.Dvalue(Dt, vel);
 
@@ -869,8 +872,8 @@ public static class Geez {
 
           SKIP_TRACKED:;
 
-            // Dont handle any messages if super (or cmd) key pressed.
-            if (isset(held, KEY_SUPER) || cmd)
+            // Dont handle any messages if super key pressed.
+            if (isset(held, KEY_SUPER))
                 return false;
 
             // dont do some things before first render.
