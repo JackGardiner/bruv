@@ -219,9 +219,9 @@ public static class Polygon {
     }
 
     private static void mesh_face_indices(ref Mesh mesh, in List<Vec2> vertices,
-            int trioff, bool ccw) {
+            int trioff, bool ccw, bool top) {
         void triangle(ref Mesh mesh, int A, int B, int C) {
-            if (!ccw)
+            if (ccw != top)
                 swap(ref B, ref C);
             mesh.nAddTriangle(trioff + A, trioff + B, trioff + C);
         }
@@ -241,7 +241,8 @@ public static class Polygon {
                 Vec2 b = vertices[B];
                 Vec2 c = vertices[C];
 
-                if (cross(c - b, a - b) <= 0f)
+                float triwinding = cross(c - b, a - b);
+                if (triwinding == 0f || (triwinding < 0f) == ccw)
                     continue;
 
                 for (int j=0; j<remaining; ++j) {
@@ -353,8 +354,8 @@ public static class Polygon {
 
         Mesh mesh = new();
         // Mesh bottom and top faces.
-        mesh_face_indices(ref mesh, vertices, 0, !ccw);
-        mesh_face_indices(ref mesh, vertices, N, ccw);
+        mesh_face_indices(ref mesh, vertices, 0, ccw, false);
+        mesh_face_indices(ref mesh, vertices, N, ccw, true);
         // Mesh sides as quads.
         for (int i=0; i<N; ++i) {
             int j = (i == N - 1) ? 0 : i + 1;
@@ -393,7 +394,7 @@ public static class Polygon {
 
     public static Mesh mesh_swept(
             in List<Frame> frames,
-            in List<Vec2> vertices, /* (x,y), winding cw about axis of travel */
+            in List<Vec2> vertices, /* (x,y), winding ccw */
             bool closed=true
         ) {
 
@@ -410,8 +411,8 @@ public static class Polygon {
         if (closed) {
             List<Vec2> bot = vertices.GetRange(0, slicesize);
             List<Vec2> top = vertices.GetRange(N - slicesize, slicesize);
-            mesh_face_indices(ref mesh, bot, 0, false);
-            mesh_face_indices(ref mesh, top, N - slicesize, true);
+            mesh_face_indices(ref mesh, bot, 0, true, false);
+            mesh_face_indices(ref mesh, top, N - slicesize, true, true);
         }
 
         // Mesh sides as quads.
