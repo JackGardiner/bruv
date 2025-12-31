@@ -32,6 +32,18 @@ public static class Geez {
 
     public static bool transparent = true;
 
+    public static bool lockdown = false;
+    public static IDisposable locked() {
+        bool prev = lockdown;
+        lockdown = true;
+        return new OnLeave(() => lockdown = prev);
+    }
+    public static IDisposable unlocked() {
+        bool prev = lockdown;
+        lockdown = false;
+        return new OnLeave(() => lockdown = prev);
+    }
+
     public static Colour get_background_colour() {
         return Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
     }
@@ -372,7 +384,7 @@ public static class Geez {
             get => torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
             set => Perv.set(PICOGK_VIEWER, "m_fFov", todeg(value));
         }
-        private static SnapTo<SnapFloat, float> snap_fov = new(20f, torad(65f));
+        private static SnapTo<SnapFloat, float> snap_fov = new(20f, torad(60f));
 
         /* orbit/free mode + ortho/perspective proportion. */
         private static bool orbit = true;
@@ -424,7 +436,7 @@ public static class Geez {
 
             zoom = 1f;
 
-            fov = torad(65f);
+            fov = torad(60f);
             snap_fov.retarget(fov);
 
             orbit = true;
@@ -1086,6 +1098,10 @@ public static class Geez {
     }
 
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
+        // nothing added during lockdown.
+        if (lockdown)
+            return;
+
         if (numel(meshes) > 0) {
             int group_id = _material();
             foreach (Mesh mesh in meshes)
@@ -1230,6 +1246,11 @@ public static class Geez {
                 roughness: roughness,
                 sectioner: sectioner
             );
+        }
+
+        public void voxels(in Voxels vox) {
+            using (this.like())
+                this.cycle(Geez.voxels(vox));
         }
     }
 

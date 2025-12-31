@@ -56,6 +56,13 @@ public static partial class Br {
     public static int numel<T>(List<T> x) => x.Count;
     public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
 
+    /* swap me */
+    public static void swap<T>(ref T a, ref T b) {
+        T c = a;
+        a = b;
+        b = c;
+    }
+
     /* bit tricks. */
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
@@ -188,6 +195,8 @@ public static partial class Br {
         => a + clamp(t, 0f, 1f)*(b - a);
     public static Vec3 lerp(Vec3 a, Vec3 b, float t)
         => a + clamp(t, 0f, 1f)*(b - a);
+    public static float lerp(float a, float b, int n, int d)
+        => a + clamp(n/(float)d, 0f, 1f)*(b - a);
 
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
