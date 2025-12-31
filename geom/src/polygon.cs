@@ -273,15 +273,18 @@ public static class Polygon {
             in List<Vec2> vertices, /* (z,r), any winding (but direction of
                                        travel will be taken s.t. winding is cw
                                        about it) */
-            bool donut=false, float theta0=0f, int slicesize=-1,
-            int slicecount=-1
+            int slicesize=-1, int slicecount=-1,
+            bool donut=false, float theta0=0f
         ) {
         bool sliced = slicesize >= 0;
 
         int repcount;
         if (sliced) {
-            assert(slicecount == -1, "slicecount must be inferred");
-            slicecount = mesh_divided_into(numel(vertices), slicesize);
+            int count = mesh_divided_into(numel(vertices), slicesize);
+            assert(slicecount == -1 || slicecount == count,
+                   $"supplied slicecount doesn't match (got {slicecount}, "
+                 + $"expected {count}), consider leaving it inferred?");
+            slicecount = count;
             repcount = 1;
         } else {
             slicesize = numel(vertices);
@@ -302,6 +305,14 @@ public static class Polygon {
             slice_vertices = vertices;
         } else {
             slice_vertices = new(slicecount * slicesize);
+
+            float zstart0 = vertices[0].X;
+            float zstart1 = vertices[(slicecount - 1)*slicestep].X;
+            float zend0   = vertices[slicestep - 1].X;
+            float zend1   = vertices[slicecount*slicestep - 1].X;
+            assert(zstart0 == zstart1, "revolve would not be closed");
+            assert(zend0 == zend1, "revolve would not be closed");
+
             for (int n=0; n<slicecount; ++n) {
                 Vec2 start = new(vertices[n*slicestep].X, 0f);
                 Vec2 end   = new(vertices[n*slicestep + slicestep - 1].X, 0f);
@@ -334,7 +345,8 @@ public static class Polygon {
             ));
         }
 
-        return mesh_swept(swept_frames, swept_vertices, false);
+        return mesh_swept(swept_frames, swept_vertices, closed: false,
+                          ringed: donut);
     }
 
 
@@ -395,7 +407,7 @@ public static class Polygon {
     public static Mesh mesh_swept(
             in List<Frame> frames,
             in List<Vec2> vertices, /* (x,y), winding ccw */
-            bool closed=true
+            bool closed=true, bool ringed=true
         ) {
 
         int N = numel(vertices);
@@ -429,12 +441,19 @@ public static class Polygon {
             }
 
             for (int q0=0; q0<slicesize; ++q0) {
+                // not closed if not ringed.
+                if (!ringed && q0 >= slicesize - 1)
+                    break;
                 // Join as quads.
                 int q1 = (q0 == slicesize - 1) ? 0 : q0 + 1;
                 int a0 = i + q0;
                 int a1 = i + q1;
                 int b0 = j + q0;
                 int b1 = j + q1;
+                // Note the seam line of the quad will always be the same
+                // direction. switching midway through may cause some vertices to
+                // become enclosed when they normally would have been on the
+                // surface.
                 mesh.nAddTriangle(a0, b1, b0);
                 mesh.nAddTriangle(a0, a1, b1);
             }
