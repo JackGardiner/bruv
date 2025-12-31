@@ -103,6 +103,8 @@ public class TwoPeasInAPod {
         // Test me.
         if (isset(make, ANYTHING))
             pea.anything();
+        if ((make & MASK_ACTION) == ANYTHING)
+            return;
 
         // Gimme voxels.
         Voxels? vox = get_voxels(pea, neednew: isset(make, VOXELS));
