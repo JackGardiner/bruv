@@ -11,6 +11,7 @@ using PolyLine = PicoGK.PolyLine;
 using BBox3 = PicoGK.BBox3;
 using Colour = PicoGK.ColorFloat;
 using Viewer = PicoGK.Viewer;
+using VEK = PicoGK.Viewer.EKeys;
 
 namespace br {
 
@@ -163,18 +164,21 @@ public static class Geez {
             public T target_t;
             public float responsiveness;
             public float elapsed_time;
+            public bool release_on_snap;
             public float max_time;
             public float atol;
             public float rtol;
 
             public V target => target_t.to;
 
-            public SnapTo(float responsiveness, V target_v, float max_time=NAN,
+            public SnapTo(float responsiveness, V target_v,
+                    bool release_on_snap=true, float max_time=NAN,
                     float atol=5e-3f, float rtol=5e-3f) {
                 target_t = new T().from(target_v);
                 assert(target_t.noninf);
                 this.responsiveness = responsiveness;
                 this.elapsed_time = 0f;
+                this.release_on_snap = release_on_snap;
                 this.max_time = max_time;
                 this.atol = atol;
                 this.rtol = rtol;
@@ -189,9 +193,12 @@ public static class Geez {
                 if (target_t.isnan) {
                     Dvalue = target_t.ZERO;
                 } else {
+                    float ease = 1f - exp(-responsiveness * Dt);
                     Dvalue = target_t.sub(value);
                     if (Dvalue.mag() > max(atol, rtol*target_t.mag()))
-                        Dvalue = Dvalue.mul(1f - exp(-responsiveness * Dt));
+                        Dvalue = Dvalue.mul(ease);
+                    else if (release_on_snap)
+                        untarget();
                 }
                 if (target_t.isnan)
                     elapsed_time = 0f;
@@ -216,11 +223,13 @@ public static class Geez {
             public float target_phi;
             public float responsiveness;
             public float elapsed_time;
+            public bool release_on_snap;
             public float max_time;
             public float atol;
 
             public SnapRotation(float responsiveness, float target_theta,
-                    float target_phi, float max_time=NAN, float atol=1e-2f) {
+                    float target_phi, bool release_on_snap=true,
+                    float max_time=NAN, float atol=1e-2f) {
                 assert(isnan(target_theta) == isnan(target_phi));
                 assert(noninf(target_theta));
                 assert(noninf(target_phi));
@@ -228,6 +237,7 @@ public static class Geez {
                 this.target_phi   = target_phi;
                 this.responsiveness = responsiveness;
                 this.elapsed_time = 0f;
+                this.release_on_snap = release_on_snap;
                 this.max_time = max_time;
                 this.atol = atol;
             }
@@ -245,12 +255,15 @@ public static class Geez {
                     // lowkey just snapping theta and phi individually has much
                     // better results around the poles than a true lerped
                     // rotation.
+                    float ease = 1f - exp(-responsiveness * Dt);
                     Dtheta = wraprad(target_theta - theta);
-                    if (abs(Dtheta) > atol)
-                        Dtheta *= 1f - exp(-responsiveness * Dt);
                     Dphi = wraprad(target_phi - phi);
+                    if (max(abs(Dtheta), abs(Dphi)) <= atol && release_on_snap)
+                        untarget();
+                    if (abs(Dtheta) > atol)
+                        Dtheta *= ease;
                     if (abs(Dphi) > atol)
-                        Dphi *= 1f - exp(-responsiveness * Dt);
+                        Dphi *= ease;
                 }
 
                 if (isnan(target_theta))
@@ -281,9 +294,9 @@ public static class Geez {
 
         private static System.Diagnostics.Stopwatch stopwatch = new();
 
-        /* middle pos and min->max size of canonical objects. */
-        private static Vec3 centre = NAN3;
-        private static Vec3 size = NAN3;
+        /* min->max size of canonical objects. */
+        private static Vec3 size = 100f*ONE3;
+        private static SnapTo<SnapVec3, Vec3> snap_size = new(30f, NAN3, false);
 
         /* number of times to skip overriding picogk so they can make the static
            projection matrix. */
@@ -294,13 +307,23 @@ public static class Geez {
         private static Vec3 vel = ZERO3;
         public static float speed = 50f;
         public static float sprint = 3f;
-        private static SnapTo<SnapVec3, Vec3> snap_vel = new(20f, NAN3);
+        private static SnapTo<SnapVec3, Vec3> snap_vel = new(20f, NAN3, false);
         private static SnapTo<SnapVec3, Vec3> snap_pos
-            = new(25f, NAN3, max_time: 0.25f /* don freeze */);
+            = new(25f, NAN3, max_time: 0.3f /* don freeze */);
 
         private static Vec3 future_pos => nonnan(snap_pos.target)
                                         ? snap_pos.target
                                         : pos;
+
+        /* ortho zoom value (and speed dial). managed indepedantly to picogk, but
+           we continuously read theirs to check for scrolling input. */
+        public static float zoom = 1f;
+        private static SnapTo<SnapFloat, float> snap_zoom = new(40f, 1f, false);
+        public static float zoom_min = 0.01f;
+        public static float zoom_max = 10f;
+        // We leave picogk's zoom at this value and periodically check how far
+        // its moved to detect scroll input.
+        private const float zoom_picogk = 100f;
 
         /* looking vector. */
         public static float theta {
@@ -325,11 +348,10 @@ public static class Geez {
                 PICOGK_VIEWER.m_fElevation = todeg(value - PI_2);
             }
         }
-        private static SnapRotation snap_ang = new(25f, NAN, NAN, 0.25f);
+        private static SnapRotation snap_ang = new(25f, NAN, NAN, true, 0.25f);
+        private static float dflt_theta = torad(225f); // matching picogk.
+        private static float dflt_phi = torad(120f); // matching picogk.
         private static Vec3 get_looking() => fromsph(1f, theta, phi);
-        private static Vec3 get_camera() => -fromsph(1f, theta, phi);
-        private static float get_focal_dist() => mag(size) * zoom * 0.8f;
-        private static float get_ortho_dist() => mag(size) * zoom_max * 10f;
 
         private static float future_theta => nonnan(snap_ang.target_theta)
                                            ? snap_ang.target_theta
@@ -339,22 +361,6 @@ public static class Geez {
                                          : phi;
         private static Vec3 get_future_looking()
             => fromsph(1f, future_theta, future_phi);
-        private static Vec3 get_future_camera()
-            => -fromsph(1f, future_theta, future_phi);
-
-
-        /* ortho zoom value (and speed dial), scaled up by some amount to get
-          around picogk's minimum of 0.1. */
-        public static float zoom {
-            // need picogk to enable scroll->zoom in/out.
-            get => Perv.get<float>(PICOGK_VIEWER, "m_fZoom") / zoom_scale;
-            set => Perv.set(PICOGK_VIEWER, "m_fZoom", value * zoom_scale);
-        }
-        public static float zoom_scale = 10f;
-        // note zoom minimum is enforced by picogk (which is the whole reason we
-        // use a scaler).
-        private static float zoom_min => 0.1f / zoom_scale;
-        private static float zoom_max = 2.5f;
 
         /* free field of view. */
         public static float fov {
@@ -362,24 +368,36 @@ public static class Geez {
             get => torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
             set => Perv.set(PICOGK_VIEWER, "m_fFov", todeg(value));
         }
-        private static SnapTo<SnapFloat, float> snap_fov = new(20f, torad(60f));
+        private static SnapTo<SnapFloat, float> snap_fov
+            = new(20f, torad(60f), false);
 
         /* orbit/free mode + ortho/perspective proportion. */
         private static bool orbit = true;
         private static float ortho = 1f;
-        private static SnapTo<SnapFloat, float> snap_ortho = new(25f, 1f);
-        private static float extra_dist = 0f;
-        private static SnapTo<SnapFloat, float> snap_extra_dist = new(20f, 0f);
-        public static void set_mode(bool now_orbiting) {
+        private static SnapTo<SnapFloat, float> snap_ortho = new(25f, 1f, false);
+        private static bool extra_focal_further = false;
+        private static float get_focal_dist() => mag(size) * zoom * 0.8f;
+        private static float get_ortho_dist() => mag(size) * zoom_max * 10f;
+        public static void set_mode(bool now_orbiting, bool about_focal) {
+            if (now_orbiting == orbit)
+                return;
+            extra_focal_further = false;
+            if (about_focal) {
+                if (now_orbiting) {
+                    pos += get_looking() * get_focal_dist();
+                    extra_focal_further = true;
+                } else {
+                    pos -= get_looking() * get_focal_dist();
+                }
+            }
             orbit = now_orbiting;
+            snap_ortho.responsiveness = now_orbiting ? 18f : 25f;
             snap_ortho.retarget(now_orbiting ? 1f : 0f);
-            extra_dist = 0f;
         }
 
         /* prev variable caches, to change the scaling of them over time. */
         private static float last_theta = NAN;
         private static float last_phi = NAN;
-        private static float last_zoom = NAN;
 
         /* key held-state. */
         private const int KEY_SHIFT = 0x1;
@@ -399,8 +417,8 @@ public static class Geez {
 
             stopwatch.Stop();
 
-            centre = NAN3;
-            size = NAN3;
+            size = 100f*ONE3;
+            snap_size.untarget();
 
             get_a_word_in_edgewise = 5;
 
@@ -409,11 +427,13 @@ public static class Geez {
             snap_pos.untarget();
             snap_vel.untarget();
 
-            theta = torad(225f);
-            phi = torad(120f);
+            theta = dflt_theta;
+            phi = dflt_phi;
             snap_ang.untarget();
 
             zoom = 1f;
+            snap_zoom.retarget(zoom);
+            Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
 
             fov = torad(60f);
             snap_fov.retarget(fov);
@@ -421,34 +441,43 @@ public static class Geez {
             orbit = true;
             ortho = 1f;
             snap_ortho.retarget(ortho);
-            extra_dist = 0f;
-            snap_extra_dist.retarget(0f);
+            extra_focal_further = false;
 
             last_theta = NAN;
             last_phi = NAN;
-            last_zoom = NAN;
         }
 
-        public static void rescope() {
+        private static void recalc_size(bool must=false, bool recentre=true) {
+            if (!must && nonnan(snap_size.target))
+                return;
+            // Checkout the reaaal genuine bounding box (which picogk doesnt
+            // know about).
+            Vec3 centre;
+            if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox)) {
+                snap_size.untarget();
+                centre = ZERO3;
+            } else {
+                snap_size.retarget(bbox.vecSize());
+                centre = bbox.vecCenter();
+            }
+            // Send it to centre.
+            if (recentre)
+                snap_pos.retarget(centre);
+        }
+
+        public static void rescope(bool isometric=false) {
             // Reframes the viewer for current scene objects.
-
-            centre = NAN3;
-            size = NAN3;
-
-            snap_pos.retarget(ZERO3);
-
-            snap_ang.retarget(new(torad(225f), torad(120f)));
-
-            zoom = 1f;
-            last_zoom = NAN;
-
-            set_mode(true);
+            recalc_size(must: true, recentre: true);
+            set_mode(now_orbiting: true, about_focal: true);
+            snap_ang.retarget(isometric
+                            ? new(1.25f*PI, 0.75f*PI)
+                            : new(dflt_theta, dflt_phi));
+            snap_zoom.retarget(1f);
         }
 
         public static void initialise() {
-            zoom = 1f;
-            fov = snap_fov.target;
-            ortho = snap_ortho.target;
+            fov = snap_fov.target; // update picogk.
+            Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
             PICOGK_VIEWER.AddKeyHandler(new ViewerHack());
             _ = make_shit_happen_continuously();
         }
@@ -511,33 +540,21 @@ public static class Geez {
 
 
         private static void make_shit_happen() {
-            // Only set the initial box once, on the first thing rendered.
-            if (isnan(centre) || isnan(size)) {
-                // Checkout the reaaal genuine bounding box (which picogk doesnt
-                // know about).
-                if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox)) {
-                    _set_compass_visible(false);
-                    return;
-                }
-                _set_compass_visible(true);
-                centre = bbox.vecCenter();
-                size = bbox.vecSize();
-                assert(nonnan(centre));
-                assert(nonnan(size));
-            }
+            // Get the size box, but only if we havent before.
+            recalc_size(must: false, recentre: true);
 
-            // Rescale their zoom handler too bc the linear one is bad.
-            if (nonnan(last_zoom)) {
-                float Dzoom = zoom - last_zoom;
-                // since i dont like picogk's linearly scaling zoom:
+            // Peek if we've had any scroll input.
+            {
+                float curr_zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
+                float Dzoom = curr_zoom - zoom_picogk;
+                // Rescale since the linear that picogk uses is bad.
                 Dzoom *= 5f*log(zoom + 1f);
-                // since picogk doesnt know about the scale:
-                Dzoom *= zoom_scale;
-
-                zoom = last_zoom + Dzoom;
-                zoom = clamp(zoom, zoom_min, zoom_max);
+                float target = snap_zoom.target + Dzoom;
+                target = clamp(target, zoom_min, zoom_max);
+                snap_zoom.retarget(target);
+                // now tuck picogk back into bed. there there.
+                Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
             }
-            last_zoom = zoom;
 
             // In perspective, we scale-down the sensitivity.
             if (!orbit && nonnan(last_theta) && nonnan(last_phi)) {
@@ -550,7 +567,7 @@ public static class Geez {
                 theta = last_theta + 0.7f*Dtheta;
                 phi   = last_phi   + 0.7f*Dphi;
             }
-            // dont save last_ yet, there be more to happen.
+            // yarr matey, dont save last_ yet, for there be more to come.
 
             // Get Dt across calls for movement.
             if (!stopwatch.IsRunning) {
@@ -559,14 +576,12 @@ public static class Geez {
                 float Dt = (float)stopwatch.Elapsed.TotalSeconds;
                 stopwatch.Restart();
 
-                // Handle perspective/orthogonal switch.
+                // SNAP SNAPP.
+                size += snap_size.Dvalue(Dt, size);
                 ortho += snap_ortho.Dvalue(Dt, ortho);
-                extra_dist += snap_extra_dist.Dvalue(Dt, extra_dist);
-
-                // Update fov.
+                zoom += snap_zoom.Dvalue(Dt, zoom);
                 fov += snap_fov.Dvalue(Dt, fov);
 
-                // Do any view snapping.
                 snap_ang.Dvalue(Dt, theta, phi, out float Dtheta,
                         out float Dphi);
                 theta += Dtheta;
@@ -610,7 +625,8 @@ public static class Geez {
             last_theta = theta;
             last_phi = phi;
 
-            // Setup box to trick picogk into thinking its the origin.
+            // Setup box to trick picogk into thinking its the origin (if it
+            // actually gets a chance to generate any matrices lmao).
             BBox3 newbbox = new(-size/2f, size/2f);
             Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
 
@@ -635,138 +651,119 @@ public static class Geez {
                                 ? 1f
                                 : proj_static[1,1] / proj_static[0,0];
 
-            // Create the mvp matrix, perhaps blending between perspective and
-            // ortho.
-            Vec3 looking = get_looking();
-            Vec3 camera = get_camera();
+            // Now we create the mvp matrix, perhaps blending between perspective
+            // and ortho.
 
+            Vec3 camera = pos;
+            Vec3 looking = get_looking();
             // Get an up vector which wont break the view matrix on perfectly
             // up/down.
-            Vec3 up = nearvert(camera)
-                    ? fromcyl(1f, theta + ((camera.Z < 0f) ? PI : 0f), 0f)
+            Vec3 up = nearvert(looking)
+                    ? fromcyl(1f, theta + ((looking.Z < 0f) ? 0f : PI), 0f)
                     : uZ3;
 
-            // Get some lengths.
-            float focal_dist = get_focal_dist() + extra_dist;
+            // Get focal lengths. Note the extra dist baked in exists to allow a
+            // smooth transition about focal point (by shifting the focal point).
+            float focal_dist = get_focal_dist();
+            if (extra_focal_further)
+                focal_dist *= 2f - ortho;
             float focal_height = 2f * focal_dist * tan(fov/2f);
-            float ortho_dist = get_ortho_dist();
 
-            // Get the "closeness", which is just ortho but rescaled to be slower
-            // (i.e. looks like x^2 kinda).
-            float closeness = ortho / (2f - ortho);
+            Mat4 proj;
+            if (ortho > 0.999f /* pretty unreal how far it can go */) {
+                float ortho_dist = get_ortho_dist();
 
-            // To facilitate the transition between persp and ortho we shift the
-            // camera an additional amount.
-            Vec3 shift = camera * extra_dist;
-
-            Vec3 eye;
-            Mat4 view;
-            Mat4 projection;
-            if (ortho > 0.99f) {
                 float near = ortho_dist*0.05f;
                 float far  = ortho_dist*50f;
                 // thats farkin heaps deep enough jeff.
 
-                view = Mat4.CreateLookTo(
-                    camera,
-                    looking,
-                    up
-                );
-                projection = Mat4.CreateOrthographic(
+                camera -= looking * ortho_dist; // farkin loads far enough too.
+
+                proj = Mat4.CreateOrthographic(
                     focal_height * aspect_x_on_y,
                     focal_height,
                     near,
                     far
                 );
-                eye = camera * ortho_dist; // very far.
             } else {
                 // Move camera back at the exact inverse of fov increase to keep
                 // focal plane static.
-                float lerp_fov = lerp(fov, 1e-2f, ortho);
-                float lerp_focal_dist = focal_height / 2f / tan(lerp_fov/2f);
-                float near = lerp_focal_dist*0.05f;
-                float far  = lerp_focal_dist*50f;
+                float real_fov = lerp(fov, 1e-2f, ortho);
+                float real_focal_dist = focal_height / 2f / tan(real_fov/2f);
 
                 // Want ultra deep clipping area when in perspective.
+                float near = real_focal_dist*0.05f;
+                float far  = real_focal_dist*50f;
                 near *= lerp(0.05f/zoom, 1f, ortho);
                 far  *= lerp(0.2f/zoom, 1f, ortho);
 
-                // shift is irrelevant in ortho, so just use the value for
-                // perspective.
-                shift += camera * closeness * focal_dist;
-
-                view = Mat4.CreateLookTo(
-                    camera * closeness * lerp_focal_dist,
-                    looking,
-                    up
+                // Move the camera s.t. the focal plane doesn't change.
+                camera -= looking * lerp(
+                    extra_focal_further ? get_focal_dist() : 0f,
+                    real_focal_dist,
+                    ortho
                 );
-                projection = Mat4.CreatePerspectiveFieldOfView(
-                    lerp_fov,
+
+                proj = Mat4.CreatePerspectiveFieldOfView(
+                    real_fov,
                     aspect_x_on_y,
                     near,
                     far
                 );
-
-                // Eye somewhere between here and there. note the squared is not
-                // an exact solution, but it looks good.
-                eye = camera * ortho_dist * squared(closeness);
             }
-            Perv.set(
+
+            // Trusty view matrix.
+            Mat4 view = Mat4.CreateLookTo(
+                camera,
+                looking,
+                up
+            );
+
+            Perv.set( // important to keep updated for obvious purposes?
                 PICOGK_VIEWER,
                 "m_matModelViewProjection",
-                view * projection
+                view * proj
             );
             Perv.set( // important to keep updated for lighting purposes.
                 PICOGK_VIEWER,
                 "m_vecEye",
-                eye
+                camera
             );
 
-            // Shift all objects into the origin established by first rendered
-            // object and then to camera.
-            Vec3 translate = centre + pos + shift;
-            _set_all_transforms(Mat4.CreateTranslation(-translate));
 
-
-            // Ok now we gotta handle the compass.
-            Mat4 compass;
-            // First things first, we gotta cancel the current static transform
-            // being applied by picogk.
-            Mat4 view_s = PicoGK.Utils.matLookAt(
-                Perv.get<Vec3>(PICOGK_VIEWER, "m_vecEyeStatic"),
-                ZERO3
+            // Ok now we gotta handle the compass. so ready for another round of
+            // mvp and picogk overwriting.
+            float compass_fov = torad(25f);
+            // choose focal dist s.t. focal height = 2..
+            float compass_focal_dist = 1f/tan(compass_fov/2f);
+            // choose camera s.t. focal plane passes through origin. tada, the
+            // compass now has a size mapped to screen space (excluding
+            // perspective effects).
+            Vec3 compass_camera = -compass_focal_dist*looking;
+            Mat4 compass_view = Mat4.CreateLookTo(
+                compass_camera,
+                looking,
+                up
             );
-            Mat4 projection_s = Mat4.CreateOrthographic(
-                100f * aspect_x_on_y,
-                100f,
+            Mat4 compass_proj = Mat4.CreatePerspectiveFieldOfView(
+                compass_fov,
+                aspect_x_on_y,
                 0.1f,
-                100f
+                10f
             );
-            assert(Mat4.Invert(view_s * projection_s, out compass));
-            // Now scale to have even y and x (and ensure it doesnt leave the
-            // screen in either direction).
-            Vec3 compass_scale = (aspect_x_on_y > 1f)
-                               ? new(1f/aspect_x_on_y, 1f, 1f)
-                               : new(1f, aspect_x_on_y, 1f);
-            compass = Mat4.CreateScale(compass_scale)
-                    * compass;
-            // Scale down and shift into corner. Note that (1,1) is at the edge
-            // of the screen, and makes a 45deg angle with (0,0).
+            Mat4 compass = compass_view * compass_proj;
+            // Then scale down and shift into corner. Note that (1,1) is the
+            // top-right corner.
             float compass_size = 0.15f;
-            Vec3 compass_shift = (aspect_x_on_y > 1f)
-                               ? new(aspect_x_on_y, 1f, 0f)
-                               : new(1f, 1f/aspect_x_on_y, 0f);
-            compass_shift -= 1.3f*compass_size * (uX3 + 1.05f*uY3);
-            // also the aspect ratio seems to slightly overestimate y.
-            compass = Mat4.CreateTranslation(compass_shift)
-                    * compass;
-            compass = Mat4.CreateScale(compass_size)
-                    * compass;
-            // Finally rotate to actually show our orientation.
-            compass = Mat4.CreateLookAt(camera, ZERO3, up)
-                    * compass;
-            // SEND IT
-            _set_compass_transform(compass);
+            compass *= Mat4.CreateScale(compass_size);
+            Vec3 compass_shift = new(1f, 1f, 0f);
+            compass_shift -= 1.5f*compass_size
+                           * new Vec3(1f/aspect_x_on_y, 1f, 0f);
+            compass *= Mat4.CreateTranslation(compass_shift);
+
+            // SEND IT.
+            Perv.set(PICOGK_VIEWER, "m_matStatic", compass);
+            Perv.set(PICOGK_VIEWER, "m_vecEyeStatic", compass_camera);
         }
 
         public static void make_shit_happen_in_the_future() {
@@ -787,58 +784,52 @@ public static class Geez {
 
 
         private static Vec2 get_ang_axis_aligned() {
-            float newtheta = wraprad(round(future_theta / PI_2) * PI_2);
-            float newphi = (future_phi < PI/6f) ? 0f
-                         : (future_phi > PI*5f/6f) ? PI
+            float newtheta = round(future_theta / PI_2) * PI_2;
+            float newphi = (future_phi < PI/5f) ? 0f
+                         : (future_phi > PI - PI/5f) ? PI
                          : PI_2;
             return new(newtheta, newphi);
         }
 
-        private static Vec2 get_ang_quarter_aligned() {
-            float newtheta = wraprad(round(future_theta / PI_4) * PI_4);
-            float newphi = round(future_phi / PI_4) * PI_4;
-            return new(newtheta, newphi);
-        }
-
         private static Vec2 get_ang_origin() {
-            Vec3 looking = -centre - pos;
+            Vec3 looking = -future_pos;
             float newtheta = argxy(looking, ifzero: future_theta);
             float newphi = argphi(looking, ifzero: future_phi);
             return new(newtheta, newphi);
         }
 
-        private static Vec2 get_ang_isometric() {
-            return new(torad(225f), torad(135f));
+        private static Vec2 get_ang_nearest_isometric() {
+            float newtheta = future_theta;
+            newtheta -= PI_4;
+            newtheta = round(newtheta / PI_2) * PI_2;
+            newtheta += PI_4;
+            float newphi = future_phi;
+            bool tophalf = newphi <= (PI_2 + 1e-2f);
+            newphi -= tophalf ? PI_4 : -PI_4;
+            newphi = round(newphi / PI_2) * PI_2;
+            newphi += tophalf ? PI_4 : -PI_4;
+            return new(newtheta, newphi);
         }
 
         private static Vec3 get_pos_on_z_axis() {
-            Vec3 newpos = -centre;
+            float z;
             if (orbit) {
                 // cheeky plane line intersection.
                 Vec3 point = future_pos;
                 Vec3 looking = get_future_looking();
                 Vec3 right = fromcyl(1f, future_theta - PI_2, 0f);
                 Vec3 normal = cross(right, looking);
-                float z = -dot(normal, -point) / dot(normal, uZ3);
-                newpos.Z = z;
+                if (nearhoriz(normal)) {
+                    // If looking perfectly vertical, just stay where we are.
+                    z = future_pos.Z;
+                } else {
+                    z = -dot(normal, -point) / dot(normal, uZ3);
+                }
             } else {
                 // otherwise jus dont change z.
-                newpos.Z = future_pos.Z;
+                z = future_pos.Z;
             }
-            return newpos;
-        }
-
-        private static Vec3 get_pos_origin() {
-            return -centre;
-        }
-
-        private static Vec3 get_pos_focal_point() {
-            Vec3 newpos = future_pos;
-            if (orbit)
-                newpos -= get_focal_dist() * get_future_looking();
-            else
-                newpos += get_focal_dist() * get_future_looking();
-            return newpos;
+            return uZ3 * z;
         }
 
         /* Viewer.IViewerAction */
@@ -847,28 +838,28 @@ public static class Geez {
         }
 
         /* Viewer.IKeyHandler */
-        public bool bHandleEvent(Viewer viewer, Viewer.EKeys key, bool pressed,
+        public bool bHandleEvent(Viewer viewer, VEK key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
             // couple of these keys are inexplicably unlabelled by picogk.
-            const Viewer.EKeys Viewer_EKeys_Key_Shift    = (Viewer.EKeys)340;
-            const Viewer.EKeys Viewer_EKeys_Key_Ctrl     = (Viewer.EKeys)341;
-            const Viewer.EKeys Viewer_EKeys_Key_Alt      = (Viewer.EKeys)342;
-            const Viewer.EKeys Viewer_EKeys_Key_Super    = (Viewer.EKeys)343;
-            const Viewer.EKeys Viewer_EKeys_Key_Backtick = (Viewer.EKeys)'`';
-            const Viewer.EKeys Viewer_EKeys_Key_Equals   = (Viewer.EKeys)'=';
+            const VEK VEK_Key_Shift    = (VEK)340;
+            const VEK VEK_Key_Ctrl     = (VEK)341;
+            const VEK VEK_Key_Alt      = (VEK)342;
+            const VEK VEK_Key_Super    = (VEK)343;
+            const VEK VEK_Key_Backtick = (VEK)'`';
+            const VEK VEK_Key_Equals   = (VEK)'=';
 
             // Check the tracked keys.
             int keycode;
             switch (key) {
-                case Viewer.EKeys.Key_W:     keycode = KEY_W;     break;
-                case Viewer.EKeys.Key_S:     keycode = KEY_S;     break;
-                case Viewer.EKeys.Key_A:     keycode = KEY_A;     break;
-                case Viewer.EKeys.Key_D:     keycode = KEY_D;     break;
-                case Viewer.EKeys.Key_Space: keycode = KEY_SPACE; break;
-                case Viewer_EKeys_Key_Shift: keycode = KEY_SHIFT; break;
-                case Viewer_EKeys_Key_Ctrl:  keycode = KEY_CTRL;  break;
-                case Viewer_EKeys_Key_Alt:   keycode = KEY_ALT;   break;
-                case Viewer_EKeys_Key_Super: keycode = KEY_SUPER; break;
+                case VEK.Key_W:     keycode = KEY_W;     break;
+                case VEK.Key_S:     keycode = KEY_S;     break;
+                case VEK.Key_A:     keycode = KEY_A;     break;
+                case VEK.Key_D:     keycode = KEY_D;     break;
+                case VEK.Key_Space: keycode = KEY_SPACE; break;
+                case VEK_Key_Shift: keycode = KEY_SHIFT; break;
+                case VEK_Key_Ctrl:  keycode = KEY_CTRL;  break;
+                case VEK_Key_Alt:   keycode = KEY_ALT;   break;
+                case VEK_Key_Super: keycode = KEY_SUPER; break;
                 default: goto SKIP_TRACKED;
             }
             if (pressed)
@@ -881,119 +872,113 @@ public static class Geez {
 
             // Dont handle any messages if super key pressed.
             if (isset(held, KEY_SUPER))
-                return false;
-
-            // dont do some things before first render.
-            bool started = nonnan(centre);
+                return true; // dont let picogk do it either lmao.
 
             switch (key) {
-                case Viewer.EKeys.Key_Tab:
-                    if (pressed && started) {
-                        pos = get_pos_focal_point();
-                        snap_ortho.responsiveness = orbit ? 24f : 18f;
-                        set_mode(!orbit);
-                        if (orbit)
-                            extra_dist = get_focal_dist();
-                    }
-                    return true;
-                case Viewer_EKeys_Key_Backtick:
-                    if (pressed && started) {
-                        snap_ortho.responsiveness = orbit ? 25f : 18f;
-                        set_mode(!orbit);
-                    }
-                    return true;
+              case VEK.Key_Tab:
+              case VEK_Key_Backtick:
+                if (pressed)
+                    set_mode(now_orbiting: !orbit,
+                             about_focal: key == VEK.Key_Tab);
+                return true;
 
                 // Override picogks bad view rotater to use our snap.
-                case Viewer.EKeys.Key_Left:
-                    if (pressed && started) {
-                        Vec2 ang = get_ang_quarter_aligned();
-                        ang.X += PI_4;
-                        snap_ang.retarget(ang);
+              case VEK.Key_Left:
+              case VEK.Key_Right:
+              case VEK.Key_Up:
+              case VEK.Key_Down:
+                if (pressed) {
+                    Vec2 ang = new(future_theta, future_phi);
+                    float size_theta = ctrl ? PI_2 : PI_4;
+                    float size_phi   = ctrl ? PI_2 : PI/6f;
+                    switch (key) {
+                        case VEK.Key_Left:
+                            ang.X = floor((ang.X + 5e-2f) / size_theta);
+                            ang.X += 1f;
+                            ang.X *= size_theta;
+                            ang.Y = round(ang.Y / size_phi) * size_phi;
+                            break;
+                        case VEK.Key_Right:
+                            ang.X = ceil((ang.X - 5e-2f) / size_theta);
+                            ang.X -= 1f;
+                            ang.X *= size_theta;
+                            ang.Y = round(ang.Y / size_phi) * size_phi;
+                            break;
+                        case VEK.Key_Up:
+                            ang.Y = ceil((ang.Y - 5e-2f) / size_phi);
+                            ang.Y -= 1f;
+                            ang.Y *= size_phi;
+                            ang.X = round(ang.X / size_theta) * size_theta;
+                            break;
+                        case VEK.Key_Down:
+                            ang.Y = floor((ang.Y + 5e-2f) / size_phi);
+                            ang.Y += 1f;
+                            ang.Y *= size_phi;
+                            ang.X = round(ang.X / size_theta) * size_theta;
+                            break;
                     }
-                    return true;
-                case Viewer.EKeys.Key_Right:
-                    if (pressed && started) {
-                        Vec2 ang = get_ang_quarter_aligned();
-                        ang.X -= PI_4;
-                        snap_ang.retarget(ang);
-                    }
-                    return true;
-                case Viewer.EKeys.Key_Up:
-                    if (pressed && started) {
-                        Vec2 ang = get_ang_quarter_aligned();
-                        ang.Y -= PI_4;
-                        snap_ang.retarget(ang);
-                    }
-                    return true;
-                case Viewer.EKeys.Key_Down:
-                    if (pressed && started) {
-                        Vec2 ang = get_ang_quarter_aligned();
-                        ang.Y += PI_4;
-                        snap_ang.retarget(ang);
-                    }
-                    return true;
+                    snap_ang.retarget(ang);
+                }
+                return true;
 
-                case Viewer.EKeys.Key_Q:
-                    // get snapping.
-                    if (pressed && started) {
-                        snap_ang.retarget(ctrl
-                                        ? get_ang_origin()
-                                        : get_ang_axis_aligned());
-                    }
-                    return true;
-                case Viewer.EKeys.Key_E:
-                    // snap snap.
-                    if (pressed && started) {
-                        snap_pos.retarget(ctrl
-                                        ? get_pos_origin()
-                                        : get_pos_on_z_axis());
-                    }
-                    return true;
-                case Viewer.EKeys.Key_R:
-                    // dujj.
-                    if (pressed && started) {
-                        snap_ang.retarget(get_ang_isometric());
-                        if (ctrl)
-                            snap_pos.retarget(get_pos_origin());
-                    }
-                    return true;
+              case VEK.Key_Q:
+                // get snapping.
+                if (pressed) {
+                    snap_ang.retarget(ctrl
+                                    ? get_ang_origin()
+                                    : get_ang_axis_aligned());
+                }
+                return true;
+              case VEK.Key_E:
+                // snap snap.
+                if (pressed) {
+                    snap_pos.retarget(ctrl
+                                    ? ZERO3
+                                    : get_pos_on_z_axis());
+                }
+                return true;
+              case VEK.Key_R:
+                // dujj.
+                if (pressed) {
+                    if (ctrl)
+                        rescope(isometric: true);
+                    else
+                        snap_ang.retarget(get_ang_nearest_isometric());
+                }
+                return true;
 
-                case Viewer_EKeys_Key_Equals:
-                    if (pressed && started)
-                        rescope();
-                    return true;
-                case Viewer.EKeys.Key_Backspace:
-                    if (pressed && started)
-                        reset();
-                    return true;
+              case VEK_Key_Equals:
+                if (pressed)
+                    rescope();
+                return true;
+              case VEK.Key_Backspace:
+                if (pressed)
+                    reset();
+                return true;
 
-                case Viewer.EKeys.Key_K:
-                    if (pressed && started && !orbit) {
-                        float target = snap_fov.target;
-                        target += (PI - target)/15f;
-                        snap_fov.retarget(target);
-                    }
-                    return true;
-                case Viewer.EKeys.Key_L:
-                    if (pressed && started && !orbit) {
-                        float target = snap_fov.target;
-                        target += (0f - target)/15f;
-                        snap_fov.retarget(target);
-                    }
-                    return true;
+              case VEK.Key_K:
+              case VEK.Key_L:
+                if (pressed && !orbit) {
+                    float target = snap_fov.target;
+                    target += (key == VEK.Key_K)
+                            ? (PI - target)/15f
+                            : (0f - target)/15f;
+                    snap_fov.retarget(target);
+                }
+                return true;
 
-                case Viewer.EKeys.Key_T:
-                    if (pressed)
-                        _set_all_alpha(!transparent);
-                    return true;
+              case VEK.Key_T:
+                if (pressed)
+                    Geez._set_all_alpha(!transparent);
+                return true;
 
-                case Viewer.EKeys.Key_Y:
-                    if (pressed) {
-                        bool light = get_background_colour()
+              case VEK.Key_Y:
+                if (pressed) {
+                    bool light = Geez.get_background_colour()
                                     .Equals(new Colour("#FFFFFF"));
-                        set_background_colour(light);
-                    }
-                    return true;
+                    Geez.set_background_colour(light);
+                }
+                return true;
             }
             return false;
         }
@@ -1006,17 +991,17 @@ public static class Geez {
         log("[Geez] using a new hacked-in camera, keybinds:");
         log("     - W/A/S/D         move camera horizontally");
         log("     - space/shift     move camera up/down");
+        log("     - arrow keys      rotate view");
         log("     - scroll up/down  orbit zoom in/out + move slower/faster");
-        log("     - ctrl            sprint (when held)");
+        log("     - ctrl held       stronger movement + arrow key rotation");
         log("     - tab             toggle orbit/free mode at focal point");
         log("     - backtick [`/~]  toggle orbit/free mode at centre");
         log("     - Q               snap view along nearest axis");
         log("     - ctrl+Q          snap view to origin");
         log("     - E               snap centre to Z axis");
         log("     - ctrl+E          snap centre to origin");
-        log("     - R               snap view to isometric angle");
-        log("     - ctrl+R          snap view to isometric angle and centre to "
-                                 + "origin");
+        log("     - R               snap view to nearest isometric angle");
+        log("     - ctrl+R          snap to true isometric");
         log("     - equals [+/=]    rescope view");
         log("     - backspace       reset view (+fix window aspect ratio)");
         log("     - K/L             dial up/down free fov");
@@ -1110,8 +1095,9 @@ public static class Geez {
             _COMPASS_METALLIC,
             _COMPASS_ROUGHNESS
         );
+        // use the static grouping since thats where compass is.
         PICOGK_VIEWER.SetGroupStatic(_MATERIAL_DUMMY, true);
-        // group must be visible to be drawn before compass.
+        // note group must be visible to be drawn before compass.
         PICOGK_VIEWER.Add(new Mesh(), _MATERIAL_DUMMY);
 
         PICOGK_VIEWER.SetGroupMaterial(
@@ -1120,25 +1106,16 @@ public static class Geez {
             1f,
             1f
         );
+        // compass gotta be in the static rendering groups, since it uses the
+        // overridden static rendering matrix.
         PICOGK_VIEWER.SetGroupStatic(_MATERIAL_COMPASS, true);
-        PICOGK_VIEWER.SetGroupVisible(_MATERIAL_COMPASS, false);
         _compass_lines = new();
         _frame_lines(out _, _compass_lines, new Frame(),
                      size: 1f, mark_pos: false);
         foreach (PolyLine line in _compass_lines)
             PICOGK_VIEWER.Add(line, _MATERIAL_COMPASS);
     }
-    private static void _set_compass_visible(bool visible) {
-        PICOGK_VIEWER.SetGroupVisible(_MATERIAL_COMPASS, visible);
-    }
-    private static void _set_compass_transform(Mat4 m) {
-        PICOGK_VIEWER.SetGroupMatrix(_MATERIAL_COMPASS, m);
-    }
 
-    private static void _set_all_transforms(Mat4 m) {
-        for (int i=_MATERIAL_START; i<_material_next; ++i)
-            PICOGK_VIEWER.SetGroupMatrix(i, m);
-    }
     private static void _set_all_alpha(bool transparent) {
         for (int i=_MATERIAL_START; i<_material_next; ++i) {
             _Material mat = _materials[i - _MATERIAL_START];

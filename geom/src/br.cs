@@ -218,6 +218,8 @@ public static partial class Br {
     }
 
     public static float round(float a) => float.Round(a);
+    public static float floor(float a) => float.Floor(a);
+    public static float ceil(float a)  => float.Ceiling(a);
 
     public static bool closeto(float a, float b, float rtol=1e-4f,
             float atol=1e-5f) {
@@ -292,6 +294,11 @@ public static partial class Br {
         assert(!nearzero(a));
         float phi = argphi(a);
         return closeto(phi, 0f) || closeto(phi, PI);
+    }
+    public static bool nearhoriz(Vec3 a) {
+        assert(!nearzero(a));
+        float phi = argphi(a);
+        return closeto(phi, PI_2);
     }
 
     public static float lerp(float a, float b, float t) => a + t*(b - a);
