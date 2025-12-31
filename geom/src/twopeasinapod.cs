@@ -46,6 +46,7 @@ public class TwoPeasInAPod {
         { // Construct the chamber object.
             float max_phi = config.get<float>("printer/max_print_angle");
             config.set("chamber/phi_mani", max_phi);
+            config.set("chamber/phi_fixt", max_phi);
             config.set("chamber/phi_inlet", -max_phi);
             config.set("chamber/phi_tc", max_phi);
             config.set("chamber/pm", config.get_map("part_mating"));

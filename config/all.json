@@ -53,6 +53,9 @@
         "th_imani": 1.5,
         "th_omani": 2.5,
 
+        "no_fixt": 4,
+        "wi_fixt": 10.0,
+
         "theta_inlet": -1.5707963267948966,
         "L_inlet": 15.0,
         "D_inlet": 10.0,

@@ -255,7 +255,7 @@ public class Injector : TwoPeasInAPod.Pea
                 shifted_frame = shifted_frame.rotxy(DEG90);
                 shifted_frame = shifted_frame.transx(rad_offset_swinlet);
 
-                inlets += new Polygon(
+                inlets += new Voxels(Polygon.mesh_extruded(
                     shifted_frame,
                     fSwirlChamberRadius*4,
                     [
@@ -265,7 +265,7 @@ public class Injector : TwoPeasInAPod.Pea
                         new(-sw_w, sw_h_t+sw_h_r),
                         new(-sw_w, sw_h_t),
                     ]
-                ).voxels();
+                ));
 
             }
 
@@ -534,7 +534,7 @@ public class Injector : TwoPeasInAPod.Pea
         foreach (Vector3 point in points_supports)
         {
             Frame support_frame = new(point, point, uZ3);
-            supports += new Polygon(
+            supports += new Voxels(Polygon.mesh_extruded(
                 support_frame,
                 fMaxAtticZ,
                 [
@@ -543,7 +543,7 @@ public class Injector : TwoPeasInAPod.Pea
                     new (4f, 0f),
                     new (0f, -2f),
                 ]
-            ).voxels();
+            ));
         }
 
         supports = supports & cone_roof_lower_crop();
