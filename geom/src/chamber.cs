@@ -1282,20 +1282,20 @@ public class Chamber : TwoPeasInAPod.Pea {
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
 
         Voxels neg_mani = voxels_neg_mani(ref key_mani, out Frame inlet);
-        log("created negative manifold.");
+        print("created negative manifold.");
 
         Voxels gas = voxels_cnt_gas();
         key_gas.voxels(gas);
-        log("created gas.");
+        print("created gas.");
 
         Voxels pos_mani = voxels_pos_mani(inlet);
-        log("created positive manifold.");
+        print("created positive manifold.");
 
         Voxels chnl = voxels_chnl(ref key_chnl);
-        log("created channels.");
+        print("created channels.");
 
         voxels_tc(ref key_tc, out Voxels neg_tc, out Voxels pos_tc);
-        log("created thermocouples.");
+        print("created thermocouples.");
 
         Voxels neg_bolts = voxels_neg_bolts(ref key_bolts);
 
@@ -1317,18 +1317,18 @@ public class Chamber : TwoPeasInAPod.Pea {
 
         Voxels flange = voxels_flange();
         key_flange.voxels(flange);
-        log("created flange.");
+        print("created flange.");
 
         part = voxels_cnt_ow_filled();
         key_part.voxels(part);
-        log("created outer wall.");
+        print("created outer wall.");
 
         add(ref pos_mani);
-        log("added positive manifold.");
+        print("added positive manifold.");
         add(ref pos_tc, key_tc);
-        log("added positive thermocouples.");
+        print("added positive thermocouples.");
         add(ref flange, key_flange);
-        log("added flange.");
+        print("added flange.");
 
         part.BoolSubtract(new Cuboid(
             new Frame(cnt_z6*uZ3),
@@ -1336,22 +1336,22 @@ public class Chamber : TwoPeasInAPod.Pea {
             2f*(cnt_r6 + th_iw + th_chnl + th_ow + EXTRA)
         ).voxels());
         key_part.voxels(part);
-        log("clipped top excess.");
+        print("clipped top excess.");
 
         Fillet.concave(part, 3f, inplace: true);
         key_part.voxels(part);
-        log("filleted.");
+        print("filleted.");
 
         sub(ref gas, key_gas);
-        log("subtracted gas cavity.");
+        print("subtracted gas cavity.");
         sub(ref chnl, key_chnl);
-        log("subtracted channels.");
+        print("subtracted channels.");
         sub(ref neg_mani, key_mani);
-        log("subtracted negative manifold.");
+        print("subtracted negative manifold.");
         sub(ref neg_tc);
-        log("subtracted negative thermocouples.");
+        print("subtracted negative thermocouples.");
         sub(ref neg_bolts, key_bolts);
-        log("subtracted bolt holes.");
+        print("subtracted bolt holes.");
 
         part.BoolSubtract(new Cuboid(
             new Frame(ZERO3, -uZ3),
@@ -1359,33 +1359,33 @@ public class Chamber : TwoPeasInAPod.Pea {
             2f*(pm.Mr_bolt + pm.Bsz_bolt/2f + pm.thickness_around_bolt + EXTRA)
         ).voxels());
         key_part.voxels(part);
-        log("clipped bottom excess.");
+        print("clipped bottom excess.");
 
 
 
-        log("Baby made.");
+        print("Baby made.");
 
         if (_cnt_cache_total == 0) {
-            log($"  cache sdf: unused");
+            print($"  cache sdf: unused");
         } else {
-            log($"  cache sdf: "
+            print($"  cache sdf: "
                     + $"{_cnt_cache_hits:N0} / {_cnt_cache_total:N0} "
                     + $"({_cnt_cache_hits*100f/_cnt_cache_total:F2}%)");
         }
         if (_cnt_wid_cache_total == 0) {
-            log($"  cache wid_sdf: unused");
+            print($"  cache wid_sdf: unused");
         } else {
-            log($"  cache wid_sdf: "
+            print($"  cache wid_sdf: "
                     + $"{_cnt_wid_cache_hits:N0} / {_cnt_wid_cache_total:N0} "
                     + $"({_cnt_wid_cache_hits*100f/_cnt_wid_cache_total:F2}%)");
         }
-        log("  bang.");
-        log();
+        print("  bang.");
+        print();
 
 
 
 
-        log("birthing alternative offspring.");
+        print("birthing alternative offspring.");
 
         Geez.clear();
         Voxels outer = part.voxDuplicate();
@@ -1409,7 +1409,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             ".info/PicoGK/ViewerEnvironment/Barcelona.zip"
         );
         try { PICOGK_VIEWER.LoadLightSetup(barcelona); }
-        catch { log($"oops, no barcelona lightmap at '{barcelona}'"); }
+        catch { print($"oops, no barcelona lightmap at '{barcelona}'"); }
         using (Geez.like(metallic: 0.4f, roughness: 0.1f)) {
             Geez.voxels(outer);
             Geez.voxels(middle);
@@ -1430,7 +1430,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         Cuboid bounds;
 
         Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
-        log("cross-sectioning xy...");
+        print("cross-sectioning xy...");
         Drawing.to_file(
             fromroot($"exports/chamber_xy.svg"),
             part,
@@ -1441,7 +1441,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
 
         Frame frame_yz = new(ZERO3, uY3, uX3);
-        log("cross-sectioning yz...");
+        print("cross-sectioning yz...");
         Drawing.to_file(
             fromroot($"exports/chamber_yz.svg"),
             part,
@@ -1450,138 +1450,49 @@ public class Chamber : TwoPeasInAPod.Pea {
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
 
-        log("Baby drawed.");
-        log();
+        print("Baby drawed.");
+        print();
     }
 
 
     public void anything() {
+        print("loading");
+        SDFimage img = new(fromroot("assets/unimelblogo.tga"));
+        print($"{img.width} x {img.height}");
 
-        // List<Vec2> V =
-        //     [
-        //         new(-1f, -1f),
-        //         new(1f, -1f),
-        //         new(1f, 1f),
-        //         new(-2f, 3f),
-        //     ];
-        // Polygon.fillet(V, 1, 1f, divisions: 1000);
-        // V = Polygon.resample(V, 30, false);
-        // Mesh m = Polygon.mesh_extruded(
-        //     new Frame(),
-        //     1f,
-        //     V,
-        //     at_middle: true
-        // );
+        // print("saving");
+        // img.stash_a_look(fromroot(".sdfimg.tga"), resolution: 3, sharpness: 4);
+        // print("saved");
 
 
-        // List<Vec2> V =
-        //     [
-        //         new(-1f, -1f), new(1f, -1f), new(0, 1f),
-        //         new(-2f, -3f), new(0.5f, -2f), new(0, 2f),
-        //         new(-1f, -1f), new(1f, -1f), new(0, 5f),
-        //     ];
-        // Mesh m = Polygon.mesh_swept(
-        //     [
-        //         new Frame(),
-        //         new Frame(10f*uZ3),
-        //         new Frame(20f*uZ3),
-        //     ],
-        //     V
-        // );
-        // for (int i=0; i<numel(V); ++i) {
-        //     Vec3 v = rejxy(V[i], (i/3) * 10);
-        //     Geez.point(v, r:0.2f, colour: Leap71.ShapeKernel.Cp.clrRandom());
-        // }
-        // Mesh m = Polygon.mesh_extruded(
-        //     new Frame(),
-        //     2f,
-        //     [
-        //         new(1f, -1f),
-        //         new(0, 1f),
-        //         new(-1f, -1f),
-        //     ],
-        //     at_middle: true
-        // );
-        // Mesh m = Polygon.mesh_revolved(
-        //     new Frame(),
-        //     [
-        //         new(3f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.1f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.2f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.3f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.4f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.5f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.6f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.7f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.8f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.9f, 0f), new(2f, 2f), new(1f, 0f),
-        //         new(3.8f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.7f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.6f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.5f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.4f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.3f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.2f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.1f, 0f), new(2f, 1f), new(1f, 0f),
-        //         new(3.0f, 0f), new(2f, 1f), new(1f, 0f),
-        //     ],
-        //     slicesize: 3,
-        //     by: PI/3f
-        // );
-        // Geez.Cycle key = new();
-        // key <<= Geez.mesh(m);
-        // Thread.Sleep(3000);
-        // key <<= Geez.voxels(new(m));
+        float length = 50f;
+        float aspect_x_on_y = img.width / (float)img.height;
+        float scale = length / max(img.width, img.height);
+        Vec2 corner = (aspect_x_on_y >= 1f)
+                    ? new(length, length / aspect_x_on_y)
+                    : new(length * aspect_x_on_y, length);
+        float Lz = 2f;
 
-        // Frame f = new Frame(ONE3).rotate(new(-1f,1f, -2f), PI/7f);
-        // f.rot_to_global(out Vec3 about, out float by);
-        // Geez.frame(f);
-        // Geez.frame(new(f.pos));
-        // Geez.vec(new(f.pos), 5*about, colour: COLOUR_WHITE);
-        // Console.WriteLine(about);
-        // Console.WriteLine(todeg(by));
+        float sdf(in Vec3 p) {
+            float z = p.Z;
+            float dist_z = max(-z, z - Lz);
 
-        // FramesLerp f = new(10, new Frame(), new Frame(2*9*uZ3).rotxy(PI_2).rotzx(PI_4));
-        // Geez.Cycle key = new();
-        // key <<= Geez.frames(f);
-        // Geez.frame(f.at(4));
-        // Thread.Sleep(2000);
-        // key <<= Geez.frames(f.skipping(end: 5));
-        // Thread.Sleep(2000);
-        // key <<= Geez.frames(f.without(end: 5));
+            Vec2 q = projxy(p);
+            float dist_xy = img.signed_dist(q / scale) * scale;
 
-        // FramesSpin f = new(5);
-
-        // List<Frame> frames = new();
-        // for (int i=0; i<numel(f); ++i)
-        //     frames.Add(f.at(i).transz(i));
-        // Geez.Cycle key = new();
-        // key <<= Geez.frames(frames, size: 1f);
-
-
-        // Thread.Sleep(3000);
-        // f = f.skipping(end: 3);
-
-        // frames = new();
-        // for (int i=0; i<numel(f); ++i)
-        //     frames.Add(f.at(i).transz(i));
-        // key <<= Geez.frames(frames, size: 1f);
-
-
-        List<Vec2> V = new();
-        float thetalo = arg(new Vec2(+nonhypot(2f, 1f), -1f));
-        float thetahi = PI - thetalo;
-        swap(ref thetalo, ref thetahi);
-        for (int i=0; i<4; ++i) {
-            float theta = lerp(thetalo, thetahi, i, 4);
-            V.Add(uY2 + frompol(2f, theta));
-            assert(nearzero(V[^1].Y) || V[^1].Y > 0f);
+            float dist;
+            if (dist_xy <= 0f || dist_z <= 0f) {
+                dist = max(dist_xy, dist_z);
+            } else {
+                dist = hypot(dist_xy, dist_z);
+            }
+            return dist;
         }
-        Mesh m = Polygon.mesh_revolved(new(), V, PI_2);
-        Geez.mesh(m);
-
-        // Geez.voxels(new(m));
-
+        PicoGK.BBox3 bbox = new(ZERO3, rejxy(corner, Lz));
+        Geez.bbox(bbox);
+        print(bbox);
+        Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+        print("rendered");
     }
 
 

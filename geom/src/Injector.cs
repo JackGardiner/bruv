@@ -736,7 +736,7 @@ public class Injector : TwoPeasInAPod.Pea
 
 
         Library.Log("Baby made.");
-        log();
+        print();
 
         return part;
     }
@@ -746,7 +746,7 @@ public class Injector : TwoPeasInAPod.Pea
         Cuboid bounds;
 
         Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
-        log("cross-sectioning xy...");
+        print("cross-sectioning xy...");
         Drawing.to_file(
             fromroot($"exports/injector_xy.svg"),
             part,
@@ -757,7 +757,7 @@ public class Injector : TwoPeasInAPod.Pea
             Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
 
         Frame frame_yz = new(ZERO3, uY3, uX3);
-        log("cross-sectioning yz...");
+        print("cross-sectioning yz...");
         Drawing.to_file(
             fromroot($"exports/injector_yz.svg"),
             part,
@@ -766,7 +766,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
 
-        log();
+        print();
     }
 
     public void anything() {

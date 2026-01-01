@@ -5,8 +5,8 @@ using TPIAP = TwoPeasInAPod;
 
 
 /* Boot up options: */
-float voxel_size_mm = 0.5f;
-int make = TPIAP.CHAMBER | TPIAP.VOXELS;
+float voxel_size_mm = 0.03f;
+int make = TPIAP.CHAMBER | TPIAP.ANYTHING;
 // See TPIAP for construction guide of `make`.
 bool sectionview = false;
 Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
@@ -18,14 +18,14 @@ Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
 // Task wrapper to configure some things and have nicer exception handling.
 void wrapped_task() {
     try {
-        log();
-        log("whas good");
-        log();
+        print();
+        print("whas good");
+        print();
 
         TPIAP.entrypoint(make, sectionview ? sectioner : null);
 
-        log("Don.");
-        log();
+        print("Don.");
+        print();
 
         // Now loop until window is closed, since picogk will stop the instant
         // this function returns (and the thread is terminated).
@@ -43,10 +43,10 @@ void wrapped_task() {
             Thread.Sleep(50);
         }
     } catch (Exception e) {
-        log("FAILED when running task.");
-        log("Exception log:");
-        log(e.ToString());
-        log();
+        print("FAILED when running task.");
+        print("Exception log:");
+        print(e.ToString());
+        print();
     }
 }
 

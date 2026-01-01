@@ -9,6 +9,11 @@ using IImplicit = PicoGK.IImplicit;
 using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
+using Colour = PicoGK.ColorFloat;
+using Image = PicoGK.Image;
+using ImageColor = PicoGK.ImageColor;
+using TgaIo = PicoGK.TgaIo;
+
 namespace br {
 
 public static partial class Br {
@@ -670,6 +675,267 @@ public class Tubing {
         vox.BoolSubtract(S.voxels());
         vox.BoolSubtract(E.voxels());
         return vox;
+    }
+}
+
+
+
+public class SDFimage {
+
+    private static float[,] euclidean_distance_transform(bool[,] boundary) {
+        const float inf = 1e10f;
+
+        void edt_1d(float[] f, float[] d, int[] v, float[] z, int N) {
+            int k = 0; // index of rightmost parabola in envelope
+
+            v[0] = 0;
+            z[0] = -inf;
+            z[1] = +inf;
+
+            for (int q=1; q<N; ++q) {
+                float s;
+                // Compute intersection s between parabola q and parabola v[k].
+                while (true) {
+                    int p = v[k];
+                    s = (f[q] - f[p] + q*q - p*p) / 2f / (q - p);
+                    if (s <= z[k]) {
+                        // The last parabola v[k] is never part of the lower
+                        // envelope.
+                        --k;
+                        if (k < 0) // safety
+                            break;
+                        continue;
+                    }
+                    break;
+                }
+
+                ++k;
+                v[k] = q;
+                z[k] = s;
+                z[k + 1] = +inf;
+            }
+
+            // Sample lower envelope.
+            k = 0;
+            for (int q=0; q<N; ++q) {
+                while (z[k + 1] < q)
+                    ++k;
+                int p = v[k];
+                float diff = q - p;
+                d[q] = diff*diff + f[p];
+            }
+        }
+
+        int W = boundary.GetLength(0);
+        int H = boundary.GetLength(1);
+
+        // Setup distances with zero on boundary and max everywhere else.
+        float[,] dist = new float[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y)
+                dist[x, y] = boundary[x, y] ? 0f : inf;
+        }
+
+        float[] f = new float[max(W, H)]; // Buffer to give distances.
+        float[] d = new float[max(W, H)]; // Buffer to receive distances.
+
+        // Locations of parabolas in lower envelope.
+        int[] v = new int[max(W, H)];
+        // Breakpoints between parabolas.
+        float[] z = new float[max(W, H) + 1];
+
+        // Vertical pass.
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y)
+                f[y] = dist[x, y];
+            edt_1d(f, d, v, z, H);
+            for (int y=0; y<H; ++y)
+                dist[x, y] = d[y];
+        }
+        // Horizontal pass.
+        for (int y=0; y<H; ++y) {
+            for (int x=0; x<W; ++x)
+                f[x] = dist[x, y];
+            edt_1d(f, d, v, z, W);
+            for (int x=0; x<W; ++x)
+                dist[x, y] = d[x];
+        }
+        // Convert from sqr dist to genuine.
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y)
+                dist[x, y] = sqrt(dist[x, y]);
+        }
+        return dist;
+    }
+
+    private static float[,] make_sda(bool[,] mask) {
+        int W = mask.GetLength(0);
+        int H = mask.GetLength(1);
+
+        bool[,] inside_boundary  = new bool[W, H];
+        bool[,] outside_boundary = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                bool v = mask[x, y];
+
+                for (int dx=-1; dx<=1; ++dx) {
+                    for (int dy=-1; dy<=1; ++dy) {
+                        if (dx == 0 && dy == 0)
+                            continue;
+                        int nx = x + dx;
+                        int ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= W || ny >= H)
+                            continue;
+                        if (mask[nx, ny] != v)
+                            goto ON_BOUNDARY;
+                    }
+                }
+                continue;
+
+              ON_BOUNDARY:;
+                inside_boundary[x, y]  = !v;
+                outside_boundary[x, y] =  v;
+            }
+        }
+
+        float[,] inside_dist  = euclidean_distance_transform(inside_boundary);
+        float[,] outside_dist = euclidean_distance_transform(outside_boundary);
+
+        float[,] sda = new float[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                sda[x, H - 1 - y] = mask[x, y]
+                                  ? -inside_dist[x, y]
+                                  : +outside_dist[x, y];
+
+            }
+        }
+        return sda;
+    }
+
+    private static bool[,] make_mask(Image img, int scale, int xextra,
+            int yextra, float threshold, bool invert, bool flipx, bool flipy) {
+        int W = img.nWidth;
+        int H = img.nHeight;
+
+        bool[,] mask = new bool[scale*(W + 2*xextra), scale*(H + 2*yextra)];
+        if (invert) {
+            for (int x=0; x<mask.GetLength(0); ++x) {
+                for (int y=0; y<mask.GetLength(1); ++y)
+                    mask[x, y] = true;
+            }
+        }
+
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                Colour col = img.clrValue(flipx ? W - 1 - x : x,
+                                          flipy ? H - 1 - y : y);
+                float grey = 0.2126f*col.R + 0.7152f*col.G + 0.0722f*col.B;
+                grey *= col.A;
+                bool on = invert == (grey < threshold);
+
+                for (int dx=0; dx<scale; ++dx) {
+                    for (int dy=0; dy<scale; ++dy) {
+                        int i = scale * (x + xextra) + dx;
+                        int j = scale * (y + yextra) + dy;
+                        mask[i, j] = on;
+                    }
+                }
+            }
+        }
+        return mask;
+    }
+
+
+
+    private float[,] sda;
+    private int scale { get; }
+    private int xextra { get; }
+    private int yextra { get; }
+    public int width { get; }
+    public int height { get; }
+
+    // loads tga image from the given path, expecting (0,0) to be bottom-left.
+    public SDFimage(in string path, int scale=1, float threshold=0.5f,
+            bool invert=false, bool flipx=false, bool flipy=false) {
+        assert(scale >= 1);
+        assert(xextra >= 0);
+        assert(yextra >= 0);
+        TgaIo.LoadTga(path, out Image img);
+        this.width  = img.nWidth;
+        this.height = img.nHeight;
+        this.scale = scale;
+        this.xextra = scale * width / 2;
+        this.yextra = scale * height / 2;
+        bool[,] mask = make_mask(img, scale, xextra, yextra, threshold, invert,
+                flipx, flipy);
+        this.sda = make_sda(mask);
+    }
+
+
+    // Returns the signed distance in units of pixels, with an input vector also
+    // in units of pixels. The valid bounds are ~(-width/2, -height/2) to
+    // ~(1.5 width, 1.5 height).
+    public float signed_dist(in Vec2 p) {
+        assert(within(p.X, -xextra, width  + xextra));
+        assert(within(p.Y, -yextra, height + yextra));
+
+        float x = (p.X + xextra) * scale - 0.5f;
+        float y = (p.Y + yextra) * scale - 0.5f;
+
+        int x0 = clamp(ifloor(x), 0, sda.GetLength(0) - 2);
+        int y0 = clamp(ifloor(y), 0, sda.GetLength(1) - 2);
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+
+        float d00 = sda[x0, y0];
+        float d01 = sda[x0, y1];
+        float d10 = sda[x1, y0];
+        float d11 = sda[x1, y1];
+
+        float tx = x - x0;
+        float ty = y - y0;
+        float d0 = lerp(d00, d01, ty);
+        float d1 = lerp(d10, d11, ty);
+        float d = lerp(d0, d1, tx);
+        return d / scale;
+    }
+
+
+
+    // save the sdf to an image, just so we can see whats up.
+    public Image cop_a_look(int resolution=1, float sharpness=1f) {
+        Colour col_inside  = COLOUR_PINK;
+        Colour col_outside = COLOUR_GREEN;
+
+        int W = resolution * scale * width;
+        int H = resolution * scale * height;
+        ImageColor img = new(W, H);
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                Vec2 p = new(x, y);
+                p += 0.5f*ONE2;
+                p /= resolution;
+                p /= scale;
+                float value = signed_dist(p);
+                value /= min(width, height) / 4f;
+                value *= sharpness;
+
+                PicoGK.ColorHSV col = (value < 0)
+                                    ? col_inside
+                                    : col_outside;
+                col.V *= 1f - exp(-2f * abs(value));
+
+                img.SetValue(x, H - 1 - y, col);
+            }
+        }
+        return img;
+    }
+
+    public void stash_a_look(in string path, int resolution=1,
+            float sharpness=1f) {
+        Image img = cop_a_look(resolution: resolution, sharpness: sharpness);
+        TgaIo.SaveTga(path, img);
     }
 }
 

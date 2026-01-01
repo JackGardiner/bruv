@@ -995,27 +995,27 @@ public static class Geez {
     public static void initialise() {
         _initialise_compass();
         ViewerHack.initialise();
-        log();
-        log("[Geez] using a new hacked-in camera, keybinds:");
-        log("     - W/A/S/D         move camera horizontally");
-        log("     - space/shift     move camera up/down");
-        log("     - arrow keys      rotate view");
-        log("     - scroll up/down  orbit zoom in/out + move slower/faster");
-        log("     - ctrl held       stronger movement + arrow key rotation");
-        log("     - tab             toggle orbit/free mode at focal point");
-        log("     - backtick [`/~]  toggle orbit/free mode at centre");
-        log("     - Q               snap view along nearest axis");
-        log("     - ctrl+Q          snap view to origin");
-        log("     - E               snap centre to Z axis");
-        log("     - ctrl+E          snap centre to origin");
-        log("     - R               snap view to nearest isometric angle");
-        log("     - ctrl+R          snap to true isometric");
-        log("     - equals [+/=]    rescope view to full scene");
-        log("     - backspace       reset view (+fix window aspect ratio)");
-        log("     - K/L             dial up/down free fov");
-        log("     - T               toggle transparency");
-        log("     - Y               toggle background dark-mode");
-        log();
+        print();
+        print("[Geez] using a new hacked-in camera, keybinds:");
+        print("     - W/A/S/D         move camera horizontally");
+        print("     - space/shift     move camera up/down");
+        print("     - arrow keys      rotate view");
+        print("     - scroll up/down  orbit zoom in/out + move slower/faster");
+        print("     - ctrl held       stronger movement + arrow key rotation");
+        print("     - tab             toggle orbit/free mode at focal point");
+        print("     - backtick [`/~]  toggle orbit/free mode at centre");
+        print("     - Q               snap view along nearest axis");
+        print("     - ctrl+Q          snap view to origin");
+        print("     - E               snap centre to Z axis");
+        print("     - ctrl+E          snap centre to origin");
+        print("     - R               snap view to nearest isometric angle");
+        print("     - ctrl+R          snap to true isometric");
+        print("     - equals [+/=]    rescope view to full scene");
+        print("     - backspace       reset view (+fix window aspect ratio)");
+        print("     - K/L             dial up/down free fov");
+        print("     - T               toggle transparency");
+        print("     - Y               toggle background dark-mode");
+        print();
     }
 
 
