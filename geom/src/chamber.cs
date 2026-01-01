@@ -623,10 +623,15 @@ public class Chamber : TwoPeasInAPod.Pea {
         return r;
     }
 
-    protected Voxels voxels_cnt_filled(float max_off, bool widened) {
+    protected Voxels voxels_cnt_filled(float max_off, bool widened,
+            bool extra=true) {
         List<Vec2> V = new();
-        float zlo = cnt_z0 - EXTRA;
-        float zhi = cnt_z6 + EXTRA;
+        float zlo = cnt_z0;
+        float zhi = cnt_z6;
+        if (extra) {
+            zlo -= EXTRA;
+            zhi += EXTRA;
+        }
         V.Add(new(zlo, 0f));
         for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(zlo, zhi, i, DIVISIONS);
@@ -636,10 +641,15 @@ public class Chamber : TwoPeasInAPod.Pea {
         Mesh mesh = Polygon.mesh_revolved(new Frame(), V, slicecount: DIVISIONS);
         return new(mesh);
     }
-    protected Voxels voxels_cnt_shelled(float min_off, float th, bool widened) {
+    protected Voxels voxels_cnt_shelled(float min_off, float th, bool widened,
+            bool extra=true) {
         List<Vec2> V = new();
-        float zlo = cnt_z0 - EXTRA;
-        float zhi = cnt_z6 + EXTRA;
+        float zlo = cnt_z0;
+        float zhi = cnt_z6;
+        if (extra) {
+            zlo -= EXTRA;
+            zhi += EXTRA;
+        }
         for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off + th, widened)));
@@ -653,29 +663,10 @@ public class Chamber : TwoPeasInAPod.Pea {
         return new(mesh);
     }
 
-    protected Voxels voxels_cnt_gas() {
-        return voxels_cnt_filled(0f, false);
-    }
-    protected Voxels voxels_cnt_ow_filled() {
-        return voxels_cnt_filled(th_iw + th_chnl + th_ow, true);
-    }
-    protected Voxels voxels_cnt_iw(in Voxels gas) {
-        Voxels vox = voxels_cnt_filled(th_iw, true);
-        vox.BoolSubtract(gas);
-        return vox;
-    }
-    protected Voxels voxels_cnt_chnl(in Voxels chnl) {
-        Voxels vox = voxels_cnt_shelled(th_iw, th_chnl, true);
-        vox.BoolSubtract(chnl);
-        return vox;
-    }
-    protected Voxels voxels_cnt_ow(in Voxels neg_mani, in Voxels pos_mani) {
-        Voxels vox = voxels_cnt_shelled(th_iw + th_chnl, th_ow, true);
-        vox.BoolAdd(pos_mani);
-        vox.BoolSubtract(neg_mani);
-        vox.BoolSubtract(voxels_cnt_filled(th_iw + th_chnl, true));
-        return vox;
-    }
+    protected Voxels voxels_cnt_gas()
+        => voxels_cnt_filled(0f, false);
+    protected Voxels voxels_cnt_ow_filled()
+        => voxels_cnt_filled(th_iw + th_chnl + th_ow, true);
 
 
 
@@ -1272,14 +1263,14 @@ public class Chamber : TwoPeasInAPod.Pea {
             key_part.voxels(part);
             if (key != null)
                 key.clear();
-            vox = new();
+            // vox = new();
         }
         void sub(ref Voxels vox, Geez.Cycle? key=null) {
             part.BoolSubtract(vox);
             key_part.voxels(part);
             if (key != null)
                 key.clear();
-            vox = new();
+            // vox = new();
         }
 
         // We view a few things as they are updated.
@@ -1290,12 +1281,12 @@ public class Chamber : TwoPeasInAPod.Pea {
         Geez.Cycle key_bolts = new(colour: new("#404040"));
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
 
+        Voxels neg_mani = voxels_neg_mani(ref key_mani, out Frame inlet);
+        log("created negative manifold.");
+
         Voxels gas = voxels_cnt_gas();
         key_gas.voxels(gas);
         log("created gas.");
-
-        Voxels neg_mani = voxels_neg_mani(ref key_mani, out Frame inlet);
-        log("created negative manifold.");
 
         Voxels pos_mani = voxels_pos_mani(inlet);
         log("created positive manifold.");
@@ -1329,8 +1320,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         log("created flange.");
 
         part = voxels_cnt_ow_filled();
-        using (key_part.like())
-            key_part <<= Geez.voxels(part);
+        key_part.voxels(part);
         log("created outer wall.");
 
         add(ref pos_mani);
@@ -1372,6 +1362,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         log("clipped bottom excess.");
 
 
+
         log("Baby made.");
 
         if (_cnt_cache_total == 0) {
@@ -1390,6 +1381,45 @@ public class Chamber : TwoPeasInAPod.Pea {
         }
         log("  bang.");
         log();
+
+
+
+
+        log("birthing alternative offspring.");
+
+        Geez.clear();
+        Voxels outer = part.voxDuplicate();
+        Voxels middle = voxels_cnt_filled(th_iw + th_chnl - 0.1f, true, false);
+        // Voxels inner = voxels_cnt_filled(th_iw, true, false);
+        outer.BoolSubtract(middle);
+        // middle.BoolSubtract(inner);
+        // inner.BoolSubtract(gas);
+        middle.BoolSubtract(chnl);
+        middle.BoolSubtract(gas);
+        Frame f = new Frame((cnt_z4 + 45f)*uZ3)
+                .rotxy(PI/6f + 0.05f)
+                .rotzx(PI/3f)
+                .transx(39f);
+        float Lx = 200f;
+        float Ly = 140f;
+        float Lz = 100f;
+        outer.BoolSubtract(new Cuboid(f.transz(-17f), Lx, Ly, Lz).voxels());
+        middle.BoolSubtract(new Cuboid(f.transz(5f), Lx, Ly, Lz).voxels());
+        string barcelona = fromroot(
+            ".info/PicoGK/ViewerEnvironment/Barcelona.zip"
+        );
+        try { PICOGK_VIEWER.LoadLightSetup(barcelona); }
+        catch { log($"oops, no barcelona lightmap at '{barcelona}'"); }
+        using (Geez.like(metallic: 0.4f, roughness: 0.1f)) {
+            Geez.voxels(outer);
+            Geez.voxels(middle);
+        }
+
+        // vdb first incase the meshing throws.
+        TwoPeasInAPod.save_voxels("chamber_ow", outer, stl: false);
+        TwoPeasInAPod.save_voxels("chamber_iw", outer, stl: false);
+        TwoPeasInAPod.save_voxels("chamber_ow", outer, stl: true);
+        TwoPeasInAPod.save_voxels("chamber_iw", outer, stl: true);
 
         return part;
     }
