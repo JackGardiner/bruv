@@ -39,8 +39,10 @@ public static partial class Br {
     /* picogk aliases. */
     public static float VOXEL_SIZE => PicoGK.Library.fVoxelSizeMM;
     public static PicoGK.Viewer PICOGK_VIEWER => PicoGK.Library.oViewer();
-    public static void log() => PicoGK.Library.Log("");
-    public static void log(in string msg) => PicoGK.Library.Log(msg);
+    public static void print() => PicoGK.Library.Log("");
+    public static void print(in string msg) => PicoGK.Library.Log(msg);
+    public static void print(in object? obj)
+        => PicoGK.Library.Log(obj?.ToString() ?? "<null>");
 
     /* paths. */
     public static string PATH_ROOT
@@ -135,9 +137,15 @@ public static partial class Br {
 
     public static Vec2 uX2 => Vec2.UnitX;
     public static Vec2 uY2 => Vec2.UnitY;
+    public static Vec2 uXY2 => uX2 + uY2;
+
     public static Vec3 uX3 => Vec3.UnitX;
     public static Vec3 uY3 => Vec3.UnitY;
     public static Vec3 uZ3 => Vec3.UnitZ;
+    public static Vec3 uXY3 => uX3 + uY3;
+    public static Vec3 uXZ3 => uX3 + uZ3;
+    public static Vec3 uYZ3 => uY3 + uZ3;
+    public static Vec3 uXYZ3 => uX3 + uY3 + uZ3;
 
     public static int abs(int a) => (a < 0) ? -a : a;
     public static int min(int a, int b) => (b < a) ? b : a;
@@ -220,6 +228,17 @@ public static partial class Br {
     public static float round(float a) => float.Round(a);
     public static float floor(float a) => float.Floor(a);
     public static float ceil(float a)  => float.Ceiling(a);
+    public static int iround(float a) => (int)float.Round(a);
+    public static int ifloor(float a) => (int)float.Floor(a);
+    public static int iceil(float a)  => (int)float.Ceiling(a);
+
+    public static Vec2 round(Vec2 a) => Vec2.Round(a);
+    public static Vec2 floor(Vec2 a) => new(floor(a.X), floor(a.Y));
+    public static Vec2 ceil(Vec2 a)  => new(ceil(a.X), ceil(a.Y));
+
+    public static Vec3 round(Vec3 a) => Vec3.Round(a);
+    public static Vec3 floor(Vec3 a) => new(floor(a.X), floor(a.Y), floor(a.Z));
+    public static Vec3 ceil(Vec3 a)  => new(ceil(a.X), ceil(a.Y), ceil(a.Z));
 
     public static bool closeto(float a, float b, float rtol=1e-4f,
             float atol=1e-5f) {

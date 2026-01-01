@@ -113,15 +113,15 @@ public class TwoPeasInAPod {
 
         // Drawing sidequest.
         if (isset(make, DRAWINGS)) {
-            log($"Making '{pea.name}' drawings...");
-            log();
+            print($"Making '{pea.name}' drawings...");
+            print();
             pea.drawings(vox);
         }
 
         // Proper looksie.
         if (isset(make, LOOKSIE)) {
-            log($"Giving '{pea.name}' a looksie...");
-            log();
+            print($"Giving '{pea.name}' a looksie...");
+            print();
             Geez.clear();
             Geez.voxels(vox);
         }
@@ -134,12 +134,12 @@ public class TwoPeasInAPod {
         string path_vdb = fromroot($"exports/{name}.vdb");
         try {
             vox.SaveToVdbFile(path_vdb);
-            log($"Saved to vdb: '{path_vdb}'");
+            print($"Saved to vdb: '{path_vdb}'");
         } catch (Exception e) {
-            log($"Failed to export to vdb at '{path_vdb}'.");
-            log("Exception log:");
-            log(e.ToString());
-            log();
+            print($"Failed to export to vdb at '{path_vdb}'.");
+            print("Exception log:");
+            print(e.ToString());
+            print();
             goto SKIP_VOXEL_SIZE;
         }
         // Save voxel size explicitly, since the vdb cant/doesnt check it matches
@@ -149,12 +149,12 @@ public class TwoPeasInAPod {
             string text = VOXEL_SIZE.ToString(
                     System.Globalization.CultureInfo.InvariantCulture);
             File.WriteAllText(path_voxsize, text);
-            log($"  (saved voxel size to: '{path_voxsize}')");
+            print($"  (saved voxel size to: '{path_voxsize}')");
         } catch (Exception e) {
-            log($"Failed to save voxel size at '{path_voxsize}'.");
-            log("Exception log:");
-            log(e.ToString());
-            log();
+            print($"Failed to save voxel size at '{path_voxsize}'.");
+            print("Exception log:");
+            print(e.ToString());
+            print();
             /* fallthrough */
         }
       SKIP_VOXEL_SIZE:;
@@ -164,14 +164,14 @@ public class TwoPeasInAPod {
             try {
                 Mesh mesh = new(vox);
                 mesh.SaveToStlFile(path_stl);
-                log($"Exported to stl: '{path_stl}'");
+                print($"Exported to stl: '{path_stl}'");
             } catch (Exception e) {
-                log($"Failed to export to stl at '{path_stl}'.");
-                log("Exception log:");
-                log(e.ToString());
+                print($"Failed to export to stl at '{path_stl}'.");
+                print("Exception log:");
+                print(e.ToString());
             }
         }
-        log();
+        print();
     }
 
     public static bool load_voxels(in string name, out Voxels? vox) {
@@ -179,20 +179,20 @@ public class TwoPeasInAPod {
         string path_voxsize = fromroot($"exports/{name}.voxel_size");
         // Ensure all files are chilling.
         if (!File.Exists(path_vdb)) {
-            log($"No voxels at: '{path_vdb}'");
-            log();
+            print($"No voxels at: '{path_vdb}'");
+            print();
             goto FAILED;
         }
         FileInfo file_info = new(path_voxsize);
         if (!file_info.Exists) {
-            log($"Missing voxel size at: '{path_voxsize}'");
-            log();
+            print($"Missing voxel size at: '{path_voxsize}'");
+            print();
             goto FAILED;
         }
         if (file_info.Length > 1024*1024 /* 1MB */) {
-            log($"Voxel size file invalid at: '{path_voxsize}'");
-            log($"  (sus, file over 1MB)");
-            log();
+            print($"Voxel size file invalid at: '{path_voxsize}'");
+            print($"  (sus, file over 1MB)");
+            print();
             goto FAILED;
         }
         // Ensure voxel size matches.
@@ -201,29 +201,29 @@ public class TwoPeasInAPod {
             float voxsize = float.Parse(text,
                     System.Globalization.CultureInfo.InvariantCulture);
             if (voxsize != VOXEL_SIZE) {
-                log($"Voxel size mismatch at: '{path_voxsize}'");
-                log($"  (needed {VOXEL_SIZE}, found {voxsize})");
-                log();
+                print($"Voxel size mismatch at: '{path_voxsize}'");
+                print($"  (needed {VOXEL_SIZE}, found {voxsize})");
+                print();
                 goto FAILED;
             }
         } catch (Exception e) {
-            log($"Failed to read voxel size at '{path_vdb}'.");
-            log("Exception log:");
-            log(e.ToString());
-            log();
+            print($"Failed to read voxel size at '{path_vdb}'.");
+            print("Exception log:");
+            print(e.ToString());
+            print();
             goto FAILED;
         }
         // Read dem voxels.
         try {
             vox = Voxels.voxFromVdbFile(path_vdb);
-            log($"Loaded from vdb: '{path_vdb}'");
-            log();
+            print($"Loaded from vdb: '{path_vdb}'");
+            print();
             return true;
         } catch (Exception e) {
-            log($"Failed to load from vdb at '{path_vdb}'.");
-            log("Exception log:");
-            log(e.ToString());
-            log();
+            print($"Failed to load from vdb at '{path_vdb}'.");
+            print("Exception log:");
+            print(e.ToString());
+            print();
             goto FAILED;
         }
 
@@ -238,11 +238,11 @@ public class TwoPeasInAPod {
             if (load_voxels(pea.name, out vox))
                 return vox;
         }
-        log(neednew
+        print(neednew
             ? $"Generating '{pea.name}' voxels..."
             : $"Regenerating '{pea.name}' voxels..."
         );
-        log();
+        print();
         vox = pea.voxels();
         save_voxels(pea.name, vox);
         if (!neednew)

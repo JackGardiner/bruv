@@ -297,6 +297,19 @@ public static class Geez {
         /* min->max size of canonical objects. */
         private static Vec3 size = 100f*ONE3;
         private static SnapTo<SnapVec3, Vec3> snap_size = new(30f, NAN3, false);
+        private static bool recalc_size(out Vec3 newsize, out Vec3 newcentre,
+                bool must=false) {
+            newsize = NAN3;
+            newcentre = NAN3;
+            if (!must && nonnan(snap_size.target))
+                return false;
+            // Use the reaaal bounding box (which picogk doesnt know about).
+            if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
+                return false;
+            newsize = bbox.vecSize();
+            newcentre = bbox.vecCenter();
+            return true;
+        }
 
         /* number of times to skip overriding picogk so they can make the static
            projection matrix. */
@@ -412,6 +425,13 @@ public static class Geez {
         private static int held = 0;
 
 
+        public static void initialise() {
+            fov = snap_fov.target; // update picogk.
+            Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
+            PICOGK_VIEWER.AddKeyHandler(new ViewerHack());
+            _ = make_shit_happen_continuously();
+        }
+
         public static void reset() {
             // Cheeky reset.
 
@@ -447,40 +467,19 @@ public static class Geez {
             last_phi = NAN;
         }
 
-        private static void recalc_size(bool must=false, bool recentre=true) {
-            if (!must && nonnan(snap_size.target))
-                return;
-            // Checkout the reaaal genuine bounding box (which picogk doesnt
-            // know about).
-            Vec3 centre;
-            if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox)) {
-                snap_size.untarget();
-                centre = ZERO3;
-            } else {
-                snap_size.retarget(bbox.vecSize());
-                centre = bbox.vecCenter();
-            }
-            // Send it to centre.
-            if (recentre)
-                snap_pos.retarget(centre);
-        }
-
         public static void rescope(bool isometric=false) {
             // Reframes the viewer for current scene objects.
-            recalc_size(must: true, recentre: true);
+            if (!recalc_size(out Vec3 newsize, out Vec3 newcentre, must: true))
+                return; // cooked it.
             set_mode(now_orbiting: true, about_focal: true);
+            snap_size.retarget(newsize);
+            snap_pos.retarget(newcentre);
             snap_ang.retarget(isometric
                             ? new(1.25f*PI, 0.75f*PI)
                             : new(dflt_theta, dflt_phi));
             snap_zoom.retarget(1f);
         }
 
-        public static void initialise() {
-            fov = snap_fov.target; // update picogk.
-            Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
-            PICOGK_VIEWER.AddKeyHandler(new ViewerHack());
-            _ = make_shit_happen_continuously();
-        }
 
 
       #if false
@@ -540,8 +539,17 @@ public static class Geez {
 
 
         private static void make_shit_happen() {
-            // Get the size box, but only if we havent before.
-            recalc_size(must: false, recentre: true);
+            // See if we should recalc size box.
+            if (recalc_size(out Vec3 newsize, out Vec3 newcentre)) {
+                // We did recalc, which means this is the first render after an
+                // empty scene so lets go straight to centre and ortho.
+                set_mode(now_orbiting: true, about_focal: false);
+                ortho = snap_ortho.target;
+                size = newsize;
+                snap_size.retarget(newsize);
+                pos = newcentre;
+                snap_pos.untarget();
+            }
 
             // Peek if we've had any scroll input.
             {
@@ -734,7 +742,7 @@ public static class Geez {
             // Ok now we gotta handle the compass. so ready for another round of
             // mvp and picogk overwriting.
             float compass_fov = torad(25f);
-            // choose focal dist s.t. focal height = 2..
+            // choose focal dist s.t. focal height = 2.
             float compass_focal_dist = 1f/tan(compass_fov/2f);
             // choose camera s.t. focal plane passes through origin. tada, the
             // compass now has a size mapped to screen space (excluding
@@ -987,27 +995,27 @@ public static class Geez {
     public static void initialise() {
         _initialise_compass();
         ViewerHack.initialise();
-        log();
-        log("[Geez] using a new hacked-in camera, keybinds:");
-        log("     - W/A/S/D         move camera horizontally");
-        log("     - space/shift     move camera up/down");
-        log("     - arrow keys      rotate view");
-        log("     - scroll up/down  orbit zoom in/out + move slower/faster");
-        log("     - ctrl held       stronger movement + arrow key rotation");
-        log("     - tab             toggle orbit/free mode at focal point");
-        log("     - backtick [`/~]  toggle orbit/free mode at centre");
-        log("     - Q               snap view along nearest axis");
-        log("     - ctrl+Q          snap view to origin");
-        log("     - E               snap centre to Z axis");
-        log("     - ctrl+E          snap centre to origin");
-        log("     - R               snap view to nearest isometric angle");
-        log("     - ctrl+R          snap to true isometric");
-        log("     - equals [+/=]    rescope view");
-        log("     - backspace       reset view (+fix window aspect ratio)");
-        log("     - K/L             dial up/down free fov");
-        log("     - T               toggle transparency");
-        log("     - Y               toggle background dark-mode");
-        log();
+        print();
+        print("[Geez] using a new hacked-in camera, keybinds:");
+        print("     - W/A/S/D         move camera horizontally");
+        print("     - space/shift     move camera up/down");
+        print("     - arrow keys      rotate view");
+        print("     - scroll up/down  orbit zoom in/out + move slower/faster");
+        print("     - ctrl held       stronger movement + arrow key rotation");
+        print("     - tab             toggle orbit/free mode at focal point");
+        print("     - backtick [`/~]  toggle orbit/free mode at centre");
+        print("     - Q               snap view along nearest axis");
+        print("     - ctrl+Q          snap view to origin");
+        print("     - E               snap centre to Z axis");
+        print("     - ctrl+E          snap centre to origin");
+        print("     - R               snap view to nearest isometric angle");
+        print("     - ctrl+R          snap to true isometric");
+        print("     - equals [+/=]    rescope view to full scene");
+        print("     - backspace       reset view (+fix window aspect ratio)");
+        print("     - K/L             dial up/down free fov");
+        print("     - T               toggle transparency");
+        print("     - Y               toggle background dark-mode");
+        print();
     }
 
 
