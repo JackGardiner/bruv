@@ -29,6 +29,7 @@
         "fOxMassFlowRate": 2.5,
         "fFuelMassFlowRate": 1.2,
         "fOxInjectionRho": 1141.0,
+        "fFuelInjectionRho": 786.0,
         "fChamberPressure": 3.5e6
     },
     "chamber": {
@@ -70,7 +71,7 @@
     },
     "injector": {
         "no_inj": [9],
-        "r_inj": [31.0],
+        "r_inj": [32],
         "theta0_inj": [0.0],
 
         "no_fc": [30],
@@ -80,11 +81,7 @@
 
         "fTargetdPFrac": 0.25,
 
-        "fLOxPostFluidRad": 2.5,
         "fLOxPostLength": 10.0,
-        "fLOxSwirlMflFluidRad": 3.5,
-        "fLOxSwirlMfldAngleDeg": 45.0,
-        "fLOxSwirlMfldLength": 12.0,
         "fLOxPostWT": 1.0,
         "fInjectorPlateThickness": 3.0,
         "fFuelAnnulusOR": 4.5,

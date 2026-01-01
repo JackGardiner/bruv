@@ -39,6 +39,7 @@ public class PartMating {
     public required float fOxMassFlowRate { get; init; }
     public required float fFuelMassFlowRate { get; init; }
     public required float fOxInjectionRho { get; init; }
+    public required float fFuelInjectionRho { get; init; }
 
     // --- Design Preference Params ---
     public required float thickness_around_bolt { get; init; }

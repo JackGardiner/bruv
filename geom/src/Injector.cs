@@ -49,6 +49,7 @@ public class Injector : TwoPeasInAPod.Pea
     public List<Vector3>? points_inj = null;
     protected void initialise_inj()
     {
+        // injector patterning / overall init
         points_inj = new();
         iTotalElementCount = 0;
         for (int n=0; n<numel(no_inj); ++n) {
@@ -63,22 +64,75 @@ public class Injector : TwoPeasInAPod.Pea
         }
         fOxElementMFR = pm.fOxMassFlowRate / iTotalElementCount;
         fFuelElementMFR = pm.fFuelMassFlowRate / iTotalElementCount;
+        Library.Log($"total elements count: {iTotalElementCount}");
 
-        fTargetdP = fTargetdPFrac*pm.fChamberPressure;
+        // LOX / swirl / central post init
         fLOxPostLength = 10f;
-        fLOxPostWT = 1f;
-        fFuelAnnulusOR = 5f;
-        no_annulus_rib = 6;
-        annulus_rib_width = 1f;
+        fLOxPostWT = 0.8f;
 
         iOxSwirlInlets = 4;
         iFuelSwirlInlets = 4;
         fTargetCdOx = 0.25f;
-        fTargetCdFuel = 0.25f;
-        fCoreExitArea = fOxElementMFR/(fTargetCdOx*sqrt(2*pm.fOxInjectionRho*fTargetdP));
+        // fTargetCdFuel = 0.25f;
+        fTargetdP = fTargetdPFrac*pm.fChamberPressure;
+
+        fCoreExitArea = fOxElementMFR/(fTargetCdOx*sqrt(2*pm.fOxInjectionRho*fTargetdP)) * 1e6f; // mm^2
         // A = PI*r^2
         // r = sqrt(A/pi)
-        fCoreExitRadius = sqrt(fCoreExitArea/PI) * 1e3f; // mm(!)
+        fCoreExitRadius = sqrt(fCoreExitArea/PI);
+        Library.Log($"Ox core fluid rad = {fCoreExitRadius}");
+
+        // IPA annulus init
+        float min_rib_wid = 0.8f;
+        float min_gap_wid = 0.8f;
+        float cd_annulus = 0.25f;
+        float rib_percent_area = 0.2f;
+
+        float vel_bernoulli_annulus = sqrt(2*fTargetdP/pm.fFuelInjectionRho);
+        Library.Log($"v_ideal = {vel_bernoulli_annulus}");
+        float area_annulus = fFuelElementMFR/(cd_annulus*sqrt(2*pm.fFuelInjectionRho*fTargetdP)) * 1e6f;
+        // float area_annulus = fFuelElementMFR/(pm.fFuelInjectionRho*cd_annulus*vel_bernoulli_annulus) * 1e6f; // mm^2
+        Library.Log($"annulus area: {area_annulus}");
+
+        float Or_post = fCoreExitRadius + fLOxPostWT;
+        float total_annulus_area = area_annulus * (1+rib_percent_area);
+        float total_rib_area = area_annulus*rib_percent_area;
+
+        fFuelAnnulusOR = sqrt(total_annulus_area/PI + pow(Or_post,2));
+        Library.Log($"Fuel annulus OR = {fFuelAnnulusOR}");
+        Library.Log($"Fuel (annulus) area: {area_annulus} mm^2");
+        Library.Log($"Oxidisr (core) area: {fCoreExitArea} mm^2");
+
+        float annulus_width = fFuelAnnulusOR - Or_post;
+        Library.Log($"Annulus width: {annulus_width}");
+
+        if (annulus_width > min_gap_wid)
+        {
+           // calculate max rib count (min width)
+            float smallest_rib_area = min_rib_wid*(fFuelAnnulusOR - Or_post);
+            no_annulus_rib = (int)ceil(total_rib_area / smallest_rib_area);
+            float actual_rib_area = total_rib_area / no_annulus_rib;
+            annulus_rib_width = actual_rib_area / (fFuelAnnulusOR - Or_post);
+            Library.Log($"{no_annulus_rib} ribs @ {annulus_rib_width} wide");
+        } else
+        {
+            fFuelAnnulusOR = Or_post + min_gap_wid;
+            float required_rib_area = PI*(pow(fFuelAnnulusOR,2) - pow(Or_post,2)) - area_annulus;
+            float smallest_rib_area = min_rib_wid*(fFuelAnnulusOR - Or_post);
+
+            no_annulus_rib = (int)ceil(required_rib_area / smallest_rib_area);
+            float actual_rib_area = required_rib_area / no_annulus_rib;
+            annulus_rib_width = actual_rib_area / (fFuelAnnulusOR - Or_post);
+            float blockage = required_rib_area / (PI*(pow(fFuelAnnulusOR,2) - pow(Or_post,2)));
+            Library.Log($"Gap too small! Gap-bounded solution -> {blockage*100f}% blockage");
+            Library.Log($"{no_annulus_rib} ribs @ {annulus_rib_width} wide");
+        }
+
+        /*
+            segment area (inner) A = 0.5*r^2*(theta-sin(theta))
+            rib area = rectangle - inner segment + outer segment
+            approximate inner segment == outer segment
+        */
 
         area_swinlet_perinj = 10f; // mm^2
         no_swinlet = 3;
@@ -140,7 +194,7 @@ public class Injector : TwoPeasInAPod.Pea
                     fFuelAnnulusOR
                 ).voxConstruct();
 
-                // add ribs for future annulus
+                // add ribs
                 Frame rib_frame = new Frame(point, uY3).transx(-fInjectorPlateThickness/2);
                 Voxels ribs = new();
                 for (int i=0; i<no_annulus_rib; i++)
@@ -168,13 +222,6 @@ public class Injector : TwoPeasInAPod.Pea
                     Or_fc).voxConstruct();
             }
         }
-
-        // remove hole for ignitor (//TODO fix placeholder)
-        voxPlate -= new BaseCylinder(
-            new LocalFrame(),
-            fInjectorPlateThickness,
-            4.0f
-        ).voxConstruct();
 
         return voxPlate;
     }
@@ -204,8 +251,8 @@ public class Injector : TwoPeasInAPod.Pea
                 fCoreExitRadius
             ).voxConstruct();
 
-            float fSwirlChamberStraightHeight = 12f;
-            float fSwirlChamberRadius = 4f;
+            float fSwirlChamberStraightHeight = 8f;
+            float fSwirlChamberRadius = 1.5f * fCoreExitRadius;
 
             // build upper/inner swirl chamber
             // calculate upper wall height
@@ -214,7 +261,8 @@ public class Injector : TwoPeasInAPod.Pea
                 (aPoint.R()+fSwirlChamberRadius)/Or_chnl
                 );
             LocalFrame oSwirlChamberFrame = new LocalFrame(aPoint + new Vector3(0f, 0f, fSwirlChamberLowerBound));
-            Frame swirl_chamber_frame = new Frame(aPoint).transz(fSwirlChamberLowerBound); // https://www.youtube.com/watch?v=TZtiJN6yiik
+            Frame swirl_chamber_frame = new Frame(aPoint).transz(fSwirlChamberLowerBound);
+            // https://www.youtube.com/watch?v=TZtiJN6yiik
 
             Voxels voxNextSwirlChamber = new(); // temp so we don't cook old one w offsets
             voxNextSwirlChamber += new BasePipe(
