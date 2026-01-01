@@ -273,7 +273,7 @@ public static class Geez {
             public void retarget(float new_target_theta, float new_target_phi) {
                 assert(isgood(new_target_theta));
                 assert(isgood(new_target_phi));
-                new_target_theta = wraprad(new_target_theta - PI) + PI;
+                new_target_theta = wraprad(new_target_theta, true);
                 new_target_phi = clamp(new_target_phi, 0f, PI);
                 target_theta = new_target_theta;
                 target_phi   = new_target_phi;
@@ -294,20 +294,19 @@ public static class Geez {
 
         private static System.Diagnostics.Stopwatch stopwatch = new();
 
-        /* min->max size of canonical objects. */
+        /* bounding box properties of canonical objects. */
         private static Vec3 size = 100f*ONE3;
+        private static Vec3 centre = ZERO3;
         private static SnapTo<SnapVec3, Vec3> snap_size = new(30f, NAN3, false);
-        private static bool recalc_size(out Vec3 newsize, out Vec3 newcentre,
-                bool must=false) {
+        private static bool recalc_size(out Vec3 newsize, bool must=false) {
             newsize = NAN3;
-            newcentre = NAN3;
             if (!must && nonnan(snap_size.target))
                 return false;
             // Use the reaaal bounding box (which picogk doesnt know about).
             if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
                 return false;
             newsize = bbox.vecSize();
-            newcentre = bbox.vecCenter();
+            centre = bbox.vecCenter();
             return true;
         }
 
@@ -438,6 +437,7 @@ public static class Geez {
             stopwatch.Stop();
 
             size = 100f*ONE3;
+            centre = ZERO3;
             snap_size.untarget();
 
             get_a_word_in_edgewise = 5;
@@ -467,16 +467,14 @@ public static class Geez {
             last_phi = NAN;
         }
 
-        public static void rescope(bool isometric=false) {
+        public static void rescope() {
             // Reframes the viewer for current scene objects.
-            if (!recalc_size(out Vec3 newsize, out Vec3 newcentre, must: true))
+            if (!recalc_size(out Vec3 newsize, must: true))
                 return; // cooked it.
             set_mode(now_orbiting: true, about_focal: true);
             snap_size.retarget(newsize);
-            snap_pos.retarget(newcentre);
-            snap_ang.retarget(isometric
-                            ? new(1.25f*PI, 0.75f*PI)
-                            : new(dflt_theta, dflt_phi));
+            snap_pos.retarget(centre);
+            snap_ang.retarget(new(dflt_theta, dflt_phi));
             snap_zoom.retarget(1f);
         }
 
@@ -540,14 +538,14 @@ public static class Geez {
 
         private static void make_shit_happen() {
             // See if we should recalc size box.
-            if (recalc_size(out Vec3 newsize, out Vec3 newcentre)) {
+            if (recalc_size(out Vec3 newsize)) {
                 // We did recalc, which means this is the first render after an
                 // empty scene so lets go straight to centre and ortho.
                 set_mode(now_orbiting: true, about_focal: false);
                 ortho = snap_ortho.target;
                 size = newsize;
                 snap_size.retarget(newsize);
-                pos = newcentre;
+                pos = centre;
                 snap_pos.untarget();
             }
 
@@ -786,23 +784,30 @@ public static class Geez {
         private static async Task make_shit_happen_continuously() {
             for (;;) {
                 make_shit_happen_in_the_future();
-                await Task.Delay(15);
+                await Task.Delay(5);
             }
         }
 
+
+        private static Vec2 get_ang_origin() {
+            Vec3 looking = -future_pos;
+            float newtheta = argxy(looking, ifzero: future_theta);
+            float newphi = argphi(looking, ifzero: future_phi);
+            return new(newtheta, newphi);
+        }
+
+        private static Vec2 get_ang_centre() {
+            Vec3 looking = centre - future_pos;
+            float newtheta = argxy(looking, ifzero: future_theta);
+            float newphi = argphi(looking, ifzero: future_phi);
+            return new(newtheta, newphi);
+        }
 
         private static Vec2 get_ang_axis_aligned() {
             float newtheta = round(future_theta / PI_2) * PI_2;
             float newphi = (future_phi < PI/5f) ? 0f
                          : (future_phi > PI - PI/5f) ? PI
                          : PI_2;
-            return new(newtheta, newphi);
-        }
-
-        private static Vec2 get_ang_origin() {
-            Vec3 looking = -future_pos;
-            float newtheta = argxy(looking, ifzero: future_theta);
-            float newphi = argphi(looking, ifzero: future_phi);
             return new(newtheta, newphi);
         }
 
@@ -933,7 +938,7 @@ public static class Geez {
                 // get snapping.
                 if (pressed) {
                     snap_ang.retarget(ctrl
-                                    ? get_ang_origin()
+                                    ? get_ang_nearest_isometric()
                                     : get_ang_axis_aligned());
                 }
                 return true;
@@ -948,10 +953,10 @@ public static class Geez {
               case VEK.Key_R:
                 // dujj.
                 if (pressed) {
-                    if (ctrl)
-                        rescope(isometric: true);
+                    if (ctrl == orbit)
+                        snap_ang.retarget(get_ang_centre());
                     else
-                        snap_ang.retarget(get_ang_nearest_isometric());
+                        snap_pos.retarget(centre);
                 }
                 return true;
 
@@ -1003,13 +1008,15 @@ public static class Geez {
         print("     - scroll up/down  orbit zoom in/out + move slower/faster");
         print("     - ctrl held       stronger movement + arrow key rotation");
         print("     - tab             toggle orbit/free mode at focal point");
-        print("     - backtick [`/~]  toggle orbit/free mode at centre");
+        print("     - backtick [`/~]  toggle orbit/free mode at pivot point");
         print("     - Q               snap view along nearest axis");
-        print("     - ctrl+Q          snap view to origin");
-        print("     - E               snap centre to Z axis");
-        print("     - ctrl+E          snap centre to origin");
-        print("     - R               snap view to nearest isometric angle");
-        print("     - ctrl+R          snap to true isometric");
+        print("     - ctrl+Q          snap view to nearest isometric angle");
+        print("     - E               snap pivot point to Z axis");
+        print("     - ctrl+E          snap pivot point to origin");
+        print("     - R               snap pivot point in orbit or view in free "
+                                   + "to scene centre");
+        print("     - ctrl+R          snap view in orbit or pivot point in free "
+                                   + "to scene centre");
         print("     - equals [+/=]    rescope view to full scene");
         print("     - backspace       reset view (+fix window aspect ratio)");
         print("     - K/L             dial up/down free fov");

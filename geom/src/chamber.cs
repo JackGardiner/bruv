@@ -6,6 +6,7 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
+using BBox3 = PicoGK.BBox3;
 
 public class Chamber : TwoPeasInAPod.Pea {
 
@@ -717,7 +718,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         return Polygon.mesh_swept(new FramesCart(frames), vertices);
     }
 
-    protected Voxels voxels_chnl(ref Geez.Cycle key) {
+    protected Voxels voxels_chnl(Geez.Cycle key) {
         Voxels vox = new();
         using (key.like()) {
             List<int> mesh_keys = new();
@@ -727,11 +728,11 @@ public class Chamber : TwoPeasInAPod.Pea {
                 mesh_keys.Add(Geez.mesh(mesh));
                 vox.BoolAdd(new(mesh));
             }
-            key <<= Geez.voxels(vox);
+            key.cycle(Geez.voxels(vox));
             Geez.remove(mesh_keys);
 
             Fillet.convex(vox, 0.4f, inplace: true);
-            key <<= Geez.voxels(vox);
+            key.cycle(Geez.voxels(vox));
         }
         return vox;
     }
@@ -911,7 +912,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         );
     }
 
-    protected Voxels voxels_neg_mani(ref Geez.Cycle key, out Frame inlet) {
+    protected Voxels voxels_neg_mani(Geez.Cycle key, out Frame inlet) {
         List<Vec2> vertices;
         points_mani(theta_inlet, out vertices, out _, out inlet);
         for (int n=1; n<DIVISIONS; ++n) {
@@ -926,7 +927,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             donut: true
         );
         using (key.like())
-            key <<= Geez.mesh(mesh);
+            key.cycle(Geez.mesh(mesh));
         Voxels vox = new(mesh);
 
         float zextra = 1.5f;
@@ -938,7 +939,7 @@ public class Chamber : TwoPeasInAPod.Pea {
          .extended(EXTRA, EXTEND_UP)
          .voxels());
         using (key.like())
-            key <<= Geez.voxels(vox);
+            key.cycle(Geez.voxels(vox));
 
         Voxels mask = new Pipe(
             inlet.transz(-zextra),
@@ -949,7 +950,7 @@ public class Chamber : TwoPeasInAPod.Pea {
             Fillet.concave(l.vox, Fr_inlet, inplace: true);
 
         using (key.like())
-            key <<= Geez.voxels(vox);
+            key.cycle(Geez.voxels(vox));
 
         return vox;
     }
@@ -1088,8 +1089,7 @@ public class Chamber : TwoPeasInAPod.Pea {
         return points;
     }
 
-    protected void voxels_tc(ref Geez.Cycle key, out Voxels neg,
-            out Voxels pos) {
+    protected void voxels_tc(Geez.Cycle key, out Voxels neg, out Voxels pos) {
         List<Vec3> points = points_tc();
         neg = new();
         pos = new();
@@ -1227,7 +1227,25 @@ public class Chamber : TwoPeasInAPod.Pea {
         return vox;
     }
 
-    protected Voxels voxels_neg_bolts(ref Geez.Cycle key) {
+    protected Voxels? voxels_branding() {
+        if (VOXEL_SIZE > 0.3) {
+            print("skipping branding due to large voxel size (generation would "
+                + "fail).");
+            return null;
+        }
+
+        int scale = (VOXEL_SIZE < 0.1) ? 2 : 1; // might as well.
+        SDFimage image = new(fromroot("assets/unimelblogo.tga"), scale: scale);
+
+        Frame centre = new((cnt_z1 - 15f)*uZ3, -uY3, uZ3);
+        float Lz = 20f;
+        float Lr = 1.5f;
+        float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.4f;
+        float length = Lz * image.aspect_x_on_y;
+        return image.voxels_on_cyl(vertical: true, centre, R, Lr, length);
+    }
+
+    protected Voxels voxels_neg_bolts(Geez.Cycle key) {
         Voxels vox = new();
         using (key.like()) {
             List<int> keys = new(pm.no_bolt);
@@ -1244,7 +1262,7 @@ public class Chamber : TwoPeasInAPod.Pea {
                     pm.Bsz_bolt/2f + 3f
                 ).voxels());
             }
-            key <<= Geez.group(keys);
+            key.cycle(Geez.group(keys));
         }
         return vox;
     }
@@ -1280,24 +1298,25 @@ public class Chamber : TwoPeasInAPod.Pea {
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
         Geez.Cycle key_bolts = new(colour: new("#404040"));
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
-
-        Voxels neg_mani = voxels_neg_mani(ref key_mani, out Frame inlet);
-        print("created negative manifold.");
+        Geez.Cycle key_branding = new(colour: COLOUR_CYAN);
 
         Voxels gas = voxels_cnt_gas();
         key_gas.voxels(gas);
         print("created gas.");
 
+        Voxels neg_mani = voxels_neg_mani(key_mani, out Frame inlet);
+        print("created negative manifold.");
+
         Voxels pos_mani = voxels_pos_mani(inlet);
         print("created positive manifold.");
 
-        Voxels chnl = voxels_chnl(ref key_chnl);
+        Voxels chnl = voxels_chnl(key_chnl);
         print("created channels.");
 
-        voxels_tc(ref key_tc, out Voxels neg_tc, out Voxels pos_tc);
+        voxels_tc(key_tc, out Voxels neg_tc, out Voxels pos_tc);
         print("created thermocouples.");
 
-        Voxels neg_bolts = voxels_neg_bolts(ref key_bolts);
+        Voxels neg_bolts = voxels_neg_bolts(key_bolts);
 
         // Also view o-ring grooves.
         using (key_bolts.like()) {
@@ -1318,6 +1337,12 @@ public class Chamber : TwoPeasInAPod.Pea {
         Voxels flange = voxels_flange();
         key_flange.voxels(flange);
         print("created flange.");
+
+        Voxels? branding = voxels_branding();
+        if (branding != null) {
+            key_branding.voxels(branding);
+            print("created branding.");
+        }
 
         part = voxels_cnt_ow_filled();
         key_part.voxels(part);
@@ -1341,6 +1366,11 @@ public class Chamber : TwoPeasInAPod.Pea {
         Fillet.concave(part, 3f, inplace: true);
         key_part.voxels(part);
         print("filleted.");
+
+        if (branding != null) {
+            add(ref branding, key_branding);
+            print("added branding.");
+        }
 
         sub(ref gas, key_gas);
         print("subtracted gas cavity.");
@@ -1465,34 +1495,132 @@ public class Chamber : TwoPeasInAPod.Pea {
         // print("saved");
 
 
-        float length = 50f;
-        float aspect_x_on_y = img.width / (float)img.height;
-        float scale = length / max(img.width, img.height);
-        Vec2 corner = (aspect_x_on_y >= 1f)
-                    ? new(length, length / aspect_x_on_y)
-                    : new(length * aspect_x_on_y, length);
-        float Lz = 2f;
+        // SDFfunction sdf_cyl = img.sdf_on_cyl(out BBox3 bbox, 10f, 40f, 50f);
+        // Geez.pipe(new(new(), 50f/img.aspect_x_on_y, 10f, 50f));
+        // Geez.bbox(bbox);
+        // Geez.voxels(new SDFfilled(sdf_cyl).voxels(bbox));
 
-        float sdf(in Vec3 p) {
-            float z = p.Z;
-            float dist_z = max(-z, z - Lz);
 
-            Vec2 q = projxy(p);
-            float dist_xy = img.signed_dist(q / scale) * scale;
+        // Geez.clear();
+        // SDFfunction sdf_flat = img.sdf_flat(out bbox, 1f, 30f);
+        // Geez.bbox(bbox);
+        // Geez.voxels(new SDFfilled(sdf_flat).voxels(bbox));
 
-            float dist;
-            if (dist_xy <= 0f || dist_z <= 0f) {
-                dist = max(dist_xy, dist_z);
-            } else {
-                dist = hypot(dist_xy, dist_z);
-            }
-            return dist;
-        }
-        PicoGK.BBox3 bbox = new(ZERO3, rejxy(corner, Lz));
+        Frame centre = new((100f - 15f)*uZ3, -uY3, uZ3);
+        float Lz = 30f;
+        float Lr = 1f;
+        float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.2f;
+        float length = Lz / img.aspect_x_on_y;
+        SDFfunction sdf = img.sdf_on_cyl(true, out BBox3 bbox, centre, R, Lr,
+                length);
+        Geez.frame(centre);
         Geez.bbox(bbox);
-        print(bbox);
-        Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-        print("rendered");
+        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+        Geez.voxels(img.voxels_on_cyl(true, centre, R, Lr, length));
+
+
+
+        // float L = 1f;
+        // float length = 30f;
+        // float R = 20f;
+        // Frame frame;
+        // BBox3 bbox;
+        // SDFfunction sdf;
+
+        // frame = new Frame(-ONE3).rotxy(-4f*PI/3f);
+        // Geez.frame(frame);
+        // Geez.pipe(new Pipe(frame, length / img.aspect_x_on_y, R, R + L).at_centre());
+        // sdf = img.sdf_on_cyl(true, out bbox, frame, R, L, length);
+        // Geez.bbox(bbox);
+        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+
+        // frame = new Frame(ONE3).rotzx(PI/3f);
+        // Geez.frame(frame);
+        // Geez.pipe(new Pipe(frame.rotyz(PI_2), length, R, R + L).at_centre());
+        // sdf = img.sdf_on_cyl(false, out bbox, frame, R, L, length);
+        // Geez.bbox(bbox);
+        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+
+
+        // Frame frame = Frame.cyl_axial(20*ONE3 - 10*uZ3);
+        // Frame frame = new Frame(20*ONE3 - 10*uZ3).rotzx(torad(15));
+
+        // img.sdf_on_plane(out bbox, frame, L, length);
+        // Geez.bbox(bbox);
+        // Geez.voxels(img.voxels_on_plane(frame, L, length));
+
+        // frame = frame.rotzx(torad(-15)).transx(-30f).rotxy(PI/3f).rotzx(torad(15));
+        // frame = new();
+        // Geez.frame(frame);
+        // img.sdf_on_cyl(out bbox, frame, R, L, length);
+        // Geez.bbox(bbox);
+        // Geez.voxels(img.voxels_on_cyl(vertical: true, frame, R, L, length));
+
+
+
+        // float aspect_x_on_y = img.width / (float)img.height;
+        // float scale = length / max(img.width, img.height);
+        // Vec2 corner = (aspect_x_on_y >= 1f)
+        //             ? new(length, length / aspect_x_on_y)
+        //             : new(length * aspect_x_on_y, length);
+        // float Lz = 2f;
+
+        // float sdf(in Vec3 p) {
+        //     float z = p.Z;
+        //     float dist_z = max(-z, z - Lz);
+
+        //     Vec2 q = projxy(p);
+        //     float dist_xy = img.signed_dist(q / scale) * scale;
+
+        //     float dist;
+        //     if (dist_xy <= 0f || dist_z <= 0f) {
+        //         dist = max(dist_xy, dist_z);
+        //     } else {
+        //         dist = hypot(dist_xy, dist_z);
+        //     }
+        //     return dist;
+        // }
+        // PicoGK.BBox3 bbox = new(ZERO3, rejxy(corner, Lz));
+        // // Geez.bbox(bbox);
+        // // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+        // // print("rendered");
+
+
+        // float r0 = 70f;
+        // float Lr = 1f;
+        // float sdf_cyl(in Vec3 p) {
+        //     float r = magxy(p);
+        //     float t = argxy(p);
+        //     float z = p.Z;
+        //     float dist_r = max(r0 - r, r - (r0 + Lr));
+
+        //     Vec2 q = new(r0*t, z);
+        //     float dist_surf = img.signed_dist(q / scale) * scale;
+        //     // technically, this is the distance along the surface of the
+        //     // cylinder and not true euclidean in xyz. but like, theyre pretty
+        //     // similar.
+
+        //     float dist;
+        //     if (dist_surf <= 0f || dist_r <= 0f) {
+        //         dist = max(dist_surf, dist_r);
+        //     } else {
+        //         dist = hypot(dist_surf, dist_r);
+        //     }
+        //     return dist;
+        // }
+        // Geez.pipe(new(new Frame(), corner.Y, r0));
+        // bbox = new();
+        // bbox.Include(fromcyl(r0,      0f,            0f));
+        // bbox.Include(fromcyl(r0,      0f,            corner.Y));
+        // bbox.Include(fromcyl(r0 + Lr, 0f,            0f));
+        // bbox.Include(fromcyl(r0 + Lr, 0f,            corner.Y));
+        // bbox.Include(fromcyl(r0,      corner.X / r0, 0f));
+        // bbox.Include(fromcyl(r0,      corner.X / r0, corner.Y));
+        // bbox.Include(fromcyl(r0 + Lr, corner.X / r0, 0f));
+        // bbox.Include(fromcyl(r0 + Lr, corner.X / r0, corner.Y));
+        // Geez.bbox(bbox);
+        // Geez.voxels(new SDFfilled(sdf_cyl).voxels(bbox));
+        // print("rendered");
     }
 
 

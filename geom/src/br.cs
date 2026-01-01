@@ -279,11 +279,20 @@ public static partial class Br {
 
     public static float torad(float deg) => deg * (PI / 180f);
     public static float todeg(float rad) => rad * (180f / PI);
-    public static float wraprad(float rad) // [-PI, PI)
+
+    public static float wraprad(float rad, bool unsigned=false) {
+        rad += unsigned ? 0f : PI;
         // shitass c sharp non-positive modulo.
-        => ((rad + PI)%TWOPI + TWOPI)%TWOPI - PI;
-    public static float wrapdeg(float deg) // [-180, 180)
-        => ((deg + 180f)%360f + 360f)%360f - 180f;
+        rad = (rad%TWOPI + TWOPI)%TWOPI;
+        rad -= unsigned ? 0f : PI;
+        return rad;
+    }
+    public static float wrapdeg(float deg, bool unsigned=false) {
+        deg += unsigned ? 0f : 180f;
+        deg = (deg%360f + 360f)%360f;
+        deg -= unsigned ? 0f : 180f;
+        return deg;
+    }
 
     public static float sin(float a) => MathF.Sin(a);
     public static float cos(float a) => MathF.Cos(a);
