@@ -1341,10 +1341,6 @@ public class Chamber : TPIAP.Pea {
 
     /* pea interface: */
 
-    public sealed class NullDisposable : IDisposable {
-        public NullDisposable() {}
-        public void Dispose() {}
-    }
     delegate void _Op(in Voxels vox);
     public Voxels voxels(out Mesh part_mesh) {
         /* cheeky timer. */
@@ -1357,7 +1353,7 @@ public class Chamber : TPIAP.Pea {
             print("minimising memory means no rendering, going dark...");
         using var __ = minimise_mem
                      ? Geez.locked()
-                     : new NullDisposable();
+                     : DoNothing.please();
 
 
         /* create the part object and its key. */

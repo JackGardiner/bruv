@@ -95,11 +95,6 @@ public static class Geez {
                 Geez.dflt_sectioner = sectioner0;
             });
     }
-    private class OnLeave : IDisposable {
-        protected readonly Action _func;
-        public OnLeave(Action func) { _func = func; }
-        public void Dispose() { _func(); }
-    }
 
 
 
@@ -299,23 +294,21 @@ public static class Geez {
         public static Vec3 size { get; private set; } = 100f*ONE3;
         public static Vec3 centre { get; private set; } = ZERO3;
         private static bool explicit_scene = false;
-        public static bool resize(bool must=true) {
-            if (!must && explicit_scene)
-                return false;
+        public static bool resize() {
             // Use the reaaal bounding box (which picogk doesnt know about).
             if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
                 return false;
-            set_size(bbox.vecSize());
-            set_centre(bbox.vecCenter());
+            set_size(bbox.vecSize(), expl: true);
+            set_centre(bbox.vecCenter(), expl: true);
             return true;
         }
-        public static void set_size(Vec3 newsize, object? dummy=null) {
-            explicit_scene = true;
+        public static void set_size(Vec3 newsize, bool expl=true) {
+            explicit_scene |= expl;
             assert(isgood(newsize));
             size = newsize;
         }
-        public static void set_centre(Vec3 newcentre, object? dummy=null) {
-            explicit_scene = true;
+        public static void set_centre(Vec3 newcentre, bool expl=true) {
+            explicit_scene |= expl;
             assert(isgood(newcentre));
             centre = newcentre;
         }
@@ -336,8 +329,9 @@ public static class Geez {
                                        ? snap_pos.target
                                        : pos;
 
-        public static void set_pos(in Vec3 newpos, bool instant=false) {
-            explicit_scene = true;
+        public static void set_pos(in Vec3 newpos, bool instant=false,
+                bool expl=true) {
+            explicit_scene |= expl;
             assert(isgood(newpos));
             if (instant) {
                 pos = newpos;
@@ -361,8 +355,9 @@ public static class Geez {
                                          ? snap_zoom.target
                                          : zoom;
 
-        public static void set_zoom(float newzoom, bool instant=false) {
-            explicit_scene = true;
+        public static void set_zoom(float newzoom, bool instant=false,
+                bool expl=true) {
+            explicit_scene |= expl;
             assert(isgood(newzoom));
             newzoom = clamp(newzoom, zoom_min, zoom_max);
             if (instant)
@@ -408,8 +403,8 @@ public static class Geez {
             => fromsph(1f, future_theta, future_phi);
 
         public static void set_ang(float newtheta, float newphi,
-                bool instant=false) {
-            explicit_scene = true;
+                bool instant=false, bool expl=true) {
+            explicit_scene |= expl;
             assert(isgood(newtheta));
             assert(isgood(newphi));
             newtheta = wraprad(newtheta, true);
@@ -444,8 +439,8 @@ public static class Geez {
         public static float get_ortho_dist() => zoom_max * 10f;
 
         public static void set_orbit(bool neworbit, bool about_focal,
-                bool instant=false) {
-            explicit_scene = true;
+                bool instant=false, bool expl=true) {
+            explicit_scene |= expl;
             if (neworbit == orbit)
                 return;
             extra_focal_further = false;
@@ -507,6 +502,10 @@ public static class Geez {
             _ = make_shit_happen_continuously();
         }
 
+        public static void shutdown() {
+            stop_making_shit_happen_continuously();
+        }
+
         public static void reset() {
             // Cheeky reset.
 
@@ -546,10 +545,10 @@ public static class Geez {
         public static void reframe(bool instant=false) {
             if (!resize())
                 return; // cooked it.
-            set_orbit(true, about_focal: true, instant);
-            set_zoom(mag(size), instant);
-            set_pos(centre, instant);
-            set_ang(dflt_theta, dflt_phi, instant);
+            set_orbit(true, true, instant, expl: false);
+            set_zoom(mag(size), instant, expl: false);
+            set_pos(centre, instant, expl: false);
+            set_ang(dflt_theta, dflt_phi, instant, expl: false);
         }
 
 
@@ -620,15 +619,13 @@ public static class Geez {
                 stopwatch.Restart();
             }
 
-            // See if we should recalc size box.
-            if (resize(must: false)) {
-                if (explicit_scene)
-                    return;
+            // Recalc the scene if not explicit and there are objects.
+            if (!explicit_scene && resize()) {
                 // We did recalc, which means this is the first render after an
                 // empty scene so lets go straight to centre and ortho.
-                set_orbit(true, about_focal: false, instant: true);
-                set_zoom(mag(size), instant: true);
-                set_pos(centre, instant: true);
+                set_orbit(true, false, instant: true, expl: false);
+                set_zoom(mag(size), instant: true, expl: false);
+                set_pos(centre, instant: true, expl: false);
             }
 
 
@@ -878,11 +875,18 @@ public static class Geez {
                 actions.Enqueue(new ViewerHack());
         }
 
+        private static bool stop_making_shit_happen = false;
         private static async Task make_shit_happen_continuously() {
+            Volatile.Write(ref stop_making_shit_happen, false);
             for (;;) {
+                if (Volatile.Read(ref stop_making_shit_happen))
+                    break;
                 make_shit_happen_in_the_future();
                 await Task.Delay(5);
             }
+        }
+        private static void stop_making_shit_happen_continuously() {
+            Volatile.Write(ref stop_making_shit_happen, true);
         }
 
 
@@ -890,22 +894,22 @@ public static class Geez {
             Vec3 looking = -future_pos;
             float newtheta = argxy(looking, ifzero: future_theta);
             float newphi = argphi(looking, ifzero: future_phi);
-            set_ang(newtheta, newphi, instant);
+            set_ang(newtheta, newphi, instant, false);
         }
 
         public static void snap_pos_to_origin(bool instant=false) {
-            set_pos(ZERO3, instant);
+            set_pos(ZERO3, instant, false);
         }
 
         public static void snap_ang_to_centre(bool instant=false) {
             Vec3 looking = centre - future_pos;
             float newtheta = argxy(looking, ifzero: future_theta);
             float newphi = argphi(looking, ifzero: future_phi);
-            set_ang(newtheta, newphi, instant);
+            set_ang(newtheta, newphi, instant, false);
         }
 
         public static void snap_pos_to_centre(bool instant=false) {
-            set_pos(centre, instant);
+            set_pos(centre, instant, false);
         }
 
         public static void snap_ang_to_axis_aligned(bool instant=false) {
@@ -913,7 +917,7 @@ public static class Geez {
             float newphi = (future_phi < PI/5f) ? 0f
                          : (future_phi > PI - PI/5f) ? PI
                          : PI_2;
-            set_ang(newtheta, newphi, instant);
+            set_ang(newtheta, newphi, instant, false);
         }
 
         public static void snap_ang_to_nearest_isometric(bool instant=false) {
@@ -926,7 +930,7 @@ public static class Geez {
             newphi -= tophalf ? PI_4 : -PI_4;
             newphi = round(newphi / PI_2) * PI_2;
             newphi += tophalf ? PI_4 : -PI_4;
-            set_ang(newtheta, newphi, instant);
+            set_ang(newtheta, newphi, instant, false);
         }
 
         public static void snap_pos_to_z_axis(bool instant=false) {
@@ -947,7 +951,7 @@ public static class Geez {
                 // otherwise jus dont change z.
                 z = future_pos.Z;
             }
-            set_pos(uZ3 * z, instant);
+            set_pos(uZ3 * z, instant, false);
         }
 
         /* Viewer.IViewerAction */
@@ -999,7 +1003,7 @@ public static class Geez {
               case VEK.Key_Tab:
               case VEK_Key_Backtick:
                 if (pressed && !islocked)
-                    set_orbit(!orbit, about_focal: key == VEK.Key_Tab);
+                    set_orbit(!orbit, key == VEK.Key_Tab, expl: false);
                 return true;
 
                 // Override picogks bad view rotater to use our snap.
@@ -1146,6 +1150,10 @@ public static class Geez {
         print();
     }
 
+    public static void shutdown() {
+        ViewerHack.shutdown();
+    }
+
 
     public static void lookat(BBox3 bbox, float theta=NAN, float phi=NAN) {
         lookat(
@@ -1182,12 +1190,12 @@ public static class Geez {
         float zoom = ViewerHack.future_zoom;
         bool orbit = ViewerHack.orbit;
         return new OnLeave(() => {
-            ViewerHack.set_size(size);
-            ViewerHack.set_centre(centre);
-            ViewerHack.set_orbit(orbit, false, true);
-            ViewerHack.set_zoom(zoom, true);
-            ViewerHack.set_pos(pos, true);
-            ViewerHack.set_ang(theta, phi, true);
+            ViewerHack.set_size(size, expl: false);
+            ViewerHack.set_centre(centre, expl: false);
+            ViewerHack.set_orbit(orbit, false, true, expl: false);
+            ViewerHack.set_zoom(zoom, true, expl: false);
+            ViewerHack.set_pos(pos, true, expl: false);
+            ViewerHack.set_ang(theta, phi, true, expl: false);
         });
     }
 

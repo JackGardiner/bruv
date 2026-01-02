@@ -4,7 +4,17 @@ using br;
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 
-public class TwoPeasInAPod {
+public static class TwoPeasInAPod {
+
+    public interface Pea {
+        string name { get; }
+
+        Voxels voxels(out Mesh mesh);
+        void drawings(in Voxels vox);
+        void anything();
+
+        void set_modifiers(int mods);
+    }
 
     /* GUIDE: how to create `make` (for smarties) */
     /* bitwise or (|) ANY/SEVERAL/ALL of these actions: */
@@ -31,55 +41,19 @@ public class TwoPeasInAPod {
     public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
 
 
-    public interface Pea {
-        string name { get; }
-
-        Voxels voxels(out Mesh mesh);
-        void drawings(in Voxels vox);
-        void anything();
-
-        void set_modifiers(int mods);
-    }
-
-
-    public Chamber chamber { get; init; }
-    public Injector injector { get; init; }
-
-    public TwoPeasInAPod() {
-        // Load the config files.
-        string path_all = fromroot("../config/all.json");
-        string path_extra = fromroot("../config/ammendments.json");
-        Jason config = new(path_all);
-        if (File.Exists(path_extra))
-            config.overwrite_from(path_extra);
-
-        { // Construct the chamber object.
-            float max_phi = config.get<float>("printer/max_print_angle");
-            config.set("chamber/phi_mani", max_phi);
-            config.set("chamber/phi_fixt", max_phi);
-            config.set("chamber/phi_inlet", -max_phi);
-            config.set("chamber/phi_tc", max_phi);
-            config.set("chamber/pm", config.get_map("part_mating"));
-            chamber = config.deserialise<Chamber>("chamber");
-            chamber.initialise();
-        }
-
-        { // Construct the injector object.
-            float max_phi = config.get<float>("printer/max_print_angle");
-            config.set("injector/fPrintAngle", max_phi);
-            config.set("injector/pm", config.get_map("part_mating"));
-            injector = config.deserialise<Injector>("injector");
-            injector.initialise();
-        }
-    }
-
     public static Voxels? dummy(out string? name) {
         /* whatever your heart desires. */
         name = null;
         return null;
     }
 
-    public static void entrypoint(int make, in Sectioner? sectioner) {
+
+    public static void entrypoint(int make, bool shutdown_on_exit,
+            in Sectioner? sectioner) {
+        using var _ = shutdown_on_exit
+                    ? new OnLeave(Geez.shutdown) // :(
+                    : DoNothing.please();
+
         // Setup geez.
         Geez.set_background_colour(dark: true);
         Geez.dflt_colour = new("#AB331A"); // copperish.
@@ -101,13 +75,41 @@ public class TwoPeasInAPod {
         assert(!isclr(make, MASK_ACTION));
         assert(!isclr(make, MASK_PEA));
 
-        // Parse the objects.
-        TwoPeasInAPod tpiap = new TwoPeasInAPod();
+        // Load the config files.
+        string path_all = fromroot("../config/all.json");
+        string path_extra = fromroot("../config/ammendments.json");
+        Jason config = new(path_all);
+        if (File.Exists(path_extra))
+            config.overwrite_from(path_extra);
+
+        // Construct the pea.
         Pea pea;
         switch (make & MASK_PEA) {
-            case CHAMBER:  pea = tpiap.chamber; break;
-            case INJECTOR: pea = tpiap.injector; break;
-            default: throw new Exception("invalid pea");
+            case CHAMBER: {
+                // Construct the chamber object.
+                float max_phi = config.get<float>("printer/max_print_angle");
+                config.set("chamber/phi_mani", max_phi);
+                config.set("chamber/phi_fixt", max_phi);
+                config.set("chamber/phi_inlet", -max_phi);
+                config.set("chamber/phi_tc", max_phi);
+                config.set("chamber/pm", config.get_map("part_mating"));
+                Chamber chamber = config.deserialise<Chamber>("chamber");
+                chamber.initialise();
+                pea = chamber;
+            } break;
+
+            case INJECTOR: {
+                // Construct the injector object.
+                float max_phi = config.get<float>("printer/max_print_angle");
+                config.set("injector/fPrintAngle", max_phi);
+                config.set("injector/pm", config.get_map("part_mating"));
+                Injector injector = config.deserialise<Injector>("injector");
+                injector.initialise();
+                pea = injector;
+            } break;
+
+            default:
+                throw new Exception($"invalid pea: 0x{make & MASK_PEA:X}");
         }
 
         // Modify the objects.
@@ -161,6 +163,7 @@ public class TwoPeasInAPod {
                     System.Globalization.CultureInfo.InvariantCulture);
             File.WriteAllText(path_voxsize, text);
             print($"  (saved voxel size to: '{path_voxsize}')");
+            print();
         } catch (Exception e) {
             print($"Failed to save voxel size at '{path_voxsize}'.");
             print("Exception log:");
@@ -176,6 +179,7 @@ public class TwoPeasInAPod {
         try {
             mesh.SaveToStlFile(path_stl);
             print($"Exported to stl: '{path_stl}'");
+            print();
         } catch (Exception e) {
             print($"Failed to export to stl at '{path_stl}'.");
             print("Exception log:");

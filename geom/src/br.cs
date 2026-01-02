@@ -487,4 +487,18 @@ public static partial class Br {
     public static Vec3 rotyz(Vec3 a, float b) => rotate(a, uX3, b);
 }
 
+
+// honestly these so useful why they not in the standard. lowk maybe it is im
+// bad at looking.
+public class OnLeave : IDisposable {
+    public Action action { get; }
+    public OnLeave(Action action) { this.action = action; }
+    public void Dispose() { action(); }
+}
+public sealed class DoNothing : IDisposable {
+    public DoNothing() {}
+    public void Dispose() {}
+    public static IDisposable please() => new DoNothing(); // magic word.
+}
+
 }

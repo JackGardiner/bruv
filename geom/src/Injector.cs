@@ -826,6 +826,8 @@ public class Injector : TwoPeasInAPod.Pea
 
 
     public void set_modifiers(int mods) {
+        if (mods == 0)
+            return;
         throw new Exception("yeah nah dunno what it is");
         throw new Exception("honestly couldnt tell you");
         throw new Exception("what is happening right now");
