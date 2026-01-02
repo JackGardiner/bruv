@@ -87,9 +87,9 @@ public class Frame {
             Vec3 Rad = fromcyl(1f, theta, 0f);
             Vec3 Cir = fromcyl(1f, theta + PI_2, 0f);
             Vec3 Axi = uZ3;
-            Rad = centre.to_global_rot(Rad);
-            Cir = centre.to_global_rot(Cir);
-            Axi = centre.to_global_rot(Axi);
+            Rad = centre.to_global_dir(Rad);
+            Cir = centre.to_global_dir(Cir);
+            Axi = centre.to_global_dir(Axi);
             return new(centre * pos, Rad, Cir, Axi);
         }
         public Frame radial(Vec3 pos) {
@@ -115,9 +115,9 @@ public class Frame {
             Vec3 Lon = fromsph(1f, theta, phi + PI_2);
             Vec3 Lat = fromcyl(1f, theta + PI_2, 0f);
             Vec3 Nor = fromsph(1f, theta, phi);
-            Lon = centre.to_global_rot(Lon);
-            Lat = centre.to_global_rot(Lat);
-            Nor = centre.to_global_rot(Nor);
+            Lon = centre.to_global_dir(Lon);
+            Lat = centre.to_global_dir(Lat);
+            Nor = centre.to_global_dir(Nor);
             return new(centre * pos, Lon, Lat, Nor);
         }
         public Frame longit(Vec3 pos) {
@@ -147,22 +147,22 @@ public class Frame {
     public static Frame sph_latit(Vec3 pos) => new Sph().latit(pos);
 
 
-    public Frame transx(float by, bool relative=true) {
+    public Frame transx(float shift, bool relative=true) {
         Vec3 along = relative ? X : uX3;
-        return new(pos + by*along, this);
+        return new(pos + shift*along, this);
     }
-    public Frame transy(float by, bool relative=true) {
+    public Frame transy(float shift, bool relative=true) {
         Vec3 along = relative ? Y : uY3;
-        return new(pos + by*along, this);
+        return new(pos + shift*along, this);
     }
-    public Frame transz(float by, bool relative=true) {
+    public Frame transz(float shift, bool relative=true) {
         Vec3 along = relative ? Z : uZ3;
-        return new(pos + by*along, this);
+        return new(pos + shift*along, this);
     }
-    public Frame translate(Vec3 by, bool relative=true) {
+    public Frame translate(Vec3 shift, bool relative=true) {
         if (relative)
-            by = to_global_rot(by);
-        return new(pos + by, this);
+            shift = to_global_dir(shift);
+        return new(pos + shift, this);
     }
 
     public Frame rotxy(float by, bool relative=true) {
@@ -182,8 +182,20 @@ public class Frame {
     }
     public Frame rotate(Vec3 about, float by, bool relative=true) {
         if (relative)
-            about = to_global_rot(about);
+            about = to_global_dir(about);
         return new(pos, Br.rotate(X, about, by), Br.rotate(Z, about, by));
+    }
+
+    public Frame swing(Vec3 around, Vec3 about, float by, bool relative=true) {
+        if (relative) {
+            around = to_global(around);
+            about = to_global_dir(about);
+        }
+        Frame f = this;
+        f = f.rotate(about, by, false);
+        Vec3 shift = around - pos - Br.rotate(around - pos, about, by);
+        f = f.translate(shift, false);
+        return f;
     }
 
     public Frame flipxy() {
@@ -215,9 +227,9 @@ public class Frame {
 
     public Frame compose(in Frame other) {
         Vec3 pos = to_global(other.pos);
-        Vec3 X = to_global_rot(other.X);
-        Vec3 Y = to_global_rot(other.Y);
-        Vec3 Z = to_global_rot(other.Z);
+        Vec3 X = to_global_dir(other.X);
+        Vec3 Y = to_global_dir(other.Y);
+        Vec3 Z = to_global_dir(other.Z);
         return new(pos, X, Y, Z);
     }
 
@@ -242,7 +254,7 @@ public class Frame {
     public static Vec3 operator/(in Frame frame, Vec3 p) => frame.from_global(p);
 
 
-    public Vec3 to_global_rot(Vec3 p) {
+    public Vec3 to_global_dir(Vec3 p) {
         return p.X*X + p.Y*Y + p.Z*Z;
     }
     public Vec3 from_global_rot(Vec3 p) {
@@ -303,11 +315,11 @@ public class Frame {
     }
 
     public Vec3 to_other_rot(Frame other, Vec3 p) {
-        Vec3 q = to_global_rot(p);
+        Vec3 q = to_global_dir(p);
         return other.from_global_rot(q);
     }
     public Vec3 from_other_rot(Frame other, Vec3 p) {
-        Vec3 q = other.to_global_rot(p);
+        Vec3 q = other.to_global_dir(p);
         return from_global_rot(q);
     }
 

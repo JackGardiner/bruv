@@ -821,7 +821,7 @@ public class Injector : TwoPeasInAPod.Pea
         return fGetAtticSurfaceModulation(fPhi, fLengthRatio) + cos(fPrintAngle)*4*fRoofThickness; //TODO:fix magic number attic WT
     }
 
-    public Voxels voxels(out Mesh part_mesh)
+    public Voxels voxels()
     {
         Voxels part = new();
         report();
@@ -906,9 +906,7 @@ public class Injector : TwoPeasInAPod.Pea
         Library.Log("created bolt holes and O-ring grooves.");
 
         Geez.clear();
-        part_mesh = new(part);
-        using (key_part.like())
-            key_part <<= Geez.mesh(part_mesh);
+        key_part.voxels(part);
 
 
         Library.Log("Baby made.");

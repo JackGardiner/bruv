@@ -665,7 +665,7 @@ public class Chamber : TPIAP.Pea {
         return new(mesh);
     }
 
-    protected Voxels voxels_cnt_gas(Geez.Cycle key) {
+    protected Voxels voxels_gas(Geez.Cycle key) {
         using var __ = key.like();
 
         // view a cheeky wireframe while its generating.
@@ -704,7 +704,7 @@ public class Chamber : TPIAP.Pea {
         key.cycle(Geez.voxels(vox));
         return vox;
     }
-    protected Voxels voxels_cnt_ow_filled()
+    protected Voxels voxels_outer()
         => voxels_cnt_filled(th_iw + th_chnl + th_ow, true);
 
 
@@ -1342,10 +1342,14 @@ public class Chamber : TPIAP.Pea {
     /* pea interface: */
 
     delegate void _Op(in Voxels vox);
-    public Voxels voxels(out Mesh part_mesh) {
+    public Voxels? voxels() {
         /* cheeky timer. */
         System.Diagnostics.Stopwatch stopwatch = new();
         stopwatch.Start();
+        using var _ = Scoped.on_leave(() => {
+            print($"Baby made in {stopwatch.Elapsed.TotalSeconds:N1}s.");
+            print();
+        });
 
 
         /* disable rendering if minimising mem. */
@@ -1353,7 +1357,14 @@ public class Chamber : TPIAP.Pea {
             print("minimising memory means no rendering, going dark...");
         using var __ = minimise_mem
                      ? Geez.locked()
-                     : DoNothing.please();
+                     : Scoped.do_nothing();
+
+
+        /* see if we wanna do cutaway actually. */
+        if (cutaway) {
+            do_cutaway();
+            return null;
+        }
 
 
         /* create the part object and its key. */
@@ -1388,7 +1399,7 @@ public class Chamber : TPIAP.Pea {
                 key_part.voxels(part);
             if (take_screenshots) {
                 using (Geez.remember_current_layout()) {
-                    using var ___ = Geez.ViewerHack.locked();
+                    using var _ = Geez.ViewerHack.locked();
 
                     Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
                     Geez.screenshot(step_count.ToString());
@@ -1411,9 +1422,8 @@ public class Chamber : TPIAP.Pea {
 
         /* shorthand for adding/subtracting a component into the part. */
         void _op(_Op func, ref Voxels? vox, Geez.Cycle? key, bool keepme) {
-            if (vox == null)
-                return;
-            func(vox);
+            assert(vox != null);
+            func(vox!);
             if (key != null)
                 key.clear();
             if (!keepme)
@@ -1428,7 +1438,7 @@ public class Chamber : TPIAP.Pea {
         /* perform all the steps of creating the part. */
 
         Geez.Cycle key_gas = new(colour: COLOUR_RED);
-        Voxels? gas = voxels_cnt_gas(key_gas);
+        Voxels? gas = voxels_gas(key_gas);
         step("created gas.");
 
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
@@ -1453,21 +1463,24 @@ public class Chamber : TPIAP.Pea {
         step("created flange.");
 
         Geez.Cycle key_branding = new(colour: COLOUR_CYAN);
-        Voxels? branding = voxels_branding(key_branding);
+        Voxels? branding = brandingless
+                         ? null
+                         : voxels_branding(key_branding);
         if (branding != null)
             step("created branding.");
+        else if (brandingless)
+            no_step("skipping branding (brandingless requested)");
         else
-            no_step("skipping branding due to large voxel size (generation "
-                  + "would fail).");
+            no_step("skipping branding (voxel size too large, would fail).");
 
-        part = voxels_cnt_ow_filled();
+        part = voxels_outer();
         step("created outer wall.", view_part: true);
 
-        add(ref pos_mani!);
+        add(ref pos_mani);
         substep($"added positive manifold.", view_part: true);
-        add(ref pos_tc!, key_tc);
+        add(ref pos_tc, key_tc);
         substep($"added thermocouples.", view_part: true);
-        add(ref flange!, key_flange);
+        add(ref flange, key_flange);
         substep($"added flange.", view_part: true);
 
         step($"added outer componenets.");
@@ -1487,21 +1500,21 @@ public class Chamber : TPIAP.Pea {
         }
 
         if (branding != null) {
-            add(ref branding!, key_branding);
+            add(ref branding, key_branding);
             step("added branding.");
         } else {
             no_step("no branding to add.");
         }
 
-        sub(ref gas!, key_gas, keepme: cutaway);
+        sub(ref gas, key_gas, keepme: cutaway);
         substep("subtracted gas cavity.", view_part: true);
-        sub(ref chnl!, key_chnl, keepme: cutaway);
+        sub(ref chnl, key_chnl, keepme: cutaway);
         substep("subtracted channels.", view_part: true);
-        sub(ref neg_mani!, key_mani);
+        sub(ref neg_mani, key_mani);
         substep("subtracted negative manifold.", view_part: true);
-        sub(ref neg_tc!);
+        sub(ref neg_tc);
         substep("subtracted negative thermocouples.", view_part: true);
-        sub(ref neg_bolts!, key_bolts);
+        sub(ref neg_bolts, key_bolts);
         substep("subtracted bolt holes.", view_part: true);
 
         step($"added inner componenets.");
@@ -1511,92 +1524,83 @@ public class Chamber : TPIAP.Pea {
             2f*EXTRA,
             2f*(pm.Mr_bolt + pm.Bsz_bolt/2f + pm.thickness_around_bolt + EXTRA)
         ).voxels());
-        part_mesh = new(part);
-        key_part.mesh(part_mesh);
         substep("clipped bottom excess.", view_part: false);
 
+        step("finished.", view_part: true);
 
-        print($"Baby made in {stopwatch.Elapsed.Seconds:N1}s.");
-        stopwatch.Stop();
+        return part;
+    }
 
-        if (_cnt_cache_total == 0) {
-            print($"  cache sdf: unused");
-        } else {
-            print($"  cache sdf: "
-                    + $"{_cnt_cache_hits:N0} / {_cnt_cache_total:N0} "
-                    + $"({_cnt_cache_hits*100f/_cnt_cache_total:F2}%)");
-        }
-        if (_cnt_wid_cache_total == 0) {
-            print($"  cache wid_sdf: unused");
-        } else {
-            print($"  cache wid_sdf: "
-                    + $"{_cnt_wid_cache_hits:N0} / {_cnt_wid_cache_total:N0} "
-                    + $"({_cnt_wid_cache_hits*100f/_cnt_wid_cache_total:F2}%)");
-        }
-        print("  bang.");
-        print();
+    public void do_cutaway() {
 
-
-
-        // see if cutaway been requested.
-        if (!cutaway)
-            return part;
         print("birthing alternative offspring.");
         print();
 
-        Voxels outer = part; // no copy.
+        if (!TPIAP.load_voxels(name, out Voxels? part))
+            throw new Exception("cutaway requires part already generated, "
+                              + "please re-run the normal voxels");
+        assert(part != null);
 
-        // dont even think about the part now.
-        part = new();
-        part_mesh = new();
+        Voxels gas;
+        Voxels chnl;
+        using (Geez.locked()) {
+            gas = voxels_gas(new Geez.Cycle());
+            chnl = voxels_chnl(new Geez.Cycle());
+        }
+
+        Voxels outer = new(part!) ; // copy.
 
         Voxels inner = voxels_cnt_filled(th_iw + th_chnl - 0.1f, true, false);
         outer.BoolSubtract(inner);
-        inner.BoolSubtract(chnl!);
-        inner.BoolSubtract(gas!);
-        Frame f = new Frame((cnt_z4 + 45f)*uZ3)
-                .rotxy(PI/6f + 0.05f)
-                .rotzx(PI/3f)
-                .transx(38.8f);
+
         float Lx = 200f;
         float Ly = 140f;
         float Lz = 100f;
-        outer.BoolSubtract(new Cuboid(f.transz(-16f), Lx, Ly, Lz).voxels());
-        inner.BoolSubtract(new Cuboid(f.transz(5f), Lx, Ly, Lz).voxels());
+        Frame f = new Frame((cnt_z4 + 45f)*uZ3)
+                .rotxy(PI/6f + 0.05f)
+                .rotzx(PI/3f)
+                .translate(new(38.8f, -Ly/2f, -16f));
+        Geez.frame(f);
+        f = f.swing(new Vec3(Lx/2f, Ly/2f, 0f), uZ3, torad(-8f));
+        Geez.frame(f, pos_colour: COLOUR_BLUE);
+        // Transformer rotateme = new Transformer();
+        // Vec3 about = f * new Vec3(Lx/2f, Ly/2f, 0f);
+        // rotateme = rotateme.translate(-about);
+        // rotateme = rotateme.rotate(new(0.5f, 0.8f, 0f), torad(-8f));
+        // rotateme = rotateme.translate(about);
+        // rotateme.get_rotation(out Vec3 trans_about, out float trans_by);
+        // Vec3 trans_shift = rotateme.get_translation();
+        // f = new Frame(trans_shift).rotate(trans_about, trans_by).compose(f);
 
-        // vdb first incase the meshing throws.
-        TPIAP.save_voxels_only("chamber_ow", outer);
-        TPIAP.save_voxels_only("chamber_iw", inner);
+        outer.BoolIntersect(new Cuboid(f, Lx, Ly, Lz).voxels());
 
-        Mesh mesh_outer = new(outer);
-        Mesh mesh_inner = new(inner);
+        part!.BoolSubtract(outer);
+
+        Mesh mesh = new(part);
         string barcelona = fromroot(
             ".info/PicoGK/ViewerEnvironment/Barcelona.zip"
         );
         try { PICOGK_VIEWER.LoadLightSetup(barcelona); }
         catch { print($"oops, no barcelona lightmap at '{barcelona}'"); }
-        Geez.clear();
-        using (Geez.like(metallic: 0.4f, roughness: 0.1f)) {
-            Geez.mesh(mesh_outer);
-            Geez.mesh(mesh_inner);
-        }
-        TPIAP.save_mesh_only("chamber_ow", mesh_outer);
-        TPIAP.save_mesh_only("chamber_iw", mesh_inner);
-
-
-        return part;
+        using (Geez.like(metallic: 0.4f, roughness: 0.1f))
+            Geez.mesh(mesh);
+        TPIAP.save_mesh_only("chamber_cutaway", mesh);
     }
 
 
     public void drawings(in Voxels part) {
-        Geez.voxels(part); // someting to look at.
+        Mesh mesh = new(part); // only gen once.
+
+        if (!minimise_mem)
+            Geez.mesh(mesh); // someting to look at.
+
         Cuboid bounds;
 
         Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
         print("cross-sectioning xy...");
         Drawing.to_file(
             fromroot($"exports/chamber_xy.svg"),
-            part,
+            mesh,
             frame_xy,
             out bounds
         );
@@ -1607,9 +1611,10 @@ public class Chamber : TPIAP.Pea {
         print("cross-sectioning yz...");
         Drawing.to_file(
             fromroot($"exports/chamber_yz.svg"),
-            part,
+            mesh,
             frame_yz,
-            out bounds);
+            out bounds
+        );
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
 
@@ -1620,8 +1625,11 @@ public class Chamber : TPIAP.Pea {
 
     public void anything() {
         print("loading");
-        SDFimage img = new(fromroot("assets/unimelblogo.tga"));
+        SDFimage img = new(fromroot("assets/.jackyg.tga"));
         print($"{img.width} x {img.height}");
+
+        Geez.voxels(img.voxels_on_plane(new(), 1f, 40f));
+
 
         // print("saving");
         // img.stash_a_look(fromroot(".sdfimg.tga"), resolution: 3, sharpness: 4);
@@ -1639,17 +1647,17 @@ public class Chamber : TPIAP.Pea {
         // Geez.bbox(bbox);
         // Geez.voxels(new SDFfilled(sdf_flat).voxels(bbox));
 
-        Frame centre = new((100f - 15f)*uZ3, -uY3, uZ3);
-        float Lz = 30f;
-        float Lr = 1f;
-        float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.2f;
-        float length = Lz / img.aspect_x_on_y;
-        SDFfunction sdf = img.sdf_on_cyl(true, out BBox3 bbox, centre, R, Lr,
-                length);
-        Geez.frame(centre);
-        Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-        Geez.voxels(img.voxels_on_cyl(true, centre, R, Lr, length));
+        // Frame centre = new((100f - 15f)*uZ3, -uY3, uZ3);
+        // float Lz = 30f;
+        // float Lr = 1f;
+        // float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.2f;
+        // float length = Lz / img.aspect_x_on_y;
+        // SDFfunction sdf = img.sdf_on_cyl(true, out BBox3 bbox, centre, R, Lr,
+        //         length);
+        // Geez.frame(centre);
+        // Geez.bbox(bbox);
+        // // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
+        // Geez.voxels(img.voxels_on_cyl(true, centre, R, Lr, length));
 
 
 
@@ -1764,11 +1772,13 @@ public class Chamber : TPIAP.Pea {
     public bool cutaway          = false;
     public bool minimise_mem     = false;
     public bool take_screenshots = false;
+    public bool brandingless     = false;
     public void set_modifiers(int mods) {
         filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         cutaway          = popbits(ref mods, TPIAP.CUTAWAY);
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
+        brandingless     = popbits(ref mods, TPIAP.BRANDINGLESS);
         assert(mods == 0, $"unrecognised modifiers: 0x{mods:X}");
     }
 

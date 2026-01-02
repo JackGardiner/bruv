@@ -31,26 +31,38 @@ public static class Geez {
     public static float dflt_line_metallic = 0.42f;
     public static float dflt_line_roughness = 0.8f;
 
-    public static bool transparent = true;
 
     public static bool lockdown = false;
     public static IDisposable locked() {
         bool prev = lockdown;
         lockdown = true;
-        return new OnLeave(() => lockdown = prev);
+        return Scoped.on_leave(() => lockdown = prev);
     }
     public static IDisposable unlocked() {
         bool prev = lockdown;
         lockdown = false;
-        return new OnLeave(() => lockdown = prev);
+        return Scoped.on_leave(() => lockdown = prev);
     }
 
-    public static Colour get_background_colour() {
-        return Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
+    public static Colour background_colour {
+        get => Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
+        set => PICOGK_VIEWER.SetBackgroundColor(value);
     }
-    public static void set_background_colour(bool dark) {
-        Colour bgcol = dark ? new("#202020") : new("#FFFFFF");
-        PICOGK_VIEWER.SetBackgroundColor(bgcol);
+    public static void set_background_colour(bool dark)
+        => background_colour = dark ? new("#202020") : new("#FFFFFF");
+
+    public static bool transparent { get; private set; } = true;
+    public static void set_transparency(bool newtransparent) {
+        for (int i=_MATERIAL_START; i<_material_next; ++i) {
+            _Material mat = _materials[i - _MATERIAL_START];
+            Colour col = mat.colour;
+            if (!newtransparent)
+                col.A = 1f;
+            float metal = mat.metallic;
+            float rough = mat.roughness;
+            PICOGK_VIEWER.SetGroupMaterial(i, col, metal, rough);
+        }
+        transparent = newtransparent;
     }
 
     public static IDisposable like(Colour? colour=null, float? alpha=null,
@@ -66,7 +78,7 @@ public static class Geez {
         Geez.metallic = metallic ?? metallic0;
         Geez.roughness = roughness ?? roughness0;
         Geez.sectioner = sectioner ?? sectioner0;
-        return new OnLeave(() => {
+        return Scoped.on_leave(() => {
                 Geez.colour = colour0;
                 Geez.alpha = alpha0;
                 Geez.metallic = metallic0;
@@ -87,7 +99,7 @@ public static class Geez {
         Geez.dflt_metallic = metallic ?? metallic0;
         Geez.dflt_roughness = roughness ?? roughness0;
         Geez.dflt_sectioner = sectioner ?? sectioner0;
-        return new OnLeave(() => {
+        return Scoped.on_leave(() => {
                 Geez.dflt_colour = colour0;
                 Geez.dflt_alpha = alpha0;
                 Geez.dflt_metallic = metallic0;
@@ -345,8 +357,8 @@ public static class Geez {
            we continuously read theirs purely for detecting scrolling input. */
         public static float zoom { get; private set; } = 1f;
         private static SnapTo<SnapFloat, float> snap_zoom = new(40f, 1f, false);
-        public static float zoom_min => mag(size) * 0.01f;
-        public static float zoom_max => mag(size) * 10f;
+        public static float min_zoom => mag(size) * 0.01f;
+        public static float max_zoom => mag(size) * 10f;
         // We leave picogk's zoom at this value and periodically check how far
         // its moved to detect scroll input.
         private const float zoom_picogk = 100f;
@@ -359,7 +371,7 @@ public static class Geez {
                 bool expl=true) {
             explicit_scene |= expl;
             assert(isgood(newzoom));
-            newzoom = clamp(newzoom, zoom_min, zoom_max);
+            newzoom = clamp(newzoom, min_zoom, max_zoom);
             if (instant)
                 zoom = newzoom;
             snap_zoom.retarget(newzoom);
@@ -424,19 +436,37 @@ public static class Geez {
         public static float fov {
             // could bypass picogk, we dont.
             get => torad(Perv.get<float>(PICOGK_VIEWER, "m_fFov"));
-            set => Perv.set(PICOGK_VIEWER, "m_fFov", todeg(value));
+            private set => Perv.set(PICOGK_VIEWER, "m_fFov", todeg(value));
         }
         private static SnapTo<SnapFloat, float> snap_fov
-            = new(20f, torad(60f), false);
+            = new(20f, dflt_fov, false);
+        public static float dflt_fov => torad(60f);
+        public static float min_fov => torad(10f);
+        public static float max_fov => torad(170f);
+
+        public static float future_fov => nonnan(snap_fov.target)
+                                        ? snap_fov.target
+                                        : zoom;
+
+        public static void set_fov(float newfov, bool instant=false,
+                bool expl=true) {
+            explicit_scene |= expl;
+            assert(isgood(newfov));
+            newfov = clamp(newfov, min_fov, max_fov);
+            if (instant)
+                fov = newfov;
+            snap_fov.retarget(newfov);
+        }
 
         /* orbit/free mode + ortho/perspective proportion. */
         public static bool orbit = true;
         public static float ortho = 1f;
-        private static SnapTo<SnapFloat, float> snap_ortho = new(25f, 1f, false);
+        private static SnapTo<SnapFloat, float> snap_ortho
+                = new(25f, ortho, false);
         private static bool extra_focal_further = false;
         public static float get_focal_dist(float with_zoom=NAN)
             => (isnan(with_zoom) ? zoom : with_zoom) * 0.9f /* may rescale */;
-        public static float get_ortho_dist() => zoom_max * 10f;
+        public static float get_ortho_dist() => max_zoom * 10f;
 
         public static void set_orbit(bool neworbit, bool about_focal,
                 bool instant=false, bool expl=true) {
@@ -475,7 +505,7 @@ public static class Geez {
         public static IDisposable locked() {
             float prev = locked_for;
             locked_for = +INF;
-            return new OnLeave(() => locked_for = prev);
+            return Scoped.on_leave(() => locked_for = prev);
         }
 
         /* prev variable caches, to change the scaling of them over time. */
@@ -530,7 +560,7 @@ public static class Geez {
             snap_zoom.retarget(zoom);
             Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
 
-            fov = torad(60f);
+            fov = dflt_fov;
             snap_fov.retarget(fov);
 
             orbit = true;
@@ -642,13 +672,10 @@ public static class Geez {
                 float Dzoom = curr_zoom - zoom_picogk;
                 if (islocked) // unlucky.
                     Dzoom = 0f;
-
                 // Rescale zoom to be size-aware and also dont use the linear
                 // scaling that picogk uses.
                 Dzoom *= 5f*mag(size)*log(zoom/mag(size) + 1f);
-                float target = snap_zoom.target + Dzoom;
-                target = clamp(target, zoom_min, zoom_max);
-                snap_zoom.retarget(target);
+                set_zoom(snap_zoom.target + Dzoom, expl: false);
                 // now tuck picogk back into bed. there there.
                 Perv.set(PICOGK_VIEWER, "m_fZoom", zoom_picogk);
             }
@@ -875,18 +902,21 @@ public static class Geez {
                 actions.Enqueue(new ViewerHack());
         }
 
-        private static bool stop_making_shit_happen = false;
+        private static volatile bool stop_making_shit_happen = false;
         private static async Task make_shit_happen_continuously() {
-            Volatile.Write(ref stop_making_shit_happen, false);
-            for (;;) {
-                if (Volatile.Read(ref stop_making_shit_happen))
+            stop_making_shit_happen = false;
+            bool leave = false;
+            while (!leave) {
+                if (stop_making_shit_happen) {
+                    stop_making_shit_happen = false;
                     break;
+                }
                 make_shit_happen_in_the_future();
-                await Task.Delay(5);
+                await Task.Delay(8); // dont sync w library poll of 5ms.
             }
         }
         private static void stop_making_shit_happen_continuously() {
-            Volatile.Write(ref stop_making_shit_happen, true);
+            stop_making_shit_happen = true;
         }
 
 
@@ -1015,30 +1045,35 @@ public static class Geez {
                     Vec2 ang = new(future_theta, future_phi);
                     float size_theta = ctrl ? PI_2 : PI_4;
                     float size_phi   = ctrl ? PI_2 : PI/6f;
+                    bool round_inactive = false;
                     switch (key) {
                         case VEK.Key_Left:
                             ang.X = floor((ang.X + 5e-2f) / size_theta);
                             ang.X += 1f;
                             ang.X *= size_theta;
-                            ang.Y = round(ang.Y / size_phi) * size_phi;
+                            if (round_inactive)
+                                ang.Y = round(ang.Y / size_phi) * size_phi;
                             break;
                         case VEK.Key_Right:
                             ang.X = ceil((ang.X - 5e-2f) / size_theta);
                             ang.X -= 1f;
                             ang.X *= size_theta;
-                            ang.Y = round(ang.Y / size_phi) * size_phi;
+                            if (round_inactive)
+                                ang.Y = round(ang.Y / size_phi) * size_phi;
                             break;
                         case VEK.Key_Up:
                             ang.Y = ceil((ang.Y - 5e-2f) / size_phi);
                             ang.Y -= 1f;
                             ang.Y *= size_phi;
-                            ang.X = round(ang.X / size_theta) * size_theta;
+                            if (round_inactive)
+                                ang.X = round(ang.X / size_theta) * size_theta;
                             break;
                         case VEK.Key_Down:
                             ang.Y = floor((ang.Y + 5e-2f) / size_phi);
                             ang.Y += 1f;
                             ang.Y *= size_phi;
-                            ang.X = round(ang.X / size_theta) * size_theta;
+                            if (round_inactive)
+                                ang.X = round(ang.X / size_theta) * size_theta;
                             break;
                     }
                     snap_ang.retarget(ang);
@@ -1085,24 +1120,27 @@ public static class Geez {
               case VEK.Key_K:
               case VEK.Key_L:
                 if (pressed && !islocked && !orbit) {
-                    float target = snap_fov.target;
-                    target += (key == VEK.Key_K)
-                            ? (PI - target)/15f
-                            : (0f - target)/15f;
-                    snap_fov.retarget(target);
+                    float newfov = future_fov;
+                    // scale s.t. decreasing changes at either end and s.t.
+                    // repeated alternating applications settle at some value.
+                    float scale_up   = dflt_fov/PI/8f;
+                    float scale_down = (1f - dflt_fov/PI)/8f;
+                    newfov += (key == VEK.Key_K)
+                            ? (PI - newfov)*scale_up
+                            : (0f - newfov)*scale_down;
+                    set_fov(newfov, expl: false);
                 }
                 return true;
 
               case VEK.Key_T:
                 if (pressed && !islocked)
-                    Geez._set_all_alpha(!transparent);
+                    set_transparency(!transparent);
                 return true;
 
               case VEK.Key_Y:
                 if (pressed && !islocked) {
-                    bool light = Geez.get_background_colour()
-                                    .Equals(new Colour("#FFFFFF"));
-                    Geez.set_background_colour(light);
+                    bool light = background_colour.Equals(COLOUR_WHITE);
+                    set_background_colour(light);
                 }
                 return true;
             }
@@ -1161,41 +1199,42 @@ public static class Geez {
             theta: theta,
             phi: phi,
             zoom: mag(bbox.vecSize()),
-            orbit: true
+            orbit: true,
+            fov: NAN
         );
     }
     public static void lookat(Vec3? pos=null, float theta=NAN, float phi=NAN,
-            float zoom=NAN, bool orbit=true) {
-        if (isnan(zoom))
-            zoom = ViewerHack.future_zoom;
-        if (isnan(theta))
-            theta = ViewerHack.future_theta;
-        if (isnan(phi))
-            phi = ViewerHack.future_phi;
-        if (pos == null)
-            pos = ViewerHack.future_pos;
+            float zoom=NAN, bool orbit=true, float fov=NAN) {
+        pos = (pos != null) ? pos : ViewerHack.future_pos;
+        zoom = nonnan(zoom) ? zoom : ViewerHack.future_zoom;
+        theta = nonnan(theta) ? theta : ViewerHack.future_theta;
+        phi = nonnan(phi) ? phi : ViewerHack.future_phi;
+        fov = nonnan(fov) ? fov : ViewerHack.future_fov;
 
-        ViewerHack.set_orbit(orbit, false, true);
-        ViewerHack.set_zoom(zoom, true);
-        ViewerHack.set_pos(pos.Value, true);
-        ViewerHack.set_ang(theta, phi, true);
+        ViewerHack.set_orbit(orbit, false,  instant: true);
+        ViewerHack.set_zoom(zoom,           instant: true);
+        ViewerHack.set_pos(pos.Value,       instant: true);
+        ViewerHack.set_ang(theta, phi,      instant: true);
+        ViewerHack.set_fov(fov,             instant: true);
     }
 
     public static IDisposable remember_current_layout() {
         Vec3 size = ViewerHack.size;
         Vec3 centre = ViewerHack.centre;
+        bool orbit = ViewerHack.orbit;
+        float zoom = ViewerHack.future_zoom;
         Vec3 pos = ViewerHack.future_pos;
         float theta = ViewerHack.future_theta;
         float phi = ViewerHack.future_phi;
-        float zoom = ViewerHack.future_zoom;
-        bool orbit = ViewerHack.orbit;
-        return new OnLeave(() => {
-            ViewerHack.set_size(size, expl: false);
-            ViewerHack.set_centre(centre, expl: false);
-            ViewerHack.set_orbit(orbit, false, true, expl: false);
-            ViewerHack.set_zoom(zoom, true, expl: false);
-            ViewerHack.set_pos(pos, true, expl: false);
-            ViewerHack.set_ang(theta, phi, true, expl: false);
+        float fov = ViewerHack.future_fov;
+        return Scoped.on_leave(() => {
+            ViewerHack.set_size(size,                         expl: false);
+            ViewerHack.set_centre(centre,                     expl: false);
+            ViewerHack.set_orbit(orbit, false,  instant:true, expl: false);
+            ViewerHack.set_zoom(zoom,           instant:true, expl: false);
+            ViewerHack.set_pos(pos,             instant:true, expl: false);
+            ViewerHack.set_ang(theta, phi,      instant:true, expl: false);
+            ViewerHack.set_fov(fov,             instant:true, expl: false);
         });
     }
 
@@ -1221,6 +1260,8 @@ public static class Geez {
                 return;
             }
 
+            // Enqueue the actions, ensuring our matrices are set, then ss taken,
+            // then stop blocking this thread.
             var actions = Perv.get<Queue<Viewer.IViewerAction>>(
                 PICOGK_VIEWER,
                 "m_oActions"
@@ -1230,11 +1271,9 @@ public static class Geez {
                 actions.Enqueue((Viewer.IViewerAction)req_ss);
                 actions.Enqueue(signal);
             }
-
-            // Wait until ss saved.
-            assert(Perv.get<bool>(typeof(PicoGK.Library), "bRunning"));
-            done.Wait();
         }
+        // Wait until ss saved.
+        done.Wait();
     }
 
     public static void wipe_screenshot(string name, bool missingok=true) {
@@ -1249,7 +1288,7 @@ public static class Geez {
 
 
     private static Dictionary<int, object> _geezed = new();
-    private static int _next = 1; // must leave 0 as illegal.
+    private static int _next = 1; // must leave <=0 as illegal.
     private static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
         // nothing added during lockdown.
         if (lockdown)
@@ -1357,19 +1396,6 @@ public static class Geez {
             PICOGK_VIEWER.Add(line, _MATERIAL_COMPASS);
     }
 
-    private static void _set_all_alpha(bool transparent) {
-        for (int i=_MATERIAL_START; i<_material_next; ++i) {
-            _Material mat = _materials[i - _MATERIAL_START];
-            Colour col = mat.colour;
-            if (!transparent)
-                col.A = 1f;
-            float metal = mat.metallic;
-            float rough = mat.roughness;
-            PICOGK_VIEWER.SetGroupMaterial(i, col, metal, rough);
-        }
-        Geez.transparent = transparent;
-    }
-
     private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
         // nothing added during lockdown.
         if (lockdown)
@@ -1465,8 +1491,10 @@ public static class Geez {
     }
 
 
-    public const int BLANK = 0;
+    public const int BLANK = 0; // due to locking.
     public const int CLEAR = -1;
+    public const int NOOP = -2;
+
     public class Cycle {
         protected int[] keys; // rolling buffer.
         protected int i; // next index.
@@ -1493,12 +1521,14 @@ public static class Geez {
         }
 
         public void cycle(int key) {
-            assert(key > 0 || key == CLEAR || key == BLANK);
+            assert(key > 0 || key == BLANK || key == CLEAR || key == NOOP);
             if (key == CLEAR) {
                 clear();
                 return;
             }
-            if (keys[i] > 0)
+            if (key == NOOP)
+                return;
+            if (keys[i] != BLANK)
                 Geez.remove(keys[i]);
             keys[i] = key;
             i = (i == numel(keys) - 1) ? 0 : i + 1;
@@ -1657,15 +1687,15 @@ public static class Geez {
         return group([key_line, key_mesh]);
     }
 
-    public static int vec(in Vec3 dir, Colour? colour=null, float arrow=1f) {
-        return Geez.vec(new Frame(), dir, colour: colour, arrow: arrow);
+    public static int dir(in Vec3 dir, Colour? colour=null, float arrow=1f) {
+        return Geez.dir(new Frame(), dir, colour: colour, arrow: arrow);
     }
-    public static int vec(in Vec3 from, in Vec3 to, Colour? colour=null,
+    public static int dir(in Vec3 from, in Vec3 to, Colour? colour=null,
             float arrow=1f) {
-        return Geez.vec(new Frame(from), to - from, colour: colour,
+        return Geez.dir(new Frame(from), to - from, colour: colour,
                 arrow: arrow);
     }
-    public static int vec(in Frame frame, in Vec3 dir, Colour? colour=null,
+    public static int dir(in Frame frame, in Vec3 dir, Colour? colour=null,
             float arrow=1f) {
         if (lockdown)
             return BLANK;
@@ -1683,7 +1713,7 @@ public static class Geez {
         return Geez.cuboid(new Cuboid(bbox), colour: colour);
     }
 
-    public static int pipe(in Pipe pipe, Colour? colour=null, int? rings=null,
+    public static int pipe(in Pipe pipe, Colour? colour=null, int rings=-1,
             int bars=6) {
         if (lockdown)
             return BLANK;
@@ -1691,7 +1721,7 @@ public static class Geez {
         float L = pipe.Lz;
         Frame frame = pipe.centre;
 
-        if (rings == null)
+        if (rings == -1)
             rings = max(3, (int)(L * 2.5f / (TWOPI/bars*r)));
         assert(rings >= 2 || rings == 0);
         assert(bars >= 2 || bars == 0);
@@ -1704,8 +1734,8 @@ public static class Geez {
       DO:;
 
         // Rings.
-        for (int n=0; n<rings.Value; ++n) {
-            float z = n*L/(rings.Value - 1);
+        for (int n=0; n<rings; ++n) {
+            float z = n*L/(rings - 1);
             line = new(col);
             int N = 100;
             for (int i=0; i<N; ++i) {
@@ -1728,6 +1758,7 @@ public static class Geez {
 
         // Maybe do inner also.
         if (!done_inner) {
+            done_inner = true;
             if (pipe.rlo > 0f) {
                 // Add connections to the bars.
                 for (int n=0; n<bars; ++n) {
@@ -1747,7 +1778,6 @@ public static class Geez {
                 }
 
                 r = pipe.rlo;
-                done_inner = true;
                 goto DO;
             } else {
                 // Add crosses on the end.

@@ -9,7 +9,7 @@ public static class TwoPeasInAPod {
     public interface Pea {
         string name { get; }
 
-        Voxels voxels(out Mesh mesh);
+        Voxels? voxels();
         void drawings(in Voxels vox);
         void anything();
 
@@ -27,6 +27,7 @@ public static class TwoPeasInAPod {
     public const int CUTAWAY          = 0x2 << BITC_ACTION;
     public const int MINIMISE_MEM     = 0x4 << BITC_ACTION;
     public const int TAKE_SCREENSHOTS = 0x8 << BITC_ACTION;
+    public const int BRANDINGLESS     = 0x10 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
     public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
@@ -36,7 +37,7 @@ public static class TwoPeasInAPod {
     public const int DUMMY = 0;
     public const int BITC_ACTION = 4;
     public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
-    public const int BITC_MODIFIER = 4;
+    public const int BITC_MODIFIER = 5;
     public const int MASK_MODIFIER = ((1 << BITC_MODIFIER) - 1) << BITC_ACTION;
     public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
 
@@ -50,18 +51,27 @@ public static class TwoPeasInAPod {
 
     public static void entrypoint(int make, bool shutdown_on_exit,
             in Sectioner? sectioner) {
-        using var _ = shutdown_on_exit
-                    ? new OnLeave(Geez.shutdown) // :(
-                    : DoNothing.please();
+        try {
+            // Setup geez.
+            Geez.set_background_colour(dark: true);
+            Geez.dflt_colour = new("#AB331A"); // copperish.
+            Geez.dflt_metallic = 0.35f;
+            Geez.dflt_roughness = 0.8f;
+            if (sectioner != null)
+                Geez.dflt_sectioner = sectioner;
+            Geez.initialise();
 
-        // Setup geez.
-        Geez.set_background_colour(dark: true);
-        Geez.dflt_colour = new("#AB331A"); // copperish.
-        Geez.dflt_metallic = 0.35f;
-        Geez.dflt_roughness = 0.8f;
-        if (sectioner != null)
-            Geez.dflt_sectioner = sectioner;
-        Geez.initialise();
+            execute(make);
+        } catch {
+            Geez.shutdown(); // :(
+            throw;
+        } finally {
+            if (shutdown_on_exit)
+                Geez.shutdown(); // ok to double-call.
+        }
+    }
+
+    public static void execute(int make) {
 
         // Check dummy method.
         if (make == DUMMY) {
@@ -72,8 +82,10 @@ public static class TwoPeasInAPod {
         }
 
         // Check a pea and at least one action was given.
-        assert(!isclr(make, MASK_ACTION));
-        assert(!isclr(make, MASK_PEA));
+        if (isclr(make, MASK_ACTION))
+            throw new Exception("invalid 'make': no action selected");
+        if (isclr(make, MASK_PEA))
+            throw new Exception("invalid 'make': no pea selected");
 
         // Load the config files.
         string path_all = fromroot("../config/all.json");
@@ -109,7 +121,8 @@ public static class TwoPeasInAPod {
             } break;
 
             default:
-                throw new Exception($"invalid pea: 0x{make & MASK_PEA:X}");
+                throw new Exception("invalid 'make': unrecognised pea "
+                                 + $"0x{make & MASK_PEA:X}");
         }
 
         // Modify the objects.
@@ -130,6 +143,7 @@ public static class TwoPeasInAPod {
         if (isset(make, DRAWINGS)) {
             print($"Making '{pea.name}' drawings...");
             print();
+            Geez.clear();
             pea.drawings(vox);
         }
 
@@ -195,10 +209,9 @@ public static class TwoPeasInAPod {
     }
     public static bool save_voxels(in string name, in Voxels vox,
             ref Mesh? mesh) {
-        if (mesh == null)
-            mesh = new(vox);
+        mesh ??= new(vox);
         return save_voxels_only(name, vox)
-             & save_mesh_only(name, in mesh);
+             & save_mesh_only(name, mesh);
     }
 
     public static bool load_voxels(in string name, out Voxels? vox) {
@@ -270,10 +283,9 @@ public static class TwoPeasInAPod {
             : $"Regenerating '{pea.name}' voxels..."
         );
         print();
-        vox = pea.voxels(out Mesh mesh);
-        save_voxels(pea.name, vox, ref mesh!);
-        if (!neednew)
-            Geez.clear();
+        vox = pea.voxels();
+        if (vox != null)
+            save_voxels(pea.name, vox);
         return vox;
     }
 

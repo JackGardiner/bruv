@@ -4,16 +4,22 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using Mesh = PicoGK.Mesh;
 using ImageGrayScale = PicoGK.ImageGrayScale;
 using PolySlice = PicoGK.PolySlice;
 
 namespace br {
 
 public static class Drawing {
-    public static PolySlice as_poly_slice(Voxels vox, in Frame slice_at,
-            out Cuboid bounds) {
+    public static PolySlice slice(Voxels vox, Frame slice_at,
+                out Cuboid bounds) {
+        return slice(new Mesh(vox), slice_at, out bounds);
+    }
+
+    public static PolySlice slice(Mesh mesh, Frame slice_at, out Cuboid bounds) {
         Transformer trans = new Transformer().to_local(slice_at);
-        vox = trans.voxels(vox);
+        mesh = trans.mesh(mesh);
+        Voxels vox = new(mesh);
 
         vox.GetVoxelDimensions(
             out int origin_x,
@@ -47,8 +53,13 @@ public static class Drawing {
 
     public static void to_file(string path, Voxels vox, in Frame slice_at,
             out Cuboid bounds) {
-        PolySlice slice = as_poly_slice(vox, slice_at, out bounds);
-        slice.SaveToSvgFile(path, false);
+        PolySlice poly_slice = slice(vox, slice_at, out bounds);
+        poly_slice.SaveToSvgFile(path, false);
+    }
+    public static void to_file(string path, Mesh mesh, in Frame slice_at,
+            out Cuboid bounds) {
+        PolySlice poly_slice = slice(mesh, slice_at, out bounds);
+        poly_slice.SaveToSvgFile(path, false);
     }
 }
 
