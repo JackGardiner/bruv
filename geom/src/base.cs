@@ -482,6 +482,13 @@ public class Pipe : SDF {
         return new Pipe(centre, Lz, Ir, rhi);
     }
 
+    public Pipe as_thickness(float th, bool fix_outer=true) {
+        if (fix_outer)
+            return new Pipe(centre, Lz, rhi - th, rhi);
+        else
+            return new Pipe(centre, Lz, rlo, rlo + th);
+    }
+
     public Pipe extended(float Lz, int direction) {
         assert(direction == EXTEND_UP || direction == EXTEND_DOWN
             || direction == EXTEND_UPDOWN);

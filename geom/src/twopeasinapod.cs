@@ -12,23 +12,33 @@ public class TwoPeasInAPod {
     public const int DRAWINGS = 0x2;
     public const int VOXELS   = 0x4;
     public const int LOOKSIE  = 0x8;
+    /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
+    public const int FILLETLESS       = 0x1 << BITC_ACTION;
+    public const int CUTAWAY          = 0x2 << BITC_ACTION;
+    public const int MINIMISE_MEM     = 0x4 << BITC_ACTION;
+    public const int TAKE_SCREENSHOTS = 0x8 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
-    public const int CHAMBER  = 1 << BITC_ACTION;
-    public const int INJECTOR = 2 << BITC_ACTION;
+    public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
+    public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
     /* THATS ALL FOLKS */
 
 
     public const int DUMMY = 0;
     public const int BITC_ACTION = 4;
     public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
-    public const int MASK_PEA = ~MASK_ACTION;
+    public const int BITC_MODIFIER = 4;
+    public const int MASK_MODIFIER = ((1 << BITC_MODIFIER) - 1) << BITC_ACTION;
+    public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
 
 
     public interface Pea {
         string name { get; }
-        Voxels voxels();
+
+        Voxels voxels(out Mesh mesh);
         void drawings(in Voxels vox);
         void anything();
+
+        void set_modifiers(int mods);
     }
 
 
@@ -100,6 +110,9 @@ public class TwoPeasInAPod {
             default: throw new Exception("invalid pea");
         }
 
+        // Modify the objects.
+        pea.set_modifiers(make & MASK_MODIFIER);
+
         // Test me.
         if (isset(make, ANYTHING))
             pea.anything();
@@ -128,9 +141,7 @@ public class TwoPeasInAPod {
     }
 
 
-
-    public static void save_voxels(in string name, in Voxels vox,
-            bool stl=true) {
+    public static bool save_voxels_only(in string name, in Voxels vox) {
         string path_vdb = fromroot($"exports/{name}.vdb");
         try {
             vox.SaveToVdbFile(path_vdb);
@@ -138,9 +149,9 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to export to vdb at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
-            goto SKIP_VOXEL_SIZE;
+            return false;
         }
         // Save voxel size explicitly, since the vdb cant/doesnt check it matches
         // when loading it.
@@ -153,25 +164,37 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to save voxel size at '{path_voxsize}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
-            /* fallthrough */
+            return false;
         }
-      SKIP_VOXEL_SIZE:;
+        return true;
+    }
 
-        if (stl) {
-            string path_stl = fromroot($"exports/{name}.stl");
-            try {
-                Mesh mesh = new(vox);
-                mesh.SaveToStlFile(path_stl);
-                print($"Exported to stl: '{path_stl}'");
-            } catch (Exception e) {
-                print($"Failed to export to stl at '{path_stl}'.");
-                print("Exception log:");
-                print(e.ToString());
-            }
+    public static bool save_mesh_only(in string name, in Mesh mesh) {
+        string path_stl = fromroot($"exports/{name}.stl");
+        try {
+            mesh.SaveToStlFile(path_stl);
+            print($"Exported to stl: '{path_stl}'");
+        } catch (Exception e) {
+            print($"Failed to export to stl at '{path_stl}'.");
+            print("Exception log:");
+            print(e);
+            return false;
         }
-        print();
+        return true;
+    }
+
+    public static bool save_voxels(in string name, in Voxels vox) {
+        Mesh? mesh = null;
+        return save_voxels(name, vox, ref mesh);
+    }
+    public static bool save_voxels(in string name, in Voxels vox,
+            ref Mesh? mesh) {
+        if (mesh == null)
+            mesh = new(vox);
+        return save_voxels_only(name, vox)
+             & save_mesh_only(name, in mesh);
     }
 
     public static bool load_voxels(in string name, out Voxels? vox) {
@@ -209,7 +232,7 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to read voxel size at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
             goto FAILED;
         }
@@ -222,7 +245,7 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to load from vdb at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
             goto FAILED;
         }
@@ -243,8 +266,8 @@ public class TwoPeasInAPod {
             : $"Regenerating '{pea.name}' voxels..."
         );
         print();
-        vox = pea.voxels();
-        save_voxels(pea.name, vox);
+        vox = pea.voxels(out Mesh mesh);
+        save_voxels(pea.name, vox, ref mesh!);
         if (!neednew)
             Geez.clear();
         return vox;

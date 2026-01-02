@@ -656,7 +656,7 @@ public class Injector : TwoPeasInAPod.Pea
         return fGetAtticSurfaceModulation(fPhi, fLengthRatio) + cos(fPrintAngle)*4*fRoofThickness; //TODO:fix magic number attic WT
     }
 
-    public Voxels voxels()
+    public Voxels voxels(out Mesh part_mesh)
     {
         Voxels part = new();
 
@@ -731,8 +731,9 @@ public class Injector : TwoPeasInAPod.Pea
         part -= voxels_oring_grooves();
 
         Geez.clear();
+        part_mesh = new(part);
         using (key_part.like())
-            key_part <<= Geez.voxels(part);
+            key_part <<= Geez.mesh(part_mesh);
 
 
         Library.Log("Baby made.");
@@ -774,6 +775,20 @@ public class Injector : TwoPeasInAPod.Pea
     }
 
     public string name => "injector";
+
+
+    public void set_modifiers(int mods) {
+        throw new Exception("yeah nah dunno what it is");
+        throw new Exception("honestly couldnt tell you");
+        throw new Exception("what is happening right now");
+                          // im selling out
+        // note chamber has the following fields and sets them like so:
+        // filletless       = popbits(ref mods, TPIAP.FILLETLESS);
+        // cutaway          = popbits(ref mods, TPIAP.CUTAWAY);
+        // minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        // take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
+        // assert(mods == 0, $"unrecognised modifiers: 0x{mods:X}");
+    }
 
 
     public void initialise()

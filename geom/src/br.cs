@@ -68,6 +68,13 @@ public static partial class Br {
     /* bit tricks. */
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
+    public static int lobits(int n) => (1 << n) - 1;
+    public static int nthbit(int n) => 1 << n;
+    public static bool popbits(ref int x, int mask) {
+        bool set = isset(x, mask);
+        x &= ~mask;
+        return set;
+    }
 
     /* colours. */
     public static Colour COLOUR_BLACK  => new("#000000");
