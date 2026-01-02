@@ -70,7 +70,7 @@
         "L_tc": 15.0
     },
     "injector": {
-        "no_inj": [9],
+        "no_inj": [6],
         "r_inj": [32],
         "theta0_inj": [0.0],
 
@@ -79,7 +79,7 @@
         "theta0_fc": [0.0],
         "Or_fc": 0.5,
 
-        "fTargetdPFrac": 0.25,
+        "fTargetdPFrac": 0.15,
 
         "fLOxPostLength": 10.0,
         "fLOxPostWT": 1.0,
