@@ -40,11 +40,13 @@ def convert(input_path, output_path):
             if s[0] == "n":
                 return False
             print("overwriting...")
-        output_path.unlink()
+        if output_path.resolve() != input_path.resolve():
+            output_path.unlink()
 
     img = Image.open(input_path)
     if img.mode in ("RGBA", "LA"): # picogk cant handle alpha
         img = img.convert("RGB")
+    img = img.convert("L") # we only ever want greyscale.
     img.save(output_path, format="TGA")
     return True
 

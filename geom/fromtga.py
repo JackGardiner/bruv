@@ -40,7 +40,8 @@ def convert(input_path, output_path):
             if s[0] == "n":
                 return False
             print("overwriting...")
-        output_path.unlink()
+        if output_path.resolve() != input_path.resolve():
+            output_path.unlink()
 
     img = Image.open(input_path)
     img.save(output_path)
