@@ -4,7 +4,17 @@ using br;
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 
-public class TwoPeasInAPod {
+public static class TwoPeasInAPod {
+
+    public interface Pea {
+        string name { get; }
+
+        Voxels voxels(out Mesh mesh);
+        void drawings(in Voxels vox);
+        void anything();
+
+        void set_modifiers(int mods);
+    }
 
     /* GUIDE: how to create `make` (for smarties) */
     /* bitwise or (|) ANY/SEVERAL/ALL of these actions: */
@@ -12,56 +22,24 @@ public class TwoPeasInAPod {
     public const int DRAWINGS = 0x2;
     public const int VOXELS   = 0x4;
     public const int LOOKSIE  = 0x8;
+    /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
+    public const int FILLETLESS       = 0x1 << BITC_ACTION;
+    public const int CUTAWAY          = 0x2 << BITC_ACTION;
+    public const int MINIMISE_MEM     = 0x4 << BITC_ACTION;
+    public const int TAKE_SCREENSHOTS = 0x8 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
-    public const int CHAMBER  = 1 << BITC_ACTION;
-    public const int INJECTOR = 2 << BITC_ACTION;
+    public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
+    public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
     /* THATS ALL FOLKS */
 
 
     public const int DUMMY = 0;
     public const int BITC_ACTION = 4;
     public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
-    public const int MASK_PEA = ~MASK_ACTION;
+    public const int BITC_MODIFIER = 4;
+    public const int MASK_MODIFIER = ((1 << BITC_MODIFIER) - 1) << BITC_ACTION;
+    public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
 
-
-    public interface Pea {
-        string name { get; }
-        Voxels voxels();
-        void drawings(in Voxels vox);
-        void anything();
-    }
-
-
-    public Chamber chamber { get; init; }
-    public Injector injector { get; init; }
-
-    public TwoPeasInAPod() {
-        // Load the config files.
-        string path_all = fromroot("../config/all.json");
-        string path_extra = fromroot("../config/ammendments.json");
-        Jason config = new(path_all);
-        if (File.Exists(path_extra))
-            config.overwrite_from(path_extra);
-
-        { // Construct the chamber object.
-            float max_phi = config.get<float>("printer/max_print_angle");
-            config.set("chamber/phi_mani", max_phi);
-            config.set("chamber/phi_fixt", max_phi);
-            config.set("chamber/phi_inlet", -max_phi);
-            config.set("chamber/phi_tc", max_phi);
-            config.set("chamber/pm", config.get_map("part_mating"));
-            chamber = config.deserialise<Chamber>("chamber");
-            chamber.initialise();
-        }
-
-        { // Construct the injector object.
-            float max_phi = config.get<float>("printer/max_print_angle");
-            config.set("injector/fPrintAngle", max_phi);
-            config.set("injector/pm", config.get_map("part_mating"));
-            injector = config.deserialise<Injector>("injector");
-            injector.initialise();
-        }
-    }
 
     public static Voxels? dummy(out string? name) {
         /* whatever your heart desires. */
@@ -69,7 +47,13 @@ public class TwoPeasInAPod {
         return null;
     }
 
-    public static void entrypoint(int make, in Sectioner? sectioner) {
+
+    public static void entrypoint(int make, bool shutdown_on_exit,
+            in Sectioner? sectioner) {
+        using var _ = shutdown_on_exit
+                    ? new OnLeave(Geez.shutdown) // :(
+                    : DoNothing.please();
+
         // Setup geez.
         Geez.set_background_colour(dark: true);
         Geez.dflt_colour = new("#AB331A"); // copperish.
@@ -91,14 +75,45 @@ public class TwoPeasInAPod {
         assert(!isclr(make, MASK_ACTION));
         assert(!isclr(make, MASK_PEA));
 
-        // Parse the objects.
-        TwoPeasInAPod tpiap = new TwoPeasInAPod();
+        // Load the config files.
+        string path_all = fromroot("../config/all.json");
+        string path_extra = fromroot("../config/ammendments.json");
+        Jason config = new(path_all);
+        if (File.Exists(path_extra))
+            config.overwrite_from(path_extra);
+
+        // Construct the pea.
         Pea pea;
         switch (make & MASK_PEA) {
-            case CHAMBER:  pea = tpiap.chamber; break;
-            case INJECTOR: pea = tpiap.injector; break;
-            default: throw new Exception("invalid pea");
+            case CHAMBER: {
+                // Construct the chamber object.
+                float max_phi = config.get<float>("printer/max_print_angle");
+                config.set("chamber/phi_mani", max_phi);
+                config.set("chamber/phi_fixt", max_phi);
+                config.set("chamber/phi_inlet", -max_phi);
+                config.set("chamber/phi_tc", max_phi);
+                config.set("chamber/pm", config.get_map("part_mating"));
+                Chamber chamber = config.deserialise<Chamber>("chamber");
+                chamber.initialise();
+                pea = chamber;
+            } break;
+
+            case INJECTOR: {
+                // Construct the injector object.
+                float max_phi = config.get<float>("printer/max_print_angle");
+                config.set("injector/fPrintAngle", max_phi);
+                config.set("injector/pm", config.get_map("part_mating"));
+                Injector injector = config.deserialise<Injector>("injector");
+                injector.initialise();
+                pea = injector;
+            } break;
+
+            default:
+                throw new Exception($"invalid pea: 0x{make & MASK_PEA:X}");
         }
+
+        // Modify the objects.
+        pea.set_modifiers(make & MASK_MODIFIER);
 
         // Test me.
         if (isset(make, ANYTHING))
@@ -128,9 +143,7 @@ public class TwoPeasInAPod {
     }
 
 
-
-    public static void save_voxels(in string name, in Voxels vox,
-            bool stl=true) {
+    public static bool save_voxels_only(in string name, in Voxels vox) {
         string path_vdb = fromroot($"exports/{name}.vdb");
         try {
             vox.SaveToVdbFile(path_vdb);
@@ -138,9 +151,9 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to export to vdb at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
-            goto SKIP_VOXEL_SIZE;
+            return false;
         }
         // Save voxel size explicitly, since the vdb cant/doesnt check it matches
         // when loading it.
@@ -150,28 +163,42 @@ public class TwoPeasInAPod {
                     System.Globalization.CultureInfo.InvariantCulture);
             File.WriteAllText(path_voxsize, text);
             print($"  (saved voxel size to: '{path_voxsize}')");
+            print();
         } catch (Exception e) {
             print($"Failed to save voxel size at '{path_voxsize}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
-            /* fallthrough */
+            return false;
         }
-      SKIP_VOXEL_SIZE:;
+        return true;
+    }
 
-        if (stl) {
-            string path_stl = fromroot($"exports/{name}.stl");
-            try {
-                Mesh mesh = new(vox);
-                mesh.SaveToStlFile(path_stl);
-                print($"Exported to stl: '{path_stl}'");
-            } catch (Exception e) {
-                print($"Failed to export to stl at '{path_stl}'.");
-                print("Exception log:");
-                print(e.ToString());
-            }
+    public static bool save_mesh_only(in string name, in Mesh mesh) {
+        string path_stl = fromroot($"exports/{name}.stl");
+        try {
+            mesh.SaveToStlFile(path_stl);
+            print($"Exported to stl: '{path_stl}'");
+            print();
+        } catch (Exception e) {
+            print($"Failed to export to stl at '{path_stl}'.");
+            print("Exception log:");
+            print(e);
+            return false;
         }
-        print();
+        return true;
+    }
+
+    public static bool save_voxels(in string name, in Voxels vox) {
+        Mesh? mesh = null;
+        return save_voxels(name, vox, ref mesh);
+    }
+    public static bool save_voxels(in string name, in Voxels vox,
+            ref Mesh? mesh) {
+        if (mesh == null)
+            mesh = new(vox);
+        return save_voxels_only(name, vox)
+             & save_mesh_only(name, in mesh);
     }
 
     public static bool load_voxels(in string name, out Voxels? vox) {
@@ -209,7 +236,7 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to read voxel size at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
             goto FAILED;
         }
@@ -222,7 +249,7 @@ public class TwoPeasInAPod {
         } catch (Exception e) {
             print($"Failed to load from vdb at '{path_vdb}'.");
             print("Exception log:");
-            print(e.ToString());
+            print(e);
             print();
             goto FAILED;
         }
@@ -243,8 +270,8 @@ public class TwoPeasInAPod {
             : $"Regenerating '{pea.name}' voxels..."
         );
         print();
-        vox = pea.voxels();
-        save_voxels(pea.name, vox);
+        vox = pea.voxels(out Mesh mesh);
+        save_voxels(pea.name, vox, ref mesh!);
         if (!neednew)
             Geez.clear();
         return vox;

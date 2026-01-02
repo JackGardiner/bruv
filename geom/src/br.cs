@@ -68,6 +68,13 @@ public static partial class Br {
     /* bit tricks. */
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
+    public static int lobits(int n) => (1 << n) - 1;
+    public static int nthbit(int n) => 1 << n;
+    public static bool popbits(ref int x, int mask) {
+        bool set = isset(x, mask);
+        x &= ~mask;
+        return set;
+    }
 
     /* colours. */
     public static Colour COLOUR_BLACK  => new("#000000");
@@ -279,11 +286,20 @@ public static partial class Br {
 
     public static float torad(float deg) => deg * (PI / 180f);
     public static float todeg(float rad) => rad * (180f / PI);
-    public static float wraprad(float rad) // [-PI, PI)
+
+    public static float wraprad(float rad, bool unsigned=false) {
+        rad += unsigned ? 0f : PI;
         // shitass c sharp non-positive modulo.
-        => ((rad + PI)%TWOPI + TWOPI)%TWOPI - PI;
-    public static float wrapdeg(float deg) // [-180, 180)
-        => ((deg + 180f)%360f + 360f)%360f - 180f;
+        rad = (rad%TWOPI + TWOPI)%TWOPI;
+        rad -= unsigned ? 0f : PI;
+        return rad;
+    }
+    public static float wrapdeg(float deg, bool unsigned=false) {
+        deg += unsigned ? 0f : 180f;
+        deg = (deg%360f + 360f)%360f;
+        deg -= unsigned ? 0f : 180f;
+        return deg;
+    }
 
     public static float sin(float a) => MathF.Sin(a);
     public static float cos(float a) => MathF.Cos(a);
@@ -469,6 +485,20 @@ public static partial class Br {
     public static Vec3 rotxy(Vec3 a, float b) => rotate(a, uZ3, b);
     public static Vec3 rotzx(Vec3 a, float b) => rotate(a, uY3, b);
     public static Vec3 rotyz(Vec3 a, float b) => rotate(a, uX3, b);
+}
+
+
+// honestly these so useful why they not in the standard. lowk maybe it is im
+// bad at looking.
+public class OnLeave : IDisposable {
+    public Action action { get; }
+    public OnLeave(Action action) { this.action = action; }
+    public void Dispose() { action(); }
+}
+public sealed class DoNothing : IDisposable {
+    public DoNothing() {}
+    public void Dispose() {}
+    public static IDisposable please() => new DoNothing(); // magic word.
 }
 
 }

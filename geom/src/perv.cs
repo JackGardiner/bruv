@@ -9,20 +9,23 @@ namespace br {
 // not so private to me.
 
 public class PervField {
+    public object? obj { get; }
+    public FieldInfo field_info { get; }
 
-    public object obj;
-    public FieldInfo field_info;
-
-    public PervField(object obj, string name, bool is_static=false) {
-        BindingFlags flags = BindingFlags.NonPublic;
-        if (is_static)
-            flags |= BindingFlags.Static;
-        else
-            flags |= BindingFlags.Instance;
+    public PervField(object obj, string name) {
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
         this.field_info = obj.GetType().GetField(name, flags)!;
         this.obj = obj;
     }
+    public PervField(Type type, string name) {
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        this.field_info = type.GetField(name, flags)!;
+        this.obj = null;
+    }
 
+    public T? maybe_get<T>() {
+        return (T?)field_info.GetValue(obj);
+    }
     public T get<T>() {
         return (T)field_info.GetValue(obj)!;
     }
@@ -32,17 +35,18 @@ public class PervField {
 }
 
 public class PervMethod {
-    public object obj;
-    public MethodInfo method_info;
+    public object? obj { get; }
+    public MethodInfo method_info { get; }
 
-    public PervMethod(object obj, string name, bool is_static=false) {
-        BindingFlags flags = BindingFlags.NonPublic;
-        if (is_static)
-            flags |= BindingFlags.Static;
-        else
-            flags |= BindingFlags.Instance;
+    public PervMethod(object obj, string name) {
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
         this.method_info = obj.GetType().GetMethod(name, flags)!;
         this.obj = obj;
+    }
+    public PervMethod(Type type, string name) {
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        this.method_info = type.GetMethod(name, flags)!;
+        this.obj = null;
     }
 
     public void invoke() {
@@ -56,38 +60,92 @@ public class PervMethod {
     }
 }
 
-public static class Perv {
-    public static PervField field(object obj, string name,
-            bool is_static=false) {
-        return new(obj, name, is_static);
-    }
-    public static PervMethod method(object obj, string name,
-            bool is_static=false) {
-        return new(obj, name, is_static);
+public class PervNestedType {
+    public Type nested_type { get; }
+
+    public PervNestedType(Type type, string name) {
+        nested_type = type.GetNestedType(
+            name,
+            BindingFlags.NonPublic
+        )!;
     }
 
-    public static T get<T>(object obj, string name, bool is_static=false) {
-        PervField f = new(obj, name, is_static);
+    public object create(params object?[]? args) {
+        return Activator.CreateInstance(
+            nested_type,
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
+            binder: null,
+            args: args,
+            culture: null
+        )!;
+    }
+}
+
+public static class Perv {
+    public static PervField field(object obj, string name) {
+        return new(obj, name);
+    }
+    public static PervField field(Type type, string name) {
+        return new(type, name);
+    }
+    public static PervMethod method(object obj, string name) {
+        return new(obj, name);
+    }
+    public static PervMethod method(Type type, string name) {
+        return new(type, name);
+    }
+    public static PervNestedType nested_type(Type type, string name) {
+        return new(type, name);
+    }
+
+    public static T get<T>(object obj, string name) {
+        PervField f = new(obj, name);
         return f.get<T>();
     }
-    public static void set(object obj, string name, object? value,
-            bool is_static=false) {
-        PervField f = new(obj, name, is_static);
+    public static T get<T>(Type type, string name) {
+        PervField f = new(type, name);
+        return f.get<T>();
+    }
+
+    public static void set(object obj, string name, object? value) {
+        PervField f = new(obj, name);
+        f.set(value);
+    }
+    public static void set(Type type, string name, object? value) {
+        PervField f = new(type, name);
         f.set(value);
     }
 
-    public static void invoke(object obj, string name, bool is_static=false) {
-        PervMethod m = new(obj, name, is_static);
+    public static void invoke(object obj, string name) {
+        PervMethod m = new(obj, name);
         m.invoke();
     }
-    public static T invoke<T>(object obj, string name, bool is_static=false) {
-        PervMethod m = new(obj, name, is_static);
+    public static T invoke<T>(object obj, string name) {
+        PervMethod m = new(obj, name);
         return m.invoke<T>();
     }
-    public static T invoke<T>(object obj, string name, bool is_static,
-            params object?[]? args) {
-        PervMethod m = new(obj, name, is_static);
+    public static T invoke<T>(object obj, string name, params object?[]? args) {
+        PervMethod m = new(obj, name);
         return m.invoke<T>(args);
+    }
+
+    public static void invoke(Type type, string name) {
+        PervMethod m = new(type, name);
+        m.invoke();
+    }
+    public static T invoke<T>(Type type, string name) {
+        PervMethod m = new(type, name);
+        return m.invoke<T>();
+    }
+    public static T invoke<T>(Type type, string name, params object?[]? args) {
+        PervMethod m = new(type, name);
+        return m.invoke<T>(args);
+    }
+
+    public static object create_nested_type(Type type, string name,
+            params object?[]? args) {
+        PervNestedType nt = new(type, name);
+        return nt.create(args);
     }
 }
 

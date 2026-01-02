@@ -306,26 +306,12 @@ public class Cuboid {
     public float Ly { get; }
     public float Lz { get; }
 
-    public Cuboid(in BBox3 box)
-        : this(box.vecMin, box.vecMax) {}
-    public Cuboid(in Vec3 a, in Vec3 b) {
-        Vec3 lo = min(a, b);
-        Vec3 hi = max(a, b);
-        assert(lo.X < hi.X, $"lo={lo.X}, hi={hi.X}");
-        assert(lo.Y < hi.Y, $"lo={lo.Y}, hi={hi.Y}");
-        assert(lo.Z < hi.Z, $"lo={lo.Z}, hi={hi.Z}");
-        this.centre = new(new Vec3(ave(lo.X, hi.X), ave(lo.Y, hi.Y), lo.Z));
-        this.Lx = hi.X - lo.X;
-        this.Ly = hi.Y - lo.Y;
-        this.Lz = hi.Z - lo.Z;
-        assert(noninf(Lx));
-        assert(noninf(Ly));
-        assert(noninf(Lz));
-    }
     public Cuboid(in Frame centre, float L)
         : this(centre, L, L, L) {}
     public Cuboid(in Frame centre, float Lz, float Lxy)
         : this(centre, Lxy, Lxy, Lz) {}
+    public Cuboid(in Frame centre, Vec3 L)
+        : this(centre, L.X, L.Y, L.Z) {}
     public Cuboid(in Frame centre, float Lx, float Ly, float Lz) {
         assert(Lx > 0f, $"Lx={Lx}");
         assert(Ly > 0f, $"Ly={Ly}");
@@ -338,6 +324,19 @@ public class Cuboid {
         assert(noninf(Ly));
         assert(noninf(Lz));
     }
+
+    public Cuboid(in BBox3 box)
+        : this(new Frame(), box.vecMin, box.vecMax) {}
+    public Cuboid(in Frame frame, in BBox3 box)
+        : this(frame, box.vecMin, box.vecMax) {}
+    public Cuboid(in Vec3 a, in Vec3 b)
+        : this(new Frame(), a, b) {}
+    public Cuboid(in Frame frame, in Vec3 a, in Vec3 b)
+        : this(
+            frame.translate(new(ave(a.X, b.X), ave(a.Y, b.Y), min(a.Z, b.Z))),
+            max(a, b) - min(a, b)
+        ) {}
+
 
     public Cuboid at_centre() {
         return new(centre.transz(-Lz/2f), Lx, Ly, Lz);
@@ -466,6 +465,10 @@ public class Pipe : SDF {
         }
     }
 
+    public Pipe at_centre() {
+        return new(centre.transz(-Lz/2f), Lz, rlo, rhi);
+    }
+
     public Pipe filled() {
         if (rlo == 0f)
             return this;
@@ -477,6 +480,13 @@ public class Pipe : SDF {
 
     public Pipe hollowed(float Ir) {
         return new Pipe(centre, Lz, Ir, rhi);
+    }
+
+    public Pipe as_thickness(float th, bool fix_outer=true) {
+        if (fix_outer)
+            return new Pipe(centre, Lz, rhi - th, rhi);
+        else
+            return new Pipe(centre, Lz, rlo, rlo + th);
     }
 
     public Pipe extended(float Lz, int direction) {
@@ -492,7 +502,7 @@ public class Pipe : SDF {
 
 
     public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre.from_global(p);
+        Vec3 q = centre / p;
         float r = magxy(q);
         float z = q.Z;
 
@@ -535,7 +545,7 @@ public class Donut : SDF {
     }
 
     public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre.from_global(p);
+        Vec3 q = centre / p;
         float dist = hypot(magxy(q) - R, q.Z);
         return abs(dist) - r;
     }
@@ -588,7 +598,7 @@ public class Cone : SDF {
 
 
     public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre.from_global(p);
+        Vec3 q = centre / p;
         float r = magxy(q);
         float z = q.Z;
 
@@ -819,13 +829,6 @@ public class SDFimage {
         int H = img.nHeight;
 
         bool[,] mask = new bool[scale*(W + 2*xextra), scale*(H + 2*yextra)];
-        if (invert) {
-            for (int x=0; x<mask.GetLength(0); ++x) {
-                for (int y=0; y<mask.GetLength(1); ++y)
-                    mask[x, y] = true;
-            }
-        }
-
         for (int x=0; x<W; ++x) {
             for (int y=0; y<H; ++y) {
                 Colour col = img.clrValue(flipx ? W - 1 - x : x,
@@ -854,6 +857,7 @@ public class SDFimage {
     private int yextra { get; }
     public int width { get; }
     public int height { get; }
+    public float aspect_x_on_y => width / (float)height;
 
     // loads tga image from the given path, expecting (0,0) to be bottom-left.
     public SDFimage(in string path, int scale=1, float threshold=0.5f,
@@ -865,8 +869,10 @@ public class SDFimage {
         this.width  = img.nWidth;
         this.height = img.nHeight;
         this.scale = scale;
-        this.xextra = scale * width / 2;
-        this.yextra = scale * height / 2;
+        // choose extra s.t. an image spanning a quarter of a circle may be
+        // sampled anywhere on the circle (aka up to 1.5x away).
+        this.xextra = scale * 16 * width / 10;
+        this.yextra = scale * 16 * height / 10;
         bool[,] mask = make_mask(img, scale, xextra, yextra, threshold, invert,
                 flipx, flipy);
         this.sda = make_sda(mask);
@@ -874,8 +880,8 @@ public class SDFimage {
 
 
     // Returns the signed distance in units of pixels, with an input vector also
-    // in units of pixels. The valid bounds are ~(-width/2, -height/2) to
-    // ~(1.5 width, 1.5 height).
+    // in units of pixels. The valid bounds are ~(width, -height) to
+    // ~(2 width, 2 height).
     public float signed_dist(in Vec2 p) {
         assert(within(p.X, -xextra, width  + xextra));
         assert(within(p.Y, -yextra, height + yextra));
@@ -899,6 +905,152 @@ public class SDFimage {
         float d1 = lerp(d10, d11, ty);
         float d = lerp(d0, d1, tx);
         return d / scale;
+    }
+
+
+    public SDFfunction sdf_on_plane(out BBox3 bbox, Frame centre, float Lz,
+            float length /* for longer image dimension */,
+            bool i_understand_sampling_oob_is_illegal_and_i_wont_do_it=false) {
+        assert(Lz > 0f);
+        assert(length > 0f);
+        if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
+            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            assert(nearzero(rot_by),
+                    "the raw sdf will not work with anything that rotates at "
+                  + "all. you will need to use a transformer");
+        }
+
+        float scale = length / max(width, height);
+        Vec2 size = (aspect_x_on_y >= 1f)
+                  ? new(length, length / aspect_x_on_y)
+                  : new(length * aspect_x_on_y, length);
+
+        bbox = new(rejxy(-size/2f, 0f), rejxy(size/2f, Lz));
+        bbox = centre.to_global_bbox(bbox);
+
+        float sdf(in Vec3 p) {
+            Vec3 q = centre / p;
+
+            float z = q.Z;
+            float dist_z = max(-z, z - Lz);
+
+            Vec2 pixel = projxy(q) + size/2f;
+            float dist_xy = signed_dist(pixel / scale) * scale;
+
+            float dist;
+            if (dist_xy <= 0f || dist_z <= 0f) {
+                dist = max(dist_xy, dist_z);
+            } else {
+                dist = hypot(dist_xy, dist_z);
+            }
+            return dist;
+        }
+
+        return sdf;
+    }
+
+    public SDFfunction sdf_on_cyl(bool vertical, out BBox3 bbox, Frame centre,
+            float R, float Lr, float length /* for longer image dimension */,
+            bool i_understand_sampling_oob_is_illegal_and_i_wont_do_it=false) {
+        assert(R > 0f);
+        assert(Lr > 0f);
+        assert(length > 0f);
+
+        Frame orient = vertical ? new Frame()
+                                : new Frame(ZERO3, uX3, uY3);
+
+        if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
+            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            assert(nearzero(rot_by) || nearvert(orient / rot_about),
+                    "the raw sdf will not work with anything that rotates away "
+                  + "from axial. you will need to use a transformer");
+        }
+
+        float scale = length / max(width, height);
+        Vec2 size = (aspect_x_on_y >= 1f)
+                  ? new(length, length / aspect_x_on_y)
+                  : new(length * aspect_x_on_y, length);
+
+        float Lz = vertical ? size.Y : size.X; // cylinder z.
+        float Ltheta = (vertical ? size.X : size.Y) / R;
+        assert(Ltheta <= TWOPI, "cannot wrap around");
+
+        bbox = new();
+        bbox.Include(orient * new Vec3(R + Lr, 0f, -Lz/2f));
+        bbox.Include(orient * new Vec3(R + Lr, 0f, +Lz/2f));
+        bbox.Include(orient * fromcyl(R, -Ltheta/2f, 0f));
+        bbox.Include(orient * fromcyl(R, +Ltheta/2f, 0f));
+        bbox.Include(orient * fromcyl(R + Lr, -Ltheta/2f, 0f));
+        bbox.Include(orient * fromcyl(R + Lr, +Ltheta/2f, 0f));
+        if (Ltheta > PI) {
+            bbox.Include(orient * new Vec3(0f, +R + Lr, 0f));
+            bbox.Include(orient * new Vec3(0f, -R - Lr, 0f));
+        }
+        bbox = centre.to_global_bbox(bbox);
+
+        float sdf(in Vec3 p) {
+            Vec3 q = centre / p;
+            q = orient / q;
+
+            float r = magxy(q);
+            float dist_r = max(R - r, r - (R + Lr));
+
+            float z = q.Z + Lz/2f;
+            float theta = (vertical ? argxy(q) : -argxy(q)) + Ltheta/2f;
+            Vec2 pixel = vertical ? new(R*theta, z) : new(z, R*theta);
+            float dist_surf = signed_dist(pixel / scale) * scale;
+            dist_surf *= r / R;
+            // technically, this is the distance along the surface of the
+            // cylinder and not true euclidean in xyz. but like, theyre pretty
+            // similar provided the image has no super larger gaps/solids.
+
+            float dist;
+            if (dist_surf <= 0f || dist_r <= 0f) {
+                dist = max(dist_surf, dist_r);
+            } else {
+                dist = hypot(dist_surf, dist_r);
+            }
+            return dist;
+        }
+
+        return sdf;
+    }
+
+
+    public Voxels voxels_on_plane(in Frame centre, float Lz,
+            float length /* for longer image dimension */) {
+        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+        if (!nearzero(rot_by)) {
+            // darn its got rotation we need a transformer.
+            SDFfunction sdf = sdf_on_plane(out BBox3 bbox, new(), Lz, length);
+            Voxels vox = new SDFfilled(sdf).voxels(bbox);
+            Transformer transformer = new Transformer().to_global(centre);
+            return transformer.voxels(vox);
+        } else {
+            // okie nws just send to sdf.
+            SDFfunction sdf = sdf_on_plane(out BBox3 bbox, centre, Lz, length);
+            return new SDFfilled(sdf).voxels(bbox);
+        }
+    }
+
+    public Voxels voxels_on_cyl(bool vertical, in Frame centre, float R,
+            float Lr, float length /* for longer image dimension */) {
+        Frame orient = vertical ? new Frame()
+                                : new Frame(ZERO3, uX3, uY3);
+        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+
+        // same deal except can take inplane rotations.
+        if (!nearzero(rot_by) && !nearvert(orient / rot_about)) {
+            SDFfunction sdf = sdf_on_cyl(vertical, out BBox3 bbox, new Frame(),
+                    R, Lr, length);
+            Voxels vox = new SDFfilled(sdf).voxels(bbox);
+            Transformer transformer = new Transformer().to_global(centre);
+            return transformer.voxels(vox);
+        } else {
+            SDFfunction sdf = sdf_on_cyl(vertical, out BBox3 bbox, centre, R, Lr,
+                    length);
+            return new SDFfilled(sdf).voxels(bbox);
+        }
     }
 
 
