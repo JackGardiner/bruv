@@ -4,6 +4,7 @@ using br;
 using Leap71.ShapeKernel;
 using PicoGK;
 using ports;
+using Calculations;
 
 public class Injector : TwoPeasInAPod.Pea
 {
@@ -85,7 +86,7 @@ public class Injector : TwoPeasInAPod.Pea
         // IPA annulus init
         float min_rib_wid = 0.8f;
         float min_gap_wid = 0.8f;
-        float cd_annulus = 0.25f;
+        float cd_annulus = 0.75f;
         float rib_percent_area = 0.2f;
 
         float vel_bernoulli_annulus = sqrt(2*fTargetdP/pm.fFuelInjectionRho);
@@ -110,7 +111,7 @@ public class Injector : TwoPeasInAPod.Pea
         {
            // calculate max rib count (min width)
             float smallest_rib_area = min_rib_wid*(fFuelAnnulusOR - Or_post);
-            no_annulus_rib = (int)ceil(total_rib_area / smallest_rib_area);
+            no_annulus_rib = (int)floor(total_rib_area / smallest_rib_area);
             float actual_rib_area = total_rib_area / no_annulus_rib;
             annulus_rib_width = actual_rib_area / (fFuelAnnulusOR - Or_post);
             Library.Log($"{no_annulus_rib} ribs @ {annulus_rib_width} wide");
@@ -134,10 +135,126 @@ public class Injector : TwoPeasInAPod.Pea
             approximate inner segment == outer segment
         */
 
-        area_swinlet_perinj = 10f; // mm^2
-        no_swinlet = 3;
-        aspect_swinlet = 5f; // height/width
-        rad_offset_swinlet = 2f;
+        // // outer swirl init
+        // float twoalpha_outer = torad(90);
+        // float A_outer = 2.5f;
+        // float mu_outer = 0.25f;
+        // float nozzle_radius_outer = 0.475f * sqrt(fFuelElementMFR/(mu_outer*sqrt(pm.fFuelInjectionRho*fTargetdP))) * 1e3f; //mm
+        // print($"nozzle rad outer = {nozzle_radius_outer}");
+
+
+        // // inner swirl init
+        // float twoalpha_inner = torad(105);
+        // float A_inner = 4.5f;
+        // float mu_inner = 0.15f;
+        // float nozzle_radius_inner = 0.475f * sqrt(fOxElementMFR/(mu_inner*sqrt(pm.fOxInjectionRho*2*fTargetdP))) * 1e3f; //mm
+        // print($"nozzle rad inner = {nozzle_radius_inner}");
+        // area_swinlet_perinj = 10f; // mm^2
+        // no_swinlet = 3;
+        // aspect_swinlet = 5f; // height/width
+        // rad_offset_swinlet = 2f;
+    }
+
+    protected void initilise_biswirl()
+    {
+        // injector patterning / overall init
+        points_inj = new();
+        iTotalElementCount = 0;
+        for (int n=0; n<numel(no_inj); ++n) {
+            List<Vector3> ps = circularly_distributed(
+                no:     no_inj[n],
+                z:      0f,
+                r:      r_inj[n],
+                theta0: theta0_inj[n]
+            );
+            points_inj.AddRange(ps);
+            iTotalElementCount += no_inj[n];
+        }
+
+        // inputs
+        fTargetdP = fTargetdPFrac*pm.fChamberPressure;
+        float dP_i1 = fTargetdP;
+        float dP_i2 = fTargetdP;
+        float mdot_i1 = pm.fOxMassFlowRate / iTotalElementCount;
+        float mdot_i2 = fFuelElementMFR = pm.fFuelMassFlowRate / iTotalElementCount;
+
+        // selected params
+        float Rbar_in1 = 3f; // coefficients of nozzle opening
+        float Rbar_in2 = 3f;
+        float lbar_n1 = 1f; // relative nozzle lengths
+        float lbar_n2 = 2f;
+        int n_1 = 3; // number of tangential inlet passages
+        int n_2 = 3;
+        float twoalpha_1 = torad(70f); // spray cone angle of stage 1
+        float twoalpha_2 = torad(35f); // spray cone angle of stage 2
+
+        float C = 1f; // no idea what this is :)
+
+        float nu_IPA = 2.66e-6f; // m2/s //TODO: f(T) this bad boy, it changes a lot w temp!
+        float nu_LOX = 2.56e-6f; // at arithmetic mean of airborne ICD (114K)
+
+        //   stage 1 (inner core) design
+        float A_1 = GraphLookup.GetA(twoalpha_1, lbar_n1);
+        float mu_1 = GraphLookup.GetFlowCoefficient(A_1, C);
+
+        float R_n1 = 0.475f * sqrt(mdot_i1/(mu_1*sqrt(pm.fOxInjectionRho*dP_i1))) * 1e3f; // mm
+        float R_in1 = Rbar_in1 * R_n1;
+        float r_in1 = sqrt(R_in1*R_n1/(n_1*A_1));
+
+        float Re_in1 = 2*mdot_i1/(PI*sqrt(n_1)*(r_in1*1e-3f)*pm.fOxInjectionRho*nu_LOX); // dimensionless
+
+        // print lil summary
+        Library.Log($"Stage 1 (LOX) nozzle inner radius: {r_in1} mm");
+        Library.Log($"Stage 1 (LOX) nozzle Reynolds number: {Re_in1}");
+        assert(Re_in1 > 4000, $"Stage 1 (LOX) nozzle flow: Re (= {Re_in1}) out of bounds for Bazarov");
+
+        float l_in1 = 4f   * r_in1;  // tangential passage length
+        float l_n1  = 2f   * R_n1;   // nozzle length
+        float l_s1  = 2.5f * R_in1;  // vortex chamber length
+
+        float del_w = 0.8f;  // nozzle wall thickness
+        float R_1 = R_n1 + del_w; // external radius of nozzle
+
+    // --- stage 2 (outer annulus) design ---
+    float r_m2_req = R_1 + 0.3f;  // Required physical gas-vortex radius (constant)
+    float R_n2 = r_m2_req;        // Initial guess for nozzle radius
+
+    float tolerance = 0.001f;
+    int maxIter = 100;
+    int iter = 0;
+    float diff = 1f;
+    float A_2 = 0;
+
+    while (diff > tolerance && iter < maxIter)
+    {
+        // 1. Calculate current flow coefficient mu based on current Rn
+        float mu_2 = 0.225f * mdot_i2 / (pow(R_n2, 2) * sqrt(pm.fFuelInjectionRho * dP_i2));
+
+        // 2. Step 3: Find A based on mu (from Fig 34 correlations)
+        A_2 = GraphLookup.GetAFromMu(mu_2, C);
+
+        // 3. Step 3: Find dimensionless relative vortex radius (from Fig 35)
+        float rm_bar = GraphLookup.GetRelativeVortexRadius(A_2, Rbar_in2);
+
+        // 4. Step 4: Calculate NEW physical nozzle radius
+        // Formula: Rn = r_m_physical / r_m_relative
+        float R_n2_new = r_m2_req / rm_bar;
+
+        diff = Math.Abs(R_n2_new - R_n2);
+        R_n2 = R_n2_new;
+        iter++;
+
+        Library.Log($"Iteration {iter}: R_n2 = {R_n2} mm, A_2 = {A_2}, mu = {mu_2}");
+    }
+
+    float R_in2 = Rbar_in2 * R_n2;
+    float r_in2 = sqrt(R_in2*R_n2/(n_2*A_2));
+    float Re_in2 = 2*mdot_i2/(PI*sqrt(n_2)*(r_in2*1e-3f)*pm.fFuelInjectionRho*nu_IPA); // dimensionless
+
+    // print lil summary
+    Library.Log($"Stage 2 (IPA) nozzle outer radius: {R_n2} mm");
+    Library.Log($"Stage 2 (IPA) nozzle Reynolds number: {Re_in2}");
+
     }
 
     // film cooling vars
@@ -707,6 +824,7 @@ public class Injector : TwoPeasInAPod.Pea
     public Voxels voxels()
     {
         Voxels part = new();
+        report();
 
         Geez.Cycle key_part = new();
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
@@ -728,31 +846,37 @@ public class Injector : TwoPeasInAPod.Pea
         part += cone_roof;
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof);
+        Library.Log("created cone roof.");
 
         Voxels attic = voxels_attic();
         part += attic;
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic);
+        Library.Log("created attic.");
 
         Voxels supports = voxels_supports();
         Geez.voxels(supports, Cp.clrRandom());
         part += supports;
+        Library.Log("created supports.");
 
         Voxels asi = voxels_asi(out Voxels asi_fluid);
         part += asi;
         part -= asi_fluid;
         using (key_asi.like())
             key_asi <<= Geez.voxels(asi - asi_fluid);
+        Library.Log("created ASI.");
 
         Voxels flange = voxels_flange();
         part += flange;
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
+        Library.Log("created flange.");
 
         Voxels gussets = voxels_gussets(out Voxels voxStrutHoles);
         part += gussets;
         using (key_gusset.like())
             key_gusset <<= Geez.voxels(gussets - voxStrutHoles);
+        Library.Log("created gussets.");
 
         Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets);
         part += inj_elements;
@@ -760,23 +884,26 @@ public class Injector : TwoPeasInAPod.Pea
         part -= swirl_inlets;
         using (key_inj_elements.like())
             key_inj_elements <<= Geez.voxels(inj_elements - voxOxPostFluid);
+        Library.Log("created injector elements.");
 
         Voxels ports = voxels_ports(out Voxels ports_fluids);
         part += ports;
         using (key_ports.like())
             key_ports <<= Geez.voxels(ports - ports_fluids);
+        Library.Log("created ports.");
 
         // external fillets
         Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
         Voxels voxNoCropZone = part & (cone_roof_upper_crop() + voxInnerPipeCrop!);
         voxCropZone.OverOffset(5f);
-        Library.Log("Filleting completed");
+        Library.Log("created fillets.");
         part = voxCropZone + voxNoCropZone;
 
         part -= ports_fluids;
         part -= voxels_bolts();
         part -= voxStrutHoles;
         part -= voxels_oring_grooves();
+        Library.Log("created bolt holes and O-ring grooves.");
 
         Geez.clear();
         using (key_part.like())
@@ -787,6 +914,18 @@ public class Injector : TwoPeasInAPod.Pea
         print();
 
         return part;
+    }
+
+    public void report()
+    {
+        using (StreamWriter writer = new StreamWriter("exports/manufacturing_report.txt"))
+        {
+            writer.WriteLine("Manufacturing considerations:");
+            writer.WriteLine($" - Annulus gap width: {fFuelAnnulusOR - (fCoreExitRadius + fLOxPostWT)} mm");
+            writer.WriteLine($" - Annulus rib width: {annulus_rib_width} mm");
+            writer.WriteLine($" - Core internal diameter: {2*fCoreExitRadius} mm");
+            writer.WriteLine($" - LOx post wall thickness: {fLOxPostWT} mm");
+        }
     }
 
     public void drawings(in Voxels part) {
@@ -826,6 +965,7 @@ public class Injector : TwoPeasInAPod.Pea
 
     public void initialise()
     {
+        initilise_biswirl();
         initialise_inj();
         initialise_fc();
         initialise_chnl();
