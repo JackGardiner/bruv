@@ -363,10 +363,10 @@ public static partial class Br {
 
 
 public class FramesSequence : Frames {
-    public List<Frame> frames { get; }
+    public Slice<Frame> frames { get; }
     public FramesSequence()
-        : this(new List<Frame>()) {}
-    public FramesSequence(in List<Frame> frames) {
+        : this(new Slice<Frame>()) {}
+    public FramesSequence(in Slice<Frame> frames) {
         this.frames = frames;
     }
 
@@ -464,10 +464,10 @@ public class FramesSpin : Frames {
 
 public class FramesCart : Frames {
     public Frame centre { get; }
-    public List<Vec3> points { get; }
-    public FramesCart(in List<Vec3> points)
+    public Slice<Vec3> points { get; }
+    public FramesCart(in Slice<Vec3> points)
         : this(new Frame(), points) {}
-    public FramesCart(in Frame centre, in List<Vec3> points) {
+    public FramesCart(in Frame centre, in Slice<Vec3> points) {
         this.centre = centre;
         this.points = points;
     }
@@ -479,8 +479,8 @@ public class FramesCart : Frames {
 
 public abstract class FramesCyl : Frames {
     public Frame.Cyl centre { get; }
-    public List<Vec3> points { get; }
-    protected FramesCyl(in Frame.Cyl centre, in List<Vec3> points) {
+    public Slice<Vec3> points { get; }
+    protected FramesCyl(in Frame.Cyl centre, in Slice<Vec3> points) {
         this.centre = centre;
         this.points = points;
     }
@@ -490,23 +490,23 @@ public abstract class FramesCyl : Frames {
     protected abstract Frame _frame(Vec3 pos);
 }
 public class FramesCylAxial : FramesCyl {
-    public FramesCylAxial(in List<Vec3> points)
+    public FramesCylAxial(in Slice<Vec3> points)
         : base(new Frame.Cyl(), points) {}
-    public FramesCylAxial(in Frame.Cyl centre, in List<Vec3> points)
+    public FramesCylAxial(in Frame.Cyl centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.axial(pos);
 }
 public class FramesCylRadial : FramesCyl {
-    public FramesCylRadial(in List<Vec3> points)
+    public FramesCylRadial(in Slice<Vec3> points)
         : base(new Frame.Cyl(), points) {}
-    public FramesCylRadial(in Frame.Cyl centre, in List<Vec3> points)
+    public FramesCylRadial(in Frame.Cyl centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.radial(pos);
 }
 public class FramesCylCircum : FramesCyl {
-    public FramesCylCircum(in List<Vec3> points)
+    public FramesCylCircum(in Slice<Vec3> points)
         : base(new Frame.Cyl(), points) {}
-    public FramesCylCircum(in Frame.Cyl centre, in List<Vec3> points)
+    public FramesCylCircum(in Frame.Cyl centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.circum(pos);
 }
@@ -514,8 +514,8 @@ public class FramesCylCircum : FramesCyl {
 
 public abstract class FramesSph : Frames {
     public Frame.Sph centre { get; }
-    public List<Vec3> points { get; }
-    protected FramesSph(in Frame.Sph centre, in List<Vec3> points) {
+    public Slice<Vec3> points { get; }
+    protected FramesSph(in Frame.Sph centre, in Slice<Vec3> points) {
         this.centre = centre;
         this.points = points;
     }
@@ -525,23 +525,23 @@ public abstract class FramesSph : Frames {
     protected abstract Frame _frame(Vec3 pos);
 }
 public class FramesSphNormal : FramesSph {
-    public FramesSphNormal(in List<Vec3> points)
+    public FramesSphNormal(in Slice<Vec3> points)
         : base(new Frame.Sph(), points) {}
-    public FramesSphNormal(in Frame.Sph centre, in List<Vec3> points)
+    public FramesSphNormal(in Frame.Sph centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.normal(pos);
 }
 public class FramesSphLongit : FramesSph {
-    public FramesSphLongit(in List<Vec3> points)
+    public FramesSphLongit(in Slice<Vec3> points)
         : base(new Frame.Sph(), points) {}
-    public FramesSphLongit(in Frame.Sph centre, in List<Vec3> points)
+    public FramesSphLongit(in Frame.Sph centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.longit(pos);
 }
 public class FramesSphLatit : FramesSph {
-    public FramesSphLatit(in List<Vec3> points)
+    public FramesSphLatit(in Slice<Vec3> points)
         : base(new Frame.Sph(), points) {}
-    public FramesSphLatit(in Frame.Sph centre, in List<Vec3> points)
+    public FramesSphLatit(in Frame.Sph centre, in Slice<Vec3> points)
         : base(centre, points) {}
     protected override Frame _frame(Vec3 pos) => centre.latit(pos);
 }

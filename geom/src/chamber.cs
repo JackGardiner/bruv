@@ -98,12 +98,27 @@ public class Chamber : TPIAP.Pea {
     public int no_chnl = -1;
     public float th_chnl = NAN;
     public float Ltheta_chnl = NAN;
-    public float theta0_chnl = NAN;
     public float A_chnl_exit = NAN;
-    protected float theta_chnl(float z) {
-        z = z/cnt_z6 - 0.5f;
-        assert(pm.no_bolt == 8, "change special constant smile");
-        return 7.7f*TWOPI/no_chnl * 0.5f*sin(PI*z);
+
+    protected float[] theta_chnl_lookup = [];
+    protected float theta_chnl_lookup_zlo = NAN;
+    protected float theta_chnl_lookup_zhi = NAN;
+    protected float theta_chnl(float z) { // NOTE: not angle wrapped.
+        // cheeky lookup table mate. could write em in my sleep.
+        z -= theta_chnl_lookup_zlo;
+        z /= theta_chnl_lookup_zhi - theta_chnl_lookup_zlo;
+        z = clamp(z, 0f, 1f);
+        z *= numel(theta_chnl_lookup) - 1;
+        int i = clamp(ifloor(z), 0, numel(theta_chnl_lookup) - 2);
+        int j = i + 1;
+        float t = z - i;
+        float A = theta_chnl_lookup[i];
+        float B = theta_chnl_lookup[j];
+        return lerp(A, B, t);
+
+        // assert(pm.no_bolt == 8, "change special constant smile");
+        // z = z/cnt_z6 - 0.5f;
+        // return 7.7f*TWOPI/no_chnl * 0.5f*sin(PI*z);
     }
     protected void initialise_chnl() {
         no_chnl = no_web;
@@ -111,19 +126,46 @@ public class Chamber : TPIAP.Pea {
         Ltheta_chnl = TWOPI/no_chnl - Ltheta_web;
         assert(Ltheta_chnl > 0f);
 
-      #if false
-        float ave_theta = 0f;
-        int N = 10000;
+        // Compute theta channel.
+
+        float phi = torad(30f); // MAGIC (heart eyes)
+
+        int N = DIVISIONS;
+        theta_chnl_lookup = new float[N];
+        // distributed between zlo and zhi, clamped outside.
+
+        float zlo = theta_chnl_lookup_zlo = cnt_z0;
+        float zhi = theta_chnl_lookup_zhi = cnt_z6 - th_chnl - th_omani;
+        float Dz = (zhi - zlo) / (N - 1);
+        float rho = Dz * tan(phi); // radius of difference between points.
+
+        float prev_r = NAN;
+        float prev_theta = NAN;
         for (int i=0; i<N; ++i) {
-            float z = lerp(cnt_z0, cnt_z6, i, N);
-            float theta = theta_chnl(z);
-            ave_theta += (theta - ave_theta) / (i + 1);
+            float z = lerp(zlo, zhi, i, N);
+            float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
+            float theta;
+            if (i > 0) {
+                // got a 3d triangle to solve.
+                float cosa = (r*r - prev_r*prev_r - rho*rho)
+                           / (2f * prev_r * rho);
+                float a = acos(clamp(cosa, 0f, 1f));
+                Vec2 step = rho * frompol(1, prev_theta + a);
+                Vec2 curr = frompol(prev_r, prev_theta) + step;
+                theta = arg(curr);
+            } else {
+                // kinda required, since theta0_chnl handles any offset.
+                theta = 0f;
+            }
+            prev_r = r;
+            prev_theta = theta;
+            theta_chnl_lookup[i] = theta;
         }
-        theta0_chnl = theta_tc - ave_theta;
-      #else
+
         // ensure first channel is at stagnation point of manifold.
-        theta0_chnl = wraprad(theta_inlet + PI - theta_chnl(cnt_z6));
-      #endif
+        float Dtheta = theta_inlet + PI - theta_chnl(zhi);
+        for (int i=0; i<N; ++i)
+            theta_chnl_lookup[i] += Dtheta;
 
         A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(r_exit + th_iw + th_chnl)
                                             - squared(r_exit + th_iw));
@@ -627,7 +669,7 @@ public class Chamber : TPIAP.Pea {
 
     protected Voxels voxels_cnt_filled(float max_off, bool widened,
             bool extra=true) {
-        List<Vec2> V = new();
+        List<Vec2> V = new(DIVISIONS + 2);
         float zlo = cnt_z0;
         float zhi = cnt_z6;
         if (extra) {
@@ -704,57 +746,214 @@ public class Chamber : TPIAP.Pea {
         key.cycle(Geez.voxels(vox));
         return vox;
     }
-    protected Voxels voxels_outer()
-        => voxels_cnt_filled(th_iw + th_chnl + th_ow, true);
+
+    protected Mesh mesh_outer_lines(float Mtheta, float Ltheta, float Lr) {
+        return new(); // mmm naw.
+        int N = 2*DIVISIONS;
+        assert(N >= 4);
+
+        List<Vec2> vertices = new(N + 1); // (z,r)
+        // ccw winding of vertices about +circum.
+
+        float zlo = cnt_z0;
+        float zhi = cnt_z6;
+        for (int i=0; i<N/2; ++i) {
+            float z = lerp(zhi, zlo, i, N/2);
+            float r = cnt_radius_at(z, th_iw + th_chnl + th_ow, true);
+            r -= 2f; // safety. can have big factor.
+            vertices.Add(new(z, r));
+        }
+        for (int i=0; i<N/2; ++i) {
+            float z = lerp(zlo, zhi, i, N/2);
+            float r = cnt_radius_at(z, th_iw + th_chnl + th_ow, true);
+            r += Lr;
+            vertices.Add(new(z, r));
+        }
+        // duplicate lowest points downwards by EXTRA.
+        vertices.Insert(N/2, vertices[N/2] - EXTRA*uX2);
+        vertices.Insert(N/2, vertices[N/2 - 1] - EXTRA*uX2);
+
+        return Polygon.mesh_revolved(
+            new Frame().rotxy(Mtheta - Ltheta/2f),
+            vertices,
+            Ltheta,
+            slicecount: max(4, (int)(Ltheta * DIVISIONS / TWOPI)),
+            donut: true
+        );
+    }
+
+    protected Voxels voxels_outer(Geez.Cycle key) {
+        using var __ = key.like();
+
+        Voxels vox = voxels_cnt_filled(th_iw + th_chnl + th_ow, true);
+        key.voxels(vox);
+
+        List<int> mesh_keys = new();
+
+        float Ltheta = 0.004f*TWOPI;
+        float Lr = 1f;
+        int no = 52; //%4==0
+        Mesh mesh0 = mesh_outer_lines(0f, Ltheta, Lr);
+        for (int i=0; i<no; ++i) {
+            float Dtheta = i*TWOPI/no;
+            Transformer trans = new Transformer().rotate(uZ3, Dtheta);
+            Mesh mesh = trans.mesh(mesh0);
+            mesh_keys.Add(Geez.mesh(mesh));
+            vox.BoolAdd(new(mesh));
+        }
+
+        key.cycle(Geez.voxels(vox));
+        Geez.remove(mesh_keys);
+
+        return vox;
+    }
 
 
+    protected Mesh mesh_chnl() {
+        int N0 = DIVISIONS;
+        int N1 = max(4, DIVISIONS/60);
+        int M = max(4, (int)(Ltheta_chnl*DIVISIONS/TWOPI));
+        M += M & 1; // make even.
+        assert(N0 >= 2);
+        assert(N1 >= 2);
+        assert(M >= 2);
 
-    protected Mesh mesh_chnl(float theta0) {
-        List<Vec3> frames = new((int)(DIVISIONS*1.1f));
-        List<Vec2> vertices = new((int)(DIVISIONS*5f));
-        float Dt = 0.5f*Ltheta_chnl; // t for theta.
+        List<Vec3> frames = new(N0 + N1 + 1);
+        List<Vec2> vertices = new((N0 + N1 + 1)*M);
+        // ccw winding of vertices about +axial.
+
         float zlo = cnt_z0;
         float zhi = cnt_z6 - th_omani - th_chnl;
-        for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS);
-            float theta = theta0 + theta_chnl(z);
-            float thetalo = theta - Dt;
-            float thetahi = theta + Dt;
+        for (int i=0; i<N0; ++i) {
+            float z = lerp(zlo, zhi, i, N0);
             float rlo = cnt_radius_at(z, th_iw, true);
             float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
+            float Mtheta = theta_chnl(z);
+            float thetalo = Mtheta - Ltheta_chnl/2f;
+            float thetahi = Mtheta + Ltheta_chnl/2f;
 
             frames.Add(z*uZ3);
-            vertices.Add(frompol(rlo, thetalo));
-            vertices.Add(frompol(rhi, thetalo));
-            vertices.Add(frompol(rhi, thetahi));
-            vertices.Add(frompol(rlo, thetahi));
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(thetahi, thetalo, j, M/2);
+                vertices.Add(frompol(rlo, theta));
+            }
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(thetalo, thetahi, j, M/2);
+                vertices.Add(frompol(rhi, theta));
+            }
         }
+        // duplicate lowest polygon downwards by EXTRA.
         frames.Insert(0, frames[0] - EXTRA*uZ3);
-        vertices.Insert(0, vertices[3]);
-        vertices.Insert(0, vertices[3]);
-        vertices.Insert(0, vertices[3]);
-        vertices.Insert(0, vertices[3]);
+        for (int j=0; j<M; ++j)
+            vertices.Insert(0, vertices[M - 1]);
 
         zlo = zhi;
         zhi = cnt_z6 - th_omani;
-        for (int i=0; i<DIVISIONS/20; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS/20);
-            float theta = theta0 + theta_chnl(z);
-            float thetalo = theta - Dt;
-            float thetahi = theta + Dt;
-            float rlo = cnt_radius_at(z, th_iw, false);
-            float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani, false);
+        for (int i=0; i<N1; ++i) {
+            float z = lerp(zlo, zhi, i, N1);
+            float Mtheta = theta_chnl(z);
+            float rlo = cnt_radius_at(z, th_iw, true);
+            float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
+            float thetalo = Mtheta - Ltheta_chnl/2f;
+            float thetahi = Mtheta + Ltheta_chnl/2f;
             rhi += th_chnl/2f; // safety.
 
             frames.Add(z*uZ3);
-            vertices.Add(frompol(rlo, thetalo));
-            vertices.Add(frompol(rhi, thetalo));
-            vertices.Add(frompol(rhi, thetahi));
-            vertices.Add(frompol(rlo, thetahi));
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(thetahi, thetalo, j, M/2);
+                vertices.Add(frompol(rlo, theta));
+            }
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(thetalo, thetahi, j, M/2);
+                vertices.Add(frompol(rhi, theta));
+            }
         }
 
         return Polygon.mesh_swept(new FramesCart(frames), vertices);
     }
+
+    protected Mesh mesh_chnl_const_th_web(float wi_web) {
+        int N0 = DIVISIONS;
+        int N1 = DIVISIONS/20;
+        int M = max(5, (int)(Ltheta_chnl*DIVISIONS/TWOPI));
+        M += M & 1; // make even.
+        assert(N0 >= 2);
+        assert(N1 >= 2);
+        assert(M >= 2);
+
+        List<Vec3> frames = new(N0 + N1 + 1);
+        List<Vec2> vertices = new((N0 + N1 + 1)*M);
+        // ccw winding of vertices about +axial.
+
+        float zlo = cnt_z0;
+        float zhi = cnt_z6 - th_omani - th_chnl;
+        for (int i=0; i<N0; ++i) {
+            float z = lerp(zlo, zhi, i, N0);
+            float Mtheta = theta_chnl(z);
+            float rlo = cnt_radius_at(z, th_iw, true);
+            float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
+
+            frames.Add(z*uZ3);
+
+            float r;
+            float wi() => TWOPI*r/no_web - wi_web;
+
+            r = rlo;
+            float theta0lo = Mtheta - wi()/2f/r;
+            float theta0hi = Mtheta + wi()/2f/r;
+            assert(theta0hi > theta0lo);
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(theta0hi, theta0lo, j, M/2);
+                vertices.Add(frompol(rlo, theta));
+            }
+            r = rhi;
+            float theta1lo = Mtheta - wi()/2f/r;
+            float theta1hi = Mtheta + wi()/2f/r;
+            assert(theta1hi > theta1lo);
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(theta1lo, theta1hi, j, M/2);
+                vertices.Add(frompol(rhi, theta));
+            }
+        }
+        // duplicate lowest polygon downwards by EXTRA.
+        frames.Insert(0, frames[0] - EXTRA*uZ3);
+        for (int j=0; j<M; ++j)
+            vertices.Insert(0, vertices[M - 1]);
+
+        zlo = zhi;
+        zhi = cnt_z6 - th_omani;
+        for (int i=0; i<N1; ++i) {
+            float z = lerp(zlo, zhi, i, N1);
+            float Mtheta = theta_chnl(z);
+            float rlo = cnt_radius_at(z, th_iw, true);
+            float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani, true);
+            rhi += th_chnl/2f; // safety.
+
+            frames.Add(z*uZ3);
+
+            float r;
+            float wi() => TWOPI*r/no_web - wi_web;
+
+            r = rlo;
+            float theta0lo = Mtheta - wi()/2f/r;
+            float theta0hi = Mtheta + wi()/2f/r;
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(theta0hi, theta0lo, j, M/2);
+                vertices.Add(frompol(rlo, theta));
+            }
+            // dont use rhi here since thats not the outer radius of channel.
+            r = cnt_radius_at(z, th_iw + th_chnl, true);
+            float theta1lo = Mtheta - wi()/2f/r;
+            float theta1hi = Mtheta + wi()/2f/r;
+            for (int j=0; j<M/2; ++j) {
+                float theta = lerp(theta1lo, theta1hi, j, M/2);
+                vertices.Add(frompol(rhi, theta));
+            }
+        }
+
+        return Polygon.mesh_swept(new FramesCart(frames), vertices);
+    }
+
 
     protected Voxels voxels_chnl(Geez.Cycle key) {
         using var __ = key.like();
@@ -762,7 +961,19 @@ public class Chamber : TPIAP.Pea {
         Voxels vox = new();
         List<int> mesh_keys = new();
 
-        Mesh mesh0 = mesh_chnl(theta0_chnl);
+      #if false
+        print("th_chnl,   30deg helix angle,  1.5mm wi_web: "
+           + $"{(TWOPI*r_tht/no_web - 1.5f)*cos(torad(30f))} mm");
+        print("th_chnl,   30deg helix angle,  1.5mm th_web: "
+           + $"{TWOPI*r_tht/no_web*cos(torad(30f)) - 1.5f} mm");
+        print("wi_chnl,   30deg helix angle,  1.5mm wi_web: "
+           + $"{TWOPI*r_tht/no_web - 1.5f} mm");
+        print("wi_chnl,   30deg helix angle,  1.5mm th_web: "
+           + $"{TWOPI*r_tht/no_web - 1.5f/cos(torad(30f))} mm");
+      #endif
+        float wi_web = 1.5f / cos(torad(30f));
+
+        Mesh mesh0 = mesh_chnl_const_th_web(wi_web); // TODO: hi
         for (int i=0; i<no_chnl; ++i) {
             float Dtheta = i*TWOPI/no_chnl;
             Transformer trans = new Transformer().rotate(uZ3, Dtheta);
@@ -782,7 +993,7 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected const float min_A_neg_mani = 16f; // mm^2
+    protected const float min_A_neg_mani = 18f; // mm^2
     protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
@@ -892,7 +1103,7 @@ public class Chamber : TPIAP.Pea {
 
         // Note that this fillet has made the polygon variable-length, so
         // resample it to a fixed amount.
-        List<Vec2> wall = neg[..^divs_fillet];
+        List<Vec2> wall = neg[..^(divs_fillet + 1)];
         List<Vec2> fillet = neg[^divs_fillet..];
         wall = Polygon.resample(wall, DIVISIONS/25);
         fillet = Polygon.resample(fillet, DIVISIONS/60);
@@ -1096,7 +1307,7 @@ public class Chamber : TPIAP.Pea {
         List<Vec3> line = new();
         for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(min_z, max_z, i, DIVISIONS);
-            float theta = theta0_chnl + theta_chnl(z);
+            float theta = theta_chnl(z);
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
             line.Add(fromcyl(r, theta, z));
         }
@@ -1473,8 +1684,8 @@ public class Chamber : TPIAP.Pea {
         else
             no_step("skipping branding (voxel size too large, would fail).");
 
-        part = voxels_outer();
-        step("created outer wall.", view_part: true);
+        part = voxels_outer(key_part);
+        step("created outer wall.");
 
         add(ref pos_mani);
         substep($"added positive manifold.", view_part: true);
@@ -1624,144 +1835,34 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        print("loading");
-        SDFimage img = new(fromroot("assets/.jackyg.tga"));
-        print($"{img.width} x {img.height}");
 
-        Geez.voxels(img.voxels_on_plane(new(), 1f, 40f));
+        // List<int> l = [0, 1, 2, 3, 4, 5];
+        // Slice<int> s = new(l, 1, 3, 2);
 
-
-        // print("saving");
-        // img.stash_a_look(fromroot(".sdfimg.tga"), resolution: 3, sharpness: 4);
-        // print("saved");
-
-
-        // SDFfunction sdf_cyl = img.sdf_on_cyl(out BBox3 bbox, 10f, 40f, 50f);
-        // Geez.pipe(new(new(), 50f/img.aspect_x_on_y, 10f, 50f));
-        // Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf_cyl).voxels(bbox));
-
-
-        // Geez.clear();
-        // SDFfunction sdf_flat = img.sdf_flat(out bbox, 1f, 30f);
-        // Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf_flat).voxels(bbox));
-
-        // Frame centre = new((100f - 15f)*uZ3, -uY3, uZ3);
-        // float Lz = 30f;
-        // float Lr = 1f;
-        // float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.2f;
-        // float length = Lz / img.aspect_x_on_y;
-        // SDFfunction sdf = img.sdf_on_cyl(true, out BBox3 bbox, centre, R, Lr,
-        //         length);
-        // Geez.frame(centre);
-        // Geez.bbox(bbox);
-        // // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-        // Geez.voxels(img.voxels_on_cyl(true, centre, R, Lr, length));
+        // Slice<int> t = s.slice(1, 5, 2);
+        // foreach (int i in t)
+        //     print(i);
+        // print();
 
 
 
-        // float L = 1f;
-        // float length = 30f;
-        // float R = 20f;
-        // Frame frame;
-        // BBox3 bbox;
-        // SDFfunction sdf;
-
-        // frame = new Frame(-ONE3).rotxy(-4f*PI/3f);
-        // Geez.frame(frame);
-        // Geez.pipe(new Pipe(frame, length / img.aspect_x_on_y, R, R + L).at_centre());
-        // sdf = img.sdf_on_cyl(true, out bbox, frame, R, L, length);
-        // Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-
-        // frame = new Frame(ONE3).rotzx(PI/3f);
-        // Geez.frame(frame);
-        // Geez.pipe(new Pipe(frame.rotyz(PI_2), length, R, R + L).at_centre());
-        // sdf = img.sdf_on_cyl(false, out bbox, frame, R, L, length);
-        // Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-
-
-        // Frame frame = Frame.cyl_axial(20*ONE3 - 10*uZ3);
-        // Frame frame = new Frame(20*ONE3 - 10*uZ3).rotzx(torad(15));
-
-        // img.sdf_on_plane(out bbox, frame, L, length);
-        // Geez.bbox(bbox);
-        // Geez.voxels(img.voxels_on_plane(frame, L, length));
-
-        // frame = frame.rotzx(torad(-15)).transx(-30f).rotxy(PI/3f).rotzx(torad(15));
-        // frame = new();
-        // Geez.frame(frame);
-        // img.sdf_on_cyl(out bbox, frame, R, L, length);
-        // Geez.bbox(bbox);
-        // Geez.voxels(img.voxels_on_cyl(vertical: true, frame, R, L, length));
-
-
-
-        // float aspect_x_on_y = img.width / (float)img.height;
-        // float scale = length / max(img.width, img.height);
-        // Vec2 corner = (aspect_x_on_y >= 1f)
-        //             ? new(length, length / aspect_x_on_y)
-        //             : new(length * aspect_x_on_y, length);
-        // float Lz = 2f;
-
-        // float sdf(in Vec3 p) {
-        //     float z = p.Z;
-        //     float dist_z = max(-z, z - Lz);
-
-        //     Vec2 q = projxy(p);
-        //     float dist_xy = img.signed_dist(q / scale) * scale;
-
-        //     float dist;
-        //     if (dist_xy <= 0f || dist_z <= 0f) {
-        //         dist = max(dist_xy, dist_z);
-        //     } else {
-        //         dist = hypot(dist_xy, dist_z);
-        //     }
-        //     return dist;
-        // }
-        // PicoGK.BBox3 bbox = new(ZERO3, rejxy(corner, Lz));
-        // // Geez.bbox(bbox);
-        // // Geez.voxels(new SDFfilled(sdf).voxels(bbox));
-        // // print("rendered");
-
-
-        // float r0 = 70f;
-        // float Lr = 1f;
-        // float sdf_cyl(in Vec3 p) {
-        //     float r = magxy(p);
-        //     float t = argxy(p);
-        //     float z = p.Z;
-        //     float dist_r = max(r0 - r, r - (r0 + Lr));
-
-        //     Vec2 q = new(r0*t, z);
-        //     float dist_surf = img.signed_dist(q / scale) * scale;
-        //     // technically, this is the distance along the surface of the
-        //     // cylinder and not true euclidean in xyz. but like, theyre pretty
-        //     // similar.
-
-        //     float dist;
-        //     if (dist_surf <= 0f || dist_r <= 0f) {
-        //         dist = max(dist_surf, dist_r);
-        //     } else {
-        //         dist = hypot(dist_surf, dist_r);
-        //     }
-        //     return dist;
-        // }
-        // Geez.pipe(new(new Frame(), corner.Y, r0));
-        // bbox = new();
-        // bbox.Include(fromcyl(r0,      0f,            0f));
-        // bbox.Include(fromcyl(r0,      0f,            corner.Y));
-        // bbox.Include(fromcyl(r0 + Lr, 0f,            0f));
-        // bbox.Include(fromcyl(r0 + Lr, 0f,            corner.Y));
-        // bbox.Include(fromcyl(r0,      corner.X / r0, 0f));
-        // bbox.Include(fromcyl(r0,      corner.X / r0, corner.Y));
-        // bbox.Include(fromcyl(r0 + Lr, corner.X / r0, 0f));
-        // bbox.Include(fromcyl(r0 + Lr, corner.X / r0, corner.Y));
-        // Geez.bbox(bbox);
-        // Geez.voxels(new SDFfilled(sdf_cyl).voxels(bbox));
-        // print("rendered");
+        static void printme(Slice<int> s) {
+            string m = "";
+            foreach (int i in s) {
+                m += $" {i,2}";
+            }
+            print(m);
+        }
+        Slice<int> s = [0,1,2,3,4,5,6,7,8,9];
+        printme(s);
+        // printme(s.subslice(3, 2, rep:4));
+        // printme(s.subslice(3, 2, -1));
+        // printme(s.subslice(3, -2, -1, rep:4));
+        printme(s.subslice(5, 2));
+        printme(s.subslice(5, -2));
+        printme(s.subslice(5, 2, 2));
+        printme(s.subslice(5, -2, 2));
+        printme(s.subslice(5, -2, 2).reversed());
     }
 
 

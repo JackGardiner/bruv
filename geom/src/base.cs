@@ -24,13 +24,17 @@ public static partial class Br {
     public const int EXTEND_UPDOWN = 0x3;
 
     public const int CORNER_x0y0z0 = 0x0;
-    public const int CORNER_x1y0z0 = 0x1;
+    public const int CORNER_x0y0z1 = 0x1;
     public const int CORNER_x0y1z0 = 0x2;
-    public const int CORNER_x1y1z0 = 0x3;
-    public const int CORNER_x0y0z1 = 0x4;
+    public const int CORNER_x0y1z1 = 0x3;
+    public const int CORNER_x1y0z0 = 0x4;
     public const int CORNER_x1y0z1 = 0x5;
-    public const int CORNER_x0y1z1 = 0x6;
+    public const int CORNER_x1y1z0 = 0x6;
     public const int CORNER_x1y1z1 = 0x7;
+
+    public const int CORNER_MASK_z = 0x1;
+    public const int CORNER_MASK_y = 0x2;
+    public const int CORNER_MASK_x = 0x4;
 
     public const int EDGE_x0z0 = 0x8 + 0x8*0;
     public const int EDGE_x1z0 = 0x8 + 0x8*1;
@@ -344,11 +348,11 @@ public class Cuboid {
 
     public Cuboid at_corner(int corner) {
         Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
-        if (isset(corner, 0x1))
+        if (isset(corner, CORNER_MASK_x))
             trans.X += Lx;
-        if (isset(corner, 0x2))
+        if (isset(corner, CORNER_MASK_y))
             trans.Y += Ly;
-        if (isset(corner, 0x4))
+        if (isset(corner, CORNER_MASK_z))
             trans.Z += Lz;
         return new(centre.translate(trans), Lx, Ly, Lz);
     }
@@ -628,14 +632,14 @@ public class Cone : SDF {
 
 
 public class Tubing {
-    public List<Vec3> points { get; }
+    public Slice<Vec3> points { get; }
     public float ID { get; }
     public float th { get; }
     public float Fr { get; }
 
-    public Tubing(in List<Vec3> points, float OD)
+    public Tubing(in Slice<Vec3> points, float OD)
         : this(points, 0f, 0.5f*OD) {}
-    public Tubing(in List<Vec3> points, float ID, float th, float Fr=0f) {
+    public Tubing(in Slice<Vec3> points, float ID, float th, float Fr=0f) {
         assert(numel(points) >= 2, $"numel={numel(points)}");
         assert(ID >= 0f);
         assert(th > 0f);

@@ -305,7 +305,7 @@ public static class Geez {
         /* bounding box properties of canonical objects. */
         public static Vec3 size { get; private set; } = 100f*ONE3;
         public static Vec3 centre { get; private set; } = ZERO3;
-        private static bool explicit_scene = false;
+        public static bool explicit_scene = false;
         public static bool resize() {
             // Use the reaaal bounding box (which picogk doesnt know about).
             if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
@@ -1219,6 +1219,7 @@ public static class Geez {
     }
 
     public static IDisposable remember_current_layout() {
+        bool expl = ViewerHack.explicit_scene;
         Vec3 size = ViewerHack.size;
         Vec3 centre = ViewerHack.centre;
         bool orbit = ViewerHack.orbit;
@@ -1228,6 +1229,7 @@ public static class Geez {
         float phi = ViewerHack.future_phi;
         float fov = ViewerHack.future_fov;
         return Scoped.on_leave(() => {
+            ViewerHack.explicit_scene = expl;
             ViewerHack.set_size(size,                         expl: false);
             ViewerHack.set_centre(centre,                     expl: false);
             ViewerHack.set_orbit(orbit, false,  instant:true, expl: false);
