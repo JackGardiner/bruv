@@ -818,9 +818,9 @@ public class SDFimage {
         float[,] sda = new float[W, H];
         for (int x=0; x<W; ++x) {
             for (int y=0; y<H; ++y) {
-                sda[x, H - 1 - y] = mask[x, y]
-                                  ? -inside_dist[x, y]
-                                  : +outside_dist[x, y];
+                sda[x, y] = mask[x, y]
+                          ? -inside_dist[x, y]
+                          : +outside_dist[x, y];
 
             }
         }
@@ -848,6 +848,18 @@ public class SDFimage {
                         mask[i, j] = on;
                     }
                 }
+            }
+        }
+        return mask;
+    }
+
+    private static bool[,] make_mask_offset(float[,] sda, float off) {
+        int W = sda.GetLength(0);
+        int H = sda.GetLength(1);
+        bool[,] mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                mask[x, y] = sda[x, y] <= off;
             }
         }
         return mask;
@@ -882,11 +894,46 @@ public class SDFimage {
         this.sda = make_sda(mask);
     }
 
+    public void fix_unimelb_lmao() {
+        float min_th = 7f * scale;
+        int min_x = xextra + 900 * scale;
+
+        int W = sda.GetLength(0);
+        int H = sda.GetLength(1);
+        float min_r = 0.5f*min_th;
+
+        // Find regions which are thick enough.
+        bool[,] thick_mask = make_mask_offset(sda, -min_r);
+        float[,] thick_sda = make_sda(thick_mask);
+
+        // Using the thick-enough find the too-thin.
+        bool[,] thin_mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                thin_mask[x, y] = (sda[x, y] < 0f) && (thick_sda[x, y] > 0f);
+            }
+        }
+        float[,] thin_sda = make_sda(thin_mask);
+
+        // Expand the too-thin and union it with current.
+        bool[,] new_mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                new_mask[x, y] = sda[x, y] < 0f;
+                if (x > min_x)
+                    new_mask[x, y] |= thin_sda[x, y] < min_r;
+            }
+        }
+
+        // Make the new sda.
+        sda = make_sda(new_mask);
+    }
+
 
     // Returns the signed distance in units of pixels, with an input vector also
     // in units of pixels. The valid bounds are ~(width, -height) to
     // ~(2 width, 2 height).
-    public float signed_dist(in Vec2 p) {
+    public float signed_dist(in Vec2 p /* pixels */) {
         assert(within(p.X, -xextra, width  + xextra));
         assert(within(p.Y, -yextra, height + yextra));
 

@@ -1496,16 +1496,23 @@ public class Chamber : TPIAP.Pea {
         if (VOXEL_SIZE > 0.5)
             return null;
 
-        int scale = (VOXEL_SIZE < 0.1) ? 2 : 1; // might as well.
-        SDFimage image = new(fromroot("assets/unimelblogo.tga"), scale: scale);
+        float Lz = 35f;
+        float Lr = 0.6f;
+        float Lr_inset = 0.4f;
+        float R = cnt_r1 + th_iw + th_chnl + th_ow - Lr_inset;
+        Lr += Lr_inset;
+        Frame centre = new Frame(cnt_z1*uZ3).rotxy(theta_inlet - PI_2);
+        centre = centre.transz(-0.29f*Lz);
 
-        Frame centre = new((cnt_z1 - 15f)*uZ3, -uY3, uZ3);
-        float Lz = 20f;
-        float Lr = 1.5f;
-        float R = cnt_r1 + th_iw + th_chnl + th_ow - 0.4f;
-        float length = Lz * image.aspect_x_on_y;
-        Voxels vox = image.voxels_on_cyl(vertical: true, centre, R, Lr, length);
+        SDFimage img = new(fromroot("assets/unimelb_ccw.tga"), flipy: true);
+        img.fix_unimelb_lmao();
+        Voxels vox = img.voxels_on_cyl(true, centre, R, Lr, Lz);
+        key.voxels(vox);
 
+        centre = centre.transz(-1f*Lz);
+
+        img = new(fromroot("assets/csiro_ccw.tga"), flipy: true);
+        vox.BoolAdd(img.voxels_on_cyl(true, centre, R, Lr, Lz));
         key.voxels(vox);
 
         return vox;
@@ -1704,17 +1711,10 @@ public class Chamber : TPIAP.Pea {
         substep("clipped top excess.", view_part: true);
 
         if (!filletless) {
-            Fillet.concave(part, 3f, inplace: true);
+            Fillet.both(part, concave_Fr: 3f, convex_Fr: 0.4f, inplace: true);
             step("filleted.", view_part: true);
         } else {
             no_step("skipping fillet.");
-        }
-
-        if (branding != null) {
-            add(ref branding, key_branding);
-            step("added branding.");
-        } else {
-            no_step("no branding to add.");
         }
 
         sub(ref gas, key_gas, keepme: cutaway);
@@ -1730,12 +1730,19 @@ public class Chamber : TPIAP.Pea {
 
         step($"added inner componenets.");
 
+        if (branding != null) {
+            add(ref branding, key_branding);
+            substep("added branding.", view_part: true);
+        } else {
+            substep("no branding to add.");
+        }
+
         part.BoolSubtract(new Cuboid(
             new Frame(ZERO3, -uZ3),
             2f*EXTRA,
             2f*(pm.Mr_bolt + pm.Bsz_bolt/2f + pm.thickness_around_bolt + EXTRA)
         ).voxels());
-        substep("clipped bottom excess.", view_part: false);
+        substep("clipped bottom excess.");
 
         step("finished.", view_part: true);
 

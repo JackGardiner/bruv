@@ -492,6 +492,9 @@ public static class Geez {
             }
         }
 
+        /* cheeky roll. */
+        private static int roll = 0;
+
         /* prevent moving/rotation/mode-switching of the viewer. note this is
            bypassable by all set methods, and only locks keybinds. */
         public static float locked_for { get; private set; } = 0f;
@@ -788,6 +791,12 @@ public static class Geez {
             Vec3 up = nearvert(looking)
                     ? fromcyl(1f, theta + ((looking.Z < 0f) ? 0f : PI), 0f)
                     : uZ3;
+            switch ((roll % 4 + 4) % 4) {
+                case 0: break;
+                case 1: up =  normalise(cross(looking, up)); break;
+                case 2: up = -up; break;
+                case 3: up = -normalise(cross(looking, up)); break;
+            }
 
             // Get focal lengths. Note the extra dist baked in exists to allow a
             // smooth transition about focal point (by shifting the focal point).
@@ -1132,6 +1141,13 @@ public static class Geez {
                 }
                 return true;
 
+              case VEK.Key_O:
+              case VEK.Key_P:
+                if (pressed && !islocked) {
+                    roll += (key == VEK.Key_O) ? 1 : -1;
+                }
+                return true;
+
               case VEK.Key_T:
                 if (pressed && !islocked)
                     set_transparency(!transparent);
@@ -1183,6 +1199,7 @@ public static class Geez {
         print("     - equals [+/=]    reframe view to full scene");
         print("     - backspace       reset view (+fix window aspect ratio)");
         print("     - K/L             dial up/down free fov");
+        print("     - O/P             super hacked-in roll camera");
         print("     - T               toggle transparency");
         print("     - Y               toggle background dark-mode");
         print();
