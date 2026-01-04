@@ -52,14 +52,14 @@ public static class Drawing {
     }
 
     public static void to_file(string path, Voxels vox, in Frame slice_at,
-            out Cuboid bounds) {
+            out Cuboid bounds, bool filled=true) {
         PolySlice poly_slice = slice(vox, slice_at, out bounds);
-        poly_slice.SaveToSvgFile(path, false);
+        poly_slice.SaveToSvgFile(path, filled);
     }
     public static void to_file(string path, Mesh mesh, in Frame slice_at,
-            out Cuboid bounds) {
+            out Cuboid bounds, bool filled=true) {
         PolySlice poly_slice = slice(mesh, slice_at, out bounds);
-        poly_slice.SaveToSvgFile(path, false);
+        poly_slice.SaveToSvgFile(path, filled);
     }
 }
 
