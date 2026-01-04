@@ -26,11 +26,11 @@
         "radial_fillet_radius": 5.0,
         "axial_fillet_radius": 10.0,
 
-        "fOxMassFlowRate": 2.5,
-        "fFuelMassFlowRate": 1.2,
+        "fOxMassFlowRate": 1.2,
+        "fFuelMassFlowRate": 0.8,
         "fOxInjectionRho": 1141.0,
         "fFuelInjectionRho": 786.0,
-        "fChamberPressure": 3.5e6
+        "fChamberPressure": 35e5
     },
     "chamber": {
         "L_cc": 100.0,
@@ -70,9 +70,9 @@
         "L_tc": 15.0
     },
     "injector": {
-        "no_inj": [6],
-        "r_inj": [32],
-        "theta0_inj": [0.0],
+        "no_inj": [5, 10],
+        "r_inj": [21, 40.21],
+        "theta0_inj": [0.0, 0.314159],
 
         "no_fc": [30],
         "r_fc": [48.5],
@@ -96,10 +96,10 @@
 
         "fTargetCdOx": 0.35,
         "fTargetCdFuel": 0.35,
-        "iOxSwirlInlets": 4,
-        "iFuelSwirlInlets": 4,
+        "sw_n_1": 4,
+        "sw_n_2": 4,
 
-        "fRoofThickness": 2.0
+        "fRoofThickness": 4.0
     },
     "printer": {
         "name": "Nikon SLM280 2.0",

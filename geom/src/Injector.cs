@@ -1,4 +1,7 @@
+using System;
 using System.Numerics;
+using System.Text;
+using Calculations;
 using static br.Br;
 using br;
 using Leap71.ShapeKernel;
@@ -43,11 +46,25 @@ public class Injector : TwoPeasInAPod.Pea
     public int no_annulus_rib;
     public float annulus_rib_width;
     public float area_swinlet_perinj;
-    public int no_swinlet;
     public float aspect_swinlet;
     public float rad_offset_swinlet;
     public int iTotalElementCount;
     public List<Vector3>? points_inj = null;
+
+    public required float sw_n_1 { get; init; }
+    public required float sw_n_2 { get; init; }
+    public float sw_R_n1;
+    public float sw_R_1;
+    public float sw_R_n2;
+    public float sw_R_in1;
+    public float sw_r_in1;
+    public float sw_R_in2;
+    public float sw_r_in2;
+    public float sw_l_in1;
+    public float sw_l_n1;
+    public float sw_l_s1;
+    public float sw_delta_l_n;
+
     protected void initialise_inj()
     {
         // injector patterning / overall init
@@ -175,85 +192,132 @@ public class Injector : TwoPeasInAPod.Pea
         fTargetdP = fTargetdPFrac*pm.fChamberPressure;
         float dP_i1 = fTargetdP;
         float dP_i2 = fTargetdP;
+        print($"foxmassflow: {pm.fOxMassFlowRate}, itotalelementcount: {iTotalElementCount}");
         float mdot_i1 = pm.fOxMassFlowRate / iTotalElementCount;
-        float mdot_i2 = fFuelElementMFR = pm.fFuelMassFlowRate / iTotalElementCount;
+        float mdot_i2 = pm.fFuelMassFlowRate / iTotalElementCount;
 
         // selected params
-        float Rbar_in1 = 3f; // coefficients of nozzle opening
-        float Rbar_in2 = 3f;
-        float lbar_n1 = 1f; // relative nozzle lengths
-        float lbar_n2 = 2f;
-        int n_1 = 3; // number of tangential inlet passages
-        int n_2 = 3;
-        float twoalpha_1 = torad(70f); // spray cone angle of stage 1
-        float twoalpha_2 = torad(35f); // spray cone angle of stage 2
+        float Rbar_in1 = 1.4f; // coefficients of nozzle opening
+        float Rbar_in2 = 1f; //TODO: should be bigger?  1 is convenient
+        float lbar_n1 = 1f; // relative nozzle lengths:  l_n / (2 * R_n)
+        float lbar_n2 = 0.5f;
+        float twoalpha_1 = torad(80f); // spray cone angle of stage 1
 
-        float C = 1f; // no idea what this is :)
+        float C_1 = 2f;
+        float C_2 = 1.2f;
 
         float nu_IPA = 2.66e-6f; // m2/s //TODO: f(T) this bad boy, it changes a lot w temp!
         float nu_LOX = 2.56e-6f; // at arithmetic mean of airborne ICD (114K)
 
         //   stage 1 (inner core) design
-        float A_1 = GraphLookup.GetA(twoalpha_1, lbar_n1);
-        float mu_1 = GraphLookup.GetFlowCoefficient(A_1, C);
+        float A_1 = GraphLookup.GetA(todeg(twoalpha_1), lbar_n1);
+        float mu_1 = GraphLookup.GetFlowCoefficient(A_1, C_1);
 
-        float R_n1 = 0.475f * sqrt(mdot_i1/(mu_1*sqrt(pm.fOxInjectionRho*dP_i1))) * 1e3f; // mm
-        float R_in1 = Rbar_in1 * R_n1;
-        float r_in1 = sqrt(R_in1*R_n1/(n_1*A_1));
+        print($"mu_1: {mu_1}, mdot_i1: {mdot_i1}, dP_i1: {dP_i1}, pm.fOxInjectionRho: {pm.fOxInjectionRho}");
+        sw_R_n1 = 0.475f * sqrt(mdot_i1/(mu_1*sqrt(pm.fOxInjectionRho*dP_i1))) * 1e3f; // mm
+        sw_R_in1 = Rbar_in1 * sw_R_n1;
+        sw_r_in1 = sqrt(sw_R_in1*sw_R_n1/(sw_n_1*A_1));
 
-        float Re_in1 = 2*mdot_i1/(PI*sqrt(n_1)*(r_in1*1e-3f)*pm.fOxInjectionRho*nu_LOX); // dimensionless
+        float Re_in1 = 2*mdot_i1/(PI*sqrt(sw_n_1)*(sw_r_in1*1e-3f)*pm.fOxInjectionRho*nu_LOX); // dimensionless
 
-        // print lil summary
-        Library.Log($"Stage 1 (LOX) nozzle inner radius: {r_in1} mm");
-        Library.Log($"Stage 1 (LOX) nozzle Reynolds number: {Re_in1}");
-        assert(Re_in1 > 4000, $"Stage 1 (LOX) nozzle flow: Re (= {Re_in1}) out of bounds for Bazarov");
-
-        float l_in1 = 4f   * r_in1;  // tangential passage length
-        float l_n1  = 2f   * R_n1;   // nozzle length
-        float l_s1  = 2.5f * R_in1;  // vortex chamber length
+        sw_l_in1 = 4f   * sw_r_in1;  // tangential passage length
+        sw_l_n1  = 2f   * sw_R_n1;   // nozzle length
+        sw_l_s1  = 2.5f * sw_R_in1;  // vortex chamber length
 
         float del_w = 0.8f;  // nozzle wall thickness
-        float R_1 = R_n1 + del_w; // external radius of nozzle
+        sw_R_1 = sw_R_n1 + del_w; // external radius of nozzle
+        float rm_bar_1 = GraphLookup.GetRelativeVortexRadius(A_1, Rbar_in1);
 
-    // --- stage 2 (outer annulus) design ---
-    float r_m2_req = R_1 + 0.3f;  // Required physical gas-vortex radius (constant)
-    float R_n2 = r_m2_req;        // Initial guess for nozzle radius
+        // --- stage 2 (outer annulus) design ---
+        float r_m2_req = sw_R_1 + 0.3f;  // Required physical gas-vortex radius (constant)
+        sw_R_n2 = r_m2_req;        // Initial guess for nozzle radius
 
-    float tolerance = 0.001f;
-    int maxIter = 100;
-    int iter = 0;
-    float diff = 1f;
-    float A_2 = 0;
+        float tolerance = 0.001f;
+        int maxIter = 100;
+        int iter = 0;
+        float diff = 1f;
+        float A_2 = 0;
+        float mu_2 = 0;
+        float rm_bar_2 = 0;
 
-    while (diff > tolerance && iter < maxIter)
-    {
-        // 1. Calculate current flow coefficient mu based on current Rn
-        float mu_2 = 0.225f * mdot_i2 / (pow(R_n2, 2) * sqrt(pm.fFuelInjectionRho * dP_i2));
+        while (diff > tolerance && iter < maxIter)
+        {
+            // 1. Calculate current flow coefficient mu based on current Rn
+            mu_2 = (mdot_i1+mdot_i2) / (PI * pow(sw_R_n2*1e-3f, 2) * sqrt(2*pm.fFuelInjectionRho*dP_i2));
 
-        // 2. Step 3: Find A based on mu (from Fig 34 correlations)
-        A_2 = GraphLookup.GetAFromMu(mu_2, C);
+            // 2. Step 3: Find A based on mu (from Fig 34 correlations)
+            A_2 = GraphLookup.GetAFromMu(mu_2, C_2);
 
-        // 3. Step 3: Find dimensionless relative vortex radius (from Fig 35)
-        float rm_bar = GraphLookup.GetRelativeVortexRadius(A_2, Rbar_in2);
+            // 3. Step 3: Find dimensionless relative vortex radius (from Fig 35)
+            rm_bar_2 = GraphLookup.GetRelativeVortexRadius(A_2, Rbar_in2);
 
-        // 4. Step 4: Calculate NEW physical nozzle radius
-        // Formula: Rn = r_m_physical / r_m_relative
-        float R_n2_new = r_m2_req / rm_bar;
+            // 4. Step 4: Calculate NEW physical nozzle radius
+            // Formula: Rn = r_m_physical / r_m_relative
+            float R_n2_new = r_m2_req / rm_bar_2;
 
-        diff = Math.Abs(R_n2_new - R_n2);
-        R_n2 = R_n2_new;
-        iter++;
+            diff = Math.Abs(R_n2_new - sw_R_n2);
 
-        Library.Log($"Iteration {iter}: R_n2 = {R_n2} mm, A_2 = {A_2}, mu = {mu_2}");
-    }
+            sw_R_n2 = R_n2_new;
+            iter++;
+        }
 
-    float R_in2 = Rbar_in2 * R_n2;
-    float r_in2 = sqrt(R_in2*R_n2/(n_2*A_2));
-    float Re_in2 = 2*mdot_i2/(PI*sqrt(n_2)*(r_in2*1e-3f)*pm.fFuelInjectionRho*nu_IPA); // dimensionless
+        sw_R_in2 = Rbar_in2 * sw_R_n2;
+        sw_r_in2 = sqrt(sw_R_in2*sw_R_n2/(sw_n_2*A_2));
+        float Re_in2 = 2*mdot_i2/(PI*sqrt(sw_n_2)*(sw_r_in2*1e-3f)*pm.fFuelInjectionRho*nu_IPA); // dimensionless
+        // spray cone angle
+        float two_alpha_2 = torad(GraphLookup.GetSprayConeAngle(A_2, lbar_n2));
+        float two_alpha = two_alpha_2 - torad(35);
+        float tau_i = 0.15e-3f;
 
-    // print lil summary
-    Library.Log($"Stage 2 (IPA) nozzle outer radius: {R_n2} mm");
-    Library.Log($"Stage 2 (IPA) nozzle Reynolds number: {Re_in2}");
+        float K_m = mdot_i1/mdot_i2;
+        float phi_1 = 1f - pow(rm_bar_1, 2);
+        float phi_2 = 1f - pow(rm_bar_2, 2);
+
+        // print inputs to l_mix calc
+        print($"K_m: {K_m}, mu_2: {mu_2}, phi_2: {phi_2}, dP_i2: {dP_i2}, pm.fFuelInjectionRho: {pm.fFuelInjectionRho}");
+        print($"mu_1: {mu_1}, phi_1: {phi_1}, dP_i1: {dP_i1}, pm.fOxInjectionRho: {pm.fOxInjectionRho}");
+
+
+        float l_mix = sqrt(2)*tau_i*(
+            (K_m*mu_2/(phi_2*(K_m+1)) * sqrt(dP_i2/pm.fFuelInjectionRho))
+            + (mu_1/(phi_1*(K_m+1)) * sqrt(dP_i1/pm.fOxInjectionRho))
+        ) * 1e3f;
+
+        float l_n2 = 2f*lbar_n2*sw_R_n2; // stage 2 nozzle length
+
+        sw_delta_l_n = l_n2 - l_mix;
+
+        using (StreamWriter writer = new StreamWriter("exports/injector_report.txt"))
+        {
+            writer.WriteLine("Injector Report");
+            writer.WriteLine("===============");
+            writer.WriteLine();
+            writer.WriteLine($"Total elements count: {iTotalElementCount}");
+            writer.WriteLine();
+            writer.WriteLine("Stage 1 (LOX):");
+            writer.WriteLine($"  - Nozzle inner radius: {sw_R_n1} mm");
+            writer.WriteLine($"  - Nozzle Reynolds number: {Re_in1}");
+            writer.WriteLine($"  - Nozzle outer radius: {sw_R_1} mm");
+            writer.WriteLine($"  - A_1: {A_1}");
+            writer.WriteLine($"  - Rbar_in1: {Rbar_in1}");
+            writer.WriteLine($"  - rm_bar_1: {rm_bar_1}");
+            writer.WriteLine($"  - Tangential inlet radius: {sw_r_in1} mm");
+            writer.WriteLine($"  - phi_1: {phi_1}");
+            writer.WriteLine($"  - Reynolds number at tangential inlet: {Re_in1}");
+            writer.WriteLine();
+            writer.WriteLine("Stage 2 (IPA):");
+            writer.WriteLine($"  - Nozzle outer radius: {sw_R_n2} mm");
+            writer.WriteLine($"  - Nozzle Reynolds number: {Re_in2}");
+            writer.WriteLine($"  - A_2: {A_2}");
+            writer.WriteLine($"  - Mixing length: {l_mix} mm");
+            writer.WriteLine($"  - Annulus radial gap: {sw_R_n2 - sw_R_1} mm");
+            writer.WriteLine($"  - Nozzle length: {l_n2} mm");
+            writer.WriteLine($"  - Tangential inlet radius: {sw_r_in2} mm");
+            writer.WriteLine($"  - delta_L (inset length) {sw_delta_l_n} mm");
+            writer.WriteLine($"  - phi_2: {phi_2}");
+            writer.WriteLine($"  - Reynolds number at tangential inlet: {Re_in2}");
+            writer.WriteLine();
+        }
 
     }
 
@@ -290,45 +354,83 @@ public class Injector : TwoPeasInAPod.Pea
 
 
     // voxel builder functions
-    protected Voxels voxels_injector_plate()
+    protected Voxels voxels_injector_plate(out Voxels fc_fluid)
     {
         // generate initial base plate
-        Voxels voxPlate = new BaseLens(
+        BaseLens oPlate = new BaseLens(
             new LocalFrame(),
             fInjectorPlateThickness,
             0,
             Ir_chnl
-        ).voxConstruct();
+        );
+
+        // piecewise function for raised edges (inner o-ring support)
+        float fGetPlateHeight(float phi, float r_norm)
+        {
+            float r_actual = r_norm * Ir_chnl;
+
+            float reinforced_height = 4f;
+            float min_height = 0.5f;
+            float inner_ramp_angle = torad(30f);
+            float outer_ramp_angle = torad(45f);
+            float inner_ramp_len = (reinforced_height-fInjectorPlateThickness) / tan(inner_ramp_angle);
+            float outer_ramp_len = (reinforced_height-min_height) / tan(outer_ramp_angle);
+
+            float r_inner = r_fc[0] + 1f;
+            float r_outer = Ir_chnl;
+            float r_plateau_inner = r_inner + inner_ramp_len;
+            float r_plateau_outer = r_outer - outer_ramp_len;
+
+            if (r_actual < r_inner)
+                return fInjectorPlateThickness;
+            else if (r_actual >= r_inner && r_actual < r_plateau_inner)
+                return fInjectorPlateThickness + (reinforced_height - fInjectorPlateThickness) * (r_actual - r_inner) / inner_ramp_len;
+            else if (r_actual >= r_plateau_inner && r_actual <= r_plateau_outer)
+                return reinforced_height;
+            else if (r_actual > r_plateau_outer && r_actual <= r_outer)
+                return min_height + (reinforced_height - min_height) * (r_outer - r_actual) / outer_ramp_len;
+            else
+                return 0f;
+        }
+
+        oPlate.SetHeight(
+            new SurfaceModulation(0f),
+            new SurfaceModulation(fGetPlateHeight)
+        );
+
+
+        Voxels voxPlate = oPlate.voxConstruct();
 
         // remove holes to create IPA annulus
         if (points_inj != null)
         {
             foreach (Vector3 point in points_inj)
             {
-                voxPlate -= new BaseCylinder(
-                    new LocalFrame(point),
-                    fInjectorPlateThickness,
-                    fFuelAnnulusOR
-                ).voxConstruct();
+                voxPlate -= new Pipe(
+                    new Frame(point).transz(-fInjectorPlateThickness/2),
+                    2f * fInjectorPlateThickness,
+                    sw_R_n2 + 0.1f // offset to ensure clean bool add
+                ).voxels();
 
-                // add ribs
-                Frame rib_frame = new Frame(point, uY3).transx(-fInjectorPlateThickness/2);
-                Voxels ribs = new();
-                for (int i=0; i<no_annulus_rib; i++)
-                {
-                    ribs += new Cuboid(
-                        rib_frame,
-                        fInjectorPlateThickness,
-                        annulus_rib_width,
-                        fFuelAnnulusOR
-                    ).voxels();
-                    rib_frame = rib_frame.rotyz(TWOPI/no_annulus_rib);
-                }
-                voxPlate += ribs;
+                // // add ribs
+                // Frame rib_frame = new Frame(point, uY3).transx(-fInjectorPlateThickness/2);
+                // Voxels ribs = new();
+                // for (int i=0; i<no_annulus_rib; i++)
+                // {
+                //     ribs += new Cuboid(
+                //         rib_frame,
+                //         fInjectorPlateThickness,
+                //         annulus_rib_width,
+                //         fFuelAnnulusOR
+                //     ).voxels();
+                //     rib_frame = rib_frame.rotyz(TWOPI/no_annulus_rib);
+                // }
+                // voxPlate += ribs;
             }
         }
 
         // remove holes to create film cooling (IPA)
+        fc_fluid = new Voxels();
         if (points_fc != null)
         {
             foreach (Vector3 aFilmHole in points_fc)
@@ -340,42 +442,32 @@ public class Injector : TwoPeasInAPod.Pea
             }
         }
 
+        voxPlate.BoolSubtract(fc_fluid);
+
         return voxPlate;
     }
 
-    protected Voxels vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets)
+    protected Voxels vox_inj_elements(out Voxels ox_post_fluid, out Voxels swirl_inlets)
     {
         // iterate through each injector element and create wall section and fluid section
-        Voxels voxOxPostWall = new();
-        Voxels voxSwirlChamber = new();
-        Voxels voxShearChamber = new();
-        voxOxPostFluid = new();
+        Voxels ox_post_wall = new();
+        Voxels vtx_ch_1 = new();
+        Voxels vtx_ch_2 = new();
+        ox_post_fluid = new();
         swirl_inlets = new();
 
         foreach (Vector3 aPoint in points_inj!)
         {
-            voxOxPostWall += new BasePipe(
-                new LocalFrame(aPoint),
-                fLOxPostLength,
-                0,
-                fCoreExitRadius+fLOxPostWT
-            ).voxConstruct();
+            Frame ox_post_frame = new Frame(aPoint).transz(sw_delta_l_n);
+            ox_post_wall += new Pipe(ox_post_frame, sw_l_n1, sw_R_1).voxels();
+            ox_post_fluid += new Pipe(ox_post_frame, 1.5f*sw_l_n1, sw_R_n1).voxels();
 
-            voxOxPostFluid += new BasePipe(
-                new LocalFrame(aPoint),
-                fLOxPostLength,
-                0,
-                fCoreExitRadius
-            ).voxConstruct();
-
-            float fSwirlChamberStraightHeight = 8f;
-            float fSwirlChamberRadius = 1.5f * fCoreExitRadius;
 
             // build upper/inner swirl chamber
             // calculate upper wall height
             float fSwirlChamberLowerBound = fGetConeRoofUpperHeight(
                 atan2(aPoint.Y, aPoint.X),
-                (aPoint.R()+fSwirlChamberRadius)/Or_chnl
+                (aPoint.R()+sw_R_in1)/Or_chnl
                 );
             LocalFrame oSwirlChamberFrame = new LocalFrame(aPoint + new Vector3(0f, 0f, fSwirlChamberLowerBound));
             Frame swirl_chamber_frame = new Frame(aPoint).transz(fSwirlChamberLowerBound);
@@ -384,76 +476,103 @@ public class Injector : TwoPeasInAPod.Pea
             Voxels voxNextSwirlChamber = new(); // temp so we don't cook old one w offsets
             voxNextSwirlChamber += new BasePipe(
                 oSwirlChamberFrame,
-                fSwirlChamberStraightHeight,
+                sw_l_s1,
                 0f,
-                fSwirlChamberRadius
+                sw_R_in1
                 ).voxConstruct();
 
             voxNextSwirlChamber += new BaseCone(
-                oSwirlChamberFrame.oTranslate(new Vector3(0f, 0f, fSwirlChamberStraightHeight)),
-                fSwirlChamberRadius,
-                fSwirlChamberRadius,
+                oSwirlChamberFrame.oTranslate(new Vector3(0f, 0f, sw_l_s1)),
+                sw_R_in1,
+                sw_R_in1,
                 0
             ).voxConstruct();
 
             voxNextSwirlChamber += new BasePipe(
                 oSwirlChamberFrame,
-                -fSwirlChamberStraightHeight,
+                -sw_l_s1,
                 0f,
-                fSwirlChamberRadius
+                sw_R_in1
             ).voxConstruct();
 
-            // construct tangential swirl inlets
-            float sw_a = area_swinlet_perinj / no_swinlet;
-            float sw_w = sqrt(sw_a/(aspect_swinlet-0.25f));
-            float sw_h_t = sw_w/2;  // triangle height
-            float sw_h_r = sw_w * (aspect_swinlet - 0.5f);
-
+            // construct tangential swirl inlets (stage 1)
             Voxels inlets = new();
             Frame swinlet_frame = new Frame(aPoint);
-            swinlet_frame = swinlet_frame.transz(fSwirlChamberLowerBound+fSwirlChamberStraightHeight);
+            swinlet_frame = swinlet_frame.transz(fSwirlChamberLowerBound+sw_l_s1-sw_r_in1);
             Vector3 rot_point = swinlet_frame.pos;
-            for (int i=0; i<no_swinlet; i++)
+            for (int i=0; i<sw_n_1; i++)
             {
                 Frame shifted_frame = new Frame(rot_point, uZ3, uY3);
-                shifted_frame = shifted_frame.rotyz(TWOPI*((float)i/no_swinlet));
+                shifted_frame = shifted_frame.rotyz(TWOPI*((float)i/sw_n_1));
                 shifted_frame = shifted_frame.rotxy(DEG90);
-                shifted_frame = shifted_frame.transx(rad_offset_swinlet);
+                shifted_frame = shifted_frame.transx(0.8f*sw_R_in1); //TODO: fix hack
 
-                inlets += new Voxels(Polygon.mesh_extruded(
+                inlets += new Pipe(
                     shifted_frame,
-                    fSwirlChamberRadius*4,
-                    [
-                        new(0, 0),
-                        new(sw_w, sw_h_t),
-                        new(sw_w, sw_h_t+sw_h_r),
-                        new(-sw_w, sw_h_t+sw_h_r),
-                        new(-sw_w, sw_h_t),
-                    ]
-                ));
-
+                    sw_R_in1*2,
+                    sw_r_in1
+                ).voxels();
             }
 
             voxNextSwirlChamber = voxNextSwirlChamber.voxOffset(1.5f) - voxNextSwirlChamber - inlets;
-            voxSwirlChamber += voxNextSwirlChamber;
+            vtx_ch_1 += voxNextSwirlChamber;
 
             // build lower/outer shear chamber
             float fShearChamberUpperBound = fGetConeRoofLowerHeight(
                 atan2(aPoint.Y, aPoint.X),
-                aPoint.R()/Or_chnl
+                (aPoint.R()+sw_R_in2)/Or_chnl
             );
-            LocalFrame oShearChamberFrame = new LocalFrame(aPoint);
-            voxShearChamber += new BasePipe(
-                oShearChamberFrame,
+            Frame vtx_ch_2_frame = new Frame(aPoint);
+            vtx_ch_2 += new Pipe(
+                vtx_ch_2_frame,
                 2*fShearChamberUpperBound,
-                fFuelAnnulusOR,
-                fFuelAnnulusOR+1f
-            ).voxConstruct();
+                sw_R_n2,
+                sw_R_n2 + 1f
+            ).voxels();
 
+            // construct tangential swirl inlets (stage 2)
+            Voxels inlets_2 = new();
+            Frame swinlet_frame_2 = new Frame(aPoint);
+            swinlet_frame_2 = swinlet_frame_2.transz(fShearChamberUpperBound-sw_r_in2);
+            Vector3 rot_point_2 = swinlet_frame_2.pos;
+            for (int i=0; i<sw_n_2; i++)
+            {
+                Frame shifted_frame_2 = new Frame(rot_point_2, uZ3, uY3);
+                shifted_frame_2 = shifted_frame_2.rotyz(TWOPI*((float)i/sw_n_2));
+                shifted_frame_2 = shifted_frame_2.rotxy(DEG90);
+                shifted_frame_2 = shifted_frame_2.transx(0.8f*sw_R_in2); //TODO: fix hack
+
+                inlets_2 += new Pipe(
+                    shifted_frame_2,
+                    sw_R_in2*2,
+                    sw_r_in2
+                ).voxels();
+            }
+
+            vtx_ch_2 -= inlets_2;
         }
-        voxSwirlChamber -= cone_roof_lower_crop();
-        voxShearChamber -= cone_roof_lox_crop();
-        return voxOxPostWall + voxSwirlChamber;// + voxShearChamber;
+        vtx_ch_1 -= cone_roof_lower_crop();
+        vtx_ch_2 -= cone_roof_lox_crop();
+        return ox_post_wall + vtx_ch_1 + vtx_ch_2;
+    }
+
+    protected Voxels voxels_cone_roof()
+    {
+        // structure constructed using cones originating at each point in aPointsList
+
+        BaseLens oRoof = new BaseLens(
+            new LocalFrame(),
+            fRoofThickness,
+            0f,
+            Or_chnl
+        );
+
+        oRoof.SetHeight(
+            new SurfaceModulation(fGetConeRoofLowerHeight),
+            new SurfaceModulation(fGetConeRoofUpperHeight)
+            );
+
+        return oRoof.voxConstruct();
     }
 
     protected Voxels voxels_attic()
@@ -469,22 +588,59 @@ public class Injector : TwoPeasInAPod.Pea
         Voxels voxAttic = new Voxels(oAttic.voxConstruct());
         fMaxAtticZ = voxAttic.oCalculateBoundingBox().vecMax.Z;
         fMaxAtticR = Or_chnl
-            - ((fMaxAtticZ - fInjectorPlateThickness - cos(fPrintAngle)*4*fRoofThickness)
+            - ((fMaxAtticZ - fInjectorPlateThickness - cos(fPrintAngle)*8f) //TODO: fix magic number
             / tan(fPrintAngle));
 
         return voxAttic;
     }
 
-    protected Voxels voxels_asi(out Voxels oASIFluid)
+    protected Voxels voxels_asi(out Voxels voxASIFluid, out Voxels stainless_tube)
     {
+        // TODO: fix asi magic numbers
         // create augmented spark igniter through-port
         GPort ASIPort = new GPort("1/4in", 6.35f); // 1/4in OD for SS insert?
-        Voxels voxPort = ASIPort.voxConstruct(new LocalFrame(new Vector3(0,0,50)));
+        Voxels voxPort = ASIPort.voxConstruct(new LocalFrame(new Vector3(0, 0, 54)));
+        float Or_stainless = 6.35f/2;
 
-        BasePipe oASIWall = new BasePipe(new LocalFrame(), 50f, 6.35f, 10.35f);
-        oASIFluid = new BasePipe(new LocalFrame(), 50f, 0, 6.35f).voxConstruct();
+        Voxels voxASIWall = new Pipe(
+            new Frame(),
+            54f - ASIPort.fGetPilotBoreDiameter(),
+            Or_stainless,
+            Or_stainless + 4f
+        ).voxels();
 
-        return voxPort + oASIWall.voxConstruct();
+        voxASIFluid = new Pipe(
+            new Frame().transz(fInjectorPlateThickness),
+            54f - ASIPort.fGetBoreDepthTotal(),
+            0,
+            Or_stainless
+        ).voxels();
+
+        voxASIFluid += new Pipe(
+            new Frame().transz(1.5f * fInjectorPlateThickness).rotyz(DEG180),
+            3f * fInjectorPlateThickness,
+            Or_stainless - 1f
+        ).voxels();
+
+        stainless_tube = new Pipe(
+            new Frame().transz(fInjectorPlateThickness),
+            54f - fInjectorPlateThickness - 18f,
+            Or_stainless - 1f,
+            Or_stainless
+            ).voxels();
+
+        voxASIFluid += voxPort;
+        Voxels total_wall = voxASIFluid.voxOffset(1.5f) + voxASIWall;
+        total_wall.Trim(new BBox3(
+            -Or_chnl,
+            -Or_chnl,
+            0f,
+            Or_chnl,
+            Or_chnl,
+            54f
+        ));
+
+        return total_wall;
     }
 
     protected Voxels voxels_flange()
@@ -532,8 +688,11 @@ public class Injector : TwoPeasInAPod.Pea
     {
         // make gussets
         // create cone shape
-        BaseCone oGussetCone = new BaseCone(new LocalFrame(new Vector3(0f, 0f, pm.inj_flange_thickness)),
-                                            fMaxAtticZ-pm.inj_flange_thickness, pm.Mr_bolt+2f, fMaxAtticR);
+        BaseCone oGussetCone = new BaseCone(
+            new LocalFrame(new Vector3(0f, 0f, pm.inj_flange_thickness)),
+            fMaxAtticZ-pm.inj_flange_thickness,
+            pm.Mr_bolt+2f,
+            fMaxAtticR);
         Voxels voxGussetCone = oGussetCone.voxConstruct();
         // create spider web box thing and bolt holes voxel fields
         Voxels voxGussetBox = new();
@@ -569,7 +728,7 @@ public class Injector : TwoPeasInAPod.Pea
                     fMaxAtticZ + 15)
                 );
                 float fStrutArea = pow(2f*(pm.Bsz_bolt/2)+4, 2);
-                float fStrutRadius = sqrt(fStrutArea/PI);
+                float fStrutRadius = 1.2f*sqrt(fStrutArea/PI);
                 Rectangle oRectangle = new Rectangle(2*(pm.Or_washer+2f), 2*(pm.Or_washer+2f));
                 Circle oCircle = new Circle(fStrutRadius);
                 float fLoftHeight = oTopFrame.vecGetPosition().Z - oBottomFrame.vecGetPosition().Z;
@@ -603,38 +762,41 @@ public class Injector : TwoPeasInAPod.Pea
 
         // determine vertical height of ports:  for now use placeholder
         float fPortsHeight = 54f; // TODO: magic nom
+        float pt_through_rad = 1f; // radius of through-hole for PTs
         // determine spacing:  ASI in middle, LOX inlet and 3x PT spaced evenly
-        float fPortRadialDistance = 0.8f*pm.Or_cc;
+        float lox_port_radius = 0.8f*pm.Or_cc;
+        float through_port_radius = 0.5f * (r_inj[0] + r_inj[1]);
+
 
         // create vectors
-        LocalFrame aLOXInlet = new LocalFrame(new Vector3(-fPortRadialDistance, 0, fPortsHeight));
-        LocalFrame aLOXPT =  new LocalFrame(new Vector3(fPortRadialDistance, 0, fPortsHeight));
-        LocalFrame aChamberPT =  new LocalFrame(new Vector3(0, -fPortRadialDistance, fPortsHeight));
-        LocalFrame aIPAPT =  new LocalFrame(new Vector3(0, fPortRadialDistance, fPortsHeight));
+        LocalFrame aLOXInlet = new LocalFrame(new Vector3(-lox_port_radius, 0, fPortsHeight));
+        LocalFrame aLOXPT =  new LocalFrame(new Vector3(lox_port_radius, 0, fPortsHeight));
+        LocalFrame aChamberPT =  new LocalFrame(new Vector3(0, -through_port_radius, fPortsHeight));
+        LocalFrame aIPAPT =  new LocalFrame(new Vector3(0, through_port_radius, fPortsHeight));
 
         GPort oLOXInlet = new GPort("1/2in", 14f);
         BasePipe oLOXInletPipe = new BasePipe(aLOXInlet, -fPortsHeight, 0f, 14f/2);
-        Voxels voxLOXInletFluid = oLOXInlet.voxConstruct(aLOXInlet) + oLOXInletPipe.voxConstruct();
+        Voxels voxLOXInletFluid = oLOXInlet.voxConstruct(aLOXInlet);// + oLOXInletPipe.voxConstruct();
         Voxels voxLOXInletWall = voxLOXInletFluid.voxOffset(2f);
         voxLOXInletFluid = voxLOXInletFluid - voxLOXCrop;
         voxLOXInletWall = voxLOXInletWall - voxLOXCrop;
 
-        GPort oLOXPT = new GPort("1/4in", 7.5f);
-        BasePipe oLOXPTPipe = new BasePipe(aLOXPT, -fPortsHeight, 0f, 7.5f/2);
+        GPort oLOXPT = new GPort("1/4in", pt_through_rad*2);
+        BasePipe oLOXPTPipe = new BasePipe(aLOXPT, -fPortsHeight, 0f, pt_through_rad);
         Voxels voxLOXPTFluid = oLOXPT.voxConstruct(aLOXPT) + oLOXPTPipe.voxConstruct();
         Voxels voxLOXPTWall = voxLOXPTFluid.voxOffset(2f);
         voxLOXPTFluid = voxLOXPTFluid - voxLOXCrop;
         voxLOXPTWall = voxLOXPTWall - voxLOXCrop;
 
-        GPort oIPAPT = new GPort("1/4in", 7.5f);
-        BasePipe oIPAPTPipe = new BasePipe(aIPAPT, -fPortsHeight, 0f, 7.5f/2);
+        GPort oIPAPT = new GPort("1/4in", pt_through_rad*2);
+        BasePipe oIPAPTPipe = new BasePipe(aIPAPT, -fPortsHeight, 0f, pt_through_rad);
         Voxels voxIPAPTFluid = oIPAPT.voxConstruct(aIPAPT) + oIPAPTPipe.voxConstruct();
         Voxels voxIPAPTWall = voxIPAPTFluid.voxOffset(2f);
         voxIPAPTFluid = voxIPAPTFluid - voxIPACrop;
         voxIPAPTWall = voxIPAPTWall - voxIPACrop;
 
-        GPort oChamberPT = new GPort("1/8in", 4.5f);
-        BasePipe oChamberPTPipe = new BasePipe(aChamberPT, -fPortsHeight, 0f, 7.5f/2);
+        GPort oChamberPT = new GPort("1/4in", pt_through_rad*2);
+        BasePipe oChamberPTPipe = new BasePipe(aChamberPT, -fPortsHeight, 0f, pt_through_rad);
         Voxels voxChamberPTFluid = oChamberPT.voxConstruct(aChamberPT) + oChamberPTPipe.voxConstruct();
         Voxels voxChamberPTWall = voxChamberPTFluid.voxOffset(2f);
 
@@ -689,10 +851,16 @@ public class Injector : TwoPeasInAPod.Pea
 
     protected Voxels voxels_supports()
     {
+        float r_inner = r_fc[0] + 1f;
+        float r_outer = Ir_chnl;
+        float length = r_outer - r_inner;
+        float aspect_ratio = 4f;
+        float width = length / aspect_ratio;
+
         List<Vector3> points_supports = circularly_distributed(
             no_fc[0],
             0f,
-            45,
+            r_inner,
             PI/no_fc[0]
         );
         Voxels supports = new();
@@ -703,10 +871,10 @@ public class Injector : TwoPeasInAPod.Pea
                 support_frame,
                 fMaxAtticZ,
                 [
-                    new (-4f, 0f),
-                    new (0f, 2f),
-                    new (4f, 0f),
-                    new (0f, -2f),
+                    new (0, 0),
+                    new (length/2, width/2),
+                    new (length, 0),
+                    new (length/2, -width/2),
                 ]
             ));
         }
@@ -746,23 +914,19 @@ public class Injector : TwoPeasInAPod.Pea
         return oCrop.voxConstruct();
     }
 
-    private Voxels voxels_cone_roof()
+    private Voxels ext_inner_cone_crop()
     {
-        // structure constructed using cones originating at each point in aPointsList
+        float fGetInnerCone(float fPhi, float fLengthRatio)
+        {
+            float fRadius = fLengthRatio * Or_chnl;
+            float fConeOffset = sw_l_n1+sw_delta_l_n - sw_R_1*tan(fPrintAngle); // set offset same as coneroof
+            float fInnerWallZ = fRadius*tan(fPrintAngle) + fConeOffset;
+            return fInnerWallZ;
+        }
 
-        BaseLens oRoof = new BaseLens(
-            new LocalFrame(),
-            fRoofThickness,
-            0f,
-            Or_chnl
-        );
-
-        oRoof.SetHeight(
-            new SurfaceModulation(fGetConeRoofLowerHeight),
-            new SurfaceModulation(fGetConeRoofUpperHeight)
-            );
-
-        return oRoof.voxConstruct();
+        BaseLens oCrop = new BaseLens(new LocalFrame(), 1f, 0f, Or_chnl);
+        oCrop.SetHeight(new SurfaceModulation(fGetInnerCone), new SurfaceModulation(40f));
+        return oCrop.voxConstruct();
     }
 
     private Voxels voxCropBoxZ(float fZ, float fR=100, float fH=100)
@@ -775,8 +939,8 @@ public class Injector : TwoPeasInAPod.Pea
     {
         float fRadius = fLengthRatio * Or_chnl;
         float fZVal = (Or_chnl - fRadius)*tan(fPrintAngle) + fInjectorPlateThickness;  // outer wall case
-        // calculate vertical offset required (for now use cone mid-plane)
-        float fConeOffset = fLOxPostLength - (fCoreExitRadius+fLOxPostWT)*tan(fPrintAngle);
+        // calculate vertical offset required, remembering delta-l! (for now use cone mid-plane)
+        float fConeOffset = sw_l_n1+sw_delta_l_n - sw_R_1*tan(fPrintAngle);
         List<Vector3> aAllPoints = new List<Vector3>(points_inj!) { new Vector3(0f, 0f, 0f) };
 
         foreach (Vector3 aPoint in aAllPoints)
@@ -803,28 +967,52 @@ public class Injector : TwoPeasInAPod.Pea
         return fGetConeRoofSurfaceModulation(fPhi, fLengthRatio);
     }
 
-    private float fGetAtticSurfaceModulation(float fPhi, float fLengthRatio)
+    private float fGetAtticLowerHeight(float fPhi, float fLengthRatio)
     {
         float fRadius = fLengthRatio * Or_chnl;
-        float fInnerWallZ = sqrt(fRadius*fRadius)*tan(fPrintAngle) + 3f; // TODO: fix magic number
+        float fConeOffset = sw_l_n1+sw_delta_l_n - sw_R_1*tan(fPrintAngle); // set offset same as coneroof
+        float fInnerWallZ = fRadius*tan(fPrintAngle) + fConeOffset;
         float fOuterWallZ = (Or_chnl - fRadius)*tan(fPrintAngle) + fInjectorPlateThickness;
         return min(fInnerWallZ, fOuterWallZ);
     }
 
-    private float fGetAtticLowerHeight(float fPhi, float fLengthRatio)
-    {
-        return fGetAtticSurfaceModulation(fPhi, fLengthRatio);
-    }
-
     private float fGetAtticUpperHeight(float fPhi, float fLengthRatio)
     {
-        return fGetAtticSurfaceModulation(fPhi, fLengthRatio) + cos(fPrintAngle)*4*fRoofThickness; //TODO:fix magic number attic WT
+        return fGetAtticLowerHeight(fPhi, fLengthRatio) + cos(fPrintAngle)*8f; //TODO:fix magic number attic WT
     }
 
     public Voxels voxels()
     {
         Voxels part = new();
         report();
+
+        /* create overall bounding box to size screenshots. */
+        float overall_Lr = pm.Mr_bolt
+                         + pm.Bsz_bolt/2f
+                         + pm.thickness_around_bolt;
+        float overall_Lz = 54f; // approx total height
+        const float EXTRA = 10f;
+        float overall_Mz = overall_Lz/2f - EXTRA;
+        BBox3 overall_bbox = new(
+            new Vector3(-overall_Lr, -overall_Lr, overall_Mz - overall_Lz/2f),
+            new Vector3(+overall_Lr, +overall_Lr, overall_Mz + overall_Lz/2f)
+        );
+        // Since we're actually viewing a pipe, not a box, scale down a little.
+        overall_bbox.Grow(-0.6f*overall_Lr);
+
+        float lookat_theta = torad(135f);
+        float lookat_phi = torad(105f);
+        Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
+
+        void screenshot(string name) {
+            using (Geez.remember_current_layout()) {
+                using var _ = Geez.ViewerHack.locked();
+
+                Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
+                Geez.background_colour = new ColorFloat("#FFFFFF");
+                Geez.screenshot(name);
+            }
+        }
 
         Geez.Cycle key_part = new();
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
@@ -836,47 +1024,53 @@ public class Injector : TwoPeasInAPod.Pea
         Geez.Cycle key_inj_elements = new(colour: COLOUR_RED);
         Geez.Cycle key_ports = new(colour: Cp.clrRandom());
 
-        Voxels voxInjectorPlate = voxels_injector_plate();
+        Voxels voxInjectorPlate = voxels_injector_plate(out Voxels fc_fluid);
         part += voxInjectorPlate;
         using (key_plate.like())
             key_plate <<= Geez.voxels(voxInjectorPlate);
         Library.Log("created plate.");
+        screenshot("injector_plate.png");
 
         Voxels cone_roof = voxels_cone_roof();
         part += cone_roof;
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof);
         Library.Log("created cone roof.");
+        screenshot("injector_cone_roof.png");
 
         Voxels attic = voxels_attic();
         part += attic;
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic);
         Library.Log("created attic.");
+        screenshot("injector_attic.png");
 
         Voxels supports = voxels_supports();
         Geez.voxels(supports, Cp.clrRandom());
         part += supports;
         Library.Log("created supports.");
+        screenshot("injector_supports.png");
 
-        Voxels asi = voxels_asi(out Voxels asi_fluid);
+        Voxels asi = voxels_asi(out Voxels asi_fluid, out Voxels stainless_tube);
         part += asi;
-        part -= asi_fluid;
         using (key_asi.like())
-            key_asi <<= Geez.voxels(asi - asi_fluid);
+            key_asi <<= Geez.voxels(asi);
         Library.Log("created ASI.");
+        screenshot("injector_asi.png");
 
         Voxels flange = voxels_flange();
         part += flange;
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
         Library.Log("created flange.");
+        screenshot("injector_flange.png");
 
         Voxels gussets = voxels_gussets(out Voxels voxStrutHoles);
         part += gussets;
         using (key_gusset.like())
             key_gusset <<= Geez.voxels(gussets - voxStrutHoles);
         Library.Log("created gussets.");
+        screenshot("injector_gussets.png");
 
         Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets);
         part += inj_elements;
@@ -885,21 +1079,54 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_inj_elements.like())
             key_inj_elements <<= Geez.voxels(inj_elements - voxOxPostFluid);
         Library.Log("created injector elements.");
+        screenshot("injector_injector_elements.png");
 
         Voxels ports = voxels_ports(out Voxels ports_fluids);
         part += ports;
         using (key_ports.like())
             key_ports <<= Geez.voxels(ports - ports_fluids);
         Library.Log("created ports.");
+        screenshot("injector_ports.png");
 
         // external fillets
         Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
         Voxels voxNoCropZone = part & (cone_roof_upper_crop() + voxInnerPipeCrop!);
         voxCropZone.OverOffset(5f);
-        Library.Log("created fillets.");
+        voxCropZone.voxBoolSubtract(voxNoCropZone);
         part = voxCropZone + voxNoCropZone;
 
+        Voxels inner_cone_fillet = part & ext_inner_cone_crop();
+        inner_cone_fillet.OverOffset(5f);
+        part += inner_cone_fillet;
+
+        Library.Log("created external fillets.");
+
+        // internal fillets
+        Voxels asi_base_crop = new Pipe(
+            new Frame().transz(fInjectorPlateThickness/2f),
+            15,
+            15
+        ).voxels();
+        Voxels asi_base_fillet = part & asi_base_crop;
+        asi_base_fillet.OverOffset(3f);
+        part += asi_base_fillet;
+
+        Voxels asi_middle_crop = new Pipe(
+            new Frame().transz(10f),
+            10f,
+            15f
+        ).voxels();
+        Voxels asi_middle_fillet = part & asi_middle_crop;
+        asi_middle_fillet.OverOffset(1f);
+        part += asi_middle_fillet;
+
+        Library.Log("created internal fillets.");
+
         part -= ports_fluids;
+        part -= voxOxPostFluid;
+        part -= swirl_inlets;
+        part -= asi_fluid;
+        part -= fc_fluid;
         part -= voxels_bolts();
         part -= voxStrutHoles;
         part -= voxels_oring_grooves();
@@ -907,6 +1134,7 @@ public class Injector : TwoPeasInAPod.Pea
 
         Geez.clear();
         key_part.voxels(part);
+        screenshot("injector_part.png");
 
 
         Library.Log("Baby made.");
@@ -956,11 +1184,10 @@ public class Injector : TwoPeasInAPod.Pea
     }
 
     public void anything() {
-        /* testing playground if you wish. */
+        GraphLookupVerifier.ExportVortexRadiusCSV("exports/injector_vortex_radii.csv");
     }
 
     public string name => "injector";
-
 
     public void set_modifiers(int mods) {
         if (mods == 0)
@@ -977,11 +1204,10 @@ public class Injector : TwoPeasInAPod.Pea
         // assert(mods == 0, $"unrecognised modifiers: 0x{mods:X}");
     }
 
-
     public void initialise()
     {
         initilise_biswirl();
-        initialise_inj();
+        // initialise_inj(); // depreciated
         initialise_fc();
         initialise_chnl();
         initialise_construction();
