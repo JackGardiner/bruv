@@ -24,13 +24,17 @@ public static partial class Br {
     public const int EXTEND_UPDOWN = 0x3;
 
     public const int CORNER_x0y0z0 = 0x0;
-    public const int CORNER_x1y0z0 = 0x1;
+    public const int CORNER_x0y0z1 = 0x1;
     public const int CORNER_x0y1z0 = 0x2;
-    public const int CORNER_x1y1z0 = 0x3;
-    public const int CORNER_x0y0z1 = 0x4;
+    public const int CORNER_x0y1z1 = 0x3;
+    public const int CORNER_x1y0z0 = 0x4;
     public const int CORNER_x1y0z1 = 0x5;
-    public const int CORNER_x0y1z1 = 0x6;
+    public const int CORNER_x1y1z0 = 0x6;
     public const int CORNER_x1y1z1 = 0x7;
+
+    public const int CORNER_MASK_z = 0x1;
+    public const int CORNER_MASK_y = 0x2;
+    public const int CORNER_MASK_x = 0x4;
 
     public const int EDGE_x0z0 = 0x8 + 0x8*0;
     public const int EDGE_x1z0 = 0x8 + 0x8*1;
@@ -344,11 +348,11 @@ public class Cuboid {
 
     public Cuboid at_corner(int corner) {
         Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
-        if (isset(corner, 0x1))
+        if (isset(corner, CORNER_MASK_x))
             trans.X += Lx;
-        if (isset(corner, 0x2))
+        if (isset(corner, CORNER_MASK_y))
             trans.Y += Ly;
-        if (isset(corner, 0x4))
+        if (isset(corner, CORNER_MASK_z))
             trans.Z += Lz;
         return new(centre.translate(trans), Lx, Ly, Lz);
     }
@@ -628,14 +632,14 @@ public class Cone : SDF {
 
 
 public class Tubing {
-    public List<Vec3> points { get; }
+    public Slice<Vec3> points { get; }
     public float ID { get; }
     public float th { get; }
     public float Fr { get; }
 
-    public Tubing(in List<Vec3> points, float OD)
+    public Tubing(in Slice<Vec3> points, float OD)
         : this(points, 0f, 0.5f*OD) {}
-    public Tubing(in List<Vec3> points, float ID, float th, float Fr=0f) {
+    public Tubing(in Slice<Vec3> points, float ID, float th, float Fr=0f) {
         assert(numel(points) >= 2, $"numel={numel(points)}");
         assert(ID >= 0f);
         assert(th > 0f);
@@ -814,9 +818,9 @@ public class SDFimage {
         float[,] sda = new float[W, H];
         for (int x=0; x<W; ++x) {
             for (int y=0; y<H; ++y) {
-                sda[x, H - 1 - y] = mask[x, y]
-                                  ? -inside_dist[x, y]
-                                  : +outside_dist[x, y];
+                sda[x, y] = mask[x, y]
+                          ? -inside_dist[x, y]
+                          : +outside_dist[x, y];
 
             }
         }
@@ -844,6 +848,18 @@ public class SDFimage {
                         mask[i, j] = on;
                     }
                 }
+            }
+        }
+        return mask;
+    }
+
+    private static bool[,] make_mask_offset(float[,] sda, float off) {
+        int W = sda.GetLength(0);
+        int H = sda.GetLength(1);
+        bool[,] mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                mask[x, y] = sda[x, y] <= off;
             }
         }
         return mask;
@@ -878,11 +894,46 @@ public class SDFimage {
         this.sda = make_sda(mask);
     }
 
+    public void fix_unimelb_lmao() {
+        float min_th = 7f * scale;
+        int min_x = xextra + 900 * scale;
+
+        int W = sda.GetLength(0);
+        int H = sda.GetLength(1);
+        float min_r = 0.5f*min_th;
+
+        // Find regions which are thick enough.
+        bool[,] thick_mask = make_mask_offset(sda, -min_r);
+        float[,] thick_sda = make_sda(thick_mask);
+
+        // Using the thick-enough find the too-thin.
+        bool[,] thin_mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                thin_mask[x, y] = (sda[x, y] < 0f) && (thick_sda[x, y] > 0f);
+            }
+        }
+        float[,] thin_sda = make_sda(thin_mask);
+
+        // Expand the too-thin and union it with current.
+        bool[,] new_mask = new bool[W, H];
+        for (int x=0; x<W; ++x) {
+            for (int y=0; y<H; ++y) {
+                new_mask[x, y] = sda[x, y] < 0f;
+                if (x > min_x)
+                    new_mask[x, y] |= thin_sda[x, y] < min_r;
+            }
+        }
+
+        // Make the new sda.
+        sda = make_sda(new_mask);
+    }
+
 
     // Returns the signed distance in units of pixels, with an input vector also
     // in units of pixels. The valid bounds are ~(width, -height) to
     // ~(2 width, 2 height).
-    public float signed_dist(in Vec2 p) {
+    public float signed_dist(in Vec2 p /* pixels */) {
         assert(within(p.X, -xextra, width  + xextra));
         assert(within(p.Y, -yextra, height + yextra));
 

@@ -25,13 +25,19 @@ public static partial class Br {
             throw new AssertionFailed(msg);
         }
     }
-    public static void assert_idx(int idx, int count,
+    public static void assert_idx(int idx, int count, bool allow_negative=false,
             [System.Runtime.CompilerServices.CallerFilePath]
                 string file="<unknown file>",
             [System.Runtime.CompilerServices.CallerLineNumber]
                 int line=-1,
             [System.Runtime.CompilerServices.CallerMemberName]
                 string member="<unknown member>") {
+        if (allow_negative && idx < 0) {
+            assert(within(idx + count, 0, count - 1),
+                    $"count: {count}, idx: {idx}",
+                    file: file, line: line, member: member);
+            return;
+        }
         assert(within(idx, 0, count - 1), $"count: {count}, idx: {idx}",
                 file: file, line: line, member: member);
     }
@@ -57,6 +63,7 @@ public static partial class Br {
     public static int numel<T>(T[] x) => x.Length;
     public static int numel<T>(List<T> x) => x.Count;
     public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
+    public static int numel<T>(IEnumerable<T> x) => x.Count();
 
     /* swap me */
     public static void swap<T>(ref T a, ref T b) {
@@ -316,6 +323,8 @@ public static partial class Br {
         => sqrt(x*x + y*y + z*z);
     public static float nonhypot(float hypot, float other) // an instant classic.
         => sqrt(hypot*hypot - other*other);
+    public static float nonhypot(float hypot, float other0, float other1)
+        => sqrt(hypot*hypot - other0*other0 - other1*other1);
 
     public static bool nearzero(float a) => closeto(mag(a), 0f);
     public static bool nearzero(Vec2 a)  => closeto(mag(a), 0f);
@@ -486,5 +495,15 @@ public static partial class Br {
     public static Vec3 rotzx(Vec3 a, float b) => rotate(a, uY3, b);
     public static Vec3 rotyz(Vec3 a, float b) => rotate(a, uX3, b);
 }
+
+// lets get some python in here ay. use like:
+//  void func(int a, int b, KeywordOnly? _=null, int c=0)
+// which "forces" c to be given by keyword.... except they can give null but like
+// nah she's right. also allows overloads like:
+//  void func(KeywordOnly? _=null, int c=0, int d=0)
+//  void func(int a, int b, int c=0, int d=0)
+// which allows the following to be unambiguous:
+//  func(c: 1);
+public class KeywordOnly { private KeywordOnly() {} }
 
 }

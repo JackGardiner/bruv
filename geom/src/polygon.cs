@@ -11,13 +11,13 @@ namespace br {
 
 public static class Polygon {
 
-    public static float area(in List<Vec2> points, bool signed=false) {
-        int N = numel(points);
+    public static float area(in Slice<Vec2> vertices, bool signed=false) {
+        int N = numel(vertices);
         float A = 0f;
         for (int i=0; i<N; ++i) {
             int j = (i + 1 == N) ? 0 : i + 1;
-            Vec2 a = points[i];
-            Vec2 b = points[j];
+            Vec2 a = vertices[i];
+            Vec2 b = vertices[j];
             A += cross(a, b);
         }
         if (!signed)
@@ -25,54 +25,126 @@ public static class Polygon {
         return 0.5f*A;
     }
 
-    public static float perimeter(in List<Vec2> points) {
-        int N = numel(points);
+    public static float perimeter(in Slice<Vec2> vertices) {
+        int N = numel(vertices);
         float ell = 0f;
         for (int i=0; i<N; ++i) {
             int j = (i + 1 == N) ? 0 : i + 1;
-            Vec2 a = points[i];
-            Vec2 b = points[j];
+            Vec2 a = vertices[i];
+            Vec2 b = vertices[j];
             ell += mag(b - a);
         }
         return ell;
     }
 
-    public static bool is_simple(in List<Vec2> points) {
-        int N = numel(points);
-        if (N < 3)
+    public static bool is_simple(in Slice<Vec2> vertices, out string why) {
+        int N = numel(vertices);
+        if (N < 3) {
+            why = "fewer than three vertices";
             return false;
+        }
 
+        static string vecstr(Vec2 v) => $"({v.X}, {v.Y})";
+
+        // Reject duplicate points + degenerate edges.
         for (int i=0; i<N; ++i) {
-            int i_1 = (i + 1 == N) ? 0 : i + 1;
-            Vec2 a0 = points[i];
-            Vec2 a1 = points[i_1];
-
+            int i1 = (i + 1) % N;
+            Vec2 a = vertices[i];
+            if (closeto(a, vertices[i1])) {
+                why = $"duplicate vertices: {vecstr(a)}";
+                return false;
+            }
             for (int j=i + 1; j<N; ++j) {
-                int j_1 = (j + 1 == N) ? 0 : j + 1;
-                Vec2 b0 = points[j];
-                Vec2 b1 = points[j_1];
-
-                // Skip adjacent edges.
-                if (i == j || i_1 == j || j_1 == i)
-                    continue;
-
-                float o1 = cross(a1 - a0, b0 - a0);
-                float o2 = cross(a1 - a0, b1 - a0);
-                float o3 = cross(b1 - b0, a0 - b0);
-                float o4 = cross(b1 - b0, a1 - b0);
-                if ((o1*o2 < 0) && (o3*o4 < 0))
+                if (closeto(a, vertices[j])) {
+                    why = $"duplicate vertices: {vecstr(a)}";
                     return false;
+                }
             }
         }
+
+        float orient(Vec2 a, Vec2 b, Vec2 c) => cross(b - a, c - a);
+
+        bool on_seg(Vec2 p, Vec2 a, Vec2 b)
+            => p.X >= min(a.X, b.X)
+            && p.X <= max(a.X, b.X)
+            && p.Y >= min(a.Y, b.Y)
+            && p.Y <= max(a.Y, b.Y);
+
+        // Check segment intersection test.
+        for (int i=0; i<N; ++i) {
+            int i1 = (i + 1) % N;
+            Vec2 a0 = vertices[i];
+            Vec2 a1 = vertices[i1];
+
+            for (int j=i + 1; j<N; ++j) {
+                int j1 = (j + 1) % N;
+
+                // Skip adjacent edges.
+                if (i == j || i1 == j || j1 == i)
+                    continue;
+
+                Vec2 b0 = vertices[j];
+                Vec2 b1 = vertices[j1];
+
+                float o1 = orient(a0, a1, b0);
+                float o2 = orient(a0, a1, b1);
+                float o3 = orient(b0, b1, a0);
+                float o4 = orient(b0, b1, a1);
+
+                bool o1z = nearzero(o1);
+                bool o2z = nearzero(o2);
+                bool o3z = nearzero(o3);
+                bool o4z = nearzero(o4);
+
+                // Proper intersection
+                if (!o1z && !o2z && !o3z && !o4z
+                        && ((o1 > 0f) != (o2 > 0f))
+                        && ((o3 > 0f) != (o4 > 0f))) {
+                    why = $"self-intersecting: {vecstr(a0)} -> {vecstr(a1)} & "
+                                           + $"{vecstr(b0)} -> {vecstr(b1)}";
+                    return false;
+                }
+
+                // Collinear / touching cases (also forbidden)
+                if ((o1z && on_seg(b0, a0, a1))
+                        || (o2z && on_seg(b1, a0, a1))
+                        || (o3z && on_seg(a0, b0, b1))
+                        || (o4z && on_seg(a1, b0, b1))) {
+                    why = $"collinear edges: {vecstr(a0)} -> {vecstr(a1)} & "
+                                         + $"{vecstr(b0)} -> {vecstr(b1)}";
+                    return false;
+                }
+            }
+        }
+
+        // No flat corners either.
+        for (int i=0; i<N; ++i) {
+            Vec2 a = vertices[(i - 1 + N) % N];
+            Vec2 b = vertices[i];
+            Vec2 c = vertices[(i + 1) % N];
+            Vec2 e1 = b - a;
+            Vec2 e2 = c - b;
+            if (nearzero(cross(e1, e2))) { // collinear.
+                if (dot(e1, e2) < 0f) { // turn-back.
+                    why = $"flat corner: {vecstr(a)} -> {vecstr(b)} -> "
+                                     + $"{vecstr(c)}";
+                    return false;
+                }
+            }
+        }
+
+        why = "";
         return true;
     }
 
 
-    public static bool tri_contains(Vec2 p, Vec2 a, Vec2 b, Vec2 c) {
+    public static bool tri_contains(Vec2 p, Vec2 a, Vec2 b, Vec2 c, bool ccw) {
         float ab = cross(b - a, p - a);
         float bc = cross(c - b, p - b);
         float ca = cross(a - c, p - c);
-        return ab >= 0f && bc >= 0f && ca >= 0f;
+        return ccw
+             ? (ab >= 0f && bc >= 0f && ca >= 0f)
+             : (ab <= 0f && bc <= 0f && ca <= 0f);
     }
 
 
@@ -88,7 +160,7 @@ public static class Polygon {
     }
 
 
-    public static List<Vec2> resample(List<Vec2> vertices, int divisions,
+    public static List<Vec2> resample(Slice<Vec2> vertices, int divisions,
             bool closed=false) {
         assert(numel(vertices) >= 2);
         assert(divisions >= 2);
@@ -129,8 +201,8 @@ public static class Polygon {
         return new_vertices;
     }
 
-    public static void fillet(List<Vec2> vertices, int i, float Fr, float prec=1f,
-            int? divisions=null, bool only_this_vertex=false) {
+    public static void fillet(List<Vec2> vertices, int i, float Fr,
+            float prec=1f, int? divisions=null, bool only_this_vertex=false) {
       TRY_AGAIN:;
         int N = numel(vertices);
         assert_idx(i, N);
@@ -218,7 +290,7 @@ public static class Polygon {
         return count / by;
     }
 
-    private static void mesh_face_indices(ref Mesh mesh, in List<Vec2> vertices,
+    private static void mesh_face_indices(ref Mesh mesh, in Slice<Vec2> vertices,
             int trioff, bool ccw, bool top) {
         void triangle(ref Mesh mesh, int A, int B, int C) {
             if (ccw != top)
@@ -251,7 +323,7 @@ public static class Polygon {
                     if (D == A || D == B || D == C)
                         continue;
                     Vec2 d = vertices[D];
-                    if (tri_contains(d, a, b, c))
+                    if (tri_contains(d, a, b, c, ccw))
                         goto NEXT;
                 }
 
@@ -270,10 +342,12 @@ public static class Polygon {
 
     public static Mesh mesh_revolved(
             in Frame frame,
-            in List<Vec2> vertices, /* (z,r), any winding */
+            in Slice<Vec2> vertices, /* (z,r), any winding */
             float by=TWOPI,
-            int slicesize=-1, int slicecount=-1, bool donut=false
+            int slicesize=-1, int slicecount=-1, bool donut=false,
+            bool checksimple=true
         ) {
+        string why;
 
         // Clamp to at-most a full revolve.
         by = clamp(by, -TWOPI, TWOPI);
@@ -283,33 +357,48 @@ public static class Polygon {
         bool closed = abs(by) == TWOPI;
         bool ringed = donut;
 
-        int repcount;
+        int tilecount;
         if (slicesize >= 0) {
             int count = mesh_divided_into(numel(vertices), slicesize);
             assert(slicecount == -1 || slicecount == count,
                    $"supplied slicecount doesn't match (got {slicecount}, "
                  + $"expected {count}), consider leaving it inferred?");
             slicecount = count;
-            repcount = 1;
+            tilecount = 1;
         } else {
             slicesize = numel(vertices);
-            repcount = (slicecount == -1)
+            tilecount = (slicecount == -1)
                      ? max((int)(abs(by)*200/TWOPI), 10)
                      : slicecount;
             slicecount = 1;
         }
         assert(slicesize >= 3, "each slice is not a polygon");
-        assert(slicecount*repcount >= (closed ? 3 : 2), "too few slices to "
-                                                      + "create a solid");
+        assert(slicecount*tilecount >= (closed ? 3 : 2), "too few slices to "
+                                                       + "create a solid");
+
+        // Checkme.
+        if (checksimple) {
+            for (int n=0; n<slicecount; ++n) {
+                Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
+                if (!is_simple(v, out why))
+                    assert(false, $"cooked it: {why}");
+            }
+        }
 
         // Ensure legal revolve.
+        int idx_first_start = 0;
+        int idx_first_end = slicesize - 1;
+        int idx_last_start = (slicecount - 1)*slicesize;
+        int idx_last_end = slicecount*slicesize - 1;
         if (!donut) {
-            float zstart0 = vertices[0].X;
-            float zstart1 = vertices[(slicecount - 1)*slicesize].X;
-            float zend0   = vertices[slicesize - 1].X;
-            float zend1   = vertices[slicecount*slicesize - 1].X;
-            assert(zstart0 == zstart1, "revolve would not be closed");
-            assert(zend0 == zend1, "revolve would not be closed");
+            float z_first_start = vertices[idx_first_start].X;
+            float z_last_start  = vertices[idx_last_start].X;
+            float z_first_end   = vertices[idx_first_end].X;
+            float z_last_end    = vertices[idx_last_end].X;
+            assert(closeto(z_first_start, z_last_start),
+                    "revolve would not be closed");
+            assert(closeto(z_first_end, z_last_end),
+                    "revolve would not be closed");
 
             for (int n=0; n<slicecount; ++n) {
                 assert(nearzero(vertices[n*slicesize].Y),
@@ -319,24 +408,36 @@ public static class Polygon {
             }
         }
 
-        // Make the full list of vertices for sweep.
+        // Make the full list of vertices for sweep (trying not to copy if
+        // unneeded).
         bool ccw = area(vertices, true) >= 0f;
-        List<Vec2> swept_vertices = new(vertices);
-        if (ccw != (by > 0f)) // ccw when travelling +circum.
-            swept_vertices.Reverse();
+        Slice<Vec2> swept_vertices = vertices;
         if (!donut) {
+            List<Vec2> copy = new(vertices);
             // Set to perfectly along axis.
             for (int n=0; n<slicecount; ++n) {
-                swept_vertices[n*slicesize] *= uX2;
-                swept_vertices[n*slicesize + slicesize - 1] *= uX2;
+                copy[n*slicesize] *= uX2;
+                copy[n*slicesize + slicesize - 1] *= uX2;
             }
+            // Set to join first and last slices' top/bot.
+            copy[idx_last_start] = new(
+                copy[idx_first_start].X,
+                copy[idx_last_start].Y
+            );
+            copy[idx_last_end] = new(
+                copy[idx_first_end].X,
+                copy[idx_last_end].Y
+            );
+
+            swept_vertices = new(copy);
         }
-        for (int n=1; n<repcount; ++n)
-            swept_vertices.AddRange(swept_vertices.GetRange(0, slicesize));
+        if (ccw != (by > 0f)) // ccw when travelling +circum.
+            swept_vertices = swept_vertices.reversed();
+        swept_vertices = swept_vertices.tiled(tilecount);
 
         // Get the spinning frame for sweep.
         FramesSpin swept_frames = new FramesSpin(
-            slicecount * repcount,
+            slicecount * tilecount,
             frame.cyclecw(),
             about: uX3,
             by: by
@@ -344,8 +445,9 @@ public static class Polygon {
         if (closed)
             swept_frames = swept_frames.excluding_end();
 
+        // Forward to sweep to do the heavy lifting.
         return mesh_swept(swept_frames, swept_vertices, closed: closed,
-                          ringed: ringed);
+                          ringed: ringed, checksimple: false);
     }
 
 
@@ -353,15 +455,22 @@ public static class Polygon {
     public static Mesh mesh_extruded(
             Frame frame,
             float Lz,
-            in List<Vec2> vertices, /* (x,y), any winding */
+            in Slice<Vec2> vertices, /* (x,y), any winding */
             bool at_middle=false, float extend_by=0f,
-            int extend_direction=EXTEND_UPDOWN
+            int extend_direction=EXTEND_UPDOWN,
+            bool checksimple=true
         ) {
+        string why;
         // yeah this could be done as forward to swept but nah.
 
-        assert(is_simple(vertices), "cooked it");
-        bool ccw = area(vertices, true) >= 0f;
         int N = numel(vertices);
+
+        if (checksimple) {
+            if (!is_simple(vertices, out why))
+                assert(false, $"cooked it: {why}");
+        }
+
+        bool ccw = area(vertices, true) >= 0f;
 
         Mesh mesh = new();
         // Mesh bottom and top faces.
@@ -393,9 +502,9 @@ public static class Polygon {
         }
         z[0] += Dz;
         z[1] += Dz;
-        for (int j=0; j<2; ++j)
-        for (int i=0; i<N; ++i) {
-            V.Add(frame * rejxy(vertices[i], z[j]));
+        for (int j=0; j<2; ++j) {
+            for (int i=0; i<N; ++i)
+                V.Add(frame * rejxy(vertices[i], z[j]));
         }
         mesh.AddVertices(V, out _);
         return mesh;
@@ -405,9 +514,11 @@ public static class Polygon {
 
     public static Mesh mesh_swept(
             in Frames frames,
-            in List<Vec2> vertices, /* (x,y), winding ccw */
-            bool closed=false, bool ringed=true
+            in Slice<Vec2> vertices, /* (x,y), winding ccw */
+            bool closed=false, bool ringed=true,
+            bool checksimple=true
         ) {
+        string why;
 
         int N = numel(vertices);
         int slicecount = numel(frames);
@@ -416,12 +527,20 @@ public static class Polygon {
         assert(slicecount > 1);
 
         Mesh mesh = new();
-        assert(is_simple(vertices.GetRange(0, slicesize)), "come on man");
+
+        // Check polys.
+        if (checksimple) {
+            for (int n=0; n<slicecount; ++n) {
+                Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
+                if (!is_simple(v, out why))
+                    assert(false, $"cooked it: {why}");
+            }
+        }
 
         // Mesh bottom and top faces.
         if (!closed) {
-            List<Vec2> bot = vertices.GetRange(0, slicesize);
-            List<Vec2> top = vertices.GetRange(N - slicesize, slicesize);
+            Slice<Vec2> bot = vertices.subslice(0, slicesize);
+            Slice<Vec2> top = vertices.subslice(N - slicesize, slicesize);
             mesh_face_indices(ref mesh, bot, 0, true, false);
             mesh_face_indices(ref mesh, top, N - slicesize, true, true);
         }
@@ -433,11 +552,6 @@ public static class Polygon {
 
             int i = n*slicesize;
             int j = ((n + 1) % slicecount)*slicesize;
-
-            if (n < slicecount - 1) {
-                List<Vec2> V1 = vertices.GetRange(j, slicesize);
-                assert(is_simple(V1), "cooked it");
-            }
 
             for (int q0=0; q0<slicesize; ++q0) {
                 // not closed if not ringed.

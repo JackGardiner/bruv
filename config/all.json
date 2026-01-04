@@ -59,13 +59,13 @@
 
         "theta_inlet": -1.5707963267948966,
         "L_inlet": 15.0,
-        "D_inlet": 10.0,
+        "D_inlet": 12.7,
         "th_inlet": 3.0,
         "Fr_inlet": 7.0,
 
         "theta_tc": 1.5707963267948966,
         "no_tc": 6,
-        "D_tc": 4.0,
+        "D_tc": 3.175,
         "th_tc": 2.0,
         "L_tc": 15.0
     },

@@ -305,7 +305,7 @@ public static class Geez {
         /* bounding box properties of canonical objects. */
         public static Vec3 size { get; private set; } = 100f*ONE3;
         public static Vec3 centre { get; private set; } = ZERO3;
-        private static bool explicit_scene = false;
+        public static bool explicit_scene = false;
         public static bool resize() {
             // Use the reaaal bounding box (which picogk doesnt know about).
             if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
@@ -491,6 +491,9 @@ public static class Geez {
                 snap_ortho.retarget(neworbit ? 1f : 0f);
             }
         }
+
+        /* cheeky roll. */
+        private static int roll = 0;
 
         /* prevent moving/rotation/mode-switching of the viewer. note this is
            bypassable by all set methods, and only locks keybinds. */
@@ -788,6 +791,12 @@ public static class Geez {
             Vec3 up = nearvert(looking)
                     ? fromcyl(1f, theta + ((looking.Z < 0f) ? 0f : PI), 0f)
                     : uZ3;
+            switch ((roll % 4 + 4) % 4) {
+                case 0: break;
+                case 1: up =  normalise(cross(looking, up)); break;
+                case 2: up = -up; break;
+                case 3: up = -normalise(cross(looking, up)); break;
+            }
 
             // Get focal lengths. Note the extra dist baked in exists to allow a
             // smooth transition about focal point (by shifting the focal point).
@@ -1132,6 +1141,13 @@ public static class Geez {
                 }
                 return true;
 
+              case VEK.Key_O:
+              case VEK.Key_P:
+                if (pressed && !islocked) {
+                    roll += (key == VEK.Key_O) ? 1 : -1;
+                }
+                return true;
+
               case VEK.Key_T:
                 if (pressed && !islocked)
                     set_transparency(!transparent);
@@ -1183,6 +1199,7 @@ public static class Geez {
         print("     - equals [+/=]    reframe view to full scene");
         print("     - backspace       reset view (+fix window aspect ratio)");
         print("     - K/L             dial up/down free fov");
+        print("     - O/P             super hacked-in roll camera");
         print("     - T               toggle transparency");
         print("     - Y               toggle background dark-mode");
         print();
@@ -1219,6 +1236,7 @@ public static class Geez {
     }
 
     public static IDisposable remember_current_layout() {
+        bool expl = ViewerHack.explicit_scene;
         Vec3 size = ViewerHack.size;
         Vec3 centre = ViewerHack.centre;
         bool orbit = ViewerHack.orbit;
@@ -1228,6 +1246,7 @@ public static class Geez {
         float phi = ViewerHack.future_phi;
         float fov = ViewerHack.future_fov;
         return Scoped.on_leave(() => {
+            ViewerHack.explicit_scene = expl;
             ViewerHack.set_size(size,                         expl: false);
             ViewerHack.set_centre(centre,                     expl: false);
             ViewerHack.set_orbit(orbit, false,  instant:true, expl: false);
