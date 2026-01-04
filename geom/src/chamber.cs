@@ -1302,8 +1302,8 @@ public class Chamber : TPIAP.Pea {
         float min_z = cnt_z0;
         float max_z = cnt_z6;
         float dif = (max_z - min_z)/(no_tc + 2);
-        min_z += dif;
-        max_z -= dif;
+        min_z += dif * 1.3f;
+        max_z -= dif * 0.7f;
         List<Vec3> line = new();
         for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(min_z, max_z, i, DIVISIONS);
@@ -1321,28 +1321,29 @@ public class Chamber : TPIAP.Pea {
 
         List<Vec3> points = new(no_tc);
         for (int i=0; i<no_tc; ++i) {
-            float target = i*sumlen/(no_tc - 1);
+            float target = lerp(0f, sumlen, i, no_tc);
             int lo = 0;
             int hi = numel(dists) - 1;
             int idx = 0;
             while (lo <= hi) {
                 int mid = (lo + hi) / 2;
-                if (dists[mid] >= target) {
+                if (dists[mid] <= target) {
                     idx = mid; // maybe found.
-                    hi = mid - 1;
-                } else {
                     lo = mid + 1;
+                } else {
+                    hi = mid - 1;
                 }
             }
-            if (idx == 0) {
-                points.Add(line[idx]);
-            } else {
-                float d0 = dists[idx - 1];
-                float d1 = dists[idx];
-                float t = (target - d0) / (d1 - d0);
-                Vec3 p = t*line[idx] + (1f - t)*line[idx - 1];
-                points.Add(p);
+            if (idx >= numel(dists) - 1) {
+                points.Add(line[numel(dists) - 1]);
+                continue;
             }
+            float d0 = dists[idx];
+            float d1 = dists[idx + 1];
+            float t = (target - d0) / (d1 - d0);
+            t = clamp(t, 0f, 1f);
+            Vec3 p = lerp(line[idx], line[idx + 1], t);
+            points.Add(p);
         }
         return points;
     }
@@ -1496,20 +1497,20 @@ public class Chamber : TPIAP.Pea {
         if (VOXEL_SIZE > 0.5)
             return null;
 
-        float Lz = 35f;
+        float Lz = 32f;
         float Lr = 0.6f;
         float Lr_inset = 0.4f;
         float R = cnt_r1 + th_iw + th_chnl + th_ow - Lr_inset;
         Lr += Lr_inset;
         Frame centre = new Frame(cnt_z1*uZ3).rotxy(theta_inlet - PI_2);
-        centre = centre.transz(-0.29f*Lz);
+        centre = centre.transz(-0.38f*Lz);
 
         SDFimage img = new(fromroot("assets/unimelb_ccw.tga"), flipy: true);
         img.fix_unimelb_lmao();
         Voxels vox = img.voxels_on_cyl(true, centre, R, Lr, Lz);
         key.voxels(vox);
 
-        centre = centre.transz(-1f*Lz);
+        centre = centre.transz(-1.05f*Lz);
 
         img = new(fromroot("assets/csiro_ccw.tga"), flipy: true);
         vox.BoolAdd(img.voxels_on_cyl(true, centre, R, Lr, Lz));
@@ -1712,6 +1713,15 @@ public class Chamber : TPIAP.Pea {
 
         if (!filletless) {
             Fillet.both(part, concave_Fr: 3f, convex_Fr: 0.4f, inplace: true);
+
+            // Voxels mask = new Pipe(
+            //     inlet.transz(-zextra),
+            //     zextra + 1.1f*Fr_inlet,
+            //     D_inlet/2f + 1.1f*Fr_inlet
+            // ).voxels();
+            // using (Lifted l = new(vox, mask))
+            //     Fillet.concave(l.vox, Fr_inlet, inplace: true);
+
             step("filleted.", view_part: true);
         } else {
             no_step("skipping fillet.");
@@ -1759,6 +1769,43 @@ public class Chamber : TPIAP.Pea {
                               + "please re-run the normal voxels");
         assert(part != null);
 
+        float Lx = 100f;
+        float Ly = 300f;
+        float Lz = 80f;
+
+        float z = cnt_z1;
+        Frame f = new(
+            fromcyl(
+                cnt_radius_at(z, th_iw + th_chnl + th_ow + 2f, false),
+                PI_2,
+                z
+            ),
+            uY3,
+            uZ3
+        );
+        f = f.rotzx(torad(90f - 22f));
+        f = f.transz(-75f, false);
+        f = f.transy(-5f, false);
+        f = f.transx(50f);
+        Ly += 50f;
+        // Geez.frame(f);
+        f = f.cyclecw();
+        // Geez.voxels(part);
+
+        Cuboid cube = new Cuboid(f, Lx, Ly, Lz).at_corner(CORNER_x1y0z0);
+        // Geez.cuboid(cube);
+        // return;
+
+        // Mesh mesh = new(part);
+        // string barcelona = fromroot(".Barcelona.zip");
+        // try { PICOGK_VIEWER.LoadLightSetup(barcelona); }
+        // catch { print($"oops, no barcelona lightmap at '{barcelona}'"); }
+        // using (Geez.like(metallic: 0.4f, roughness: 0.1f))
+        //     Geez.mesh(mesh);
+        // return;
+
+
+
         Voxels gas;
         Voxels chnl;
         using (Geez.locked()) {
@@ -1768,36 +1815,17 @@ public class Chamber : TPIAP.Pea {
 
         Voxels outer = new(part!) ; // copy.
 
-        Voxels inner = voxels_cnt_filled(th_iw + th_chnl - 0.1f, true, false);
+        Voxels inner = voxels_cnt_filled(th_iw + th_chnl, true, false);
         outer.BoolSubtract(inner);
 
-        float Lx = 200f;
-        float Ly = 140f;
-        float Lz = 100f;
-        Frame f = new Frame((cnt_z4 + 45f)*uZ3)
-                .rotxy(PI/6f + 0.05f)
-                .rotzx(PI/3f)
-                .translate(new(38.8f, -Ly/2f, -16f));
-        Geez.frame(f);
-        f = f.swing(new Vec3(Lx/2f, Ly/2f, 0f), uZ3, torad(-8f));
-        Geez.frame(f, pos_colour: COLOUR_BLUE);
-        // Transformer rotateme = new Transformer();
-        // Vec3 about = f * new Vec3(Lx/2f, Ly/2f, 0f);
-        // rotateme = rotateme.translate(-about);
-        // rotateme = rotateme.rotate(new(0.5f, 0.8f, 0f), torad(-8f));
-        // rotateme = rotateme.translate(about);
-        // rotateme.get_rotation(out Vec3 trans_about, out float trans_by);
-        // Vec3 trans_shift = rotateme.get_translation();
-        // f = new Frame(trans_shift).rotate(trans_about, trans_by).compose(f);
-
-        outer.BoolIntersect(new Cuboid(f, Lx, Ly, Lz).voxels());
+        outer.BoolIntersect(cube.voxels());
 
         part!.BoolSubtract(outer);
 
+        TPIAP.save_voxels_only("chamber_cutaway", part);
+
         Mesh mesh = new(part);
-        string barcelona = fromroot(
-            ".info/PicoGK/ViewerEnvironment/Barcelona.zip"
-        );
+        string barcelona = fromroot(".Barcelona.zip");
         try { PICOGK_VIEWER.LoadLightSetup(barcelona); }
         catch { print($"oops, no barcelona lightmap at '{barcelona}'"); }
         using (Geez.like(metallic: 0.4f, roughness: 0.1f))
@@ -1807,14 +1835,74 @@ public class Chamber : TPIAP.Pea {
 
 
     public void drawings(in Voxels part) {
+
+        float Lr = pm.Mr_bolt
+                 + pm.Bsz_bolt/2f
+                 + pm.thickness_around_bolt;
+        float Lz = cnt_z6 - cnt_z0;
+
+        Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
+        Frame frame_xy_throat = new(cnt_z4*uZ3, uX3, uZ3);
+        Frame frame_yz = new(Lz/2f*uZ3, uY3, uX3);
+
+        BBox3 bbox = new(
+            new Vec3(-Lr, -Lr, 0f),
+            new Vec3(+Lr, +Lr, Lz)
+        );
+
+        Geez.set_background_colour(false);
+
+        using (Geez.ViewerHack.locked()) {
+            Voxels vox = part - new Cuboid(
+                frame_xy.flipyz(),
+                EXTRA,
+                Lr*2f + EXTRA
+            ).voxels();
+            Geez.clear();
+            Geez.voxels(vox);
+            Geez.lookat(bbox, PI_2, 0f);
+            Geez.lookat(zoom: 180f);
+            Geez.set_transparency(false);
+            Geez.screenshot("xy");
+            Geez.set_transparency(true);
+        }
+
+        using (Geez.ViewerHack.locked()) {
+            Voxels vox = part - new Cuboid(
+                frame_xy_throat,
+                cnt_z6 - cnt_z4 + EXTRA,
+                Lr*2f + EXTRA
+            ).voxels();
+            Geez.clear();
+            Geez.voxels(vox);
+            Geez.lookat(bbox, PI_2, PI);
+            Geez.lookat(zoom: 180f);
+            Geez.screenshot("xy_throat");
+        }
+
+        using (Geez.ViewerHack.locked()) {
+            Voxels vox = part - new Cuboid(
+                frame_yz,
+                Lr + EXTRA,
+                Lz + EXTRA
+            ).voxels();
+            Geez.clear();
+            Geez.voxels(vox);
+            Geez.lookat(bbox, PI, PI_2);
+            Geez.lookat(zoom: 280f);
+            Geez.screenshot("xz");
+        }
+
         Mesh mesh = new(part); // only gen once.
 
-        if (!minimise_mem)
+        if (!minimise_mem) {
             Geez.mesh(mesh); // someting to look at.
+        } else {
+            Geez.clear();
+        }
 
         Cuboid bounds;
 
-        Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
         print("cross-sectioning xy...");
         Drawing.to_file(
             fromroot($"exports/chamber_xy.svg"),
@@ -1825,7 +1913,16 @@ public class Chamber : TPIAP.Pea {
         using (Geez.like(colour: COLOUR_BLUE))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
 
-        Frame frame_yz = new(ZERO3, uY3, uX3);
+        print("cross-sectioning xy throat...");
+        Drawing.to_file(
+            fromroot($"exports/chamber_xy_throat.svg"),
+            mesh,
+            frame_xy_throat,
+            out bounds
+        );
+        using (Geez.like(colour: COLOUR_BLUE))
+            Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
+
         print("cross-sectioning yz...");
         Drawing.to_file(
             fromroot($"exports/chamber_yz.svg"),
@@ -1835,6 +1932,7 @@ public class Chamber : TPIAP.Pea {
         );
         using (Geez.like(colour: COLOUR_GREEN))
             Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
+
 
         print("Baby drawed.");
         print();

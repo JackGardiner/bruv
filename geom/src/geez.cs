@@ -929,27 +929,6 @@ public static class Geez {
         }
 
 
-        public static void snap_ang_to_origin(bool instant=false) {
-            Vec3 looking = -future_pos;
-            float newtheta = argxy(looking, ifzero: future_theta);
-            float newphi = argphi(looking, ifzero: future_phi);
-            set_ang(newtheta, newphi, instant, false);
-        }
-
-        public static void snap_pos_to_origin(bool instant=false) {
-            set_pos(ZERO3, instant, false);
-        }
-
-        public static void snap_ang_to_centre(bool instant=false) {
-            Vec3 looking = centre - future_pos;
-            float newtheta = argxy(looking, ifzero: future_theta);
-            float newphi = argphi(looking, ifzero: future_phi);
-            set_ang(newtheta, newphi, instant, false);
-        }
-
-        public static void snap_pos_to_centre(bool instant=false) {
-            set_pos(centre, instant, false);
-        }
 
         public static void snap_ang_to_axis_aligned(bool instant=false) {
             float newtheta = round(future_theta / PI_2) * PI_2;
@@ -972,25 +951,61 @@ public static class Geez {
             set_ang(newtheta, newphi, instant, false);
         }
 
+        public static void snap_ang_to_origin(bool instant=false) {
+            Vec3 looking = -future_pos;
+            float newtheta = argxy(looking, ifzero: future_theta);
+            float newphi = argphi(looking, ifzero: future_phi);
+            set_ang(newtheta, newphi, instant, false);
+        }
+
+        public static void snap_pos_to_origin(bool instant=false) {
+            set_pos(ZERO3, instant, false);
+        }
+
+        public static void snap_ang_to_centre(bool instant=false) {
+            Vec3 looking = centre - future_pos;
+            float newtheta = argxy(looking, ifzero: future_theta);
+            float newphi = argphi(looking, ifzero: future_phi);
+            set_ang(newtheta, newphi, instant, false);
+        }
+
+        public static void snap_pos_to_centre(bool instant=false) {
+            set_pos(centre, instant, false);
+        }
+
+        public static void snap_ang_to_z_axis(bool instant=false) {
+            // Vec2 axis_point = projxy(centre); // local z axis passes through.
+            Vec2 axis_point = ZERO2;
+            // could do about scene z, but nah its kinda shit.
+
+            Vec2 to_axis = axis_point - projxy(future_pos);
+            float newtheta = nearzero(to_axis) // dont change view if coincident.
+                           ? future_theta
+                           : arg(to_axis);
+            set_ang(newtheta, future_phi, instant, false);
+        }
+
         public static void snap_pos_to_z_axis(bool instant=false) {
-            float z;
+            // Vec3 axis_point = centre * uXY3; // local z axis passes through.
+            Vec3 axis_point = ZERO3;
+            // same deal with scene z.
+
+            float z = NAN;
             if (orbit) {
-                // cheeky plane line intersection.
-                Vec3 point = future_pos;
+                // try to do a cheeky plane line intersection.
+                Vec3 point = future_pos - axis_point;
                 Vec3 looking = get_future_looking();
                 Vec3 right = fromcyl(1f, future_theta - PI_2, 0f);
                 Vec3 normal = cross(right, looking);
-                if (nearhoriz(normal)) {
-                    // If looking perfectly vertical, just stay where we are.
-                    z = future_pos.Z;
-                } else {
+                // If looking perfectly vertical, cant do intersection.
+                if (!nearhoriz(normal))
                     z = -dot(normal, -point) / dot(normal, uZ3);
-                }
-            } else {
-                // otherwise jus dont change z.
-                z = future_pos.Z;
             }
-            set_pos(uZ3 * z, instant, false);
+            // otherwise jus dont change z.
+            if (isnan(z))
+                z = dot(future_pos - axis_point, uZ3);
+
+            set_pos(axis_point + uZ3*z, instant, false);
         }
 
         /* Viewer.IViewerAction */
@@ -1101,10 +1116,17 @@ public static class Geez {
               case VEK.Key_E:
                 // snap snap.
                 if (pressed && !islocked) {
-                    if (ctrl)
-                        snap_pos_to_origin();
-                    else
-                        snap_pos_to_z_axis();
+                    if (ctrl) {
+                        if (orbit)
+                            snap_pos_to_origin();
+                        else
+                            snap_ang_to_origin();
+                    } else {
+                        if (orbit)
+                            snap_pos_to_z_axis();
+                        else
+                            snap_ang_to_z_axis();
+                    }
                 }
                 return true;
               case VEK.Key_R:
@@ -1122,8 +1144,12 @@ public static class Geez {
                     reframe();
                 return true;
               case VEK.Key_Backspace:
-                if (pressed && !islocked)
-                    reset();
+                if (pressed && !islocked) {
+                    if (ctrl)
+                        reset();
+                    else
+                        get_a_word_in_edgewise = 5;
+                }
                 return true;
 
               case VEK.Key_K:
@@ -1144,7 +1170,7 @@ public static class Geez {
               case VEK.Key_O:
               case VEK.Key_P:
                 if (pressed && !islocked) {
-                    roll += (key == VEK.Key_O) ? 1 : -1;
+                    roll += (key == VEK.Key_O) ? -1 : 1;
                 }
                 return true;
 
@@ -1190,14 +1216,17 @@ public static class Geez {
         print("     - backtick [`/~]  toggle orbit/free mode at pivot point");
         print("     - Q               snap view along nearest axis");
         print("     - ctrl+Q          snap view to nearest isometric angle");
-        print("     - E               snap pivot point to Z axis");
-        print("     - ctrl+E          snap pivot point to origin");
+        print("     - E               snap pivot point in orbit or view in free "
+                                   + "to scene Z axis");
+        print("     - ctrl+E          snap pivot point in orbit or view in free "
+                                   + "to origin");
         print("     - R               snap pivot point in orbit or view in free "
                                    + "to scene centre");
         print("     - ctrl+R          snap view in orbit or pivot point in free "
                                    + "to scene centre");
         print("     - equals [+/=]    reframe view to full scene");
-        print("     - backspace       reset view (+fix window aspect ratio)");
+        print("     - backspace       fix window aspect ratio");
+        print("     - ctrl+backspace  reset view (+fix window aspect ratio)");
         print("     - K/L             dial up/down free fov");
         print("     - O/P             super hacked-in roll camera");
         print("     - T               toggle transparency");
