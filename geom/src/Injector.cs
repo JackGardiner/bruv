@@ -1,13 +1,10 @@
-using System;
 using System.Numerics;
-using System.Text;
 using Calculations;
 using static br.Br;
 using br;
 using Leap71.ShapeKernel;
 using PicoGK;
 using ports;
-using Calculations;
 
 public class Injector : TwoPeasInAPod.Pea
 {
@@ -1183,8 +1180,9 @@ public class Injector : TwoPeasInAPod.Pea
         print();
     }
 
-    public void anything() {
-        GraphLookupVerifier.ExportVortexRadiusCSV("exports/injector_vortex_radii.csv");
+    public void anything()
+    {
+
     }
 
     public string name => "injector";
