@@ -7,9 +7,46 @@ namespace Calculations
     {
         public struct Point { public float X; public float Y; }
 
-        // --- Spray Cone Angle Plot (TwoAlpha vs. A) ---
+        // --- Spray Cone Angle Plot (Independent X: A, Dependent Y: TwoAlpha) ---
         // Samples at lbar_n = 2.0 and 0.5
-        private static readonly Point[] SprayCone_N2 = new[]
+        private static readonly Point[] SprayCone_A_to_TwoAlpha_N2 = new[]
+        {
+            new Point { X = 0.421421f, Y = 56.09843f }, new Point { X = 0.927129f, Y = 66.71354f },
+            new Point { X = 1.299385f, Y = 73.60281f }, new Point { X = 1.636524f, Y = 78.17224f },
+            new Point { X = 2.064969f, Y = 82.74165f }, new Point { X = 2.661984f, Y = 87.24077f },
+            new Point { X = 3.167691f, Y = 89.77153f }, new Point { X = 3.834943f, Y = 92.51318f },
+            new Point { X = 4.326602f, Y = 94.41125f }, new Point { X = 5.007903f, Y = 96.66081f },
+            new Point { X = 5.661108f, Y = 98.27768f }, new Point { X = 6.356455f, Y = 99.61336f },
+            new Point { X = 7.044778f, Y = 100.8084f }, new Point { X = 7.585603f, Y = 101.3708f },
+            new Point { X = 8.091308f, Y = 101.7926f }
+        };
+
+        private static readonly Point[] SprayCone_A_to_TwoAlpha_N05 = new[]
+        {
+            new Point { X = 0.456541f, Y = 56.59052f }, new Point { X = 0.695346f, Y = 65.16697f },
+            new Point { X = 0.870938f, Y = 70.29878f }, new Point { X = 1.046533f, Y = 74.93849f },
+            new Point { X = 1.313432f, Y = 80.56239f }, new Point { X = 1.573309f, Y = 84.78032f },
+            new Point { X = 1.833188f, Y = 88.36555f }, new Point { X = 2.128183f, Y = 91.59930f },
+            new Point { X = 2.549605f, Y = 95.18454f }, new Point { X = 2.914838f, Y = 97.50440f },
+            new Point { X = 3.427569f, Y = 100.3163f }, new Point { X = 3.898157f, Y = 102.5659f },
+            new Point { X = 4.319579f, Y = 104.1828f }, new Point { X = 4.783144f, Y = 105.7996f },
+            new Point { X = 5.260755f, Y = 107.2056f }, new Point { X = 5.808605f, Y = 108.8225f },
+            new Point { X = 6.525022f, Y = 110.5097f }, new Point { X = 7.220371f, Y = 111.7047f },
+            new Point { X = 7.676910f, Y = 112.0562f }, new Point { X = 8.091308f, Y = 112.5483f }
+        };
+
+        public static float GetSprayConeAngle(float targetA, float lbar_n)
+        {
+            float z = Math.Clamp(lbar_n, 0.5f, 2.0f);
+            float yAt05 = Interpolate(SprayCone_A_to_TwoAlpha_N05, targetA);
+            float yAt20 = Interpolate(SprayCone_A_to_TwoAlpha_N2, targetA);
+
+            float t = (z - 0.5f) / (2.0f - 0.5f);
+            return yAt05 + t * (yAt20 - yAt05);
+        }
+
+        // --- Spray Cone Angle Plot (Independent X: TwoAlpha, Dependent Y: A) ---
+        private static readonly Point[] SprayCone_TwoAlpha_to_A_N2 = new[]
         {
             new Point { X = 56.09843f, Y = 0.421421f }, new Point { X = 66.71354f, Y = 0.927129f },
             new Point { X = 73.60281f, Y = 1.299385f }, new Point { X = 78.17224f, Y = 1.636524f },
@@ -21,7 +58,7 @@ namespace Calculations
             new Point { X = 101.7926f, Y = 8.091308f }
         };
 
-        private static readonly Point[] SprayCone_N05 = new[]
+        private static readonly Point[] SprayCone_TwoAlpha_to_A_N05 = new[]
         {
             new Point { X = 56.59052f, Y = 0.456541f }, new Point { X = 65.16697f, Y = 0.695346f },
             new Point { X = 70.29878f, Y = 0.870938f }, new Point { X = 74.93849f, Y = 1.046533f },
@@ -38,14 +75,14 @@ namespace Calculations
         public static float GetA(float twoalpha, float lbar_n)
         {
             float z = Math.Clamp(lbar_n, 0.5f, 2.0f);
-            float yAt05 = Interpolate(SprayCone_N05, twoalpha);
-            float yAt20 = Interpolate(SprayCone_N2, twoalpha);
+            float yAt05 = Interpolate(SprayCone_TwoAlpha_to_A_N05, twoalpha);
+            float yAt20 = Interpolate(SprayCone_TwoAlpha_to_A_N2, twoalpha);
 
             float t = (z - 0.5f) / (2.0f - 0.5f);
             return yAt05 + t * (yAt20 - yAt05);
         }
 
-        // --- Flow Coefficient Plot (Forward: A -> Mu_in) ---
+        // --- Flow Coefficient Plot (Independent X: A, Dependent Y: Mu_in) ---
         // Samples at C = 1.0 and 4.0
         private static readonly Point[] FlowCoeff_C1 = new[]
         {
@@ -128,59 +165,44 @@ namespace Calculations
             return yAtC1 + t * (yAtC4 - yAtC1);
         }
 
-        // --- Relative Liquid Vortex Radius (A vs. r_m_on_R_n) ---
+        // --- Relative Liquid Vortex Radius (Independent X: A, Dependent Y: r_m_on_R_n) ---
         // Samples at Rbar_in = 1, 3, and 4
         private static readonly Point[] Vortex_R1 = new[]
         {
-            new Point { X = 0.509229f, Y = 0.000839f }, new Point { X = 0.580521f, Y = 0.042812f },
-            new Point { X = 0.656906f, Y = 0.078909f }, new Point { X = 0.723105f, Y = 0.105771f },
-            new Point { X = 0.799490f, Y = 0.137671f }, new Point { X = 0.967536f, Y = 0.188877f },
-            new Point { X = 1.069382f, Y = 0.221616f }, new Point { X = 1.211966f, Y = 0.265268f },
-            new Point { X = 1.359642f, Y = 0.299685f }, new Point { X = 1.542965f, Y = 0.339979f },
-            new Point { X = 1.716103f, Y = 0.380273f }, new Point { X = 1.899427f, Y = 0.415530f },
-            new Point { X = 2.098027f, Y = 0.447429f }, new Point { X = 2.316994f, Y = 0.473452f },
-            new Point { X = 2.571609f, Y = 0.504512f }, new Point { X = 2.826225f, Y = 0.531375f },
-            new Point { X = 3.075748f, Y = 0.553200f }, new Point { X = 3.371100f, Y = 0.575866f },
-            new Point { X = 3.666454f, Y = 0.601049f }, new Point { X = 3.951623f, Y = 0.616160f },
-            new Point { X = 4.216422f, Y = 0.631270f }, new Point { X = 4.506683f, Y = 0.646380f },
-            new Point { X = 4.807129f, Y = 0.662330f }, new Point { X = 5.087204f, Y = 0.677440f },
-            new Point { X = 5.377466f, Y = 0.693389f }, new Point { X = 5.688095f, Y = 0.703463f },
-            new Point { X = 5.963078f, Y = 0.714376f }, new Point { X = 6.273709f, Y = 0.725289f },
-            new Point { X = 6.604708f, Y = 0.739559f }, new Point { X = 6.910246f, Y = 0.745435f },
-            new Point { X = 7.215786f, Y = 0.756348f }, new Point { X = 7.506047f, Y = 0.760546f },
-            new Point { X = 7.740290f, Y = 0.763064f }, new Point { X = 8.005092f, Y = 0.769780f }
+            new Point { X = 0.523076f, Y = 0.300632f }, new Point { X = 0.676923f, Y = 0.356258f },
+            new Point { X = 0.953845f, Y = 0.413780f }, new Point { X = 1.212306f, Y = 0.459924f },
+            new Point { X = 1.606152f, Y = 0.519975f }, new Point { X = 1.901537f, Y = 0.557901f },
+            new Point { X = 2.276921f, Y = 0.592667f }, new Point { X = 2.719998f, Y = 0.623641f },
+            new Point { X = 3.076923f, Y = 0.645133f }, new Point { X = 3.612306f, Y = 0.672313f },
+            new Point { X = 4.030769f, Y = 0.686220f }, new Point { X = 4.670769f, Y = 0.710240f },
+            new Point { X = 5.230768f, Y = 0.726675f }, new Point { X = 5.846152f, Y = 0.744374f },
+            new Point { X = 6.283075f, Y = 0.753856f }, new Point { X = 6.769228f, Y = 0.763338f },
+            new Point { X = 7.347693f, Y = 0.772819f }, new Point { X = 8.000000f, Y = 0.781037f }
         };
 
         private static readonly Point[] Vortex_R3 = new[]
         {
-            new Point { X = 0.870783f, Y = 0.003358f }, new Point { X = 0.931890f, Y = 0.029381f },
-            new Point { X = 0.977721f, Y = 0.057083f }, new Point { X = 1.043920f, Y = 0.088143f },
-            new Point { X = 1.161043f, Y = 0.121721f }, new Point { X = 1.298536f, Y = 0.160336f },
-            new Point { X = 1.486950f, Y = 0.205666f }, new Point { X = 1.685550f, Y = 0.242602f },
-            new Point { X = 1.924888f, Y = 0.280378f }, new Point { X = 2.194779f, Y = 0.321511f },
-            new Point { X = 2.454487f, Y = 0.354250f }, new Point { X = 2.673455f, Y = 0.379433f },
-            new Point { X = 2.892424f, Y = 0.398741f }, new Point { X = 3.203055f, Y = 0.426443f },
-            new Point { X = 3.462761f, Y = 0.449108f }, new Point { X = 3.977083f, Y = 0.481007f },
-            new Point { X = 4.639081f, Y = 0.509549f }, new Point { X = 5.285803f, Y = 0.542288f },
-            new Point { X = 5.891786f, Y = 0.567471f }, new Point { X = 6.548693f, Y = 0.596013f },
-            new Point { X = 7.159768f, Y = 0.610283f }, new Point { X = 7.526413f, Y = 0.615320f },
-            new Point { X = 7.898153f, Y = 0.619517f }
+            new Point { X = 0.916922f, Y = 0.301264f }, new Point { X = 0.990769f, Y = 0.331606f },
+            new Point { X = 1.107691f, Y = 0.362579f }, new Point { X = 1.396921f, Y = 0.410619f },
+            new Point { X = 1.667691f, Y = 0.449178f }, new Point { X = 2.024615f, Y = 0.487737f },
+            new Point { X = 2.461537f, Y = 0.519343f }, new Point { X = 2.769229f, Y = 0.541466f },
+            new Point { X = 3.224613f, Y = 0.568015f }, new Point { X = 3.735383f, Y = 0.589507f },
+            new Point { X = 4.523076f, Y = 0.619216f }, new Point { X = 5.212306f, Y = 0.640708f },
+            new Point { X = 5.975383f, Y = 0.661568f }, new Point { X = 6.775382f, Y = 0.679267f },
+            new Point { X = 7.495382f, Y = 0.695070f }, new Point { X = 8.049228f, Y = 0.703919f }
         };
 
         private static readonly Point[] Vortex_R4 = new[]
         {
-            new Point { X = 1.211966f, Y = 0.009234f }, new Point { X = 1.364735f, Y = 0.048689f },
-            new Point { X = 1.548058f, Y = 0.088143f }, new Point { X = 1.751749f, Y = 0.127597f },
-            new Point { X = 1.935073f, Y = 0.156978f }, new Point { X = 2.210056f, Y = 0.191396f },
-            new Point { X = 2.515594f, Y = 0.221616f }, new Point { X = 2.841501f, Y = 0.249318f },
-            new Point { X = 3.136854f, Y = 0.270304f }, new Point { X = 3.447485f, Y = 0.292130f },
-            new Point { X = 3.763206f, Y = 0.310598f }, new Point { X = 4.134944f, Y = 0.334103f },
-            new Point { X = 4.476128f, Y = 0.356768f }, new Point { X = 4.852958f, Y = 0.373557f },
-            new Point { X = 5.143219f, Y = 0.389507f }, new Point { X = 5.570971f, Y = 0.402099f },
-            new Point { X = 5.963078f, Y = 0.416369f }, new Point { X = 6.360279f, Y = 0.434837f },
-            new Point { X = 6.793124f, Y = 0.450787f }, new Point { X = 7.134307f, Y = 0.462539f },
-            new Point { X = 7.546783f, Y = 0.471773f }, new Point { X = 7.872690f, Y = 0.483526f },
-            new Point { X = 8.056012f, Y = 0.484365f }
+            new Point { X = 1.224614f, Y = 0.299368f }, new Point { X = 1.464615f, Y = 0.341719f },
+            new Point { X = 1.692306f, Y = 0.368268f }, new Point { X = 1.993845f, Y = 0.397977f },
+            new Point { X = 2.313845f, Y = 0.421365f }, new Point { X = 2.646153f, Y = 0.440961f },
+            new Point { X = 2.984613f, Y = 0.459924f }, new Point { X = 3.415383f, Y = 0.478255f },
+            new Point { X = 3.821536f, Y = 0.495954f }, new Point { X = 4.301537f, Y = 0.513021f },
+            new Point { X = 4.769228f, Y = 0.528824f }, new Point { X = 5.310767f, Y = 0.543363f },
+            new Point { X = 5.766152f, Y = 0.554741f }, new Point { X = 6.289230f, Y = 0.567383f },
+            new Point { X = 6.873845f, Y = 0.578129f }, new Point { X = 7.458459f, Y = 0.590139f },
+            new Point { X = 8.067689f, Y = 0.600885f }
         };
 
         public static float GetRelativeVortexRadius(float targetA, float rbar_in)
