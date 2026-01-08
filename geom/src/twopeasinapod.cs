@@ -9,24 +9,27 @@ public static class TwoPeasInAPod {
     public interface Pea {
         string name { get; }
 
-        Voxels? voxels();
-        void drawings(in Voxels vox);
         void anything();
+        Voxels? voxels();
+        Voxels? cutaway(in Voxels part);
+        void drawings(in Voxels part);
 
         void set_modifiers(int mods);
     }
 
     /* GUIDE: how to create `make` (for smarties) */
     /* bitwise or (|) ANY/SEVERAL/ALL of these actions: */
-    public const int ANYTHING = 0x1;
-    public const int DRAWINGS = 0x2;
-    public const int VOXELS   = 0x4;
-    public const int LOOKSIE  = 0x8;
+    public const int ANYTHING        = 0x01;
+    public const int VOXELS          = 0x02;
+    public const int CUTAWAY         = 0x04;
+    public const int DRAWINGS        = 0x08;
+    public const int LOOKSIE         = 0x10;
+    public const int LOOKSIE_CUTAWAY = 0x20;
     /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
-    public const int FILLETLESS       = 0x1 << BITC_ACTION;
-    public const int CUTAWAY          = 0x2 << BITC_ACTION;
-    public const int MINIMISE_MEM     = 0x4 << BITC_ACTION;
-    public const int TAKE_SCREENSHOTS = 0x8 << BITC_ACTION;
+    public const int MINIMISE_MEM     = 0x01 << BITC_ACTION;
+    public const int FILLETLESS       = 0x02 << BITC_ACTION;
+    public const int TAKE_SCREENSHOTS = 0x04 << BITC_ACTION;
+    public const int LOOKIN_FANCY     = 0x08 << BITC_ACTION;
     public const int BRANDINGLESS     = 0x10 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
     public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
@@ -35,18 +38,11 @@ public static class TwoPeasInAPod {
 
 
     public const int DUMMY = 0;
-    public const int BITC_ACTION = 4;
+    public const int BITC_ACTION = 6;
     public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
     public const int BITC_MODIFIER = 5;
     public const int MASK_MODIFIER = ((1 << BITC_MODIFIER) - 1) << BITC_ACTION;
     public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
-
-
-    public static Voxels? dummy(out string? name) {
-        /* whatever your heart desires. */
-        name = null;
-        return null;
-    }
 
 
     public static void entrypoint(int make, bool shutdown_on_exit,
@@ -72,20 +68,51 @@ public static class TwoPeasInAPod {
     }
 
     public static void execute(int make) {
-
-        // Check dummy method.
-        if (make == DUMMY) {
-            Voxels? dummy_vox = dummy(out string? dummy_name);
-            if (dummy_vox != null && dummy_name != null)
-                save_voxels(dummy_name, dummy_vox);
-            return;
-        }
-
         // Check a pea and at least one action was given.
         if (isclr(make, MASK_ACTION))
             throw new Exception("invalid 'make': no action selected");
         if (isclr(make, MASK_PEA))
             throw new Exception("invalid 'make': no pea selected");
+
+        // Peep into modifiers and disable rendering if minimising memory.
+        if (isset(make, MINIMISE_MEM)) {
+            print("minimising memory means no rendering, going dark...");
+            print();
+            Geez.lockdown = true;
+        }
+
+        // Setup fancy rendering settings if requested.
+        if (isset(make, LOOKIN_FANCY)) {
+            print("entering barcelona...");
+            print();
+            string barcelona = fromroot("barcelona/Barcelona.zip");
+            try {
+                PICOGK_VIEWER.LoadLightSetup(barcelona);
+                // Note that the loading prints a "Loading Lights" message, which
+                // we may view as an annoyance, but we may also view as an
+                // opportunity.
+                queue_print_action(["ignore that ^", ""]);
+                // its "possible" (not really since there are no threads that
+                // could) for an action to slip in between these but dw.
+
+                Geez.dflt_metallic = 0.4f;
+                Geez.dflt_roughness = 0.1f;
+            } catch (Exception e) {
+                print($"oops, failed to enter barcelona at '{barcelona}'");
+                print("Exception log:");
+                print(e);
+                print();
+            }
+        }
+
+        // Take a break if screenshotting.
+        if (isset(make, TAKE_SCREENSHOTS)) {
+            print("since 'TAKE_SCREENSHOTS' has been selected,");
+            print("sleeping for 5s to allow window resizing...");
+            print("  (be sure to hit 'backspace' to update)");
+            print();
+            Thread.Sleep(5000);
+        }
 
         // Load the config files.
         string path_all = fromroot("../config/all.json");
@@ -128,31 +155,50 @@ public static class TwoPeasInAPod {
         // Modify the objects.
         pea.set_modifiers(make & MASK_MODIFIER);
 
-        // Test me.
+        // Anything?
         if (isset(make, ANYTHING))
             pea.anything();
-        if ((make & MASK_ACTION) == ANYTHING)
-            return;
 
         // Gimme voxels.
-        Voxels? vox = get_voxels(pea, neednew: isset(make, VOXELS));
-        if (vox == null) // unlucky.
-            return;
+        GetVoxels part = new(pea);
+        GetVoxelsCutaway cutaway = new(pea);
+
+        // Voxel me.
+        if (isset(make, VOXELS))
+            part.generate(must: true);
+
+        // Cutaway gag.
+        if (isset(make, CUTAWAY))
+            cutaway.generate(part.voxels(), must: true);
 
         // Drawing sidequest.
-        if (isset(make, DRAWINGS)) {
+        if (isset(make, DRAWINGS) && part.succeeded()) {
             print($"Making '{pea.name}' drawings...");
             print();
             Geez.clear();
-            pea.drawings(vox);
+            pea.drawings(part.voxels()!);
         }
 
         // Proper looksie.
-        if (isset(make, LOOKSIE)) {
+        if (isset(make, LOOKSIE) && part.succeeded()) {
             print($"Giving '{pea.name}' a looksie...");
             print();
             Geez.clear();
-            Geez.voxels(vox);
+            Geez.voxels(part.voxels()!);
+            print("press any key when finished viewing to continue...");
+            Console.ReadKey(intercept: true);
+            print();
+        }
+
+        // Additional proper looksie.
+        if (isset(make, LOOKSIE_CUTAWAY) && cutaway.succeeded(part.voxels())) {
+            print($"Giving '{pea.name}' a cutawayed looksie...");
+            print();
+            Geez.clear();
+            Geez.voxels(cutaway.voxels(part.voxels()!)!);
+            print("press any key when finished viewing to continue...");
+            Console.ReadKey(intercept: true);
+            print();
         }
     }
 
@@ -272,21 +318,109 @@ public static class TwoPeasInAPod {
         return false;
     }
 
-    private static Voxels? get_voxels(in Pea pea, bool neednew=true) {
-        Voxels? vox;
-        if (!neednew) {
-            if (load_voxels(pea.name, out vox))
-                return vox;
+    private class GetVoxels {
+        public Pea pea { get; }
+        public bool tried { get; private set; }
+
+        public GetVoxels(in Pea pea) {
+            this.pea = pea;
+            this.tried = false;
+            _vox = null;
         }
-        print(neednew
-            ? $"Generating '{pea.name}' voxels..."
-            : $"Regenerating '{pea.name}' voxels..."
-        );
-        print();
-        vox = pea.voxels();
-        if (vox != null)
-            save_voxels(pea.name, vox);
-        return vox;
+
+        public void generate(bool must=false) {
+            assert(!must || !tried);
+            if (tried)
+                return;
+            tried = true;
+            if (!must) {
+                if (load_voxels(pea.name, out _vox))
+                    return;
+            }
+            print(must
+                ? $"Generating '{pea.name}' voxels..."
+                : $"Regenerating '{pea.name}' voxels..."
+            );
+            print();
+            Geez.clear();
+            _vox = pea.voxels();
+            if (_vox != null)
+                save_voxels(pea.name, _vox);
+        }
+
+        public Voxels? voxels() {
+            generate();
+            return _vox;
+        }
+        public bool succeeded() {
+            generate();
+            return _vox != null;
+        }
+        private Voxels? _vox;
     }
 
+    private class GetVoxelsCutaway {
+        public Pea pea { get; }
+        public bool tried { get; private set; }
+
+        public GetVoxelsCutaway(in Pea pea) {
+            this.pea = pea;
+            this.tried = false;
+            _vox = null;
+        }
+
+        public void generate(in Voxels? part, bool must=false) {
+            assert(!must || !tried);
+            if (tried)
+                return;
+            if (part == null)
+                return; // dont set tried. dont error even if must.
+            tried = true;
+            if (!must) {
+                if (load_voxels($"{pea.name}-cutaway", out _vox))
+                    return;
+            }
+            print(must
+                ? $"Cutting '{pea.name}' away..."
+                : $"Recutting '{pea.name}' away..."
+            );
+            print();
+            Geez.clear();
+            _vox = pea.cutaway(part);
+            if (_vox != null)
+                save_voxels($"{pea.name}-cutaway", _vox);
+        }
+
+        public Voxels? voxels(in Voxels? part) {
+            generate(part);
+            return _vox;
+        }
+        public bool succeeded(in Voxels? part) {
+            generate(part);
+            return _vox != null;
+        }
+        private Voxels? _vox;
+    }
+
+    private class PrintAction : PicoGK.Viewer.IViewerAction {
+        public List<string> msgs { get; }
+        public PrintAction(List<string> msgs) {
+            this.msgs = msgs;
+        }
+
+        /* Viewer.IViewerAction */
+        public void Do(PicoGK.Viewer viewer) {
+            foreach (string msg in msgs)
+                print(msg);
+        }
+    }
+
+    public static void queue_print_action(in List<string> msgs) {
+        var actions = Perv.get<Queue<PicoGK.Viewer.IViewerAction>>(
+            PICOGK_VIEWER,
+            "m_oActions"
+        );
+        lock (actions)
+            actions.Enqueue(new PrintAction(msgs));
+    }
 }

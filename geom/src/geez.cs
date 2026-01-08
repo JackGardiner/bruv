@@ -44,12 +44,16 @@ public static class Geez {
         return Scoped.on_leave(() => lockdown = prev);
     }
 
+    public static Colour BACKGROUND_COLOUR_DARK => new("#202020");
+    public static Colour BACKGROUND_COLOUR_LIGHT => new("#FFFFFF");
     public static Colour background_colour {
         get => Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
         set => PICOGK_VIEWER.SetBackgroundColor(value);
     }
     public static void set_background_colour(bool dark)
-        => background_colour = dark ? new("#202020") : new("#FFFFFF");
+        => background_colour = dark
+                             ? BACKGROUND_COLOUR_DARK
+                             : BACKGROUND_COLOUR_LIGHT;
 
     public static bool transparent { get; private set; } = true;
     public static void set_transparency(bool newtransparent) {
@@ -337,9 +341,7 @@ public static class Geez {
         private static SnapTo<SnapVec3, Vec3> snap_vel = new(20f, NAN3, false);
         private static SnapTo<SnapVec3, Vec3> snap_pos
             = new(25f, NAN3, max_time: 0.3f /* don freeze */);
-        public static Vec3 future_pos => nonnan(snap_pos.target)
-                                       ? snap_pos.target
-                                       : pos;
+        public static Vec3 future_pos => ifnan(snap_pos.target, pos);
 
         public static void set_pos(in Vec3 newpos, bool instant=false,
                 bool expl=true) {
@@ -363,9 +365,7 @@ public static class Geez {
         // its moved to detect scroll input.
         private const float zoom_picogk = 100f;
 
-        public static float future_zoom => nonnan(snap_zoom.target)
-                                         ? snap_zoom.target
-                                         : zoom;
+        public static float future_zoom => ifnan(snap_zoom.target, zoom);
 
         public static void set_zoom(float newzoom, bool instant=false,
                 bool expl=true) {
@@ -405,12 +405,8 @@ public static class Geez {
         public static float dflt_phi => torad(120f); // matching picogk.
         public static Vec3 get_looking() => fromsph(1f, theta, phi);
 
-        public static float future_theta => nonnan(snap_ang.target_theta)
-                                          ? snap_ang.target_theta
-                                          : theta;
-        public static float future_phi => nonnan(snap_ang.target_phi)
-                                        ? snap_ang.target_phi
-                                        : phi;
+        public static float future_theta => ifnan(snap_ang.target_theta, theta);
+        public static float future_phi => ifnan(snap_ang.target_phi, phi);
         public static Vec3 get_future_looking()
             => fromsph(1f, future_theta, future_phi);
 
@@ -444,9 +440,7 @@ public static class Geez {
         public static float min_fov => torad(10f);
         public static float max_fov => torad(170f);
 
-        public static float future_fov => nonnan(snap_fov.target)
-                                        ? snap_fov.target
-                                        : zoom;
+        public static float future_fov => ifnan(snap_fov.target, fov);
 
         public static void set_fov(float newfov, bool instant=false,
                 bool expl=true) {
@@ -465,7 +459,7 @@ public static class Geez {
                 = new(25f, ortho, false);
         private static bool extra_focal_further = false;
         public static float get_focal_dist(float with_zoom=NAN)
-            => (isnan(with_zoom) ? zoom : with_zoom) * 0.9f /* may rescale */;
+            => ifnan(with_zoom, zoom) * 0.9f /* may rescale */;
         public static float get_ortho_dist() => max_zoom * 10f;
 
         public static void set_orbit(bool neworbit, bool about_focal,
@@ -1145,10 +1139,12 @@ public static class Geez {
                 return true;
               case VEK.Key_Backspace:
                 if (pressed && !islocked) {
-                    if (ctrl)
+                    if (ctrl) {
                         reset();
-                    else
+                    } else {
                         get_a_word_in_edgewise = 5;
+                        _ = resize();
+                    }
                 }
                 return true;
 
@@ -1225,7 +1221,7 @@ public static class Geez {
         print("     - ctrl+R          snap view in orbit or pivot point in free "
                                    + "to scene centre");
         print("     - equals [+/=]    reframe view to full scene");
-        print("     - backspace       fix window aspect ratio");
+        print("     - backspace       recalc scene (+fix window aspect ratio)");
         print("     - ctrl+backspace  reset view (+fix window aspect ratio)");
         print("     - K/L             dial up/down free fov");
         print("     - O/P             super hacked-in roll camera");
@@ -1239,32 +1235,72 @@ public static class Geez {
     }
 
 
-    public static void lookat(BBox3 bbox, float theta=NAN, float phi=NAN) {
-        lookat(
-            pos: bbox.vecCenter(),
-            theta: theta,
-            phi: phi,
-            zoom: mag(bbox.vecSize()),
-            orbit: true,
-            fov: NAN
-        );
-    }
-    public static void lookat(Vec3? pos=null, float theta=NAN, float phi=NAN,
-            float zoom=NAN, bool orbit=true, float fov=NAN) {
-        pos = (pos != null) ? pos : ViewerHack.future_pos;
-        zoom = nonnan(zoom) ? zoom : ViewerHack.future_zoom;
-        theta = nonnan(theta) ? theta : ViewerHack.future_theta;
-        phi = nonnan(phi) ? phi : ViewerHack.future_phi;
-        fov = nonnan(fov) ? fov : ViewerHack.future_fov;
+    public class ViewAs {
+        public Vec3? pos { get; set; }
+        public float theta { get; set; }
+        public float phi { get; set; }
+        public float zoom { get; set; }
+        public float fov { get; set; }
+        public bool? orbit { get; set; }
+        public Colour? bgcol { get; set; }
+        public bool? transparent { get; set; }
 
-        ViewerHack.set_orbit(orbit, false,  instant: true);
-        ViewerHack.set_zoom(zoom,           instant: true);
-        ViewerHack.set_pos(pos.Value,       instant: true);
-        ViewerHack.set_ang(theta, phi,      instant: true);
-        ViewerHack.set_fov(fov,             instant: true);
+        public ViewAs(BBox3 bbox, float theta=NAN, float phi=NAN,
+                Colour? bgcol=null, bool? transparent=null)
+            : this(
+                pos: bbox.vecCenter(),
+                theta: theta,
+                phi: phi,
+                zoom: mag(bbox.vecSize()),
+                orbit: true,
+                fov: NAN,
+                bgcol: bgcol,
+                transparent: transparent
+            ) {}
+
+        public ViewAs(Vec3? pos=null, float theta=NAN, float phi=NAN,
+                float zoom=NAN, float fov=NAN, bool? orbit=null,
+                Colour? bgcol=null, bool? transparent=null){
+            this.pos = pos;
+            this.theta = theta;
+            this.phi = phi;
+            this.zoom = zoom;
+            this.fov = fov;
+            this.orbit = orbit;
+            this.bgcol = bgcol;
+            this.transparent = transparent;
+        }
+
+        public void now() {
+            if (pos != null)
+                ViewerHack.set_pos(pos.Value, instant: true);
+            if (nonnan(theta) || nonnan(phi)) {
+                theta = ifnan(theta, ViewerHack.future_theta);
+                phi   = ifnan(phi,   ViewerHack.future_phi);
+                ViewerHack.set_ang(theta, phi, instant: true);
+            }
+            if (nonnan(zoom))
+                ViewerHack.set_zoom(zoom, instant: true);
+            if (nonnan(fov))
+                ViewerHack.set_fov(fov, instant: true);
+            if (orbit != null)
+                ViewerHack.set_orbit(orbit.Value, false, instant: true);
+            if (bgcol != null)
+                background_colour = bgcol.Value;
+            if (transparent != null)
+                set_transparency(transparent.Value);
+        }
+
+        public IDisposable now_but_not_forever() {
+            IDisposable ret = remember_setup();
+            now();
+            return ret;
+        }
     }
 
-    public static IDisposable remember_current_layout() {
+    public static IDisposable remember_setup() {
+        Colour bgcol = background_colour;
+        bool transparent = Geez.transparent;
         bool expl = ViewerHack.explicit_scene;
         Vec3 size = ViewerHack.size;
         Vec3 centre = ViewerHack.centre;
@@ -1275,6 +1311,8 @@ public static class Geez {
         float phi = ViewerHack.future_phi;
         float fov = ViewerHack.future_fov;
         return Scoped.on_leave(() => {
+            background_colour = bgcol;
+            Geez.transparent = transparent;
             ViewerHack.explicit_scene = expl;
             ViewerHack.set_size(size,                         expl: false);
             ViewerHack.set_centre(centre,                     expl: false);
@@ -1286,8 +1324,27 @@ public static class Geez {
         });
     }
 
+
+    public class Screenshotta {
+        public ViewAs view_as { get; }
+
+        public Screenshotta(in ViewAs view_as) {
+            this.view_as = view_as;
+        }
+
+        public void take(string name, bool existok=true) {
+            using (remember_setup())
+            using (ViewerHack.locked())
+            using (view_as.now_but_not_forever())
+                screenshot(name, existok: existok);
+        }
+    }
+
     public static void screenshot(string name, bool existok=true) {
-        string path = fromroot($"exports/ss_{name}.tga");
+        if (lockdown)
+            return;
+
+        string path = fromroot($"exports/ss-{name}.tga");
         if (!existok && File.Exists(path))
             throw new Exception($"screenshot already exists: '{path}'");
 
@@ -1324,12 +1381,23 @@ public static class Geez {
         done.Wait();
     }
 
-    public static void wipe_screenshot(string name, bool missingok=true) {
-        string path = fromroot($"exports/ss_{name}.tga");
+    public static void wipe_screenshot(string name, bool missingok=true,
+            bool alsopng=true, bool missingpngok=true) {
+        string path = fromroot($"exports/ss-{name}.tga");
         if (!missingok && !File.Exists(path))
             throw new Exception($"screenshot doesn't exist: '{path}'");
 
         File.Delete(path);
+
+        // also kill any png, if requested.
+        if (alsopng) {
+            string pngpath = fromroot($"exports/ss-{name}.png");
+            if (!missingpngok && !File.Exists(pngpath))
+                throw new Exception("png screenshot doesn't exist: "
+                                 + $"'{pngpath}'");
+
+            File.Delete(pngpath);
+        }
     }
 
 
@@ -1341,17 +1409,21 @@ public static class Geez {
         // nothing added during lockdown.
         if (lockdown)
             return BLANK;
-        int key = _next++;
-        lock (_geezed)
+        int key;
+        lock (_geezed) {
+            key = _next++;
             _geezed.Add(key, (lines, meshes));
+        }
         return key;
     }
-    private static int _track(in List<int> group) {
+    private static int _track(in Slice<int> group) {
         if (lockdown)
             return BLANK;
-        int key = _next++;
-        lock (_geezed)
+        int key;
+        lock (_geezed) {
+            key = _next++;
             _geezed.Add(key, group);
+        }
         return key;
     }
     private static bool _the_box_that_bounds_them_all(out BBox3 bbox) {
@@ -1483,34 +1555,12 @@ public static class Geez {
 
 
 
-    public static int recent(int ignore=0) {
-        int key = _next;
-        lock (_geezed) {
-            assert(numel(_geezed) > 0);
-            assert(ignore >= 0);
-            for (int i=-1; i<ignore; ++i) {
-                while (!_geezed.ContainsKey(key - 1)) // O(n) skull emoji.
-                    --key;
-                --key;
-            }
-        }
-        return key;
-    }
-    public static void pop(int count, int ignore=0) {
-        assert(count >= 0);
-        assert(ignore >= 0);
-        while (count --> 0) // so glad down-to operator made it into c#.
-            remove(recent(ignore));
-    }
-    public static void remove(int key) {
+    private static void _remove(int key, bool recursive=true) {
         if (key <= 0) // noop.
             return;
 
-        object item;
-        lock (_geezed) {
-            item = _geezed[key];
-            _geezed.Remove(key);
-        }
+        object item = _geezed[key];
+        _geezed.Remove(key);
 
         if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
             foreach (Mesh mesh in meshes)
@@ -1518,24 +1568,68 @@ public static class Geez {
             foreach (PolyLine line in lines)
                 PICOGK_VIEWER.Remove(line);
             ViewerHack.make_shit_happen_in_the_future();
-        } else if (item is List<int> group) {
-            remove(group);
+        } else if (item is Slice<int> group) {
+            if (recursive) {
+                foreach (int subkey in group)
+                    _remove(subkey);
+            }
         } else {
             assert(false);
         }
     }
-    public static void remove(List<int> keys) {
-        foreach (int key in keys)
-            remove(key);
+    public static void _expand(in HashSet<int> keys, int key) {
+        object item = _geezed[key];
+        if (item is (List<PolyLine>, List<Mesh>)) {
+            keys.Add(key);
+        } else if (item is Slice<int> group) {
+            foreach (int subkey in group)
+                _expand(keys, subkey);
+        } else {
+            assert(false);
+        }
     }
+    public static void _remove(Slice<int> keys) {
+        HashSet<int> newkeys = new(numel(keys));
+        foreach (int subkey in keys)
+            _expand(newkeys, subkey);
+        foreach (int subkey in newkeys)
+            _remove(subkey, false /* shouldnt encounter groups */);
+    }
+
+    public static void remove(int key) {
+        lock (_geezed)
+            _remove(key);
+    }
+    public static void remove(Slice<int> keys) {
+        lock (_geezed)
+            _remove(keys);
+    }
+
     public static void clear() {
         List<int> keys;
-        lock (_geezed)
+        lock (_geezed) {
             keys = new(_geezed.Keys);
-        remove(keys);
+            foreach (int key in keys)
+                _remove(key, false);
+        }
     }
-    public static int group(List<int> keys) {
+
+    public static int group(Slice<int> keys) {
         return _track(keys);
+    }
+
+    public static IDisposable temporary() {
+        int last;
+        lock (_geezed)
+            last = _next - 1;
+        return Scoped.on_leave(() => {
+            lock (_geezed) {
+                for (int i = _next - 1; i >= last; --i) {
+                    if (_geezed.ContainsKey(i))
+                        _remove(i, false);
+                }
+            }
+        });
     }
 
 
@@ -1758,93 +1852,97 @@ public static class Geez {
     }
 
     public static int bbox(in BBox3 bbox, Colour? colour=null) {
-        return Geez.cuboid(new Cuboid(bbox), colour: colour);
+        return Geez.bar(new Bar(bbox), colour: colour);
     }
 
-    public static int pipe(in Pipe pipe, Colour? colour=null, int rings=-1,
-            int bars=6) {
-        if (lockdown)
-            return BLANK;
-        float r = pipe.rhi;
-        float L = pipe.Lz;
-        Frame frame = pipe.centre;
+
+    private static void _rod_lines(List<PolyLine> lines, in Rod rod, int rings,
+            int columns, Colour col) {
+        assert(rod.isfilled);
+        float r = rod.outer_r;
+        float Lz = rod.Lz;
+        Frame frame = rod.centre;
 
         if (rings == -1)
-            rings = max(3, (int)(L * 2.5f / (TWOPI/bars*r)));
+            rings = max(3, (int)(Lz * 2.5f / (TWOPI/columns*r)));
         assert(rings >= 2 || rings == 0);
-        assert(bars >= 2 || bars == 0);
+        assert(columns >= 2 || columns == 0);
 
-        List<PolyLine> lines = new();
-        PolyLine line;
-        Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
-
-        bool done_inner = false;
-      DO:;
+        PolyLine l;
 
         // Rings.
         for (int n=0; n<rings; ++n) {
-            float z = n*L/(rings - 1);
-            line = new(col);
+            float z = lerp(-Lz/2f, +Lz/2f, n, rings);
+            l = new(col);
             int N = 100;
             for (int i=0; i<N; ++i) {
                 float theta = i*TWOPI/(N - 1);
-                line.nAddVertex(frame * fromcyl(r, theta, z));
+                l.nAddVertex(frame * fromcyl(r, theta, z));
             }
-            lines.Add(line);
+            lines.Add(l);
         }
 
-        // Bars.
-        for (int n=0; n<bars; ++n) {
-            float theta = n*TWOPI/bars;
-            line = new(col);
-            line.Add([
-                frame * fromcyl(r, theta, 0f),
-                frame * fromcyl(r, theta, L),
+        // Columns.
+        for (int n=0; n<columns; ++n) {
+            float theta = n*TWOPI/columns;
+            l = new(col);
+            l.Add([
+                frame * fromcyl(r, theta, -Lz/2f),
+                frame * fromcyl(r, theta, +Lz/2f),
             ]);
-            lines.Add(line);
+            lines.Add(l);
         }
+    }
 
-        // Maybe do inner also.
-        if (!done_inner) {
-            done_inner = true;
-            if (pipe.rlo > 0f) {
-                // Add connections to the bars.
-                for (int n=0; n<bars; ++n) {
-                    float theta = n*TWOPI/bars;
-                    line = new(col);
-                    line.Add([
-                        frame * fromcyl(pipe.rlo, theta, 0f),
-                        frame * fromcyl(pipe.rhi, theta, 0f),
-                    ]);
-                    lines.Add(line);
-                    line = new(col);
-                    line.Add([
-                        frame * fromcyl(pipe.rlo, theta, L),
-                        frame * fromcyl(pipe.rhi, theta, L),
-                    ]);
-                    lines.Add(line);
-                }
+    public static int rod(in Rod rod, Colour? colour=null, int rings=-1,
+            int columns=6) {
+        if (lockdown)
+            return BLANK;
 
-                r = pipe.rlo;
-                goto DO;
-            } else {
-                // Add crosses on the end.
-                assert((bars%2) == 0);
-                for (int n=0; n<bars/2; ++n) {
-                    float theta = n*TWOPI/bars;
-                    line = new(col);
-                    line.Add([
-                        frame * fromcyl(r, theta, 0f),
-                        frame * fromcyl(r, theta + PI, 0f),
-                    ]);
-                    lines.Add(line);
-                    line = new(col);
-                    line.Add([
-                        frame * fromcyl(r, theta, L),
-                        frame * fromcyl(r, theta + PI, L),
-                    ]);
-                    lines.Add(line);
-                }
+        // Note this is not a particularly efficient vectorisation of a rod but
+        // its fine.
+
+        List<PolyLine> lines = new();
+        Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
+
+        _rod_lines(lines, rod.positive, rings, columns, col);
+
+        if (rod.isshelled) {
+            _rod_lines(lines, rod.negative, rings, columns, col);
+
+            // Add connections to the columns.
+            for (int n=0; n<columns; ++n) {
+                float theta = n*TWOPI/columns;
+                PolyLine l = new(col);
+                l.Add([
+                    rod.centre * fromcyl(rod.inner_r, theta, -rod.Lz/2f),
+                    rod.centre * fromcyl(rod.outer_r, theta, -rod.Lz/2f),
+                ]);
+                lines.Add(l);
+                l = new(col);
+                l.Add([
+                    rod.centre * fromcyl(rod.inner_r, theta, +rod.Lz/2f),
+                    rod.centre * fromcyl(rod.outer_r, theta, +rod.Lz/2f),
+                ]);
+                lines.Add(l);
+            }
+        } else {
+            // Add crosses on the end.
+            assert((columns%2) == 0);
+            for (int n=0; n<columns/2; ++n) {
+                float theta = n*TWOPI/columns;
+                PolyLine l = new(col);
+                l.Add([
+                    rod.centre * fromcyl(rod.outer_r, theta, -rod.Lz/2f),
+                    rod.centre * fromcyl(rod.outer_r, theta + PI, -rod.Lz/2f),
+                ]);
+                lines.Add(l);
+                l = new(col);
+                l.Add([
+                    rod.centre * fromcyl(rod.outer_r, theta, +rod.Lz/2f),
+                    rod.centre * fromcyl(rod.outer_r, theta + PI, +rod.Lz/2f),
+                ]);
+                lines.Add(l);
             }
         }
 
@@ -1853,10 +1951,10 @@ public static class Geez {
             return _push(lines);
     }
 
-    private static void _cuboid_lines(List<PolyLine> lines, in Cuboid cuboid,
-            Colour? colour) {
-        List<Vec3> corners = cuboid.get_corners();
-        Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
+
+    private static void _bar_lines(List<PolyLine> lines, in Bar bar,
+            Colour col) {
+        Vec3[] corners = bar.get_corners();
         PolyLine l;
 
         // Each corner (+3+3), then the zigzag joining (+6).
@@ -1913,28 +2011,46 @@ public static class Geez {
         lines.Add(l);
     }
 
-    public static int cuboid(in Cuboid cuboid, Colour? colour=null,
-            int divide_x=1, int divide_y=1, int divide_z=1) {
+    public static int bar(in Bar bar, Colour? colour=null, int divide_x=1,
+            int divide_y=1, int divide_z=1) {
         if (lockdown)
             return BLANK;
+
         List<PolyLine> lines = new();
-        float Lx = cuboid.Lx / divide_x;
-        float Ly = cuboid.Ly / divide_y;
-        float Lz = cuboid.Lz / divide_z;
-        for (int x=0; x<divide_x; ++x)
-        for (int y=0; y<divide_y; ++y)
-        for (int z=0; z<divide_z; ++z) {
-            Vec3 pos = new(
-                (1f - divide_x)*Lx/2f + x*Lx,
-                (1f - divide_y)*Ly/2f + y*Ly,
-                (1f - divide_z)*Lz/2f + z*Lz
-            );
-            _cuboid_lines(
-                lines,
-                new Cuboid(cuboid.centre.translate(pos), Lx, Ly, Lz),
-                colour: colour
-            );
+        Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
+
+        Vec3 div = new(divide_x, divide_y, divide_z);
+
+        if (div == ONE3) {
+            // Undivided bar may be shelled.
+
+            _bar_lines(lines, bar.positive, col);
+            if (bar.isshelled) {
+                _bar_lines(lines, bar.negative, col);
+                // Connect corners.
+                Vec3[] pos_corners = bar.positive.get_corners();
+                Vec3[] neg_corners = bar.negative.get_corners();
+                for (int i=0; i<numel(pos_corners); ++i) {
+                    PolyLine l = new(col);
+                    l.Add([pos_corners[i], neg_corners[i]]);
+                    lines.Add(l);
+                }
+            }
+        } else {
+            // Divided bar must be filled.
+            assert(bar.isfilled, "cannot be shelled and divide");
+
+            Bar divbar = bar.sized(bar.size / div);
+            for (int x=0; x<divide_x; ++x)
+            for (int y=0; y<divide_y; ++y)
+            for (int z=0; z<divide_z; ++z) {
+                Vec3 shift = -bar.size/2f
+                           + new Vec3(x, y, z) * divbar.size
+                           + divbar.size/2f;
+                _bar_lines(lines, divbar.translate(shift), col);
+            }
         }
+
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
             return _push(lines);

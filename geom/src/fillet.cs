@@ -36,8 +36,8 @@ public static class Fillet {
         float Dr = -inset*Fr;
         ring = ring.transz(Dz);
         Ir += Dr;
-        Voxels vox = new Pipe(ring, Fr, Ir + Fr).voxels();
-        vox.BoolSubtract(new Donut(ring.transz(Fr), Ir + Fr, Fr).voxels());
+        Voxels vox = new Rod(ring, Fr, Ir + Fr);
+        vox.BoolSubtract(new Donut(ring.transz(Fr), Ir + Fr, Fr));
         return vox;
     }
 }

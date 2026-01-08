@@ -198,32 +198,45 @@ public class Frame {
         return f;
     }
 
-    public Frame flipxy() {
-        return new(pos, -X, -Y, Z);
+    public Frame reflect(Vec3 point, Vec3 normal, int flip_axis,
+            bool relative=true) {
+        if (relative) {
+            point = to_global(point);
+            normal = to_global_dir(normal);
+        }
+        assert_idx(flip_axis, 3);
+        Vec3 N = normalise(normal);
+        // Reflect position.
+        Vec3 newpos = pos - 2f * dot(pos - point, N) * N;
+        // Reflect axes.
+        Vec3 newX = X - 2f * dot(X, N) * N;
+        Vec3 newY = Y - 2f * dot(Y, N) * N;
+        Vec3 newZ = Z - 2f * dot(Z, N) * N;
+        // Convert back to right-handed.
+        switch (flip_axis) {
+            case 0: newX = -newX; break;
+            case 1: newY = -newY; break;
+            case 2: newZ = -newZ; break;
+        }
+        return new(newpos, newX, newY, newZ);
     }
-    public Frame flipzx() {
-        return new(pos, -X, Y, -Z);
-    }
-    public Frame flipyz() {
-        return new(pos, X, -Y, -Z);
-    }
+    public Frame reflectxy(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 2, relative);
+    public Frame reflectzx(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 1, relative);
+    public Frame reflectyz(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 0, relative);
 
-    public Frame swapxy() {
-        return new(pos, Y, X, -Z);
-    }
-    public Frame swapzx() {
-        return new(pos, Z, -Y, X);
-    }
-    public Frame swapyz() {
-        return new(pos, -X, Z, Y);
-    }
+    public Frame flipxy() => new(pos, -X, -Y, Z);
+    public Frame flipzx() => new(pos, -X, Y, -Z);
+    public Frame flipyz() => new(pos, X, -Y, -Z);
 
-    public Frame cyclecw() {
-        return new(pos, Z, X, Y);
-    }
-    public Frame cycleccw() {
-        return new(pos, Y, Z, X);
-    }
+    public Frame swapxy() => new(pos, Y, X, -Z);
+    public Frame swapzx() => new(pos, Z, -Y, X);
+    public Frame swapyz() => new(pos, -X, Z, Y);
+
+    public Frame cyclecw() => new(pos, Z, X, Y);
+    public Frame cycleccw() => new(pos, Y, Z, X);
 
     public Frame compose(in Frame other) {
         Vec3 pos = to_global(other.pos);
@@ -257,7 +270,7 @@ public class Frame {
     public Vec3 to_global_dir(Vec3 p) {
         return p.X*X + p.Y*Y + p.Z*Z;
     }
-    public Vec3 from_global_rot(Vec3 p) {
+    public Vec3 from_global_dir(Vec3 p) {
         return new(dot(p, X), dot(p, Y), dot(p, Z));
     }
 
@@ -305,6 +318,20 @@ public class Frame {
     }
 
 
+    public void bbox_include_circle(ref BBox3 bbox, float r /* in xy plane */,
+            float z=0f) {
+        // Compute extents along each global axis.
+        float ex = r * hypot(dot(uX3, X), dot(uX3, Y));
+        float ey = r * hypot(dot(uY3, X), dot(uY3, Y));
+        float ez = r * nonhypot(1f, dot(uZ3, Z));
+        Vec3 e = new(ex, ey, ez);
+
+        // Expand bounding box.
+        bbox.Include(pos + z*Z - e);
+        bbox.Include(pos + z*Z + e);
+    }
+
+
     public Vec3 to_other(Frame other, Vec3 p) {
         Vec3 q = to_global(p);
         return other.from_global(q);
@@ -314,13 +341,13 @@ public class Frame {
         return from_global(q);
     }
 
-    public Vec3 to_other_rot(Frame other, Vec3 p) {
+    public Vec3 to_other_dir(Frame other, Vec3 p) {
         Vec3 q = to_global_dir(p);
-        return other.from_global_rot(q);
+        return other.from_global_dir(q);
     }
-    public Vec3 from_other_rot(Frame other, Vec3 p) {
+    public Vec3 from_other_dir(Frame other, Vec3 p) {
         Vec3 q = other.to_global_dir(p);
-        return from_global_rot(q);
+        return from_global_dir(q);
     }
 
 
@@ -334,21 +361,26 @@ public class Frame {
     }
 
     protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
-        assert(isgood(pos));
-        assert(isgood(X));
-        assert(isgood(Y));
-        assert(isgood(Z));
-        assert(nearunit(X));
-        assert(nearunit(Y));
-        assert(nearunit(Z));
-        assert(nearzero(dot(X, Y)));
-        assert(nearzero(dot(X, Z)));
-        assert(nearzero(dot(Y, Z)));
-        assert(closeto(cross(Z, X), Y)); // rhs
+        assert(isgood(pos), $"pos={pos}");
+        assert(isgood(X), $"X={X}");
+        assert(isgood(Y), $"Y={Y}");
+        assert(isgood(Z), $"Z={Z}");
+        assert(nearunit(X), $"X={X}");
+        assert(nearunit(Y), $"Y={Y}");
+        assert(nearunit(Z), $"Z={Z}");
+        assert(nearzero(dot(X, Y)), $"X={X}, Y={Y}");
+        assert(nearzero(dot(Z, X)), $"Z={Z}, X={X}");
+        assert(nearzero(dot(Y, Z)), $"Y={Y}, Z={Z}");
+        assert(closeto(cross(Z, X), Y), "must be right-handed"); // rhs
         this.pos = pos;
         this.X = X;
         this.Y = Y;
         this.Z = Z;
+    }
+
+    public override string ToString() {
+        string tostr(Vec3 a) => $"({a.X}, {a.Y}, {a.Z})";
+        return $"<frame @{tostr(pos)}, X={tostr(X)}, Y={tostr(Y)}, Z={tostr(Z)}";
     }
 }
 
@@ -380,15 +412,15 @@ public class FramesLerp : Frames {
     /* NOTE: may not be direct, though always is *initially* */
     public Frame start => at(0);
     public Frame end => at(N - 1);
-    private float _tlo;
-    private float _thi;
-    private Frame _start;
-    private Frame _end;
+    protected float _tlo;
+    protected float _thi;
+    protected Frame _start;
+    protected Frame _end;
     public FramesLerp(int N, in Frame frame, in Vec3 start, in Vec3 end)
         : this(N, frame.translate(start), frame.translate(end)) {}
     public FramesLerp(int N, in Frame start, in Frame end)
         : this(N, start, end, 0f, 1f) {}
-    private FramesLerp(int N, in Frame start, in Frame end, float tlo,
+    protected FramesLerp(int N, in Frame start, in Frame end, float tlo,
             float thi) {
         assert(N >= 2);
         this.N = N;

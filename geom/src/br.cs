@@ -11,35 +11,17 @@ public static partial class Br {
     public class AssertionFailed : Exception {
         public AssertionFailed(string message) : base(message) {}
     }
-    public static void assert(bool expression, string? extra=null,
-            [System.Runtime.CompilerServices.CallerFilePath]
-                string file="<unknown file>",
-            [System.Runtime.CompilerServices.CallerLineNumber]
-                int line=-1,
-            [System.Runtime.CompilerServices.CallerMemberName]
-                string member="<unknown member>") {
-        if (!expression) {
-            string msg = $"file: {file}, line: {line}, member: {member}";
-            if (extra != null)
-                msg += $", extra: {extra}";
+    public static void assert(bool expression, string msg="<no extra info>") {
+        if (!expression)
             throw new AssertionFailed(msg);
-        }
     }
-    public static void assert_idx(int idx, int count, bool allow_negative=false,
-            [System.Runtime.CompilerServices.CallerFilePath]
-                string file="<unknown file>",
-            [System.Runtime.CompilerServices.CallerLineNumber]
-                int line=-1,
-            [System.Runtime.CompilerServices.CallerMemberName]
-                string member="<unknown member>") {
-        if (allow_negative && idx < 0) {
+    public static void assert_idx(int idx, int count,  bool negativeok=false) {
+        if (negativeok && idx < 0) {
             assert(within(idx + count, 0, count - 1),
-                    $"count: {count}, idx: {idx}",
-                    file: file, line: line, member: member);
+                    $"count: {count}, idx: {idx}");
             return;
         }
-        assert(within(idx, 0, count - 1), $"count: {count}, idx: {idx}",
-                file: file, line: line, member: member);
+        assert(within(idx, 0, count - 1), $"count: {count}, idx: {idx}");
     }
 
     /* picogk aliases. */
@@ -61,9 +43,7 @@ public static partial class Br {
 
     /* element count. */
     public static int numel<T>(T[] x) => x.Length;
-    public static int numel<T>(List<T> x) => x.Count;
-    public static int numel<T,U>(Dictionary<T,U> x) where T:notnull => x.Count;
-    public static int numel<T>(IEnumerable<T> x) => x.Count();
+    public static int numel<T>(IReadOnlyCollection<T> x) => x.Count;
 
     /* swap me */
     public static void swap<T>(ref T a, ref T b) {
@@ -75,6 +55,9 @@ public static partial class Br {
     /* bit tricks. */
     public static bool isset(int x, int mask) => (x & mask) == mask;
     public static bool isclr(int x, int mask) => (x & mask) == 0;
+    public static bool ispow2(int x) => (x > 0) && ((x & (x - 1)) == 0);
+    public static int popcnt(int x)
+        => System.Numerics.BitOperations.PopCount((uint)x);
     public static int lobits(int n) => (1 << n) - 1;
     public static int nthbit(int n) => 1 << n;
     public static bool popbits(ref int x, int mask) {
@@ -84,15 +67,16 @@ public static partial class Br {
     }
 
     /* colours. */
-    public static Colour COLOUR_BLACK  => new("#000000");
-    public static Colour COLOUR_RED    => new("#FF0000");
-    public static Colour COLOUR_GREEN  => new("#00FF00");
-    public static Colour COLOUR_BLUE   => new("#0000FF");
-    public static Colour COLOUR_CYAN   => new("#00FFFF");
-    public static Colour COLOUR_PINK   => new("#FF00FF");
-    public static Colour COLOUR_YELLOW => new("#FFFF00");
-    public static Colour COLOUR_WHITE  => new("#FFFFFF");
-    public static Colour COLOUR_BLANK  => new("#000000", 0f);
+    public static Colour COLOUR_BLANK  => new("000000", 0f);
+    public static Colour COLOUR_BLACK  => new("000000");
+    public static Colour COLOUR_GREY   => new("404040");
+    public static Colour COLOUR_WHITE  => new("FFFFFF");
+    public static Colour COLOUR_RED    => new("FF0000");
+    public static Colour COLOUR_GREEN  => new("00FF00");
+    public static Colour COLOUR_BLUE   => new("0000FF");
+    public static Colour COLOUR_CYAN   => new("00FFFF");
+    public static Colour COLOUR_PINK   => new("FF00FF");
+    public static Colour COLOUR_YELLOW => new("FFFF00");
 
     /* inf/nan. */
     public const float INF = float.PositiveInfinity;
@@ -113,6 +97,9 @@ public static partial class Br {
     public static bool nonnan(float a) => !isnan(a);
     public static bool nonnan(Vec2 a) => !isnan(a);
     public static bool nonnan(Vec3 a) => !isnan(a);
+    public static float ifnan(float a, float dflt) => isnan(a) ? dflt : a;
+    public static Vec2 ifnan(Vec2 a, Vec2 dflt) => isnan(a) ? dflt : a;
+    public static Vec3 ifnan(Vec3 a, Vec3 dflt) => isnan(a) ? dflt : a;
 
     public static bool isgood(float a) => !isnan(a) && !isinf(a);
     public static bool isgood(Vec2 a) => !isnan(a) && !isinf(a);
@@ -151,7 +138,7 @@ public static partial class Br {
 
     public static Vec2 uX2 => Vec2.UnitX;
     public static Vec2 uY2 => Vec2.UnitY;
-    public static Vec2 uXY2 => uX2 + uY2;
+    public static Vec2 uXY2 => uX2 + uY2; // lowkey ONE2
 
     public static Vec3 uX3 => Vec3.UnitX;
     public static Vec3 uY3 => Vec3.UnitY;
@@ -159,7 +146,7 @@ public static partial class Br {
     public static Vec3 uXY3 => uX3 + uY3;
     public static Vec3 uXZ3 => uX3 + uZ3;
     public static Vec3 uYZ3 => uY3 + uZ3;
-    public static Vec3 uXYZ3 => uX3 + uY3 + uZ3;
+    public static Vec3 uXYZ3 => uX3 + uY3 + uZ3; // lowkey ONE3
 
     public static int abs(int a) => (a < 0) ? -a : a;
     public static int min(int a, int b) => (b < a) ? b : a;
@@ -176,13 +163,20 @@ public static partial class Br {
     public static bool within(float a, float lo, float hi)
         => (lo <= a) && (a <= hi);
 
+    public static Vec2 abs(Vec2 a) => new(abs(a.X), abs(a.Y));
     public static Vec2 min(Vec2 a, Vec2 b) => new(min(a.X, b.X), min(a.Y, b.Y));
     public static Vec2 max(Vec2 a, Vec2 b) => new(max(a.X, b.X), max(a.Y, b.Y));
 
+    public static Vec3 abs(Vec3 a) => new(abs(a.X), abs(a.Y), abs(a.Z));
     public static Vec3 min(Vec3 a, Vec3 b)
         => new(min(a.X, b.X), min(a.Y, b.Y), min(a.Z, b.Z));
     public static Vec3 max(Vec3 a, Vec3 b)
         => new(max(a.X, b.X), max(a.Y, b.Y), max(a.Z, b.Z));
+
+    public static float minelem(Vec2 a) => min(a.X, a.Y);
+    public static float maxelem(Vec2 a) => max(a.X, a.Y);
+    public static float minelem(Vec3 a) => min(a.X, a.Y, a.Z);
+    public static float maxelem(Vec3 a) => max(a.X, a.Y, a.Z);
 
     public static float min(float a, params float[] bs) {
         float m = a;
@@ -225,13 +219,13 @@ public static partial class Br {
     public static float sum(params float[] vs) {
         float m = 0f;
         foreach (float v in vs)
-            m += isnan(v) ? 0f : v;
+            m += ifnan(v, 0f);
         return m;
     }
     public static float prod(params float[] vs) {
         float m = 1f;
         foreach (float v in vs)
-            m *= isnan(v) ? 1f : v;
+            m *= ifnan(v, 1f);
         return m;
     }
     public static float ave(params float[] vs) {
