@@ -1111,19 +1111,19 @@ public class Cone : AxialShape<Cone> {
                 Vec2 intercept = new(intercept_x, 0f);
                 // Add if non-duplicate.
                 if (obj.c.Y < 0f) {
-                    if (!closeto(vertices[^1], intercept))
+                    if (!nearto(vertices[^1], intercept))
                         vertices.Add(intercept);
                 } else {
-                    if (!closeto(vertices[0], intercept))
+                    if (!nearto(vertices[0], intercept))
                         vertices.Insert(0, intercept);
                 }
                 donut = false;
             }
         }
         // Remove duplicates.
-        if (closeto(vertices[0], vertices[1]))
+        if (nearto(vertices[0], vertices[1]))
             vertices.RemoveAt(0);
-        if (closeto(vertices[^2], vertices[^1]))
+        if (nearto(vertices[^2], vertices[^1]))
             vertices.RemoveAt(numel(vertices) - 1);
         assert(numel(vertices) >= 3, "too thin");
 
@@ -1585,7 +1585,7 @@ public class ImageSignedDist {
         assert(Lz > 0f);
         assert(length > 0f);
         if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
-            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            centre.get_rotation(out Vec3 rot_about, out float rot_by);
             assert(nearzero(rot_by),
                     "the raw sdf will not work with anything that rotates at "
                   + "all. you will need to use a transformer");
@@ -1628,7 +1628,7 @@ public class ImageSignedDist {
                                 : new Frame(ZERO3, uX3, uY3);
 
         if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
-            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            centre.get_rotation(out Vec3 rot_about, out float rot_by);
             assert(nearzero(rot_by) || nearvert(orient / rot_about),
                     "the raw sdf will not work with anything that rotates away "
                   + "from axial. you will need to use a transformer");
@@ -1684,7 +1684,7 @@ public class ImageSignedDist {
 
     public Voxels voxels_on_plane(in Frame centre, float Lz, float length,
             WhichLength which=LONGEST) {
-        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+        centre.get_rotation(out Vec3 rot_about, out float rot_by);
         if (!nearzero(rot_by)) {
             // darn its got rotation we need a transformer.
             SDFfunction sdf = sdf_on_plane(
@@ -1714,7 +1714,7 @@ public class ImageSignedDist {
             float Lr, float length, WhichLength which=LONGEST) {
         Frame orient = vertical ? new Frame()
                                 : new Frame(ZERO3, uX3, uY3);
-        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+        centre.get_rotation(out Vec3 rot_about, out float rot_by);
 
         // same deal except can take inplane rotations.
         if (!nearzero(rot_by) && !nearvert(orient / rot_about)) {

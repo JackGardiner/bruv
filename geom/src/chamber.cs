@@ -1873,18 +1873,18 @@ public class Chamber : TPIAP.Pea {
 
     public void anything() {
 
-        Voxels a = new Ball(5f);
-        Geez.voxels(a, COLOUR_RED);
+        // Voxels a = new Ball(5f);
+        // Geez.voxels(a, COLOUR_RED);
 
-        using (Lifted l = new(a, new Ball(5f*normalise(uXZ3), 2f))) {
-            // l.vox.IntersectImplicit(new Space(new(5f*normalise(uXZ3)), 0f, INF));
-            l.vox = new Ball(5f*normalise(uXZ3), 4f);
-            Geez.voxels(l.vox, COLOUR_GREEN);
-        }
+        // using (Lifted l = new(a, new Ball(5f*normalise(uXZ3), 2f))) {
+        //     // l.vox.IntersectImplicit(new Space(new(5f*normalise(uXZ3)), 0f, INF));
+        //     l.vox = new Ball(5f*normalise(uXZ3), 4f);
+        //     Geez.voxels(l.vox, COLOUR_GREEN);
+        // }
 
-        Thread.Sleep(5000);
-        Geez.clear();
-        Geez.voxels(a, COLOUR_BLUE);
+        // Thread.Sleep(5000);
+        // Geez.clear();
+        // Geez.voxels(a, COLOUR_BLUE);
 
 
         // ports.GPort a = new("1/2in", 10f);
@@ -1917,23 +1917,31 @@ public class Chamber : TPIAP.Pea {
 
         // Geez.frame(new(), size: 1f);
 
-        // void test(Frame f, Cone c) {
-        //     using var __ = Geez.temporary();
-        //     Geez.frame(f, size: 1f, pos_colour: COLOUR_BLACK);
-        //     using (Geez.like(sectioner: Sectioner.pie(PI, TWOPI)))
-        //         Geez.voxels(c, colour: COLOUR_RED);
-        //     using (Geez.like(sectioner: Sectioner.pie(0, PI)))
-        //         Geez.voxels(c.upto_tip(), colour: COLOUR_BLUE);
-        //     Geez.frame(c.centre, size: 1f, pos_colour: COLOUR_YELLOW);
-        //     if (c.outer_tip != null)
-        //         Geez.frame(c.outer_tip, size: 1f, pos_colour: COLOUR_PINK);
-        //     if (c.inner_tip != null)
-        //         Geez.frame(c.inner_tip, size: 1f, pos_colour: COLOUR_CYAN);
-        //     print("waiting...");
-        //     Console.ReadKey(intercept: true);
-        // }
+        void test(Frame f, Cone c) {
+            // using var __ = Geez.temporary();
+            Geez.voxels(
+                ((Voxels)c).voxIntersectImplicit(
+                    new Space(c.centre.rotzx(PI_2), 0f, +INF)
+                ),
+                colour: COLOUR_RED
+            );
+            Geez.voxels(
+                ((Voxels)c.upto_tip()).voxIntersectImplicit(
+                    new Space(c.centre.rotzx(PI_2), -INF, 0f)
+                ),
+                colour: COLOUR_BLUE
+            );
+            Geez.frame(f, size: 1f, pos_colour: COLOUR_BLACK);
+            Geez.frame(c.centre, size: 1f, pos_colour: COLOUR_YELLOW);
+            if (c.outer_tip != null)
+                Geez.frame(c.outer_tip, size: 1f, pos_colour: COLOUR_PINK);
+            if (c.inner_tip != null)
+                Geez.frame(c.inner_tip, size: 1f, pos_colour: COLOUR_CYAN);
+            // print("waiting...");
+            // Console.ReadKey(intercept: true);
+        }
 
-        // test(new(), new Cone(new Frame(), 0.25f, Lz: 10f, r0: 2f));
+        test(new(0*uXY3), new Cone(new Frame(0*uXY3), 0.25f, Lz: 5f, r0: 2f));
         // test(new(), new Cone(new Frame(), 0.25f, Lz: -10f, r0: 2f));
         // test(new(), new Cone(new Frame(), -0.25f, Lz: 10f, r0: 5f));
         // test(new(), new Cone(new Frame(), -0.25f, Lz: -10f, r0: 5f));
@@ -1989,7 +1997,7 @@ public class Chamber : TPIAP.Pea {
         assert(cnt_zP > cnt_z5, $"zP={cnt_zP}, z5={cnt_z5}");
         assert(cnt_zP < cnt_z6, $"zP={cnt_zP}, z6={cnt_z6}");
 
-        assert(closeto(cnt_r0, cnt_r1), $"r0={cnt_r0}, r1={cnt_r1}");
+        assert(nearto(cnt_r0, cnt_r1), $"r0={cnt_r0}, r1={cnt_r1}");
         assert(cnt_r1 > cnt_r2, $"r1={cnt_r1}, r2={cnt_r2}");
         assert(cnt_r2 > cnt_r3, $"r2={cnt_r2}, r3={cnt_r3}");
         assert(cnt_r3 > cnt_r4, $"r3={cnt_r3}, r4={cnt_r4}");
@@ -1998,7 +2006,7 @@ public class Chamber : TPIAP.Pea {
         assert(cnt_rP > cnt_r5, $"rP={cnt_rP}, r5={cnt_r5}");
         assert(cnt_rP < cnt_r6, $"rP={cnt_rP}, r6={cnt_r6}");
 
-        assert(closeto(th_chnl, pm.min_wi_chnl) || th_chnl > pm.min_wi_chnl,
+        assert(nearto(th_chnl, pm.min_wi_chnl) || th_chnl > pm.min_wi_chnl,
                 $"th_chnl={th_chnl}, min_wi_chnl={pm.min_wi_chnl}");
     }
 }

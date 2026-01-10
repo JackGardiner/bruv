@@ -50,12 +50,12 @@ public static class Polygon {
         for (int i=0; i<N; ++i) {
             int i1 = (i + 1) % N;
             Vec2 a = vertices[i];
-            if (closeto(a, vertices[i1])) {
+            if (nearto(a, vertices[i1])) {
                 why = $"duplicate vertices: {vecstr(a)}";
                 return false;
             }
             for (int j=i + 1; j<N; ++j) {
-                if (closeto(a, vertices[j])) {
+                if (nearto(a, vertices[j])) {
                     why = $"duplicate vertices: {vecstr(a)}";
                     return false;
                 }
@@ -236,7 +236,7 @@ public static class Polygon {
         // Insanely sharp point.
         assert(!nearzero(beta));
         // Already a straight line.
-        if (closeto(abs(beta), PI))
+        if (nearto(abs(beta), PI))
             return;
         // Find the two points which will be joined by a circular arc.
         float ell = Fr / tan(0.5f*beta);
@@ -407,9 +407,9 @@ public static class Polygon {
             float z_last_start  = vertices[idx_last_start].X;
             float z_first_end   = vertices[idx_first_end].X;
             float z_last_end    = vertices[idx_last_end].X;
-            assert(closeto(z_first_start, z_last_start),
+            assert(nearto(z_first_start, z_last_start),
                     "revolve would not be closed");
-            assert(closeto(z_first_end, z_last_end),
+            assert(nearto(z_first_end, z_last_end),
                     "revolve would not be closed");
 
             for (int n=0; n<slicecount; ++n) {
@@ -511,7 +511,7 @@ public static class Polygon {
             z -= extend_by;
         if (extend_dir == Extend.UPDOWN)
             extend_by *= 2f;
-        Lz += extend_by;
+        Lz += ifnan(extend_by, 0f);
         for (int j=0; j<2; ++j) {
             if (j > 0)
                 z += Lz;
@@ -540,7 +540,8 @@ public static class Polygon {
 
         Mesh mesh = new();
 
-        // Check polys.
+        // Check polys. Note this doesnt check anything about the sides, since
+        // thats significantly more complicated (i think?).
         if (checksimple) {
             for (int n=0; n<slicecount; ++n) {
                 Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);

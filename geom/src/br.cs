@@ -32,6 +32,17 @@ public static partial class Br {
     public static void print(in object? obj)
         => PicoGK.Library.Log(obj?.ToString() ?? "<null>");
 
+    public static Colour COLOUR_BLANK  => new("000000", 0f);
+    public static Colour COLOUR_BLACK  => new("000000");
+    public static Colour COLOUR_GREY   => new("404040");
+    public static Colour COLOUR_WHITE  => new("FFFFFF");
+    public static Colour COLOUR_RED    => new("FF0000");
+    public static Colour COLOUR_GREEN  => new("00FF00");
+    public static Colour COLOUR_BLUE   => new("0000FF");
+    public static Colour COLOUR_CYAN   => new("00FFFF");
+    public static Colour COLOUR_PINK   => new("FF00FF");
+    public static Colour COLOUR_YELLOW => new("FFFF00");
+
     /* paths. */
     public static string PATH_ROOT
         => Directory.GetParent(AppContext.BaseDirectory)
@@ -66,44 +77,56 @@ public static partial class Br {
         return set;
     }
 
-    /* colours. */
-    public static Colour COLOUR_BLANK  => new("000000", 0f);
-    public static Colour COLOUR_BLACK  => new("000000");
-    public static Colour COLOUR_GREY   => new("404040");
-    public static Colour COLOUR_WHITE  => new("FFFFFF");
-    public static Colour COLOUR_RED    => new("FF0000");
-    public static Colour COLOUR_GREEN  => new("00FF00");
-    public static Colour COLOUR_BLUE   => new("0000FF");
-    public static Colour COLOUR_CYAN   => new("00FFFF");
-    public static Colour COLOUR_PINK   => new("FF00FF");
-    public static Colour COLOUR_YELLOW => new("FFFF00");
+    /* vec->arr and back. */
+    public static float[] toarr(float v) => [v];
+    public static float[] toarr(Vec2 v) => [v.X, v.Y];
+    public static float[] toarr(Vec3 v) => [v.X, v.Y, v.Z];
+    public static float tovec1(float[] v) { // kinda.
+        assert(numel(v) == 1);
+        return v[0];
+    }
+    public static Vec2 tovec2(float[] v) {
+        assert(numel(v) == 2);
+        return new(v[0], v[1]);
+    }
+    public static Vec3 tovec3(float[] v) {
+        assert(numel(v) == 3);
+        return new(v[0], v[1], v[2]);
+    }
 
     /* inf/nan. */
     public const float INF = float.PositiveInfinity;
     public const float NAN = float.NaN;
 
     public static bool isinf(float a) => float.IsInfinity(a);
-    public static bool isinf(Vec2 a) => isinf(a.X) || isinf(a.Y);
+    public static bool isinf(Vec2 a)  => isinf(a.X) || isinf(a.Y);
     public static bool isinf(Vec3 a)
         => isinf(a.X) || isinf(a.Y) || isinf(a.Z);
     public static bool noninf(float a) => !isinf(a);
-    public static bool noninf(Vec2 a) => !isinf(a);
-    public static bool noninf(Vec3 a) => !isinf(a);
+    public static bool noninf(Vec2 a)  => !isinf(a);
+    public static bool noninf(Vec3 a)  => !isinf(a);
 
     public static bool isnan(float a) => float.IsNaN(a);
-    public static bool isnan(Vec2 a) => isnan(a.X) || isnan(a.Y);
+    public static bool isnan(Vec2 a)  => isnan(a.X) || isnan(a.Y);
     public static bool isnan(Vec3 a)
         => isnan(a.X) || isnan(a.Y) || isnan(a.Z);
     public static bool nonnan(float a) => !isnan(a);
-    public static bool nonnan(Vec2 a) => !isnan(a);
-    public static bool nonnan(Vec3 a) => !isnan(a);
+    public static bool nonnan(Vec2 a)  => !isnan(a);
+    public static bool nonnan(Vec3 a)  => !isnan(a);
+
     public static float ifnan(float a, float dflt) => isnan(a) ? dflt : a;
-    public static Vec2 ifnan(Vec2 a, Vec2 dflt) => isnan(a) ? dflt : a;
-    public static Vec3 ifnan(Vec3 a, Vec3 dflt) => isnan(a) ? dflt : a;
+    public static Vec2 ifnan(Vec2 a, Vec2 dflt)    => isnan(a) ? dflt : a;
+    public static Vec3 ifnan(Vec3 a, Vec3 dflt)    => isnan(a) ? dflt : a;
+    public static float ifnanelem(float a, float dflt)
+        => ifnan(a, dflt);
+    public static Vec2 ifnanelem(Vec2 a, Vec2 dflt)
+        => new(ifnan(a.X, dflt.X), ifnan(a.Y, dflt.Y));
+    public static Vec3 ifnanelem(Vec3 a, Vec3 dflt)
+        => new(ifnan(a.X, dflt.X), ifnan(a.Y, dflt.Y), ifnan(a.Z, dflt.Z));
 
     public static bool isgood(float a) => !isnan(a) && !isinf(a);
-    public static bool isgood(Vec2 a) => !isnan(a) && !isinf(a);
-    public static bool isgood(Vec3 a) => !isnan(a) && !isinf(a);
+    public static bool isgood(Vec2 a)  => !isnan(a) && !isinf(a);
+    public static bool isgood(Vec3 a)  => !isnan(a) && !isinf(a);
 
 
     /* MATHEMATICS */
@@ -248,24 +271,24 @@ public static partial class Br {
     public static Vec3 floor(Vec3 a) => new(floor(a.X), floor(a.Y), floor(a.Z));
     public static Vec3 ceil(Vec3 a)  => new(ceil(a.X), ceil(a.Y), ceil(a.Z));
 
-    public static bool closeto(float a, float b, float rtol=1e-4f,
-            float atol=1e-5f) {
+    public static bool nearto(float a, float b, float rtol=5e-5f,
+            float atol=1e-6f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.
             return false;
         return mag(a - b) <= (atol + rtol*mag(b));
     }
-    public static bool closeto(Vec2 a, Vec2 b, float rtol=1e-4f,
-            float atol=1e-5f) {
+    public static bool nearto(Vec2 a, Vec2 b, float rtol=5e-5f,
+            float atol=1e-6f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.
             return false;
         return mag(a - b) <= (atol + rtol*mag(b));
     }
-    public static bool closeto(Vec3 a, Vec3 b, float rtol=1e-4f,
-            float atol=1e-5f) {
+    public static bool nearto(Vec3 a, Vec3 b, float rtol=5e-5f,
+            float atol=1e-6f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.
@@ -310,7 +333,7 @@ public static partial class Br {
     public static float acos(float a) => MathF.Acos(a);
     public static float atan(float a) => MathF.Atan(a);
     public static float atan2(float y, float x, float ifzero=0f)
-        => (nearzero(y) && nearzero(x)) ? ifzero : MathF.Atan2(y, x);
+        => nearzero(hypot(x, y)) ? ifzero : MathF.Atan2(y, x);
 
     public static float hypot(float x, float y) => sqrt(x*x + y*y);
     public static float hypot(float x, float y, float z)
@@ -320,30 +343,44 @@ public static partial class Br {
     public static float nonhypot(float hypot, float other0, float other1)
         => sqrt(hypot*hypot - other0*other0 - other1*other1);
 
-    public static bool nearzero(float a) => closeto(mag(a), 0f);
-    public static bool nearzero(Vec2 a)  => closeto(mag(a), 0f);
-    public static bool nearzero(Vec3 a)  => closeto(mag(a), 0f);
+    public static bool nearzero(float a) => nearto(mag(a), 0f);
+    public static bool nearzero(Vec2 a)  => nearto(mag(a), 0f);
+    public static bool nearzero(Vec3 a)  => nearto(mag(a), 0f);
 
-    public static bool nearunit(float a) => closeto(mag(a), 1f);
-    public static bool nearunit(Vec2 a)  => closeto(mag(a), 1f);
-    public static bool nearunit(Vec3 a)  => closeto(mag(a), 1f);
+    public static bool nearunit(float a) => nearto(mag(a), 1f);
+    public static bool nearunit(Vec2 a)  => nearto(mag(a), 1f);
+    public static bool nearunit(Vec3 a)  => nearto(mag(a), 1f);
 
     public static bool nearvert(Vec3 a) {
         assert(!nearzero(a));
         float phi = argphi(a);
-        return closeto(phi, 0f) || closeto(phi, PI);
+        return nearto(phi, 0f) || nearto(phi, PI);
     }
     public static bool nearhoriz(Vec3 a) {
         assert(!nearzero(a));
         float phi = argphi(a);
-        return closeto(phi, PI_2);
+        return nearto(phi, PI_2);
+    }
+    public static bool nearpara(Vec2 a, Vec2 b) => nearpara(rejxy(a), rejxy(b));
+    public static bool nearpara(Vec3 a, Vec3 b) {
+        assert(!nearzero(a));
+        assert(!nearzero(b));
+        float beta = argbeta(a, b);
+        return nearto(beta, 0f) || nearto(beta, PI);
+    }
+    public static bool nearperp(Vec2 a, Vec2 b) => nearperp(rejxy(a), rejxy(b));
+    public static bool nearperp(Vec3 a, Vec3 b) {
+        assert(!nearzero(a));
+        assert(!nearzero(b));
+        float beta = argbeta(a, b);
+        return nearto(beta, PI_2);
     }
 
     public static float lerp(float a, float b, float t) => a + t*(b - a);
     public static Vec2 lerp(Vec2 a, Vec2 b, float t)    => a + t*(b - a);
     public static Vec3 lerp(Vec3 a, Vec3 b, float t)    => a + t*(b - a);
     public static float lerp(float a, float b, int i, int N)
-            => a + i*(b - a)/(N - 1);
+        => a + i*(b - a)/(N - 1);
 
     public static float mag(float a) => abs(a); // same difference type shi.
     public static float mag(Vec2 a) => a.Length();
@@ -361,21 +398,32 @@ public static partial class Br {
         => nearzero(a) ? ifzero : atan2(a.Y, a.X);
 
     public static float argxy(Vec3 a, float ifzero=0f) // angle from +x.
-        => arg(projxy(a), ifzero);
+        => (nearzero(a) || nearvert(a))
+         ? ifzero
+         : arg(projxy(a), ifzero);
     public static float argzx(Vec3 a, float ifzero=0f) // angle from +z.
-        => arg(projzx(a), ifzero);
+        => (nearzero(a) || nearvert(new(a.Z, a.X, a.Y)))
+         ? ifzero
+         : arg(projzx(a), ifzero);
     public static float argyz(Vec3 a, float ifzero=0f) // angle from +y.
-        => arg(projyz(a), ifzero);
+        => (nearzero(a) || nearvert(new(a.Y, a.Z, a.X)))
+         ? ifzero
+         : arg(projyz(a), ifzero);
 
     public static float argphi(Vec3 a, float ifzero=PI_2)
         => nearzero(a) ? ifzero : acos(a.Z/mag(a));
+    public static float argphix(Vec3 a, float ifzero=PI_2)
+        => nearzero(a) ? ifzero : acos(a.X/mag(a));
+    public static float argphiy(Vec3 a, float ifzero=PI_2)
+        => nearzero(a) ? ifzero : acos(a.Y/mag(a));
 
-    public static float argbeta(Vec2 a, Vec2 b) => argbeta(rejxy(a), rejxy(b));
-    public static float argbeta(Vec3 a, Vec3 b) {
+    public static float argbeta(Vec2 a, Vec2 b, float ifzero=PI_4)
+        => argbeta(rejxy(a), rejxy(b), ifzero);
+    public static float argbeta(Vec3 a, Vec3 b, float ifzero=PI_4) {
         float maga = mag(a);
         float magb = mag(b);
         if (nearzero(maga) || nearzero(magb))
-            return 0;
+            return ifzero;
         return acos(clamp(dot(a, b) / maga / magb, -1f, 1f));
     }
 
