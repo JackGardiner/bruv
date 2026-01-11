@@ -12,66 +12,158 @@ public class Frame {
     public Vec3 Y { get; }
     public Vec3 Z { get; }
 
-    public void rot_to_local(out Vec3 about, out float by) {
-        float x00 = X.X;
-        float x01 = X.Y;
-        float x02 = X.Z;
-        float x10 = Y.X;
-        float x11 = Y.Y;
-        float x12 = Y.Z;
-        float x20 = Z.X;
-        float x21 = Z.Y;
-        float x22 = Z.Z;
-
-        // Calculate the angle of rotation from the trace.
-        // cos(by) = (trace - 1) / 2
-        float cosby = (x00 + x11 + x22 - 1f) * 0.5f;
-        by = acos(clamp(cosby, -1f, 1f));
-
-        // Explicitly handle no rot.
-        if (closeto(by, 0f)) {
-            about = uZ3; // can be anything.
-            return;
-        }
-        // Explicitly handle flip rot.
-        if (closeto(by, PI)) {
-            // We find the largest diagonal element to solve for the axis.
-            if (x00 > x11 && x00 > x22) {
-                float s = sqrt(x00 - x11 - x22 + 1f) * 0.5f;
-                about = new Vec3(s, x01/s/2f, x02/s/2f);
-            } else if (x11 > x22) {
-                float s = sqrt(x11 - x00 - x22 + 1f) * 0.5f;
-                about = new Vec3(x01/s/2f, s, x12/s/2f);
-            } else {
-                float s = sqrt(x22 - x00 - x11 + 1f) * 0.5f;
-                about = new Vec3(x02/s/2f, x12/s/2f, s);
-            }
-            return;
-        }
-        // Otherwise normal.
-        about = normalise(new Vec3(x12 - x21, x20 - x02, x01 - x10));
-    }
-
-    public void rot_to_global(out Vec3 about, out float by) {
-        rot_to_local(out about, out by);
-        by = -by;
-    }
-
 
     public Frame()
-        : this(ZERO3, uX3, uY3, uZ3) {}
+        : this(ZERO3, uX3, uY3, uZ3, null) {}
 
     public Frame(Vec3 pos)
-        : this(pos, uX3, uY3, uZ3) {}
+        : this(pos, uX3, uY3, uZ3, null) {}
 
     public Frame(Vec3 new_pos, Frame f)
-        : this(new_pos, f.X, f.Y, f.Z) {}
+        : this(new_pos, f.X, f.Y, f.Z, null) {}
+
+
+    // note these constructors are "unassisted", in that it does no
+    // normalisation/orthogonalisation. Use `Frame.orthonormal` to do that.
 
     public Frame(Vec3 pos, Vec3 Z)
         : this(pos, arbitrary_perpendicular(Z), Z) {}
 
     public Frame(Vec3 pos, Vec3 X, Vec3 Z)
-        : this(pos, normalise(X), normalise(cross(Z, X)), normalise(Z)) {}
+        : this(pos, X, cross(Z, X) /* righthanded */, Z) {}
+
+    public Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
+        assert(isgood(pos), $"pos={pos}");
+        assert(isgood(X), $"X={X}");
+        assert(isgood(Y), $"Y={Y}");
+        assert(isgood(Z), $"Z={Z}");
+        assert(nearunit(X), $"X={X}");
+        assert(nearunit(Y), $"Y={Y}");
+        assert(nearunit(Z), $"Z={Z}");
+        assert(nearperp(X, Y), $"X={X}, Y={Y}");
+        assert(nearperp(Z, X), $"Z={Z}, X={X}");
+        assert(nearperp(Y, Z), $"Y={Y}, Z={Z}");
+        assert(dot(cross(Z, X), Y) > 0f, "must be right-handed");
+        // orthonormalise just to prevent numerical drift over time.
+        Frame o = orthonormal(pos, X, Z);
+        this.pos = o.pos;
+        this.X = o.X;
+        this.Y = o.Y;
+        this.Z = o.Z;
+        X = o.X;
+        Y = o.Y;
+        Z = o.Z;
+        assert(nearunit(X), $"X={X}");
+        assert(nearunit(Y), $"Y={Y}");
+        assert(nearunit(Z), $"Z={Z}");
+        assert(nearperp(X, Y), $"X={X}, Y={Y}");
+        assert(nearperp(Z, X), $"Z={Z}, X={X}");
+        assert(nearperp(Y, Z), $"Y={Y}, Z={Z}");
+        assert(dot(cross(Z, X), Y) > 0f, "must be right-handed");
+    }
+
+    private Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z, object? nocheck) {
+        assert(nearunit(X), $"X={X}");
+        assert(nearunit(Y), $"Y={Y}");
+        assert(nearunit(Z), $"Z={Z}");
+        assert(nearperp(X, Y), $"X={X}, Y={Y}");
+        assert(nearperp(Z, X), $"Z={Z}, X={X}");
+        assert(nearperp(Y, Z), $"Y={Y}, Z={Z}");
+        assert(dot(cross(Z, X), Y) > 0f, "must be right-handed");
+        this.pos = pos;
+        this.X = X;
+        this.Y = Y;
+        this.Z = Z;
+    }
+
+    // Prioritises (does not rotate) Z.
+    public static Frame orthonormal(Vec3 pos, Vec3 X, Vec3 Z) {
+        assert(!nearzero(X), $"X={X}");
+        assert(!nearzero(Z), $"Z={Z}");
+        assert(!nearpara(Z, X), $"X={X}, Z={Z}");
+        Z = normalise(Z);
+        X = normalise(X - Z * dot(Z, X));
+        Vec3 Y = cross(Z, X);
+        return new(pos, X, Y, Z, null);
+    }
+    public Frame orthonormalised()
+        => orthonormal(pos, X, Z);
+
+
+    private Vec3 _about = NAN3;
+    private float _by = NAN;
+    public void get_rotation(out Vec3 about, out float by) {
+        if (nonnan(_by)) {
+            assert(nonnan(_about));
+            about = _about;
+            by = _by;
+            return;
+        }
+        float R00 = X.X;
+        float R01 = Y.X;
+        float R02 = Z.X;
+        float R10 = X.Y;
+        float R11 = Y.Y;
+        float R12 = Z.Y;
+        float R20 = X.Z;
+        float R21 = Y.Z;
+        float R22 = Z.Z;
+
+        // For a rotation matrix:
+        // v = (R21 - R12, R02 - R20, R10 - R01) = 2*sin(by)*about
+        // trace = R00 + R11 + R22 = 1 + 2*cos(by)
+
+        Vec3 v = new(R21 - R12, R02 - R20, R10 - R01);
+        float trace = R00 + R11 + R22;
+
+        // Calculate the angle of rotation via a stable method.
+        float twocosby = trace - 1f;
+        float twosinby = mag(v);
+        by = atan2(twosinby, twocosby);
+
+        // Find axis of rotation, but gotta check degenerate.
+        if (nearzero(v)) {
+            if (twocosby > 0f) { // no rotation.
+                about = uZ3; // can be anything.
+            } else { // complete flip rotation.
+                // We find the largest diagonal element to solve for the axis.
+                if (R00 > R11 && R00 > R22) {
+                    float ax = sqrt(max(0f, (R00 + 1f) * 0.5f));
+                    about = new(
+                        ax,
+                        R01 * 0.5f / ax,
+                        R02 * 0.5f / ax
+                    );
+                } else if (R11 > R22) {
+                    float ay = sqrt(max(0f, (R11 + 1f) * 0.5f));
+                    about = new(
+                        R01 * 0.5f / ay,
+                        ay,
+                        R12 * 0.5f / ay
+                    );
+                } else {
+                    float az = sqrt(max(0f, (R22 + 1f) * 0.5f));
+                    about = new(
+                        R02 * 0.5f / az,
+                        R12 * 0.5f / az,
+                        az
+                    );
+                }
+                about = normalise(about); // for numerical drift.
+            }
+        } else {
+            // Normal case.
+            about = normalise(v);
+        }
+
+        // Cache result.
+        _about = about;
+        _by = by;
+    }
+
+    public static Frame rotation(Vec3 about, float by)
+        => new Frame().rotate(about, by, false);
+
 
     public class Cyl {
         public Frame centre { get; }
@@ -188,7 +280,7 @@ public class Frame {
 
     public Frame swing(Vec3 around, Vec3 about, float by, bool relative=true) {
         if (relative) {
-            around = to_global(around);
+            around = to_global_pos(around);
             about = to_global_dir(about);
         }
         Frame f = this;
@@ -198,68 +290,140 @@ public class Frame {
         return f;
     }
 
-    public Frame flipxy() {
-        return new(pos, -X, -Y, Z);
+    public Frame reflect(Vec3 point, Vec3 normal, int flip_axis,
+            bool relative=true) {
+        if (relative) {
+            point = to_global_pos(point);
+            normal = to_global_dir(normal);
+        }
+        assert_idx(flip_axis, 3);
+        Vec3 N = normalise(normal);
+        // Reflect position.
+        Vec3 newpos = pos - 2f * dot(pos - point, N) * N;
+        // Reflect axes.
+        Vec3 newX = X - 2f * dot(X, N) * N;
+        Vec3 newY = Y - 2f * dot(Y, N) * N;
+        Vec3 newZ = Z - 2f * dot(Z, N) * N;
+        // Convert back to right-handed.
+        switch (flip_axis) {
+            case 0: newX = -newX; break;
+            case 1: newY = -newY; break;
+            case 2: newZ = -newZ; break;
+        }
+        return new(newpos, newX, newY, newZ);
     }
-    public Frame flipzx() {
-        return new(pos, -X, Y, -Z);
+    public Frame reflectxy(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 2, relative);
+    public Frame reflectzx(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 1, relative);
+    public Frame reflectyz(Vec3 point, Vec3 normal, bool relative=true)
+        => reflect(point, normal, 0, relative);
+
+    public Frame flipxy() => new(pos, -X, -Y, Z);
+    public Frame flipzx() => new(pos, -X, Y, -Z);
+    public Frame flipyz() => new(pos, X, -Y, -Z);
+
+    public Frame swapxy() => new(pos, Y, X, -Z);
+    public Frame swapzx() => new(pos, Z, -Y, X);
+    public Frame swapyz() => new(pos, -X, Z, Y);
+
+    public Frame cyclecw() => new(pos, Z, X, Y);
+    public Frame cycleccw() => new(pos, Y, Z, X);
+
+    public Frame inverse() {
+        Vec3 newX = new(X.X, Y.X, Z.X);
+        Vec3 newY = new(X.Y, Y.Y, Z.Y);
+        Vec3 newZ = new(X.Z, Y.Z, Z.Z);
+        Vec3 newpos = new(
+            -dot(pos, newX),
+            -dot(pos, newY),
+            -dot(pos, newZ)
+        );
+        return new(newpos, newX, newY, newZ);
     }
-    public Frame flipyz() {
-        return new(pos, X, -Y, -Z);
+    public Frame compose(in Frame local) {
+        Vec3 newpos = to_global_pos(local.pos);
+        Vec3 newX = to_global_dir(local.X);
+        Vec3 newY = to_global_dir(local.Y);
+        Vec3 newZ = to_global_dir(local.Z);
+        return new(newpos, newX, newY, newZ);
+    }
+    public Frame relativeto(in Frame reference) {
+        Vec3 newpos = reference.from_global_pos(pos);
+        Vec3 newX = reference.from_global_dir(X);
+        Vec3 newY = reference.from_global_dir(Y);
+        Vec3 newZ = reference.from_global_dir(Z);
+        return new(newpos, newX, newY, newZ);
     }
 
-    public Frame swapxy() {
-        return new(pos, Y, X, -Z);
-    }
-    public Frame swapzx() {
-        return new(pos, Z, -Y, X);
-    }
-    public Frame swapyz() {
-        return new(pos, -X, Z, Y);
+    public static Frame operator+(in Frame frame, in Frame appended)
+        => frame.compose(appended);
+    public static Frame operator-(in Frame to, in Frame from)
+        => to.relativeto(from);
+
+    public Frame closest_parallel(in Frame other) {
+        Vec3[] axes = {
+             other.X,
+            -other.X,
+             other.Y,
+            -other.Y,
+             other.Z,
+            -other.Z
+        };
+        float best = -INF;
+        Frame bestframe = this;
+        foreach (Vec3 newX in axes) {
+            foreach (Vec3 newZ in axes) {
+                if (nearpara(newZ, newX))
+                    continue; // must be perpendicular.
+                Vec3 newY = cross(newZ, newX);
+                float score = dot(newX, X) + dot(newY, Y) + dot(newZ, Z);
+                if (score > best) {
+                    best = score;
+                    bestframe = new(pos, newX, newY, newZ);
+                }
+            }
+        }
+        return bestframe;
     }
 
-    public Frame cyclecw() {
-        return new(pos, Z, X, Y);
-    }
-    public Frame cycleccw() {
-        return new(pos, Y, Z, X);
-    }
-
-    public Frame compose(in Frame other) {
-        Vec3 pos = to_global(other.pos);
-        Vec3 X = to_global_dir(other.X);
-        Vec3 Y = to_global_dir(other.Y);
-        Vec3 Z = to_global_dir(other.Z);
-        return new(pos, X, Y, Z);
-    }
 
     public Frame lerp(in Frame other, float t) {
         Vec3 pos = Br.lerp(this.pos, other.pos, t);
-        this.rot_to_local(out Vec3 this_about, out float this_by);
-        other.rot_to_local(out Vec3 other_about, out float other_by);
+        this.get_rotation(out Vec3 this_about, out float this_by);
+        other.get_rotation(out Vec3 other_about, out float other_by);
         Vec3 about = Br.lerpdir(this_about, other_about, t);
         float by = Br.lerp(this_by, other_by, t);
         return new Frame(pos).rotate(about, by);
     }
 
 
-    public Vec3 to_global(Vec3 p) {
-        return pos + p.X*X + p.Y*Y + p.Z*Z;
+    public Vec3 to_global_pos(Vec3 position) {
+        return pos + position.X*X + position.Y*Y + position.Z*Z;
     }
-    public Vec3 from_global(Vec3 p) {
-        p -= pos;
-        return new(dot(p, X), dot(p, Y), dot(p, Z));
+    public Vec3 from_global_pos(Vec3 position) {
+        position -= pos;
+        return new(dot(position, X), dot(position, Y), dot(position, Z));
     }
-    public static Vec3 operator*(in Frame frame, Vec3 p) => frame.to_global(p);
-    public static Vec3 operator/(in Frame frame, Vec3 p) => frame.from_global(p);
+    public static Vec3 operator*(in Frame frame, Vec3 position)
+        => frame.to_global_pos(position);
+    public static Vec3 operator/(in Frame frame, Vec3 position)
+        => frame.from_global_pos(position);
 
 
-    public Vec3 to_global_dir(Vec3 p) {
-        return p.X*X + p.Y*Y + p.Z*Z;
+    public Vec3 to_global_dir(Vec3 direction) {
+        return direction.X*X + direction.Y*Y + direction.Z*Z;
     }
-    public Vec3 from_global_rot(Vec3 p) {
-        return new(dot(p, X), dot(p, Y), dot(p, Z));
+    public Vec3 from_global_dir(Vec3 direction) {
+        return new(dot(direction, X), dot(direction, Y), dot(direction, Z));
     }
+    public static Vec3 operator|(in Frame frame, Vec3 direction)
+        => frame.to_global_dir(direction);
+    public static Vec3 operator^(in Frame frame, Vec3 direction)
+        => frame.from_global_dir(direction);
+    // here at bruv we only use operators when it is 100% clear what their
+    // operation is.
+
 
     public BBox3 to_global_bbox(BBox3 bbox) {
         Vec3 v000 = bbox.vecMin;
@@ -270,14 +434,14 @@ public class Frame {
         Vec3 v100 = new(v111.X, v000.Y, v000.Z);
         Vec3 v101 = new(v111.X, v000.Y, v111.Z);
         Vec3 v110 = new(v111.X, v111.Y, v000.Z);
-        v000 = to_global(v000);
-        v001 = to_global(v001);
-        v010 = to_global(v010);
-        v011 = to_global(v011);
-        v100 = to_global(v100);
-        v101 = to_global(v101);
-        v110 = to_global(v110);
-        v111 = to_global(v111);
+        v000 = to_global_pos(v000);
+        v001 = to_global_pos(v001);
+        v010 = to_global_pos(v010);
+        v011 = to_global_pos(v011);
+        v100 = to_global_pos(v100);
+        v101 = to_global_pos(v101);
+        v110 = to_global_pos(v110);
+        v111 = to_global_pos(v111);
         Vec3 vmin = min(v000, v001, v010, v011, v100, v101, v110, v111);
         Vec3 vmax = max(v000, v001, v010, v011, v100, v101, v110, v111);
         return new(vmin, vmax);
@@ -291,36 +455,50 @@ public class Frame {
         Vec3 v100 = new(v111.X, v000.Y, v000.Z);
         Vec3 v101 = new(v111.X, v000.Y, v111.Z);
         Vec3 v110 = new(v111.X, v111.Y, v000.Z);
-        v000 = from_global(v000);
-        v001 = from_global(v001);
-        v010 = from_global(v010);
-        v011 = from_global(v011);
-        v100 = from_global(v100);
-        v101 = from_global(v101);
-        v110 = from_global(v110);
-        v111 = from_global(v111);
+        v000 = from_global_pos(v000);
+        v001 = from_global_pos(v001);
+        v010 = from_global_pos(v010);
+        v011 = from_global_pos(v011);
+        v100 = from_global_pos(v100);
+        v101 = from_global_pos(v101);
+        v110 = from_global_pos(v110);
+        v111 = from_global_pos(v111);
         Vec3 vmin = min(v000, v001, v010, v011, v100, v101, v110, v111);
         Vec3 vmax = max(v000, v001, v010, v011, v100, v101, v110, v111);
         return new(vmin, vmax);
     }
 
 
-    public Vec3 to_other(Frame other, Vec3 p) {
-        Vec3 q = to_global(p);
-        return other.from_global(q);
-    }
-    public Vec3 from_other(Frame other, Vec3 p) {
-        Vec3 q = other.to_global(p);
-        return from_global(q);
+    public void bbox_include_circle(ref BBox3 bbox, float r /* in xy plane */,
+            float z=0f) {
+        // Compute extents along each global axis.
+        float ex = r * hypot(dot(uX3, X), dot(uX3, Y));
+        float ey = r * hypot(dot(uY3, X), dot(uY3, Y));
+        float ez = r * nonhypot(1f, dot(uZ3, Z));
+        Vec3 e = new(ex, ey, ez);
+
+        // Expand bounding box.
+        bbox.Include(pos + z*Z - e);
+        bbox.Include(pos + z*Z + e);
     }
 
-    public Vec3 to_other_rot(Frame other, Vec3 p) {
-        Vec3 q = to_global_dir(p);
-        return other.from_global_rot(q);
+
+    public Vec3 to_other(Frame other, Vec3 p) {
+        Vec3 q = to_global_pos(p);
+        return other.from_global_pos(q);
     }
-    public Vec3 from_other_rot(Frame other, Vec3 p) {
+    public Vec3 from_other(Frame other, Vec3 p) {
+        Vec3 q = other.to_global_pos(p);
+        return from_global_pos(q);
+    }
+
+    public Vec3 to_other_dir(Frame other, Vec3 p) {
+        Vec3 q = to_global_dir(p);
+        return other.from_global_dir(q);
+    }
+    public Vec3 from_other_dir(Frame other, Vec3 p) {
         Vec3 q = other.to_global_dir(p);
-        return from_global_rot(q);
+        return from_global_dir(q);
     }
 
 
@@ -333,22 +511,9 @@ public class Frame {
         return cross(Z, O);
     }
 
-    protected Frame(Vec3 pos, Vec3 X, Vec3 Y, Vec3 Z) {
-        assert(isgood(pos));
-        assert(isgood(X));
-        assert(isgood(Y));
-        assert(isgood(Z));
-        assert(nearunit(X));
-        assert(nearunit(Y));
-        assert(nearunit(Z));
-        assert(nearzero(dot(X, Y)));
-        assert(nearzero(dot(X, Z)));
-        assert(nearzero(dot(Y, Z)));
-        assert(closeto(cross(Z, X), Y)); // rhs
-        this.pos = pos;
-        this.X = X;
-        this.Y = Y;
-        this.Z = Z;
+    public override string ToString() {
+        string tostr(Vec3 a) => $"({a.X}, {a.Y}, {a.Z})";
+        return $"<frame @{tostr(pos)}, X={tostr(X)}, Y={tostr(Y)}, Z={tostr(Z)}";
     }
 }
 
@@ -380,15 +545,15 @@ public class FramesLerp : Frames {
     /* NOTE: may not be direct, though always is *initially* */
     public Frame start => at(0);
     public Frame end => at(N - 1);
-    private float _tlo;
-    private float _thi;
-    private Frame _start;
-    private Frame _end;
+    protected float _tlo;
+    protected float _thi;
+    protected Frame _start;
+    protected Frame _end;
     public FramesLerp(int N, in Frame frame, in Vec3 start, in Vec3 end)
         : this(N, frame.translate(start), frame.translate(end)) {}
     public FramesLerp(int N, in Frame start, in Frame end)
         : this(N, start, end, 0f, 1f) {}
-    private FramesLerp(int N, in Frame start, in Frame end, float tlo,
+    protected FramesLerp(int N, in Frame start, in Frame end, float tlo,
             float thi) {
         assert(N >= 2);
         this.N = N;

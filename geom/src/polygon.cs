@@ -50,12 +50,12 @@ public static class Polygon {
         for (int i=0; i<N; ++i) {
             int i1 = (i + 1) % N;
             Vec2 a = vertices[i];
-            if (closeto(a, vertices[i1])) {
+            if (nearto(a, vertices[i1])) {
                 why = $"duplicate vertices: {vecstr(a)}";
                 return false;
             }
             for (int j=i + 1; j<N; ++j) {
-                if (closeto(a, vertices[j])) {
+                if (nearto(a, vertices[j])) {
                     why = $"duplicate vertices: {vecstr(a)}";
                     return false;
                 }
@@ -148,6 +148,18 @@ public static class Polygon {
     }
 
 
+    public static Vec2 closest_on_segment(Vec2 a, Vec2 b, Vec2 p) {
+        Vec2 ap = p - a;
+        Vec2 ab = b - a;
+        float t = clamp(dot(ap, ab) / mag2(ab), 0f, 1f);
+        return ab*t;
+    }
+
+    public static float dist_to_segment(Vec2 a, Vec2 b, Vec2 p) {
+        return mag(p - closest_on_segment(a, b, p));
+    }
+
+
     public static Vec2 line_intersection(Vec2 a0, Vec2 a1, Vec2 b0, Vec2 b1,
             out bool outside) {
         Vec2 Da = a1 - a0;
@@ -224,7 +236,7 @@ public static class Polygon {
         // Insanely sharp point.
         assert(!nearzero(beta));
         // Already a straight line.
-        if (closeto(abs(beta), PI))
+        if (nearto(abs(beta), PI))
             return;
         // Find the two points which will be joined by a circular arc.
         float ell = Fr / tan(0.5f*beta);
@@ -341,7 +353,7 @@ public static class Polygon {
 
 
     public static Mesh mesh_revolved(
-            in Frame frame,
+            in Frame revolve_about,
             in Slice<Vec2> vertices, /* (z,r), any winding */
             float by=TWOPI,
             int slicesize=-1, int slicecount=-1, bool donut=false,
@@ -395,9 +407,9 @@ public static class Polygon {
             float z_last_start  = vertices[idx_last_start].X;
             float z_first_end   = vertices[idx_first_end].X;
             float z_last_end    = vertices[idx_last_end].X;
-            assert(closeto(z_first_start, z_last_start),
+            assert(nearto(z_first_start, z_last_start),
                     "revolve would not be closed");
-            assert(closeto(z_first_end, z_last_end),
+            assert(nearto(z_first_end, z_last_end),
                     "revolve would not be closed");
 
             for (int n=0; n<slicecount; ++n) {
@@ -438,7 +450,7 @@ public static class Polygon {
         // Get the spinning frame for sweep.
         FramesSpin swept_frames = new FramesSpin(
             slicecount * tilecount,
-            frame.cyclecw(),
+            revolve_about.cyclecw(),
             about: uX3,
             by: by
         );
@@ -453,11 +465,11 @@ public static class Polygon {
 
 
     public static Mesh mesh_extruded(
-            Frame frame,
+            Frame bbase,
             float Lz,
             in Slice<Vec2> vertices, /* (x,y), any winding */
-            bool at_middle=false, float extend_by=0f,
-            int extend_direction=EXTEND_UPDOWN,
+            bool at_middle=false,
+            float extend_by=NAN, Extend extend_dir=Extend.NONE,
             bool checksimple=true
         ) {
         string why;
@@ -493,18 +505,18 @@ public static class Polygon {
         }
         // Make all points.
         List<Vec3> V = new();
-        float[] z = at_middle ? [-Lz/2f, +Lz/2f] : [0f, Lz];
-        z[1] += extend_by;
-        float Dz = 0f;
-        switch (extend_direction) {
-            case EXTEND_DOWN: Dz = -extend_by; break;
-            case EXTEND_UPDOWN: Dz = -extend_by/2f; break;
-        }
-        z[0] += Dz;
-        z[1] += Dz;
+        float z = at_middle ? -Lz/2f : 0f;
+        assert(isnan(extend_by) == (extend_dir == Extend.NONE));
+        if (isset((int)extend_dir, (int)Extend.DOWN))
+            z -= extend_by;
+        if (extend_dir == Extend.UPDOWN)
+            extend_by *= 2f;
+        Lz += ifnan(extend_by, 0f);
         for (int j=0; j<2; ++j) {
+            if (j > 0)
+                z += Lz;
             for (int i=0; i<N; ++i)
-                V.Add(frame * rejxy(vertices[i], z[j]));
+                V.Add(bbase * rejxy(vertices[i], z));
         }
         mesh.AddVertices(V, out _);
         return mesh;
@@ -528,7 +540,8 @@ public static class Polygon {
 
         Mesh mesh = new();
 
-        // Check polys.
+        // Check polys. Note this doesnt check anything about the sides, since
+        // thats significantly more complicated (i think?).
         if (checksimple) {
             for (int n=0; n<slicecount; ++n) {
                 Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);

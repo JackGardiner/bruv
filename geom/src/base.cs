@@ -6,7 +6,6 @@ using Vec3 = System.Numerics.Vector3;
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 using IImplicit = PicoGK.IImplicit;
-using IBoundedImplicit = PicoGK.IBoundedImplicit;
 using BBox3 = PicoGK.BBox3;
 
 using Colour = PicoGK.ColorFloat;
@@ -16,109 +15,31 @@ using TgaIo = PicoGK.TgaIo;
 
 namespace br {
 
-public static partial class Br {
-    // chuck a couple more constants in un-qualified land.
 
-    public const int EXTEND_UP     = 0x1;
-    public const int EXTEND_DOWN   = 0x2;
-    public const int EXTEND_UPDOWN = 0x3;
-
-    public const int CORNER_x0y0z0 = 0x0;
-    public const int CORNER_x0y0z1 = 0x1;
-    public const int CORNER_x0y1z0 = 0x2;
-    public const int CORNER_x0y1z1 = 0x3;
-    public const int CORNER_x1y0z0 = 0x4;
-    public const int CORNER_x1y0z1 = 0x5;
-    public const int CORNER_x1y1z0 = 0x6;
-    public const int CORNER_x1y1z1 = 0x7;
-
-    public const int CORNER_MASK_z = 0x1;
-    public const int CORNER_MASK_y = 0x2;
-    public const int CORNER_MASK_x = 0x4;
-
-    public const int EDGE_x0z0 = 0x8 + 0x8*0;
-    public const int EDGE_x1z0 = 0x8 + 0x8*1;
-    public const int EDGE_y0z0 = 0x8 + 0x8*2;
-    public const int EDGE_y1z0 = 0x8 + 0x8*3;
-    public const int EDGE_x0z1 = 0x8 + 0x8*4;
-    public const int EDGE_x1z1 = 0x8 + 0x8*5;
-    public const int EDGE_y0z1 = 0x8 + 0x8*6;
-    public const int EDGE_y1z1 = 0x8 + 0x8*7;
-    public const int EDGE_x0y0 = 0x8 + 0x8*8;
-    public const int EDGE_x1y0 = 0x8 + 0x8*9;
-    public const int EDGE_x0y1 = 0x8 + 0x8*10;
-    public const int EDGE_x1y1 = 0x8 + 0x8*11;
-}
-
-
-public abstract class SDFunbounded : IImplicit {
-    public float signed_dist(in Vec3 p) => fSignedDistance(p);
-
-    public Voxels voxels(BBox3 bounds, bool enforce_faces=true) {
+public static class _SDF {
+    public static Voxels voxels(IImplicit imp, BBox3 bounds,
+            bool enforce_faces=true) {
         if (!enforce_faces)
-            return new Voxels(this, bounds);
-        Voxels vox = new Cuboid(bounds).voxels();
-        vox.IntersectImplicit(this);
+            return new Voxels(imp, bounds);
+        Voxels vox = new Bar(bounds);
+        vox.IntersectImplicit(imp);
         return vox;
     }
-
-
-    public abstract float fSignedDistance(in Vec3 p);
-}
-
-public abstract class SDF : SDFunbounded, IBoundedImplicit {
-    public BBox3 bounds => bounds_fr;
-
-    public Voxels voxels() {
-        assert(!inf_bounds, "shape is infinite and has no bounds");
-        assert(has_bounds, "no bounds have been set");
-        // assert(bounds.vecMin != bounds.vecMax, "bounds cannot be empty");
-        // eh maybe bounds can be empty.
-        return new Voxels(this);
-    }
-
-
-    protected void set_bounds(in BBox3 bbox) {
-        assert(!inf_bounds);
-        bounds_fr = bbox;
-        has_bounds = true;
-    }
-    protected void set_bounds(in Vec3 min, in Vec3 max) {
-        assert(!inf_bounds);
-        assert(min.X <= max.X);
-        assert(min.Y <= max.Y);
-        assert(min.Z <= max.Z);
-        bounds_fr = new BBox3(min, max);
-        has_bounds = true;
-    }
-    protected void include_in_bounds(in Vec3 p) {
-        assert(!inf_bounds);
-        if (!has_bounds) {
-            bounds_fr = new BBox3(p, p);
-        } else {
-            bounds_fr.Include(p);
-        }
-        has_bounds = true;
-    }
-    protected void unbounded_bc_inf() {
-        inf_bounds = true;
-    }
-
-    protected BBox3 bounds_fr;
-    protected bool has_bounds = false;
-    protected bool inf_bounds = false;
-    public BBox3 oBounds => bounds_fr;
 }
 
 
 public delegate float SDFfunction(in Vec3 p);
 
-public abstract class SDFfunc : SDFunbounded {
+public abstract class SDFfromfunc : IImplicit {
     public abstract SDFfunction sdf { get; }
     public abstract float max_off { get; }
+    public abstract float fSignedDistance(in Vec3 p);
+
+    public Voxels voxels(BBox3 bounds, bool enforce_faces=true)
+        => _SDF.voxels(this, bounds, enforce_faces);
 }
 
-public class SDFfilled : SDFfunc {
+public class SDFfilled : SDFfromfunc {
     private SDFfunction _sdf;
     public float off { get; }
 
@@ -129,14 +50,17 @@ public class SDFfilled : SDFfunc {
         this._sdf = sdf;
         this.off = off;
     }
+
     public override float fSignedDistance(in Vec3 p) {
         return sdf(p) - off;
     }
 }
-public class SDFshelled : SDFfunc {
+
+public class SDFshelled : SDFfromfunc {
     private SDFfunction _sdf;
     public float off { get; }
     public float semith { get; }
+    public float th => 2f*semith;
     public float Ioff => off - semith;
     public float Ooff => off + semith;
 
@@ -150,12 +74,8 @@ public class SDFshelled : SDFfunc {
         this.semith = 0.5f*th;
         this.off = off;
     }
-    public SDFshelled innered() {
-        return new SDFshelled(sdf, off + semith, 2f*semith);
-    }
-    public SDFshelled outered() {
-        return new SDFshelled(sdf, off - semith, 2f*semith);
-    }
+    public SDFshelled at_inner() => new(sdf, off + semith, 2f*semith);
+    public SDFshelled at_outer() => new(sdf, off - semith, 2f*semith);
 
     public override float fSignedDistance(in Vec3 p) {
         return abs(sdf(p) - off) - semith;
@@ -163,25 +83,180 @@ public class SDFshelled : SDFfunc {
 }
 
 
-public class Space : SDFunbounded {
-    public Frame centre { get; }
-    public float zlo { get; }
-    public float zhi { get; }
+public abstract class FramedShape<This>
+        where This : FramedShape<This> {
 
-    public Space(Frame centre, float zlo, float zhi) {
-        assert(zhi > zlo, $"zlo={zlo}, zhi={zhi}");
-        assert(zlo != +INF, $"zlo={zlo}");
-        assert(zhi != -INF, $"zhi={zhi}");
-        assert(zlo != -INF || zhi != +INF);
+    public abstract Frame centre { get; }
+    public abstract This with_centre(in Frame newcentre);
+
+    public This transx(float shift, bool relative=true)
+        => with_centre(centre.transx(shift, relative));
+    public This transy(float shift, bool relative=true)
+        => with_centre(centre.transy(shift, relative));
+    public This transz(float shift, bool relative=true)
+        => with_centre(centre.transz(shift, relative));
+    public This translate(Vec3 shift, bool relative=true)
+        => with_centre(centre.translate(shift, relative));
+
+    public This rotxy(float by, bool relative=true)
+        => with_centre(centre.rotxy(by, relative));
+    public This rotzx(float by, bool relative=true)
+        => with_centre(centre.rotzx(by, relative));
+    public This rotyz(float by, bool relative=true)
+        => with_centre(centre.rotyz(by, relative));
+    public This rotate(Vec3 about, float by, bool relative=true)
+        => with_centre(centre.rotate(about, by, relative));
+
+    public This swing(Vec3 around, Vec3 about, float by, bool relative=true)
+        => with_centre(centre.swing(around, about, by, relative));
+
+    public This reflect(Vec3 point, Vec3 normal, int flip_axis,
+            bool relative=true)
+        => with_centre(centre.reflect(point, normal, flip_axis, relative));
+    public This reflectxy(Vec3 point, Vec3 normal, bool relative=true)
+        => with_centre(centre.reflectxy(point, normal, relative));
+    public This reflectzx(Vec3 point, Vec3 normal, bool relative=true)
+        => with_centre(centre.reflectzx(point, normal, relative));
+    public This reflectyz(Vec3 point, Vec3 normal, bool relative=true)
+        => with_centre(centre.reflectyz(point, normal, relative));
+
+    public This flipxy() => with_centre(centre.flipxy());
+    public This flipzx() => with_centre(centre.flipzx());
+    public This flipyz() => with_centre(centre.flipyz());
+
+    public This swapxy() => with_centre(centre.swapxy());
+    public This swapzx() => with_centre(centre.swapzx());
+    public This swapyz() => with_centre(centre.swapyz());
+
+    public This cyclecw() => with_centre(centre.cyclecw());
+    public This cycleccw() => with_centre(centre.cycleccw());
+
+    public This compose(in Frame other) => with_centre(centre.compose(other));
+}
+
+
+public abstract class BoundedShape<This> : FramedShape<This>, IImplicit
+        // gotta implement the non-bounded IImplicit version so that when
+        // defining the implicit conversion to voxels it doesnt hit a conflict
+        // with two one-arg new Voxels() definitions.
+        where This : BoundedShape<This> {
+
+    public abstract BBox3 bounds { get; }
+    public abstract float fSignedDistance(in Vec3 p);
+
+    public static implicit operator Voxels(BoundedShape<This> obj)
+        => new(obj, obj.bounds);
+}
+
+public abstract class ShellableShape<This> : BoundedShape<This>
+        where This : ShellableShape<This> {
+
+    public abstract bool isfilled { get; }
+    public bool isshelled => !isfilled;
+
+    /* when currently filled: */
+    public This shelled(float th) {
+        assert(isfilled);
+        return _shelled(th);
+    }
+
+    /* when currently shelled: */
+    public This negative {
+        get {
+            assert(isshelled);
+            return _negative();
+        }
+    }
+
+    /* either: */
+    public This positive { get { return _positive(); } }
+    public abstract This hollowed(float inner_length);
+    public abstract This girthed(float outer_length);
+            // voted best function name in bruv three years running.
+
+
+    public abstract This _shelled(float th);
+    public abstract This _negative();
+    public abstract This _positive();
+}
+
+
+
+
+public enum Extend {
+    NONE   = 0,
+    UP     = 0x1,
+    DOWN   = 0x2,
+    UPDOWN = 0x3,
+}
+
+public abstract class AxialShape<This> : ShellableShape<This>
+        // tragically, the logical requirements of an axial shape do not require
+        // shellable, however does csharp has made some appalling decisions, this
+        // must inherit from shellable if anything axial wants to be shellable.
+        where This : AxialShape<This> {
+
+    // Note that axial shape also implies shelling does not happen in the axial
+    // direction, i.e. an "axial shape" cube should not shell the top and bottom
+    // face when shelled. this is just an arbitrary decision i have come to.
+
+    public abstract float Lz { get; }
+    public abstract This with_Lz(float new_Lz);
+
+    public Frame bbase => centre.transz(-Lz/2f);
+              // bloody c sharp keywords out the wah zu.
+    public This with_bbase(in Frame newbbase)
+        => with_centre(newbbase.transz(+Lz/2f));
+
+    public This at_base() => transz(-Lz/2f);
+    public This at_top()  => transz(+Lz/2f);
+
+    public This next_down(float count=1f) => transz(-count*Lz);
+    public This next_up(float count=1f)   => transz(+count*Lz);
+
+    public This extended(float extra, Extend dir) {
+        float Dz = 0f;
+        switch (dir) {
+            case Extend.UP:     Dz = +extra/2f; break;
+            case Extend.DOWN:   Dz = -extra/2f; break;
+            case Extend.UPDOWN: Dz = 0f; extra *= 2f; break;
+        }
+        return transz(Dz).with_Lz(Lz + extra);
+    }
+}
+
+
+
+
+public class Space : FramedShape<Space>, IImplicit {
+    public override Frame centre { get; }
+    public float min_z { get; }
+    public float max_z { get; }
+
+    public Space(in Frame centre, float min_z, float max_z) {
+        assert(max_z > min_z, $"min_z={min_z}, max_z={max_z}");
+        assert(min_z != +INF, $"min_z={min_z}");
+        assert(max_z != -INF, $"max_z={max_z}");
+        assert(min_z != -INF || max_z != +INF);
         this.centre = centre;
-        this.zlo = zlo;
-        this.zhi = zhi;
+        this.min_z = min_z;
+        this.max_z = max_z;
     }
 
-    public override float fSignedDistance(in Vec3 p) {
+
+    public float fSignedDistance(in Vec3 p) {
         float z = dot(p - centre.pos, centre.Z);
-        return max(zlo - z, z - zhi);
+        return max(min_z - z, z - max_z);
     }
+
+    public override Space with_centre(in Frame newcentre)
+        => new(newcentre, min_z, max_z);
+
+
+    // literally fuck c sharp for not inheriting default implementations from
+    // interfaces.
+    public Voxels voxels(BBox3 bounds, bool enforce_faces=true)
+        => _SDF.voxels(this, bounds, enforce_faces);
 }
 
 public class Sectioner {
@@ -224,11 +299,16 @@ public class Sectioner {
     }
 
 
-    public static Sectioner pie(float min_theta, float max_theta) {
-        assert(min_theta < max_theta);
-        float Dtheta = max_theta - min_theta;
-        Frame frame0 = new(ZERO3, fromcyl(1f, min_theta + PI_2, 0f));
-        Frame frame1 = new(ZERO3, fromcyl(1f, max_theta - PI_2, 0f));
+    public static Sectioner pie(float theta0, float theta1) {
+        assert(isgood(theta0));
+        assert(isgood(theta1));
+        if (theta1 < theta0)
+            swap(ref theta0, ref theta1);
+        float Dtheta = theta1 - theta0;
+        if (Dtheta >= TWOPI)
+            return new(); // no cuts.
+        Frame frame0 = new(ZERO3, fromcyl(1f, theta0 + PI_2, 0f));
+        Frame frame1 = new(ZERO3, fromcyl(1f, theta1 - PI_2, 0f));
         Space space0 = new(frame0, 0f, +INF);
         Space space1 = new(frame1, 0f, +INF);
         Sectioner sectioner = new();
@@ -242,183 +322,397 @@ public class Sectioner {
 }
 
 
-public class Ball : SDF {
-    public Vec3 centre { get; }
-    public float r { get; }
+public class Ball : ShellableShape<Ball> {
+    public override Frame centre { get; } // rotation irrevelant.
+    public override BBox3 bounds { get; }
+    public float inner_r { get; } // >0, or =-inf
+    public float outer_r { get; } // >0
 
-    public Ball(float r)
-        : this(ZERO3, r) {}
-    public Ball(in Vec3 centre, float r) {
-        assert(r > 0f, $"r={r}");
+    public Vec3 pos => centre.pos;
+    public float r { get { assert(isfilled); return outer_r; } }
+
+    public Ball(float outer_r)
+        : this(-INF, outer_r) {}
+    public Ball(float inner_r, float outer_r)
+        : this(ZERO3, inner_r, outer_r) {}
+    public Ball(in Vec3 centre, float outer_r)
+        : this(centre, -INF, outer_r) {}
+    public Ball(in Vec3 centre, float inner_r, float outer_r)
+        : this(new Frame(centre), inner_r, outer_r) {}
+    public Ball(in Frame centre, float inner_r, float outer_r) {
+        assert(isgood(inner_r) || inner_r == -INF, $"inner_r={inner_r}");
+        assert(isgood(outer_r), $"outer_r={outer_r}");
+        assert(inner_r > 0f || inner_r == -INF, $"inner_r={inner_r}");
+        assert(outer_r > 0f, $"outer_r={outer_r}");
+        assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
         this.centre = centre;
-        this.r = r;
-        if (isinf(r)) {
-            unbounded_bc_inf();
-        } else {
-            include_in_bounds(centre - ONE3*r);
-            include_in_bounds(centre + ONE3*r);
-        }
-
+        this.inner_r = inner_r;
+        this.outer_r = outer_r;
+        bounds = new(centre.pos - ONE3*outer_r, centre.pos + ONE3*outer_r);
     }
 
 
     public override float fSignedDistance(in Vec3 p) {
-        return mag(p - centre) - r;
+        float r = mag(p - centre.pos);
+        return max(inner_r - r, r - outer_r);
     }
+
+    public override Ball with_centre(in Frame newcentre)
+        => new(newcentre, inner_r, outer_r);
+
+    public override bool isfilled => inner_r == -INF;
+    public override Ball _shelled(float th)
+        => (th >= 0f)
+         ? new(centre, outer_r, outer_r + th)
+         : new(centre, outer_r + th, outer_r);
+    public override Ball _negative() => new(centre, -INF, inner_r);
+    public override Ball _positive() => new(centre, -INF, outer_r);
+    public override Ball hollowed(float inner_length)
+        => new(centre, inner_length, outer_r);
+    public override Ball girthed(float outer_length)
+        => new(centre, inner_r, outer_length);
 }
 
 
-public class Pill : SDF {
+public class Pill : ShellableShape<Pill> {
+    public override Frame centre { get; }
+    public override BBox3 bounds { get; }
+    public float Lz { get; } // >0
+    public float inner_r { get; } // >0, or =-inf.
+    public float outer_r { get; } // >0
+
+    public float r { get { assert(isfilled); return outer_r; } }
     public Vec3 a { get; }
     public Vec3 b { get; }
-    public float r { get; }
-    protected float magab { get; }
-    protected Vec3 AB { get; }
+    public Vec3 AB { get; } // may be zero, otherwise unit.
 
-    public Pill(Frame centre, float L, float r)
-        : this(centre.pos, centre * (L*uZ3), r) {}
-    public Pill(Vec3 a, Vec3 b, float r) {
-        assert(r > 0f, $"r={r}");
-        assert(!closeto(a, b), $"a={a}, b={b}");
-        this.a = a;
-        this.b = b;
-        this.r = r;
-        this.magab = mag(b - a);
-        this.AB = (b - a) / magab;
-        if (isinf(a) || isinf(b) || isinf(r)) {
-            unbounded_bc_inf();
-        } else {
-            include_in_bounds(a - r*ONE3);
-            include_in_bounds(a + r*ONE3);
-            include_in_bounds(b - r*ONE3);
-            include_in_bounds(b + r*ONE3);
-        }
+    public Pill(Vec3 a, Vec3 b, float outer_r)
+        : this(a, b, -INF, outer_r) {}
+    public Pill(Vec3 a, Vec3 b, float inner_r, float outer_r)
+        : this(new Frame(a + (a + b)/2f, b - a), mag(b - a), inner_r, outer_r) {}
+    public Pill(in Frame centre, float Lz, float outer_r)
+        : this(centre, Lz, -INF, outer_r) {}
+    public Pill(in Frame centre, float Lz, float inner_r, float outer_r) {
+        assert(isgood(Lz), $"Lz={Lz}");
+        assert(isgood(inner_r) || inner_r == -INF, $"inner_r={inner_r}");
+        assert(isgood(outer_r), $"outer_r={outer_r}");
+        assert(Lz > 0f, $"Lz={Lz}");
+        assert(inner_r > 0f || inner_r == -INF, $"inner_r={inner_r}");
+        assert(outer_r > 0f, $"outer_r={outer_r}");
+        assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
+        this.centre = centre;
+        this.Lz = Lz;
+        this.inner_r = inner_r;
+        this.outer_r = outer_r;
+        a = centre * (-Lz/2f * uZ3);
+        b = centre * (+Lz/2f * uZ3);
+        AB = normalise_nonzero(b - a);
+        bounds = new(a - outer_r*ONE3, b + outer_r*ONE3);
+        bounds.Include(a + outer_r*ONE3);
+        bounds.Include(b - outer_r*ONE3);
     }
+
+    public Pill(in Frame frame, Vec3 a, Vec3 b, float outer_r)
+        : this(frame * a, frame * b, -INF, outer_r) {}
+    public Pill(in Frame frame, Vec3 a, Vec3 b, float inner_r, float outer_r)
+        : this(frame * a, frame * b, inner_r, outer_r) {}
 
 
     public override float fSignedDistance(in Vec3 p) {
         float axial = dot(AB, p - a);
-        Vec3 c = a + AB*clamp(axial, 0f, magab);
-        return mag(p - c) - r;
+        Vec3 c = a + AB*clamp(axial, 0f, Lz);
+        float r = mag(p - c);
+        return max(inner_r - r, r - outer_r);
     }
+
+    public override Pill with_centre(in Frame newcentre)
+        => new(newcentre, Lz, inner_r, outer_r);
+
+    public override bool isfilled => inner_r == -INF;
+    public override Pill _shelled(float th)
+        => (th >= 0f)
+         ? new(centre, Lz, outer_r, outer_r + th)
+         : new(centre, Lz, outer_r + th, outer_r);
+    public override Pill _negative() => new(centre, Lz, -INF, inner_r);
+    public override Pill _positive() => new(centre, Lz, -INF, outer_r);
+    public override Pill hollowed(float inner_length)
+        => new(centre, Lz, inner_length, outer_r);
+    public override Pill girthed(float outer_length)
+        => new(centre, Lz, inner_r, outer_length);
 }
 
 
-public class Cuboid {
-    public Frame centre { get; } // centre of low z end.
-    public float Lx { get; }
-    public float Ly { get; }
-    public float Lz { get; }
 
-    public Cuboid(in Frame centre, float L)
-        : this(centre, L, L, L) {}
-    public Cuboid(in Frame centre, float Lz, float Lxy)
-        : this(centre, Lxy, Lxy, Lz) {}
-    public Cuboid(in Frame centre, Vec3 L)
-        : this(centre, L.X, L.Y, L.Z) {}
-    public Cuboid(in Frame centre, float Lx, float Ly, float Lz) {
-        assert(Lx > 0f, $"Lx={Lx}");
-        assert(Ly > 0f, $"Ly={Ly}");
-        assert(Lz > 0f, $"Lz={Lz}");
+public class Donut : ShellableShape<Donut> { // torus is too lame. its also the
+                                             // surface not the solid.
+    public override Frame centre { get; }
+    public override BBox3 bounds { get; }
+    public float R { get; } // distance from axis of revolution. >=0
+    public float inner_r { get; } // inner half-thickness. >0, or =-inf
+    public float outer_r { get; } // outer half-thickness. >0
+
+    public Donut(in Frame centre, float R, float outer_r)
+        : this(centre, R, 0f, outer_r) {}
+    public Donut(in Frame centre, float R, float inner_r, float outer_r) {
+        assert(isgood(R), $"R={R}");
+        assert(isgood(inner_r), $"inner_r={inner_r}");
+        assert(isgood(outer_r), $"outer_r={outer_r}");
+        assert(R >= 0f, $"R={R}");
+        assert(inner_r >= 0f, $"inner_r={inner_r}");
+        assert(outer_r > 0f, $"outer_r={outer_r}");
+        assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
+        assert(R >= outer_r, $"R={R}, outer_r={outer_r}"); // sorry.
         this.centre = centre;
-        this.Lx = Lx;
-        this.Ly = Ly;
-        this.Lz = Lz;
-        assert(noninf(Lx));
-        assert(noninf(Ly));
-        assert(noninf(Lz));
+        this.R = R;
+        this.inner_r = inner_r;
+        this.outer_r = outer_r;
+        BBox3 bbox = new();
+        centre.bbox_include_circle(ref bbox, R + outer_r, -outer_r);
+        centre.bbox_include_circle(ref bbox, R + outer_r, +outer_r);
+        bounds = bbox;
     }
 
-    public Cuboid(in BBox3 box)
+
+    public override float fSignedDistance(in Vec3 p) {
+        Vec3 q = centre / p;
+        float r = hypot(magxy(q) - R, q.Z);
+        return max(inner_r - r, r - outer_r);
+    }
+
+    public override Donut with_centre(in Frame newcentre)
+        => new(newcentre, R, inner_r, outer_r);
+
+    public override bool isfilled => inner_r == -INF;
+    public override Donut _shelled(float th)
+        => (th >= 0f)
+         ? new(centre, R, outer_r, outer_r + th)
+         : new(centre, R, outer_r + th, outer_r);
+    public override Donut _positive() => new(centre, R, -INF, outer_r);
+    public override Donut _negative() => new(centre, R, -INF, inner_r);
+    public override Donut hollowed(float inner_length)
+        => new(centre, R, inner_length, outer_r);
+    public override Donut girthed(float outer_length)
+        => new(centre, R, inner_r, outer_length);
+}
+
+
+
+public class Bar : AxialShape<Bar> {
+    public override Frame centre { get; }
+    public override BBox3 bounds { get; }
+    public override float Lz { get; } // >0
+    public float inner_Lx { get; } // >0, or =-inf.
+    public float outer_Lx { get; } // >0
+    public float inner_Ly { get; } // >0, or =-inf iff inner_Lx == -inf.
+    public float outer_Ly { get; } // >0
+    public Vec3 inner_size => new(inner_Lx, inner_Ly, isfilled ? -INF : Lz);
+        // note that when filled, inner_size = -INF3.
+    public Vec3 outer_size => new(outer_Lx, outer_Ly, Lz);
+
+    public float Lx { get { assert(isfilled); return outer_Lx; } }
+    public float Ly { get { assert(isfilled); return outer_Ly; } }
+    public Vec3 size { get { assert(isfilled); return new(Lx, Ly, Lz); } }
+
+
+    public Bar(in Frame bbase, float L)
+        : this(bbase, L, L, L) {}
+    public Bar(in Frame bbase, float Lz, float Lxy)
+        : this(bbase, Lxy, Lxy, Lz) {}
+    public Bar(in Frame bbase, Vec3 size)
+        : this(bbase, size.X, size.Y, size.Z) {}
+    public Bar(in Frame bbase, float Lx, float Ly, float Lz)
+        : this(bbase, Lz, -INF, Lx, -INF, Ly) {}
+    public Bar(in Frame bbase, float Lz, float inner_Lx, float outer_Lx,
+            float inner_Ly, float outer_Ly) {
+        assert(isgood(Lz), $"Lz={Lz}");
+        assert(isgood(inner_Lx) || inner_Lx == -INF, $"inner_Lx={inner_Lx}");
+        assert(isgood(outer_Lx), $"outer_Lx={outer_Lx}");
+        assert(isgood(inner_Ly) || inner_Ly == -INF, $"inner_Ly={inner_Ly}");
+        assert(isgood(outer_Ly), $"outer_Ly={outer_Ly}");
+        assert(abs(Lz) > 0f, $"Lz={Lz}");
+        assert(inner_Lx > 0f || inner_Lx == -INF, $"inner_Lx={inner_Lx}");
+        assert(outer_Lx > 0f, $"outer_Lx={outer_Lx}");
+        assert(inner_Ly > 0f || inner_Ly == -INF, $"inner_Ly={inner_Ly}");
+        assert(outer_Ly > 0f, $"outer_Ly={outer_Ly}");
+        assert(outer_Lx > inner_Lx, $"inner_Lx={inner_Lx}, outer_Lx={outer_Lx}");
+        assert(outer_Ly > inner_Ly, $"inner_Ly={inner_Ly}, outer_Ly={outer_Ly}");
+        if (inner_Lx == -INF || inner_Ly == -INF)
+            inner_Lx = inner_Ly = -INF; // collapse to empty.
+            // note we could require both to be -inf or both not, but nah.
+        this.centre = bbase.transz(Lz/2f);
+        Lz = abs(Lz);
+        this.Lz = Lz;
+        this.inner_Lx = inner_Lx;
+        this.outer_Lx = outer_Lx;
+        this.inner_Ly = inner_Ly;
+        this.outer_Ly = outer_Ly;
+        BBox3 bbox = new(-outer_size/2f,  outer_size/2f);
+        // unreal of c sharp to miss unary plus on the fucking vectors.
+        bounds = centre.to_global_bbox(bbox);
+    }
+
+    public Bar(in BBox3 box)
         : this(new Frame(), box.vecMin, box.vecMax) {}
-    public Cuboid(in Frame frame, in BBox3 box)
+    public Bar(in Frame frame, in BBox3 box)
         : this(frame, box.vecMin, box.vecMax) {}
-    public Cuboid(in Vec3 a, in Vec3 b)
+    public Bar(in Vec3 a, in Vec3 b)
         : this(new Frame(), a, b) {}
-    public Cuboid(in Frame frame, in Vec3 a, in Vec3 b)
+    public Bar(in Frame frame, in Vec3 a, in Vec3 b)
+        // shitass csharp not being able to forward to factory functions in pre-
+        // init.
         : this(
             frame.translate(new(ave(a.X, b.X), ave(a.Y, b.Y), min(a.Z, b.Z))),
             max(a, b) - min(a, b)
         ) {}
 
-
-    public Cuboid at_centre() {
-        return new(centre.transz(-Lz/2f), Lx, Ly, Lz);
+    public static Bar centred(in Frame centre, float Lz, float inner_Lx,
+            float outer_Lx, float inner_Ly, float outer_Ly) {
+        assert(Lz > 0f, $"Lz={Lz}");
+        return new(centre.transz(-Lz/2f), Lz, inner_Lx, outer_Lx, inner_Ly,
+                outer_Ly);
     }
 
-    public Cuboid at_corner(int corner) {
-        Vec3 trans = new(-Lx/2f, -Ly/2f, 0f);
-        if (isset(corner, CORNER_MASK_x))
-            trans.X += Lx;
-        if (isset(corner, CORNER_MASK_y))
-            trans.Y += Ly;
-        if (isset(corner, CORNER_MASK_z))
-            trans.Z += Lz;
-        return new(centre.translate(trans), Lx, Ly, Lz);
+
+    public Bar sizez(float new_Lz)
+        => centred(centre, new_Lz, inner_Lx, outer_Lx, inner_Ly, outer_Ly);
+    public Bar sizex(float length) => sized(new Vec3(length, Ly, Lz));
+    public Bar sizey(float length) => sized(new Vec3(Lx, length, Lz));
+    public Bar sized(Vec3 newsize) {
+        assert(isfilled);
+        return centred(centre, newsize.Z, -INF, newsize.X, -INF, newsize.Y);
     }
 
-    public Cuboid at_edge(int edge) {
-        Vec3 trans = new();
-        switch (edge) {
-            case EDGE_x0z0: trans = new(-Lx/2f, 0f, 0f); break;
-            case EDGE_x1z0: trans = new(+Lx/2f, 0f, 0f); break;
-            case EDGE_y0z0: trans = new(0f, -Ly/2f, 0f); break;
-            case EDGE_y1z0: trans = new(0f, +Ly/2f, 0f); break;
+    public Bar scalez(float by)
+        => centred(centre, by*Lz, inner_Lx, outer_Lx, inner_Ly, outer_Ly);
+    public Bar scalex(float by) => scaled(ONE3 + (by - 1f)*uX3);
+    public Bar scaley(float by) => scaled(ONE3 + (by - 1f)*uY3);
+    public Bar scaled(Vec3 by) {
+        assert(isfilled);
+        return centred(centre, by.Z*Lz, -INF, by.X*Lx, -INF, by.Y*Ly);
+    }
 
-            case EDGE_x0z1: trans = new(-Lx/2f, 0f, +Lz); break;
-            case EDGE_x1z1: trans = new(+Lx/2f, 0f, +Lz); break;
-            case EDGE_y0z1: trans = new(0f, -Ly/2f, +Lz); break;
-            case EDGE_y1z1: trans = new(0f, +Ly/2f, +Lz); break;
 
-            case EDGE_x0y0: trans = new(-Lx/2f, -Ly/2f, +Lz/2f); break;
-            case EDGE_x1y0: trans = new(+Lx/2f, -Ly/2f, +Lz/2f); break;
-            case EDGE_x0y1: trans = new(-Lx/2f, +Ly/2f, +Lz/2f); break;
-            case EDGE_x1y1: trans = new(+Lx/2f, +Ly/2f, +Lz/2f); break;
+    [Flags] public enum Shift {
+        X0 = 0x01,
+        X1 = 0x02,
+        Y0 = 0x04,
+        Y1 = 0x08,
+        Z0 = 0x10,
+        Z1 = 0x20,
+        MASK_ALL = 0x3F,
+        MASK_X = 0x03,
+        MASK_Y = 0x0C,
+        MASK_Z = 0x30,
+    }
 
-            default: assert(false); break;
+    public const Shift X0 = Shift.X0;
+    public const Shift X1 = Shift.X1;
+    public const Shift Y0 = Shift.Y0;
+    public const Shift Y1 = Shift.Y1;
+    public const Shift Z0 = Shift.Z0;
+    public const Shift Z1 = Shift.Z1;
+
+    public const Shift X0_Y0 = X0 | Y0;
+    public const Shift X0_Y1 = X0 | Y1;
+    public const Shift X0_Z0 = X0 | Z0;
+    public const Shift X0_Z1 = X0 | Z1;
+    public const Shift X1_Y0 = X1 | Y0;
+    public const Shift X1_Y1 = X1 | Y1;
+    public const Shift Y0_Z0 = Y0 | Z0;
+    public const Shift Y0_Z1 = Y0 | Z1;
+    public const Shift Y1_Z0 = Y1 | Z0;
+    public const Shift Y1_Z1 = Y1 | Z1;
+
+    public const Shift X0_Y0_Z0 = X0 | Y0 | Z0;
+    public const Shift X0_Y0_Z1 = X0 | Y0 | Z1;
+    public const Shift X0_Y1_Z0 = X0 | Y1 | Z0;
+    public const Shift X0_Y1_Z1 = X0 | Y1 | Z1;
+    public const Shift X1_Y0_Z0 = X1 | Y0 | Z0;
+    public const Shift X1_Y0_Z1 = X1 | Y0 | Z1;
+    public const Shift X1_Y1_Z0 = X1 | Y1 | Z0;
+    public const Shift X1_Y1_Z1 = X1 | Y1 | Z1;
+
+
+    public Vec3 point_on_surface(Shift where, bool relative=false,
+            bool validate=false, int max_popcnt=32) {
+        int wher = (int)where; // no implicit enum to int is ridiculous.
+        assert(popcnt(wher) <= max_popcnt);
+        if (validate) {
+            assert(isclr(wher, ~(int)Shift.MASK_ALL), $"where={where}");
+            assert(popcnt(wher & (int)Shift.MASK_X) <= 1, $"where={where}");
+            assert(popcnt(wher & (int)Shift.MASK_Y) <= 1, $"where={where}");
+            assert(popcnt(wher & (int)Shift.MASK_Z) <= 1, $"where={where}");
         }
-        return new(centre.translate(trans), Lx, Ly, Lz);
+        assert(isfilled);
+        Vec3 p = ZERO3;
+        if (isset(wher, (int)X0)) p.X -= outer_Lx/2f;
+        if (isset(wher, (int)X1)) p.X += outer_Lx/2f;
+        if (isset(wher, (int)Y0)) p.Y -= outer_Ly/2f;
+        if (isset(wher, (int)Y1)) p.Y += outer_Ly/2f;
+        if (isset(wher, (int)Z0)) p.Z -= Lz/2f;
+        if (isset(wher, (int)Z1)) p.Z += Lz/2f;
+        if (!relative)
+            p = centre * p;
+        return p;
     }
 
-    public Cuboid extended(float Lz, int direction) {
-        assert(direction == EXTEND_UP || direction == EXTEND_DOWN
-            || direction == EXTEND_UPDOWN);
-        float Dz = 0f;
-        switch (direction) {
-            case EXTEND_DOWN: Dz = -Lz; break;
-            case EXTEND_UPDOWN: Dz = -Lz/2f; break;
-        }
-        return new(centre.transz(Dz), Lx, Ly, this.Lz + Lz);
-    }
+    public Bar at_surface(Shift where)
+        => translate(point_on_surface(where, true));
+    public Bar at_face(Shift where)
+        => translate(point_on_surface(where, true, true, 1));
+    public Bar at_edge(Shift where)
+        => translate(point_on_surface(where, true, true, 2));
+    public Bar at_corner(Shift where)
+        => translate(point_on_surface(where, true, true, 3));
 
-    public Cuboid as_sized(float Lx, float Ly, float Lz) {
-        return new(centre, Lx, Ly, Lz);
-    }
-    public Cuboid as_scaled(float Px, float Py, float Pz) {
-        return new(centre, Px*Lx, Py*Ly, Pz*Lz);
-    }
+    public Bar at_outer_surface(Shift where)
+        => translate(positive.point_on_surface(where, true));
+    public Bar at_outer_face(Shift where)
+        => translate(positive.point_on_surface(where, true, true, 1));
+    public Bar at_outer_edge(Shift where)
+        => translate(positive.point_on_surface(where, true, true, 2));
+    public Bar at_outer_corner(Shift where)
+        => translate(positive.point_on_surface(where, true, true, 3));
+
+    public Bar at_inner_surface(Shift where)
+        => translate(negative.point_on_surface(where, true));
+    public Bar at_inner_face(Shift where)
+        => translate(negative.point_on_surface(where, true, true, 1));
+    public Bar at_inner_edge(Shift where)
+        => translate(negative.point_on_surface(where, true, true, 2));
+    public Bar at_inner_corner(Shift where)
+        => translate(negative.point_on_surface(where, true, true, 3));
 
 
-    public List<Vec3> get_corners() {
-        return [
-            centre * new Vec3(-Lx/2f, -Ly/2f, 0f),
-            centre * new Vec3(-Lx/2f, -Ly/2f, Lz),
-            centre * new Vec3(-Lx/2f, +Ly/2f, 0f),
-            centre * new Vec3(-Lx/2f, +Ly/2f, Lz),
-            centre * new Vec3(+Lx/2f, -Ly/2f, 0f),
-            centre * new Vec3(+Lx/2f, -Ly/2f, Lz),
-            centre * new Vec3(+Lx/2f, +Ly/2f, 0f),
-            centre * new Vec3(+Lx/2f, +Ly/2f, Lz),
+    public Bar hollowed(float new_inner_Lx, float new_inner_Ly)
+        => centred(centre, Lz, new_inner_Lx, outer_Lx, new_inner_Ly, outer_Ly);
+    public Bar girthed(float new_outer_Lx, float new_outer_Ly)
+        => centred(centre, Lz, inner_Lx, new_outer_Lx, inner_Ly, new_outer_Ly);
+
+
+    public Vec3[] get_corners(bool relative=false) {
+        assert(isfilled);
+        Vec3[] corners = [
+            new Vec3(-outer_Lx/2f, -outer_Ly/2f, -Lz/2f),
+            new Vec3(-outer_Lx/2f, -outer_Ly/2f, +Lz/2f),
+            new Vec3(-outer_Lx/2f, +outer_Ly/2f, -Lz/2f),
+            new Vec3(-outer_Lx/2f, +outer_Ly/2f, +Lz/2f),
+            new Vec3(+outer_Lx/2f, -outer_Ly/2f, -Lz/2f),
+            new Vec3(+outer_Lx/2f, -outer_Ly/2f, +Lz/2f),
+            new Vec3(+outer_Lx/2f, +outer_Ly/2f, -Lz/2f),
+            new Vec3(+outer_Lx/2f, +outer_Ly/2f, +Lz/2f),
         ];
+        if (!relative) {
+            for (int i=0; i<numel(corners); ++i)
+                corners[i] = centre * corners[i];
+        }
+        return corners;
     }
 
-    public Voxels voxels() {
-        return new(mesh());
-    }
 
-    public Mesh mesh() {
+    public static implicit operator Mesh(Bar obj) {
         Mesh mesh = new();
-        mesh.AddVertices(get_corners(), out _);
+        mesh.AddVertices(obj.positive.get_corners(), out _);
         // +X quad.
         mesh.nAddTriangle(4, 5, 7);
         mesh.nAddTriangle(4, 7, 6);
@@ -437,71 +731,132 @@ public class Cuboid {
         // -Z quad.
         mesh.nAddTriangle(0, 4, 6);
         mesh.nAddTriangle(0, 6, 2);
+        if (obj.isshelled) {
+            // anti inner mesh.
+            mesh.AddVertices(obj.negative.get_corners(), out _);
+            // +X quad.
+            mesh.nAddTriangle(8 + 4, 8 + 7, 8 + 5);
+            mesh.nAddTriangle(8 + 4, 8 + 6, 8 + 7);
+            // -X quad.
+            mesh.nAddTriangle(8 + 0, 8 + 3, 8 + 2);
+            mesh.nAddTriangle(8 + 0, 8 + 1, 8 + 3);
+            // +Y quad.
+            mesh.nAddTriangle(8 + 2, 8 + 7, 8 + 6);
+            mesh.nAddTriangle(8 + 2, 8 + 3, 8 + 7);
+            // -Y quad.
+            mesh.nAddTriangle(8 + 0, 8 + 5, 8 + 1);
+            mesh.nAddTriangle(8 + 0, 8 + 4, 8 + 5);
+            // +Z quad.
+            mesh.nAddTriangle(8 + 1, 8 + 7, 8 + 3);
+            mesh.nAddTriangle(8 + 1, 8 + 5, 8 + 7);
+            // -Z quad.
+            mesh.nAddTriangle(8 + 0, 8 + 6, 8 + 4);
+            mesh.nAddTriangle(8 + 0, 8 + 2, 8 + 6);
+        }
         return mesh;
     }
+
+    public static implicit operator Voxels(Bar obj)
+        => new((Mesh)obj);
+
+
+    public override float fSignedDistance(in Vec3 p) {
+        Vec3 q = centre / p;
+
+        float outer_dist;
+        {
+            float outside = minelem(abs(q) - outer_size/2f);
+            float inside  = maxelem(abs(q) - outer_size/2f);
+            outside = max(outside, 0f);
+            inside  = min(inside, 0f);
+            outer_dist = inside + outside;
+        }
+        float inner_dist;
+        {
+            float outside = minelem(abs(q) - inner_size/2f);
+            float inside  = maxelem(abs(q) - inner_size/2f);
+            outside = max(outside, 0f);
+            inside  = min(inside, 0f);
+            inner_dist = inside + outside;
+        }
+        return max(outer_dist, -inner_dist);
+    }
+
+    public override Bar with_centre(in Frame newcentre)
+        => centred(newcentre, Lz, inner_Lx, outer_Lx, inner_Ly, outer_Ly);
+    public override Bar with_Lz(float new_Lz)
+        => centred(centre, new_Lz, inner_Lx, outer_Lx, inner_Ly, outer_Ly);
+
+    public override bool isfilled => inner_Lx == -INF;
+    public override Bar _shelled(float th)
+        => (th >= 0f)
+         ? centred(centre, Lz, outer_Lx, outer_Lx + th, outer_Ly, outer_Ly + th)
+         : centred(centre, Lz, outer_Lx + th, outer_Lx, outer_Ly + th, outer_Ly);
+    public override Bar _negative()
+        => centred(centre, Lz, -INF, inner_Lx, -INF, inner_Ly);
+    public override Bar _positive()
+        => centred(centre, Lz, -INF, outer_Lx, -INF, outer_Ly);
+    public override Bar hollowed(float inner_length)
+        => hollowed(inner_length, inner_length);
+    public override Bar girthed(float outer_length)
+        => girthed(outer_length, outer_length);
 }
 
 
-public class Pipe : SDF {
-    public Frame centre { get; } // centre of low z end.
-    public float Lz { get; }
-    public float rlo { get; }
-    public float rhi { get; }
 
-    public Pipe(in Frame centre, float Lz, float r)
-        : this(centre, Lz, 0f, r) {}
-    public Pipe(in Frame centre, float Lz, float rlo, float rhi) {
-        assert(Lz > 0f, $"Lz={Lz}");
-        assert(rhi > rlo, $"rlo={rlo}, rhi={rhi}");
-        assert(rlo >= 0f, $"rlo={rlo}, rhi={rhi}");
-        this.centre = centre;
+public class Rod : AxialShape<Rod> {
+    public override Frame centre { get; }
+    public override BBox3 bounds { get; }
+    public override float Lz { get; } // >0
+    public float inner_r { get; } // >0, or =-inf
+    public float outer_r { get; } // >0
+
+    public float r { get { assert(isfilled); return outer_r; } }
+
+    public Rod(in Frame bbase, float Lz, float outer_r)
+        : this(bbase, Lz, -INF, outer_r) {}
+    public Rod(in Frame bbase, float Lz, float inner_r, float outer_r) {
+        assert(isgood(Lz), $"Lz={Lz}");
+        assert(isgood(inner_r) || inner_r == -INF, $"inner_r={inner_r}");
+        assert(isgood(outer_r), $"outer_r={outer_r}");
+        assert(abs(Lz) > 0f, $"Lz={Lz}");
+        assert(inner_r > 0f || inner_r == -INF, $"inner_r={inner_r}");
+        assert(outer_r > 0f, $"outer_r={outer_r}");
+        assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
+        this.centre = bbase.transz(Lz/2f);
+        Lz = abs(Lz);
         this.Lz = Lz;
-        this.rlo = rlo;
-        this.rhi = rhi;
-        if (isinf(Lz) || isinf(rlo) || isinf(rhi)) {
-            unbounded_bc_inf();
-        } else {
-            BBox3 bbox = new(
-                new Vec3(-rhi, -rhi, 0f),
-                new Vec3(+rhi, +rhi, Lz)
-            );
-            set_bounds(centre.to_global_bbox(bbox));
-        }
+        this.inner_r = inner_r;
+        this.outer_r = outer_r;
+        BBox3 bbox = new();
+        centre.bbox_include_circle(ref bbox, outer_r, -Lz/2f);
+        centre.bbox_include_circle(ref bbox, outer_r, +Lz/2f);
+        bounds = bbox;
     }
 
-    public Pipe at_centre() {
-        return new(centre.transz(-Lz/2f), Lz, rlo, rhi);
+    public static Rod centred(in Frame centre, float Lz, float inner_r,
+            float outer_r) {
+        assert(Lz > 0f, $"Lz={Lz}");
+        return new(centre.transz(-Lz/2f), Lz, inner_r, outer_r);
     }
 
-    public Pipe filled() {
-        if (rlo == 0f)
-            return this;
-        return new Pipe(centre, Lz, rhi);
-    }
-    public Pipe hole() {
-        return new Pipe(centre, Lz, rlo);
+
+    public Rod flipz() => flipzx(); // axisymmetric.
+
+    public Rod sizez(float new_Lz)
+        => centred(centre, new_Lz, inner_r, outer_r);
+    public Rod sizer(float length) => sized(Lz, length);
+    public Rod sized(float new_Lz, float new_r) {
+        assert(isfilled);
+        return centred(centre, new_Lz, 0f, new_r);
     }
 
-    public Pipe hollowed(float Ir) {
-        return new Pipe(centre, Lz, Ir, rhi);
-    }
-
-    public Pipe as_thickness(float th, bool fix_outer=true) {
-        if (fix_outer)
-            return new Pipe(centre, Lz, rhi - th, rhi);
-        else
-            return new Pipe(centre, Lz, rlo, rlo + th);
-    }
-
-    public Pipe extended(float Lz, int direction) {
-        assert(direction == EXTEND_UP || direction == EXTEND_DOWN
-            || direction == EXTEND_UPDOWN);
-        float Dz = 0f;
-        switch (direction) {
-            case EXTEND_DOWN: Dz = -Lz; break;
-            case EXTEND_UPDOWN: Dz = -Lz/2f; break;
-        }
-        return new(centre.transz(Dz), this.Lz + Lz, rlo, rhi);
+    public Rod scalez(float by)
+        => centred(centre, by*Lz, inner_r, outer_r);
+    public Rod scaler(float by) => scaled(1f, by);
+    public Rod scaled(float Pz, float Pr) {
+        assert(isfilled);
+        return centred(centre, Pz*Lz, 0f, Pr*outer_r);
     }
 
 
@@ -510,10 +865,8 @@ public class Pipe : SDF {
         float r = magxy(q);
         float z = q.Z;
 
-        float dist_axial = max(-z, z - Lz);
-        float dist_radial = r - rhi;
-        if (rlo > 1e-3f) // theres gotta be a better way, but i cannot see.
-            dist_radial = max(dist_radial, rlo - r);
+        float dist_axial = max(-Lz/2f - z, z - Lz/2f);
+        float dist_radial = max(inner_r - r, r - outer_r);
 
         float dist;
         if (dist_radial <= 0f || dist_axial <= 0f) {
@@ -523,112 +876,335 @@ public class Pipe : SDF {
         }
         return dist;
     }
+
+    public override Rod with_centre(in Frame newcentre)
+        => centred(newcentre, Lz, inner_r, outer_r);
+    public override Rod with_Lz(float new_Lz)
+        => centred(centre, new_Lz, inner_r, outer_r);
+
+    public override bool isfilled => inner_r == -INF;
+    public override Rod _shelled(float th)
+        => (th >= 0f)
+         ? centred(centre, Lz, outer_r, outer_r + th)
+         : centred(centre, Lz, outer_r + th, outer_r);
+    public override Rod _positive() => centred(centre, Lz, -INF, outer_r);
+    public override Rod _negative() => centred(centre, Lz, -INF, inner_r);
+    public override Rod hollowed(float inner_length)
+        => centred(centre, Lz, inner_length, outer_r);
+    public override Rod girthed(float outer_length)
+        => centred(centre, Lz, inner_r, outer_length);
 }
 
 
-public class Donut : SDF {
-    public Frame centre { get; } // centre point, z along axis of symmetry.
-    public float R { get; } // distance from axis of revoultion.
-    public float r { get; } // half-thickness.
 
-    public Donut(in Frame centre, float R, float r) {
-        assert(R >= 0f);
-        assert(r > 0f);
-        this.centre = centre;
-        this.R = R;
-        this.r = r;
-        if (isinf(R) || isinf(r)) {
-            unbounded_bc_inf();
-        } else {
-            BBox3 bbox = new(
-                new Vec3(-R - r, -R - r, -r),
-                new Vec3(+R + r, +R + r, +r)
-            );
-            set_bounds(centre.to_global_bbox(bbox));
+
+public class Cone : AxialShape<Cone> {
+    public override Frame centre { get; }
+    public override BBox3 bounds { get; }
+    public override float Lz { get; } // >0
+    public float inner_r0 { get; private set; } // >=0
+    public float inner_r1 { get; private set; } // >=0
+    public float outer_r0 { get; private set; } // >=0
+    public float outer_r1 { get; private set; } // >=0
+    // ^ fully defined by those
+
+    // little extra for flavour:
+    public float inner_phi { get; private set; } // (-pi/2, pi/2) U {nan}
+    public float outer_phi { get; private set; } // (-pi/2, pi/2)
+    public Frame? inner_tip { get; private set; } // centre translated.
+    public Frame? outer_tip { get; private set; } // centre translated.
+
+    public float phi { get { assert(isfilled); return outer_phi; } }
+    public Frame? tip { get { assert(isfilled); return outer_tip; } }
+
+    private Vec2 a;
+    private Vec2 b;
+    private Vec2 c;
+    private Vec2 d;
+    private float magab;
+    private float magcd;
+    private Vec2 AB;
+    private Vec2 CD;
+    private Vec2 ABperp;
+    private Vec2 CDperp;
+
+
+    public Cone(in Frame bbase, float phi, KeywordOnly? _=null,
+            float Lz=NAN, float r0=NAN, float r1=NAN) {
+        assert(isnan(Lz) || isnan(r0) || isnan(r1));
+        if (isnan(Lz)) {
+            if (isnan(r0)) {
+                assert(nonnan(r1));
+                assert(phi > 0f);
+                r0 = 0f;
+            }
+            if (isnan(r1)) {
+                assert(nonnan(r0));
+                assert(phi < 0f);
+                r1 = 0f;
+            }
+            Lz = (r1 - r0)/tan(phi);
         }
+        if (isnan(r0) && isnan(r1)) {
+            assert(phi != 0f);
+            if (phi > 0f)
+                r0 = 0f;
+            else
+                r1 = 0f;
+        }
+        r0 = ifnan(r0, r1 - abs(Lz)*tan(phi));
+        r1 = ifnan(r1, r0 + abs(Lz)*tan(phi));
+        assert(nonnan(Lz) && nonnan(r0) && nonnan(r1));
+        Cone o = new(bbase, Lz, r0, r1);
+
+        // c sharp pissing me off.
+        this.centre = o.centre;
+        this.bounds = o.bounds;
+        this.Lz = o.Lz;
+        this.inner_r0 = o.inner_r0;
+        this.inner_r1 = o.inner_r1;
+        this.outer_r0 = o.outer_r0;
+        this.outer_r1 = o.outer_r1;
+        this.inner_phi = o.inner_phi;
+        this.outer_phi = o.outer_phi;
+        this.inner_tip = o.inner_tip;
+        this.outer_tip = o.outer_tip;
+        this.a = o.a;
+        this.b = o.b;
+        this.c = o.c;
+        this.d = o.d;
+        this.magab = o.magab;
+        this.magcd = o.magcd;
+        this.AB = o.AB;
+        this.CD = o.CD;
+        this.ABperp = o.ABperp;
+        this.CDperp = o.CDperp;
     }
 
-    public override float fSignedDistance(in Vec3 p) {
-        Vec3 q = centre / p;
-        float dist = hypot(magxy(q) - R, q.Z);
-        return abs(dist) - r;
-    }
-}
+    public Cone(in Frame bbase, float Lz, float r0, float r1)
+        : this(bbase, Lz, -INF, r0, -INF, r1) {}
 
-
-public class Cone : SDF {
-    public Frame centre { get; } // cone tip, +z towards cone.
-    public float Lz { get; }
-    public float phi { get; }
-    public float? th { get; }
-    protected float cosphi { get; }
-    protected float sinphi { get; }
-
-    public struct AsPhi { public required float v { get; init; } }
-    public static AsPhi as_phi(float phi) => new AsPhi{v=phi};
-
-    public struct AsRadius { public required float v { get; init; } }
-    public static AsRadius as_radius(float r) => new AsRadius{v=r};
-
-    public Cone(in Frame centre, float Lz, float r, float? th=null,
-            bool at_tip=false)
-        : this(centre, Lz, as_phi(atan(r / Lz)), th, at_tip) {}
-    public Cone(in Frame centre, AsRadius r, AsPhi phi, float? th=null,
-            bool at_tip=false)
-        : this(centre, r.v / tan(phi.v), phi, th, at_tip) {}
-    public Cone(in Frame centre, float Lz, AsPhi phi, float? th=null,
-            bool at_tip=true) {
-        assert(Lz > 0f, $"Lz={Lz}");
-        assert(0f < phi.v && phi.v < PI_2, $"phi={phi.v}");
-        this.centre = centre;
-        if (!at_tip)
-            this.centre = this.centre.transz(Lz).flipyz();
+    public Cone(in Frame bbase, float Lz, float inner_r0, float outer_r0,
+            float inner_r1, float outer_r1) {
+        assert(isgood(Lz), $"Lz={Lz}");
+        assert(isgood(inner_r0) || inner_r0 == -INF, $"inner_r0={inner_r0}");
+        assert(isgood(outer_r0), $"outer_r0={outer_r0}");
+        assert(isgood(inner_r1) || inner_r1 == -INF, $"inner_r1={inner_r1}");
+        assert(isgood(outer_r1), $"outer_r1={outer_r1}");
+        assert(abs(Lz) > 0f, $"Lz={Lz}");
+        assert(outer_r0 >= 0f, $"outer_r0={outer_r0}");
+        assert(outer_r1 >= 0f, $"outer_r1={outer_r1}");
+        assert(outer_r0 >= inner_r0,
+                $"inner_r0={inner_r0}, outer_r0={outer_r0}");
+        assert(outer_r1 >= inner_r1,
+                $"inner_r1={inner_r1}, outer_r1={outer_r1}");
+        assert(outer_r0 > 0f || outer_r1 > 0f,
+                $"outer_r0={outer_r0}, outer_r1={outer_r1}");
+        assert((inner_r0 == -INF) == (inner_r1 == -INF),
+                $"inner_r0={inner_r0}, inner_r1={inner_r1}");
+        if (inner_r0 <= 0f && inner_r1 <= 0f) {
+            // collapse to filled.
+            inner_r0 = -INF;
+            inner_r1 = -INF;
+        }
+        this.centre = bbase.transz(Lz/2f);
+        if (Lz < 0f) {
+            swap(ref inner_r0, ref inner_r1);
+            swap(ref outer_r0, ref outer_r1);
+            Lz = -Lz;
+        }
+        assert(Lz > 0f);
         this.Lz = Lz;
-        this.phi = phi.v;
-        this.th = th;
-        this.cosphi = cos(this.phi);
-        this.sinphi = sin(this.phi);
-        float r = Lz * sinphi/cosphi;
-        if (isinf(Lz) || isinf(th ?? 0f)) {
-            unbounded_bc_inf();
-        } else {
-            include_in_bounds(centre * new Vec3(0f, 0f, 0f));
-            include_in_bounds(centre * new Vec3(-r, -r, Lz));
-            include_in_bounds(centre * new Vec3(-r, +r, Lz));
-            include_in_bounds(centre * new Vec3(+r, -r, Lz));
-            include_in_bounds(centre * new Vec3(+r, +r, Lz));
-        }
+        this.inner_r0 = inner_r0;
+        this.inner_r1 = inner_r1;
+        this.outer_r0 = outer_r0;
+        this.outer_r1 = outer_r1;
+        inner_phi = atan2(inner_r1 - inner_r0, Lz);
+        outer_phi = atan2(outer_r1 - outer_r0, Lz);
+        inner_tip = (nonnan(inner_phi) && inner_phi != 0f)
+                  ? centre.transz((-Lz/2f) - inner_r0/tan(inner_phi))
+                  : null;
+        outer_tip = (nonnan(outer_phi) && outer_phi != 0f)
+                  ? centre.transz((-Lz/2f) - outer_r0/tan(outer_phi))
+                  : null;
+        a = new(-Lz/2f, outer_r0);
+        b = new(+Lz/2f, outer_r1);
+        c = new(-Lz/2f, inner_r0);
+        d = new(+Lz/2f, inner_r1);
+        magab = mag(b - a);
+        magcd = mag(d - c);
+        AB = (b - a) / magab;
+        CD = (d - c) / magcd;
+        ABperp = rot90ccw(AB);
+        CDperp = rot90cw(CD);
+
+        BBox3 bbox = new();
+        centre.bbox_include_circle(ref bbox, outer_r0, -Lz/2f);
+        centre.bbox_include_circle(ref bbox, outer_r1, +Lz/2f);
+        bounds = bbox;
     }
+
+    public static Cone centred(in Frame centre, float Lz, float inner_r0,
+            float outer_r0, float inner_r1, float outer_r1) {
+        assert(Lz > 0f, $"Lz={Lz}");
+        return new(centre.transz(-Lz/2f), Lz, inner_r0, outer_r0, inner_r1,
+                outer_r1);
+    }
+
+
+    public Cone flipz() => flipzx(); // axisymmetric.
+
+    public Cone hollowed(float new_inner_r0, float new_inner_r1)
+        => centred(centre, Lz, new_inner_r0, outer_r0, new_inner_r1, outer_r1);
+    public Cone girthed(float new_outer_r0, float new_outer_r1)
+        => centred(centre, Lz, inner_r0, new_outer_r0, inner_r1, new_outer_r1);
+
+    public Cone upto_tip() {
+        if (outer_tip == null)
+            throw new Exception("tip kinda far (infinitely)");
+        float Dz = dot(outer_tip.pos - centre.pos, centre.Z);
+        float new_Lz = abs(Dz) + Lz/2f;
+        float new_inner_r0;
+        float new_outer_r0;
+        float new_inner_r1;
+        float new_outer_r1;
+        if (outer_phi > 0f) {
+            new_inner_r1 = inner_r1;
+            new_outer_r1 = outer_r1;
+            new_inner_r0 = inner_r1 - ifnan(new_Lz*tan(inner_phi), 0f);
+            new_outer_r0 = 0f;
+        } else {
+            new_inner_r0 = inner_r0;
+            new_outer_r0 = outer_r0;
+            new_inner_r1 = inner_r0 + ifnan(new_Lz*tan(inner_phi), 0f);
+            new_outer_r1 = 0f;
+        }
+        return centred(
+            centre.transz(Dz + ((Dz > 0f) ? -new_Lz/2f : new_Lz/2f)),
+            new_Lz,
+            new_inner_r0,
+            new_outer_r0,
+            new_inner_r1,
+            new_outer_r1
+        );
+    }
+
+
+    public static implicit operator Mesh(Cone obj) {
+        List<Vec2> vertices;
+        bool donut;
+        if (obj.isfilled) {
+            vertices = [obj.a*uX2, obj.a, obj.b, obj.b*uX2];
+            donut = false;
+        } else {
+            if (obj.c.Y >= 0f && obj.d.Y >= 0f) {
+                vertices = [obj.c, obj.a, obj.b, obj.d];
+                donut = true;
+            } else {
+                vertices = [
+                    new(obj.c.X, max(0f, obj.c.Y)),
+                    obj.a,
+                    obj.b,
+                    new(obj.d.X, max(0f, obj.d.Y)),
+                ];
+                float intercept_x = cross(obj.c, obj.d) / (obj.d.Y - obj.c.Y);
+                Vec2 intercept = new(intercept_x, 0f);
+                // Add if non-duplicate.
+                if (obj.c.Y < 0f) {
+                    if (!nearto(vertices[^1], intercept))
+                        vertices.Add(intercept);
+                } else {
+                    if (!nearto(vertices[0], intercept))
+                        vertices.Insert(0, intercept);
+                }
+                donut = false;
+            }
+        }
+        // Remove duplicates.
+        if (nearto(vertices[0], vertices[1]))
+            vertices.RemoveAt(0);
+        if (nearto(vertices[^2], vertices[^1]))
+            vertices.RemoveAt(numel(vertices) - 1);
+        assert(numel(vertices) >= 3, "too thin");
+
+        // Make the divs s.t. the longest spacing between vertices is one voxel.
+        int divs = (int)(TWOPI * max(obj.outer_r0, obj.outer_r1) / VOXEL_SIZE);
+        divs = max(20, divs);
+        return Polygon.mesh_revolved(obj.centre, vertices, slicecount: divs,
+                                     donut: donut);
+    }
+
+    public static implicit operator Voxels(Cone obj)
+        => new((Mesh)obj);
 
 
     public override float fSignedDistance(in Vec3 p) {
         Vec3 q = centre / p;
         float r = magxy(q);
         float z = q.Z;
+        Vec2 u = new(z, r);
 
-        // Cone sdf.
-        float dist = cosphi * r - sinphi * z;
+        // Treat as kinda a polygon lmao.
 
-        // Distance along cone face.
-        Vec2 face = new(sinphi, cosphi);
-        Vec2 point = new(r, z);
-        float along = dot(face, point);
-        float length = Lz / cosphi;
-        if (along > length) {
-            along -= length;
-            dist = hypot(dist, along);
-        }
+        Vec2 au = u - a;
+        float t = clamp(dot(au, AB), 0f, magab);
+        float dist_ab = mag(au - AB*t);
+        if (dot(au, ABperp) < 0f)
+            dist_ab = -dist_ab;
 
-        // Make shell if thickness was given.
-        if (th != null)
-            dist = abs(dist + 0.5f*th.Value) - 0.5f*th.Value;
+        Vec2 cu = u - c;
+        float s = clamp(dot(cu, CD), 0f, magcd);
+        float dist_cd = mag(cu - CD*s);
+        if (dot(cu, CDperp) < 0f)
+            dist_cd = -dist_cd;
 
-        // Make flat base.
-        dist = max(dist, z - Lz);
+        float dist_z = max(a.X - z, z - b.X);
 
-        return dist;
+        return max(max(dist_ab, dist_cd), dist_z);
     }
+
+
+    public override Cone with_centre(in Frame newcentre)
+        => centred(newcentre, Lz, inner_r0, outer_r0, inner_r1, outer_r1);
+
+    public override Cone with_Lz(float new_Lz) { // keep phi const.
+        float Dz = (new_Lz - Lz) / 2f;
+        return centred(
+            centre,
+            new_Lz,
+            inner_r0 - Dz*tan(inner_phi),
+            outer_r0 - Dz*tan(outer_phi),
+            inner_r1 + Dz*tan(inner_phi),
+            outer_r1 + Dz*tan(outer_phi)
+        );
+    }
+
+    public override bool isfilled => inner_r0 == -INF;
+    public override Cone _shelled(float th)
+        => centred(
+            centre,
+            Lz,
+            outer_r0 + min(0f, th/cos(outer_phi)),
+            outer_r0 + max(0f, th/cos(outer_phi)),
+            outer_r1 + min(0f, th/cos(outer_phi)),
+            outer_r1 + max(0f, th/cos(outer_phi))
+        );
+    public override Cone _positive()
+        => centred(centre, Lz, -INF, outer_r0, -INF, outer_r1);
+    public override Cone _negative()
+        => centred(centre, Lz, -INF, inner_r0, -INF, inner_r1);
+    public override Cone hollowed(float inner_length)
+        => hollowed(inner_length, inner_length);
+    public override Cone girthed(float outer_length)
+        => girthed(outer_length, outer_length);
 }
+
+
+
+
+
+
+
 
 
 public class Tubing {
@@ -650,51 +1226,49 @@ public class Tubing {
         this.Fr = Fr;
     }
 
-    public Voxels voxels() {
-        Vec3 S0 = points[0];
-        Vec3 S1 = points[1];
-        Vec3 E0 = points[^1];
-        Vec3 E1 = points[^2];
-        float remove_r = 1.5f*(0.5f*ID + th);
-        Pipe S = new(new Frame(S0, S0 - S1), remove_r, remove_r);
-        Pipe E = new(new Frame(E0, E0 - E1), remove_r, remove_r);
-
+    public static implicit operator Voxels(Tubing obj) {
         Voxels vox = new();
         Voxels inner = new();
-        bool hollow = (ID > 1e-3f);
-        bool filleted = (Fr > 1e-3f);
+        bool hollow = obj.ID > 1e-3f;
+        bool filleted = obj.Fr > 1e-3f;
 
         if (hollow) {
-            for (int i=1; i<numel(points); ++i) {
-                Vec3 a = points[i - 1];
-                Vec3 b = points[i];
-                inner.BoolAdd(new Pill(a, b, 0.5f*ID).voxels());
+            for (int i=1; i<numel(obj.points); ++i) {
+                Vec3 a = obj.points[i - 1];
+                Vec3 b = obj.points[i];
+                inner.BoolAdd(new Pill(a, b, 0.5f*obj.ID));
             }
         }
         if (!hollow || !filleted) {
-            for (int i=1; i<numel(points); ++i) {
-                Vec3 a = points[i - 1];
-                Vec3 b = points[i];
-                vox.BoolAdd(new Pill(a, b, 0.5f*ID + th).voxels());
+            for (int i=1; i<numel(obj.points); ++i) {
+                Vec3 a = obj.points[i - 1];
+                Vec3 b = obj.points[i];
+                vox.BoolAdd(new Pill(a, b, 0.5f*obj.ID + obj.th));
             }
         }
         if (filleted) {
             if (hollow)
-                vox = inner.voxDoubleOffset(th + Fr, -Fr);
+                vox = inner.voxDoubleOffset(obj.th + obj.Fr, -obj.Fr);
             else
-                vox = vox.voxDoubleOffset(Fr, -Fr);
+                vox = vox.voxDoubleOffset(obj.Fr, -obj.Fr);
         }
         if (hollow)
             vox.BoolSubtract(inner);
-        vox.BoolSubtract(S.voxels());
-        vox.BoolSubtract(E.voxels());
+
+        Vec3 S0 = obj.points[0];
+        Vec3 S1 = obj.points[1];
+        Vec3 E0 = obj.points[^1];
+        Vec3 E1 = obj.points[^2];
+        float remove_r = 1.5f*(0.5f*obj.ID + obj.th);
+        vox.BoolSubtract(new Rod(new Frame(S0, S0 - S1), remove_r, remove_r));
+        vox.BoolSubtract(new Rod(new Frame(E0, E0 - E1), remove_r, remove_r));
         return vox;
     }
 }
 
 
 
-public class SDFimage {
+public class ImageSignedDist {
 
     private static float[,] euclidean_distance_transform(bool[,] boundary) {
         const float inf = 1e10f;
@@ -876,7 +1450,7 @@ public class SDFimage {
     public float aspect_x_on_y => width / (float)height;
 
     // loads tga image from the given path, expecting (0,0) to be bottom-left.
-    public SDFimage(in string path, int scale=1, float threshold=0.5f,
+    public ImageSignedDist(in string path, int scale=1, float threshold=0.5f,
             bool invert=false, bool flipx=false, bool flipy=false) {
         assert(scale >= 1);
         assert(xextra >= 0);
@@ -896,7 +1470,7 @@ public class SDFimage {
 
     public void fix_unimelb_lmao() {
         float min_th = 7f * scale;
-        int min_x = xextra + 900 * scale;
+        int min_x = xextra + 770 * scale;
 
         int W = sda.GetLength(0);
         int H = sda.GetLength(1);
@@ -959,22 +1533,65 @@ public class SDFimage {
     }
 
 
+    public enum WhichLength {
+        LONGEST,
+        SHORTEST,
+        WIDTH,
+        HEIGHT,
+    }
+    // why does csharp not expose these by default man? or at least have a
+    // shorthand for it.
+    public const WhichLength LONGEST = WhichLength.LONGEST;
+    public const WhichLength SHORTEST = WhichLength.SHORTEST;
+    public const WhichLength WIDTH = WhichLength.WIDTH;
+    public const WhichLength HEIGHT = WhichLength.HEIGHT;
+
+
+    private void get_scale_size(float length, WhichLength which, out float scale,
+            out Vec2 size) {
+        scale = length;
+        size = length * ONE2;
+        switch (which) {
+            case LONGEST:
+                scale /= max(width, height);
+                if (aspect_x_on_y > 1f)
+                    size.Y /= aspect_x_on_y;
+                else
+                    size.X *= aspect_x_on_y;
+                break;
+            case SHORTEST:
+                scale /= min(width, height);
+                if (aspect_x_on_y < 1f)
+                    size.Y /= aspect_x_on_y;
+                else
+                    size.X *= aspect_x_on_y;
+                break;
+            case WIDTH:
+                scale /= width;
+                size.Y /= aspect_x_on_y;
+                break;
+            case HEIGHT:
+                scale /= height;
+                size.X *= aspect_x_on_y;
+                break;
+            default:
+                throw new Exception();
+        }
+    }
+
     public SDFfunction sdf_on_plane(out BBox3 bbox, Frame centre, float Lz,
-            float length /* for longer image dimension */,
+            float length, WhichLength which=LONGEST,
             bool i_understand_sampling_oob_is_illegal_and_i_wont_do_it=false) {
         assert(Lz > 0f);
         assert(length > 0f);
         if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
-            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            centre.get_rotation(out Vec3 rot_about, out float rot_by);
             assert(nearzero(rot_by),
                     "the raw sdf will not work with anything that rotates at "
                   + "all. you will need to use a transformer");
         }
 
-        float scale = length / max(width, height);
-        Vec2 size = (aspect_x_on_y >= 1f)
-                  ? new(length, length / aspect_x_on_y)
-                  : new(length * aspect_x_on_y, length);
+        get_scale_size(length, which, out float scale, out Vec2 size);
 
         bbox = new(rejxy(-size/2f, 0f), rejxy(size/2f, Lz));
         bbox = centre.to_global_bbox(bbox);
@@ -1001,7 +1618,7 @@ public class SDFimage {
     }
 
     public SDFfunction sdf_on_cyl(bool vertical, out BBox3 bbox, Frame centre,
-            float R, float Lr, float length /* for longer image dimension */,
+            float R, float Lr, float length, WhichLength which=LONGEST,
             bool i_understand_sampling_oob_is_illegal_and_i_wont_do_it=false) {
         assert(R > 0f);
         assert(Lr > 0f);
@@ -1011,16 +1628,13 @@ public class SDFimage {
                                 : new Frame(ZERO3, uX3, uY3);
 
         if (!i_understand_sampling_oob_is_illegal_and_i_wont_do_it) {
-            centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+            centre.get_rotation(out Vec3 rot_about, out float rot_by);
             assert(nearzero(rot_by) || nearvert(orient / rot_about),
                     "the raw sdf will not work with anything that rotates away "
                   + "from axial. you will need to use a transformer");
         }
 
-        float scale = length / max(width, height);
-        Vec2 size = (aspect_x_on_y >= 1f)
-                  ? new(length, length / aspect_x_on_y)
-                  : new(length * aspect_x_on_y, length);
+        get_scale_size(length, which, out float scale, out Vec2 size);
 
         float Lz = vertical ? size.Y : size.X; // cylinder z.
         float Ltheta = (vertical ? size.X : size.Y) / R;
@@ -1068,38 +1682,64 @@ public class SDFimage {
     }
 
 
-    public Voxels voxels_on_plane(in Frame centre, float Lz,
-            float length /* for longer image dimension */) {
-        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+    public Voxels voxels_on_plane(in Frame centre, float Lz, float length,
+            WhichLength which=LONGEST) {
+        centre.get_rotation(out Vec3 rot_about, out float rot_by);
         if (!nearzero(rot_by)) {
             // darn its got rotation we need a transformer.
-            SDFfunction sdf = sdf_on_plane(out BBox3 bbox, new(), Lz, length);
+            SDFfunction sdf = sdf_on_plane(
+                out BBox3 bbox,
+                new Frame(),
+                Lz,
+                length,
+                which
+            );
             Voxels vox = new SDFfilled(sdf).voxels(bbox);
             Transformer transformer = new Transformer().to_global(centre);
             return transformer.voxels(vox);
         } else {
             // okie nws just send to sdf.
-            SDFfunction sdf = sdf_on_plane(out BBox3 bbox, centre, Lz, length);
+            SDFfunction sdf = sdf_on_plane(
+                out BBox3 bbox,
+                centre,
+                Lz,
+                length,
+                which
+            );
             return new SDFfilled(sdf).voxels(bbox);
         }
     }
 
     public Voxels voxels_on_cyl(bool vertical, in Frame centre, float R,
-            float Lr, float length /* for longer image dimension */) {
+            float Lr, float length, WhichLength which=LONGEST) {
         Frame orient = vertical ? new Frame()
                                 : new Frame(ZERO3, uX3, uY3);
-        centre.rot_to_local(out Vec3 rot_about, out float rot_by);
+        centre.get_rotation(out Vec3 rot_about, out float rot_by);
 
         // same deal except can take inplane rotations.
         if (!nearzero(rot_by) && !nearvert(orient / rot_about)) {
-            SDFfunction sdf = sdf_on_cyl(vertical, out BBox3 bbox, new Frame(),
-                    R, Lr, length);
+            SDFfunction sdf = sdf_on_cyl(
+                vertical,
+                out BBox3 bbox,
+                new Frame(),
+                R,
+                Lr,
+                length,
+                which
+            );
             Voxels vox = new SDFfilled(sdf).voxels(bbox);
             Transformer transformer = new Transformer().to_global(centre);
             return transformer.voxels(vox);
         } else {
-            SDFfunction sdf = sdf_on_cyl(vertical, out BBox3 bbox, centre, R, Lr,
-                    length);
+            SDFfunction sdf = sdf_on_cyl(
+                vertical,
+                out BBox3 bbox,
+                centre,
+                R,
+                Lr,
+                length,
+                which
+            );
             return new SDFfilled(sdf).voxels(bbox);
         }
     }

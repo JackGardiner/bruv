@@ -12,11 +12,11 @@ namespace br {
 
 public static class Drawing {
     public static PolySlice slice(Voxels vox, Frame slice_at,
-                out Cuboid bounds) {
+                out Bar bounds) {
         return slice(new Mesh(vox), slice_at, out bounds);
     }
 
-    public static PolySlice slice(Mesh mesh, Frame slice_at, out Cuboid bounds) {
+    public static PolySlice slice(Mesh mesh, Frame slice_at, out Bar bounds) {
         Transformer trans = new Transformer().to_local(slice_at);
         mesh = trans.mesh(mesh);
         Voxels vox = new(mesh);
@@ -51,13 +51,15 @@ public static class Drawing {
         return PolySlice.oFromSdf(img, 0f, projxy(origin), VOXEL_SIZE);
     }
 
-    public static void to_file(string path, Voxels vox, in Frame slice_at,
-            out Cuboid bounds, bool filled=true) {
+    public static void to_file(string name, Voxels vox, in Frame slice_at,
+            out Bar bounds, bool filled=true) {
+        string path = fromroot($"exports/draw-{name}.svg");
         PolySlice poly_slice = slice(vox, slice_at, out bounds);
         poly_slice.SaveToSvgFile(path, filled);
     }
-    public static void to_file(string path, Mesh mesh, in Frame slice_at,
-            out Cuboid bounds, bool filled=true) {
+    public static void to_file(string name, Mesh mesh, in Frame slice_at,
+            out Bar bounds, bool filled=true) {
+        string path = fromroot($"exports/draw-{name}.svg");
         PolySlice poly_slice = slice(mesh, slice_at, out bounds);
         poly_slice.SaveToSvgFile(path, filled);
     }

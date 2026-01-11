@@ -16,6 +16,7 @@ public class Slice<T> : IReadOnlyList<T> {
     private int tile;  // >0
     private int rep;   // >0
     private List<T>? mem; // to faciliate .Add
+    private int totalcount; // =count*tile*rep
 
     public Slice() {
         // The only time mem is nonnull (maintained through .Add tho).
@@ -26,6 +27,7 @@ public class Slice<T> : IReadOnlyList<T> {
         step = 1;
         tile = 1;
         rep = 1;
+        totalcount = 0;
     }
 
     public Slice(IReadOnlyList<T> of, KeywordOnly? _=null,
@@ -83,6 +85,7 @@ public class Slice<T> : IReadOnlyList<T> {
         this.tile = tile;
         this.rep = rep;
         this.mem = null;
+        this.totalcount = count*tile*rep;
     }
 
     public static implicit operator Slice<T>(T[] arr)
@@ -110,9 +113,14 @@ public class Slice<T> : IReadOnlyList<T> {
     public T this[int idx] {
         get {
             // Allow negative indexing :).
-            // assert_idx(idx, numel(this), true);
+            assert_idx(idx, numel(this), true);
+            // dude for some reason this numel call was RIDICULOUSLY slow when
+            // `Count` wasn't cached and `numel` wasn't explicitly defined for
+            // Slices. i have no idea why.
+            // oh my fucking god IEnumerable.Count() evaluates every single
+            // element in the enumerable. unreal.
             if (idx < 0)
-                idx += count*tile*rep;
+                idx += numel(this);
             idx /= rep;
             idx %= count;
             idx *= step;
@@ -137,11 +145,12 @@ public class Slice<T> : IReadOnlyList<T> {
 
         mem.Add(item);
         count += 1;
+        totalcount += 1;
     }
 
 
     /* contractual obligations. */
-    public int Count => count*tile*rep;
+    public int Count => totalcount;
     public IEnumerator<T> GetEnumerator() {
         for (int t=0; t<tile; ++t) {
             for (int i=0; i<count; ++i) {
@@ -155,6 +164,10 @@ public class Slice<T> : IReadOnlyList<T> {
     public override string ToString()
         => $"<slice, off={off}, count={count}, step={step}, tile={tile}, "
          + $"rep={rep}, backing: ({backing})>";
+}
+
+public static partial class Br {
+    public static int numel<T>(Slice<T> slice) => slice.Count;
 }
 
 }

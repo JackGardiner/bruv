@@ -1,12 +1,14 @@
-using System.Numerics;
-using Calculations;
 using static br.Br;
 using br;
+using TPIAP = TwoPeasInAPod;
+
+using System.Numerics;
+using Calculations;
 using Leap71.ShapeKernel;
 using PicoGK;
 using ports;
 
-public class Injector : TwoPeasInAPod.Pea
+public class Injector : TPIAP.Pea
 {
     // Initialise the variables
     // coolin channel vars
@@ -403,11 +405,11 @@ public class Injector : TwoPeasInAPod.Pea
         {
             foreach (Vector3 point in points_inj)
             {
-                voxPlate -= new Pipe(
+                voxPlate -= new Rod(
                     new Frame(point).transz(-fInjectorPlateThickness/2),
                     2f * fInjectorPlateThickness,
                     sw_R_n2 + 0.1f // offset to ensure clean bool add
-                ).voxels();
+                );
 
                 // // add ribs
                 // Frame rib_frame = new Frame(point, uY3).transx(-fInjectorPlateThickness/2);
@@ -457,10 +459,8 @@ public class Injector : TwoPeasInAPod.Pea
         foreach (Vector3 aPoint in points_inj!)
         {
             Frame ox_post_frame = new Frame(aPoint).transz(sw_delta_l_n);
-            ox_post_wall += new Pipe(ox_post_frame, sw_l_n1*2, sw_R_1).voxels();
-            ox_post_wall -= cone_roof_lox_crop();
-            ox_post_fluid += new Pipe(ox_post_frame, 2f*sw_l_n1, sw_R_n1).voxels();
-            cone_roof_crop += new Pipe(ox_post_frame, 4f*sw_l_n1, sw_R_1).voxels();
+            ox_post_wall += new Rod(ox_post_frame, sw_l_n1, sw_R_1);
+            ox_post_fluid += new Rod(ox_post_frame, 1.5f*sw_l_n1, sw_R_n1);
 
 
             // build upper/inner swirl chamber
@@ -507,11 +507,11 @@ public class Injector : TwoPeasInAPod.Pea
                 shifted_frame = shifted_frame.rotxy(DEG90);
                 shifted_frame = shifted_frame.transx(0.8f*sw_R_in1); //TODO: fix hack
 
-                inlets += new Pipe(
+                inlets += new Rod(
                     shifted_frame,
                     sw_R_in1*2,
                     sw_r_in1
-                ).voxels();
+                );
             }
 
             voxNextSwirlChamber = voxNextSwirlChamber.voxOffset(1.5f) - voxNextSwirlChamber - inlets;
@@ -523,12 +523,12 @@ public class Injector : TwoPeasInAPod.Pea
                 (aPoint.R()+sw_R_in2)/Or_chnl
             );
             Frame vtx_ch_2_frame = new Frame(aPoint);
-            vtx_ch_2 += new Pipe(
+            vtx_ch_2 += new Rod(
                 vtx_ch_2_frame,
                 2*fShearChamberUpperBound,
                 sw_R_n2,
                 sw_R_n2 + 1f
-            ).voxels();
+            );
 
             // construct tangential swirl inlets (stage 2)
             Voxels inlets_2 = new();
@@ -542,11 +542,11 @@ public class Injector : TwoPeasInAPod.Pea
                 shifted_frame_2 = shifted_frame_2.rotxy(DEG90);
                 shifted_frame_2 = shifted_frame_2.transx(0.8f*sw_R_in2); //TODO: fix hack
 
-                inlets_2 += new Pipe(
+                inlets_2 += new Rod(
                     shifted_frame_2,
                     sw_R_in2*2,
                     sw_r_in2
-                ).voxels();
+                );
             }
 
             vtx_ch_2 -= inlets_2;
@@ -602,32 +602,31 @@ public class Injector : TwoPeasInAPod.Pea
         Voxels voxPort = ASIPort.voxConstruct(new LocalFrame(new Vector3(0, 0, 54)));
         float Or_stainless = 6.35f/2;
 
-        Voxels voxASIWall = new Pipe(
+        Voxels voxASIWall = new Rod(
             new Frame(),
             54f - ASIPort.fGetPilotBoreDiameter(),
             Or_stainless,
             Or_stainless + 4f
-        ).voxels();
+        );
 
-        voxASIFluid = new Pipe(
+        voxASIFluid = new Rod(
             new Frame().transz(fInjectorPlateThickness),
             54f - ASIPort.fGetBoreDepthTotal(),
-            0,
             Or_stainless
-        ).voxels();
+        );
 
-        voxASIFluid += new Pipe(
+        voxASIFluid += new Rod(
             new Frame().transz(1.5f * fInjectorPlateThickness).rotyz(DEG180),
             3f * fInjectorPlateThickness,
             Or_stainless - 1f
-        ).voxels();
+        );
 
-        stainless_tube = new Pipe(
+        stainless_tube = new Rod(
             new Frame().transz(fInjectorPlateThickness),
             54f - fInjectorPlateThickness - 18f,
             Or_stainless - 1f,
             Or_stainless
-            ).voxels();
+        );
 
         voxASIFluid += voxPort;
         Voxels total_wall = voxASIFluid.voxOffset(1.5f) + voxASIWall;
@@ -1002,22 +1001,9 @@ public class Injector : TwoPeasInAPod.Pea
         // Since we're actually viewing a pipe, not a box, scale down a little.
         // overall_bbox.Grow(0.1f);
 
-        // float lookat_theta = torad(135f);
-        // float lookat_phi = torad(105f);
-        float lookat_theta = torad(180f);
-        float lookat_phi = torad(90f);
-        Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
-        Geez.lookat(zoom: 95);
-
-        void screenshot(string name) {
-            using (Geez.remember_current_layout()) {
-                using var _ = Geez.ViewerHack.locked();
-
-                Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
-                Geez.background_colour = new ColorFloat("#FFFFFF");
-                Geez.screenshot(name);
-            }
-        }
+        Geez.Screenshotta screenshotta = new(
+            new Geez.ViewAs(overall_bbox, theta: torad(135f), phi: torad(105f))
+        );
 
         Geez.Cycle key_part = new();
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
@@ -1035,14 +1021,14 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_plate.like())
             key_plate <<= Geez.voxels(voxInjectorPlate);
         Library.Log("created plate.");
-        screenshot("injector_plate.png");
+        screenshotta.take("injector-plate");
 
         Voxels cone_roof = voxels_cone_roof();
         part += cone_roof;
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof);
         Library.Log("created cone roof.");
-        screenshot("injector_cone_roof.png");
+        screenshotta.take("injector-cone-roof");
 
         Voxels attic = voxels_attic();
         part += attic;
@@ -1051,14 +1037,14 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof - attic);
         Library.Log("created attic.");
-        screenshot("injector_attic.png");
+        screenshotta.take("injector-attic");
 
         Voxels supports = voxels_supports();
         part += supports;
         using (key_supports.like())
             key_supports <<= Geez.voxels(supports - voxInjectorPlate - cone_roof - attic);
         Library.Log("created supports.");
-        screenshot("injector_supports.png");
+        screenshotta.take("injector-supports");
 
         Voxels asi = voxels_asi(out Voxels asi_fluid, out Voxels stainless_tube);
         part += asi;
@@ -1071,7 +1057,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_plate.like())
             key_plate <<= Geez.voxels(voxInjectorPlate - asi);
         Library.Log("created ASI.");
-        screenshot("injector_asi.png");
+        screenshotta.take("injector-asi");
 
         Voxels flange = voxels_flange();
         part += flange;
@@ -1082,7 +1068,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic - flange);
         Library.Log("created flange.");
-        screenshot("injector_flange.png");
+        screenshotta.take("injector-flange");
 
         Voxels gussets = voxels_gussets(out Voxels voxStrutHoles);
         part += gussets;
@@ -1093,7 +1079,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof - gussets - voxStrutHoles);
         Library.Log("created gussets.");
-        screenshot("injector_gussets.png");
+        screenshotta.take("injector-gussets");
 
         Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets, out Voxels cone_roof_crop);
         part += inj_elements;
@@ -1105,7 +1091,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_cone_roof.like())
             key_cone_roof <<= Geez.voxels(cone_roof - inj_elements - voxOxPostFluid - cone_roof_crop);
         Library.Log("created injector elements.");
-        screenshot("injector_injector_elements.png");
+        screenshotta.take("injector-injector-elements");
 
         Voxels ports = voxels_ports(out Voxels ports_fluids);
         part += ports;
@@ -1118,7 +1104,7 @@ public class Injector : TwoPeasInAPod.Pea
         using (key_plate.like())
             key_plate <<= Geez.voxels(voxInjectorPlate - ports_fluids);
         Library.Log("created ports.");
-        screenshot("injector_ports.png");
+        screenshotta.take("injector-ports");
 
         // external fillets
         Voxels voxCropZone = part - cone_roof_upper_crop() - voxInnerPipeCrop!;
@@ -1134,20 +1120,20 @@ public class Injector : TwoPeasInAPod.Pea
         Library.Log("created external fillets.");
 
         // internal fillets
-        Voxels asi_base_crop = new Pipe(
+        Voxels asi_base_crop = new Rod(
             new Frame().transz(fInjectorPlateThickness/2f),
             15,
             15
-        ).voxels();
+        );
         Voxels asi_base_fillet = part & asi_base_crop;
         asi_base_fillet.OverOffset(3f);
         part += asi_base_fillet;
 
-        Voxels asi_middle_crop = new Pipe(
+        Voxels asi_middle_crop = new Rod(
             new Frame().transz(10f),
             10f,
             15f
-        ).voxels();
+        );
         Voxels asi_middle_fillet = part & asi_middle_crop;
         asi_middle_fillet.OverOffset(1f);
         part += asi_middle_fillet;
@@ -1166,7 +1152,7 @@ public class Injector : TwoPeasInAPod.Pea
 
         Geez.clear();
         key_part.voxels(part);
-        screenshot("injector_part.png");
+        screenshotta.take("injector-part");
 
 
         Library.Log("Baby made.");
@@ -1187,9 +1173,15 @@ public class Injector : TwoPeasInAPod.Pea
         }
     }
 
+    public Voxels? cutaway(in Voxels part) {
+        Voxels cutted = Sectioner.pie(0f, -1.5f*PI).cut(part);
+        Geez.voxels(cutted);
+        return cutted;
+    }
+
     public void drawings(in Voxels part) {
         Geez.voxels(part);
-        Cuboid bounds;
+        Bar bounds;
 
         Frame frame_xy = new(3f*VOXEL_SIZE*uZ3, uX3, uZ3);
         print("cross-sectioning xy...");
@@ -1200,7 +1192,7 @@ public class Injector : TwoPeasInAPod.Pea
             out bounds
         );
         using (Geez.like(colour: COLOUR_BLUE))
-            Geez.cuboid(bounds, divide_x: 3, divide_y: 3);
+            Geez.bar(bounds, divide_x: 3, divide_y: 3);
 
         Frame frame_yz = new(ZERO3, uY3, uX3);
         print("cross-sectioning yz...");
@@ -1208,9 +1200,10 @@ public class Injector : TwoPeasInAPod.Pea
             fromroot($"exports/injector_yz.svg"),
             part,
             frame_yz,
-            out bounds);
+            out bounds
+        );
         using (Geez.like(colour: COLOUR_GREEN))
-            Geez.cuboid(bounds, divide_x: 3, divide_y: 4);
+            Geez.bar(bounds, divide_x: 3, divide_y: 4);
 
         print();
     }
@@ -1223,6 +1216,7 @@ public class Injector : TwoPeasInAPod.Pea
     public string name => "injector";
 
     public void set_modifiers(int mods) {
+        _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods == 0)
             return;
         throw new Exception("yeah nah dunno what it is");
