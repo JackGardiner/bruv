@@ -444,7 +444,7 @@ public class Injector : TwoPeasInAPod.Pea
         return voxPlate;
     }
 
-    protected Voxels vox_inj_elements(out Voxels ox_post_fluid, out Voxels swirl_inlets)
+    protected Voxels vox_inj_elements(out Voxels ox_post_fluid, out Voxels swirl_inlets, out Voxels cone_roof_crop)
     {
         // iterate through each injector element and create wall section and fluid section
         Voxels ox_post_wall = new();
@@ -452,12 +452,15 @@ public class Injector : TwoPeasInAPod.Pea
         Voxels vtx_ch_2 = new();
         ox_post_fluid = new();
         swirl_inlets = new();
+        cone_roof_crop = new();
 
         foreach (Vector3 aPoint in points_inj!)
         {
             Frame ox_post_frame = new Frame(aPoint).transz(sw_delta_l_n);
-            ox_post_wall += new Pipe(ox_post_frame, sw_l_n1, sw_R_1).voxels();
-            ox_post_fluid += new Pipe(ox_post_frame, 1.5f*sw_l_n1, sw_R_n1).voxels();
+            ox_post_wall += new Pipe(ox_post_frame, sw_l_n1*2, sw_R_1).voxels();
+            ox_post_wall -= cone_roof_lox_crop();
+            ox_post_fluid += new Pipe(ox_post_frame, 2f*sw_l_n1, sw_R_n1).voxels();
+            cone_roof_crop += new Pipe(ox_post_frame, 4f*sw_l_n1, sw_R_1).voxels();
 
 
             // build upper/inner swirl chamber
@@ -665,7 +668,7 @@ public class Injector : TwoPeasInAPod.Pea
             //TODO: add bridging rectangular prism here
         }
         Voxels voxFlange = oFlangeBase.voxConstruct() + voxBoltClearances;
-        voxFlange += voxFlange.voxOverOffset(8f); // fillet concave only
+        voxFlange += voxFlange.voxOverOffset(3f); // fillet concave only
         //Sh.PreviewVoxels(voxFlange, Cp.clrRandom(), 0.2f);
         BBox3 oVerticalTrimBox = new BBox3(
             -2*pm.flange_outer_radius,
@@ -980,6 +983,8 @@ public class Injector : TwoPeasInAPod.Pea
 
     public Voxels voxels()
     {
+
+        Thread.Sleep(3000);
         Voxels part = new();
         report();
 
@@ -991,15 +996,18 @@ public class Injector : TwoPeasInAPod.Pea
         const float EXTRA = 10f;
         float overall_Mz = overall_Lz/2f - EXTRA;
         BBox3 overall_bbox = new(
-            new Vector3(-overall_Lr, -overall_Lr, overall_Mz - overall_Lz/2f),
+            new Vector3(-overall_Lr, -overall_Lr, overall_Mz),
             new Vector3(+overall_Lr, +overall_Lr, overall_Mz + overall_Lz/2f)
         );
         // Since we're actually viewing a pipe, not a box, scale down a little.
-        overall_bbox.Grow(-0.6f*overall_Lr);
+        // overall_bbox.Grow(0.1f);
 
-        float lookat_theta = torad(135f);
-        float lookat_phi = torad(105f);
+        // float lookat_theta = torad(135f);
+        // float lookat_phi = torad(105f);
+        float lookat_theta = torad(180f);
+        float lookat_phi = torad(90f);
         Geez.lookat(overall_bbox, lookat_theta, lookat_phi);
+        Geez.lookat(zoom: 95);
 
         void screenshot(string name) {
             using (Geez.remember_current_layout()) {
@@ -1020,6 +1028,7 @@ public class Injector : TwoPeasInAPod.Pea
         Geez.Cycle key_attic = new(colour: COLOUR_GREEN);
         Geez.Cycle key_inj_elements = new(colour: COLOUR_RED);
         Geez.Cycle key_ports = new(colour: Cp.clrRandom());
+        Geez.Cycle key_supports = new(colour: Cp.clrRandom());
 
         Voxels voxInjectorPlate = voxels_injector_plate(out Voxels fc_fluid);
         part += voxInjectorPlate;
@@ -1039,19 +1048,28 @@ public class Injector : TwoPeasInAPod.Pea
         part += attic;
         using (key_attic.like())
             key_attic <<= Geez.voxels(attic);
+        using (key_cone_roof.like())
+            key_cone_roof <<= Geez.voxels(cone_roof - attic);
         Library.Log("created attic.");
         screenshot("injector_attic.png");
 
         Voxels supports = voxels_supports();
-        Geez.voxels(supports, Cp.clrRandom());
         part += supports;
+        using (key_supports.like())
+            key_supports <<= Geez.voxels(supports - voxInjectorPlate - cone_roof - attic);
         Library.Log("created supports.");
         screenshot("injector_supports.png");
 
         Voxels asi = voxels_asi(out Voxels asi_fluid, out Voxels stainless_tube);
         part += asi;
+        using (key_attic.like())
+            key_attic <<= Geez.voxels(attic - asi);
+        using (key_cone_roof.like())
+            key_cone_roof <<= Geez.voxels(cone_roof - asi);
         using (key_asi.like())
-            key_asi <<= Geez.voxels(asi);
+            key_asi <<= Geez.voxels(asi - asi_fluid);
+        using (key_plate.like())
+            key_plate <<= Geez.voxels(voxInjectorPlate - asi);
         Library.Log("created ASI.");
         screenshot("injector_asi.png");
 
@@ -1059,6 +1077,10 @@ public class Injector : TwoPeasInAPod.Pea
         part += flange;
         using (key_flange.like())
             key_flange <<= Geez.voxels(flange);
+        using (key_cone_roof.like())
+            key_cone_roof <<= Geez.voxels(cone_roof - flange);
+        using (key_attic.like())
+            key_attic <<= Geez.voxels(attic - flange);
         Library.Log("created flange.");
         screenshot("injector_flange.png");
 
@@ -1066,15 +1088,22 @@ public class Injector : TwoPeasInAPod.Pea
         part += gussets;
         using (key_gusset.like())
             key_gusset <<= Geez.voxels(gussets - voxStrutHoles);
+        using (key_attic.like())
+            key_attic <<= Geez.voxels(attic - gussets - voxStrutHoles);
+        using (key_cone_roof.like())
+            key_cone_roof <<= Geez.voxels(cone_roof - gussets - voxStrutHoles);
         Library.Log("created gussets.");
         screenshot("injector_gussets.png");
 
-        Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets);
+        Voxels inj_elements = vox_inj_elements(out Voxels voxOxPostFluid, out Voxels swirl_inlets, out Voxels cone_roof_crop);
         part += inj_elements;
         part -= voxOxPostFluid;
+        // part -= cone_roof_crop;
         part -= swirl_inlets;
         using (key_inj_elements.like())
             key_inj_elements <<= Geez.voxels(inj_elements - voxOxPostFluid);
+        using (key_cone_roof.like())
+            key_cone_roof <<= Geez.voxels(cone_roof - inj_elements - voxOxPostFluid - cone_roof_crop);
         Library.Log("created injector elements.");
         screenshot("injector_injector_elements.png");
 
@@ -1082,6 +1111,12 @@ public class Injector : TwoPeasInAPod.Pea
         part += ports;
         using (key_ports.like())
             key_ports <<= Geez.voxels(ports - ports_fluids);
+        using (key_attic.like())
+            key_attic <<= Geez.voxels(attic - ports_fluids);
+        using (key_gusset.like())
+            key_gusset <<= Geez.voxels(gussets - ports_fluids);
+        using (key_plate.like())
+            key_plate <<= Geez.voxels(voxInjectorPlate - ports_fluids);
         Library.Log("created ports.");
         screenshot("injector_ports.png");
 
@@ -1120,7 +1155,7 @@ public class Injector : TwoPeasInAPod.Pea
         Library.Log("created internal fillets.");
 
         part -= ports_fluids;
-        part -= voxOxPostFluid;
+        // part -= voxOxPostFluid;
         part -= swirl_inlets;
         part -= asi_fluid;
         part -= fc_fluid;
