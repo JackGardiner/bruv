@@ -18,6 +18,17 @@ public static class Scoped {
         public void Dispose() {}
     }
     public static IDisposable do_nothing() => new DoNothing();
+
+    public class Locked : IDisposable {
+        protected object _lock { get; }
+
+        public Locked(object lockme) {
+            _lock = lockme;
+            Monitor.Enter(_lock);
+        }
+        public void Dispose() => Monitor.Exit(_lock);
+    }
+    public static IDisposable locked(object lockme) => new Locked(lockme);
 }
 
 }

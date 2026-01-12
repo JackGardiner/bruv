@@ -239,6 +239,19 @@ public static partial class Br {
         return m;
     }
 
+    public static int sum(params int[] vs) {
+        int m = 0;
+        foreach (int v in vs)
+            m += v;
+        return m;
+    }
+    public static int prod(params int[] vs) {
+        int m = 1;
+        foreach (int v in vs)
+            m *= v;
+        return m;
+    }
+
     public static float sum(params float[] vs) {
         float m = 0f;
         foreach (float v in vs)
@@ -255,6 +268,24 @@ public static partial class Br {
         assert(numel(vs) > 0);
         return sum(vs) / numel(vs);
     }
+
+    public static int[] cumsum(params int[] vs) {
+        int[] m = new int[numel(vs)];
+        if (numel(vs) > 0)
+            m[0] = vs[0];
+        for (int i=1; i<numel(vs); ++i)
+            m[i] = m[i - 1] + vs[i];
+        return m;
+    }
+    public static int[] cumprod(params int[] vs) {
+        int[] m = new int[numel(vs)];
+        if (numel(vs) > 0)
+            m[0] = vs[0];
+        for (int i=1; i<numel(vs); ++i)
+            m[i] = m[i - 1] * vs[i];
+        return m;
+    }
+
 
     public static float round(float a) => float.Round(a);
     public static float floor(float a) => float.Floor(a);
@@ -420,11 +451,9 @@ public static partial class Br {
     public static float argbeta(Vec2 a, Vec2 b, float ifzero=PI_4)
         => argbeta(rejxy(a), rejxy(b), ifzero);
     public static float argbeta(Vec3 a, Vec3 b, float ifzero=PI_4) {
-        float maga = mag(a);
-        float magb = mag(b);
-        if (nearzero(maga) || nearzero(magb))
+        if (nearzero(a) || nearzero(b))
             return ifzero;
-        return acos(clamp(dot(a, b) / maga / magb, -1f, 1f));
+        return atan2(mag(cross(a, b)), dot(a, b));
     }
 
     public static Vec2 normalise(Vec2 a) {

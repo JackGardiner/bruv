@@ -494,19 +494,23 @@ public static class Geez {
         /* time between "frames"/updates. */
         private static System.Diagnostics.Stopwatch stopwatch = new();
 
-        /* bounding box properties of canonical objects. */
-        public static Vec3 size { get; private set; } = 100f*ONE3;
-        public static Vec3 centre { get; private set; } = ZERO3;
-        public static bool explicit_scene = false;
-
-        public static bool resize() {
-            // Use the reaaal bounding box (which picogk doesnt know about).
-            if (!Geez._the_box_that_bounds_them_all(out BBox3 bbox))
-                return false;
-            set_size(bbox.vecSize(), expl: true);
-            set_centre(bbox.vecCenter(), expl: true);
-            return true;
+        /* when toggling from low->high */
+        private static bool _explicit = false;
+        private static bool _explicit_le = false;
+        public static bool explicit_scene {
+            get => _explicit;
+            set {
+                _explicit_le = value && (!_explicit || _explicit_le);
+                _explicit = value;
+            }
         }
+
+        /* bounding box properties of canonical objects. */
+        public static Vec3 dflt_size => 10f*ONE3;
+        public static Vec3 dflt_centre => ZERO3;
+        public static Vec3 size { get; private set; } = dflt_size;
+        public static Vec3 centre { get; private set; } = dflt_centre;
+
         public static void set_size(Vec3 newsize, bool expl=true) {
             assert(isgood(newsize));
             explicit_scene |= expl;
@@ -555,8 +559,8 @@ public static class Geez {
            we continuously read theirs purely for detecting scrolling input. */
         public static float zoom { get; private set; } = 1f;
         private static Snapper snap_zoom = new(40f, 1f, false);
-        public static float min_zoom => mag(size) * 0.01f;
-        public static float max_zoom => mag(size) * 10f;
+        public static float min_zoom => mag(size) * 0.0001f;
+        public static float max_zoom => mag(size) * 1000f;
         public static float orbit_zoom_sensitivity => 0.02f;
         public static float free_zoom_sensitivity  => 0.03f;
         // We leave picogk's zoom at this value and periodically check how far
@@ -683,8 +687,8 @@ public static class Geez {
             float t = (zoom - min_zoom) / (max_zoom - min_zoom);
             // Concentrate at [s]lower end.
             t = sqrt(t);
-            float scale_up   = fov/PI/3f;
-            float scale_down = (1f - fov/PI)/3f;
+            float scale_up   = fov/PI/2f;
+            float scale_down = (1f - fov/PI)/2f;
             float low  = (0f - fov)*scale_down;
             float high = (PI - fov)*scale_up;
             return lerp(low, high, t);
@@ -717,8 +721,9 @@ public static class Geez {
             = new(25f, ortho, false, rtol: 0f, atol: 1e-3f);
         private static bool extra_focal_further = false;
         public static float get_focal_dist(float with_zoom=NAN)
-            => ifnan(with_zoom, zoom) * 0.9f /* may rescale */;
-        public static float get_ortho_dist() => max_zoom * 10f;
+            => ifnan(with_zoom, zoom) * 1.5f /* may rescale */;
+        public static float get_ortho_dist(float with_zoom=NAN)
+            => ifnan(with_zoom, zoom) * 12f;
 
         public static void set_orbit(bool neworbit, bool about_focal,
                 bool instant=false, bool expl=true) {
@@ -799,8 +804,8 @@ public static class Geez {
 
             stopwatch.Stop();
 
-            size = 100f*ONE3;
-            centre = ZERO3;
+            size = dflt_size;
+            centre = dflt_centre;
             explicit_scene = false;
 
             lemme_get_a_word_in_edgewise();
@@ -833,8 +838,6 @@ public static class Geez {
         }
 
         public static void reframe(bool instant=false) {
-            if (!resize())
-                return; // cooked it.
             set_orbit(true, true, instant, expl: false);
             set_zoom(mag(size), instant, expl: false);
             set_pos(centre, instant, expl: false);
@@ -910,21 +913,20 @@ public static class Geez {
             }
 
 
-            // Recalc the scene if not explicit and there are objects.
-            if (!explicit_scene && resize()) {
-                // We did recalc, which means this is the first render after an
-                // empty scene so lets go straight to centre and ortho.
-                set_orbit(true, false, instant: true, expl: false);
-                set_zoom(mag(size), instant: true, expl: false);
-                set_pos(centre, instant: true, expl: false);
-            }
-
-
             // Decrease lock timer.
             locked_for = max(locked_for - Dt, 0f);
 
             // dont do movement when locked.
             bool islocked = locked_for > 0f;
+
+
+            // Leading-edge explicit, reset straight to centre ortho.
+            if (!islocked && _explicit_le) {
+                set_orbit(true, false, instant: true, expl: false);
+                set_zoom(mag(size), instant: true, expl: false);
+                set_pos(centre, instant: true, expl: false);
+                _explicit_le = false;
+            }
 
 
             // Peek if we've had any scroll input.
@@ -961,25 +963,42 @@ public static class Geez {
                                       orbit_zoom_sensitivity,
                                       ortho);
                     float Dzoom = sens * Dscroll;
+                    if (isset(held, KEY_CTRL))
+                        Dzoom *= 1.8f;
                     // Rescale zoom to be size-aware and also dont use the linear
                     // scaling that picogk uses.
                     Dzoom *= 5f*mag(size)*log(zoom/mag(size) + 1f);
                     set_zoom(future_zoom + Dzoom, expl: false);
                 }
 
-                { // Rotate on mouse move.
+                { // Rotate/pan on mouse move.
                     float sens = lerp(free_looking_sensitivity,
                                       orbit_looking_sensitivity,
                                       ortho);
-                    float Dtheta = sens * -Dmx;
-                    float Dphi   = sens * +Dmy;
-                    // Dont allow mouse movement if that angle is snapping.
-                    if (nonnan(snap_ang.target_theta))
-                        Dtheta = 0f;
-                    if (nonnan(snap_ang.target_phi))
-                        Dphi = 0f;
-                    theta += Dtheta;
-                    phi += Dphi;
+                    if (isset(held, KEY_ALT)) {
+                        // do pan.
+                        sens *= get_focal_dist();
+                        sens *= 0.12f;
+                        float Du = sens * +Dmx;
+                        float Dv = sens * +Dmy;
+                        Frame look = get_looking();
+                        Vec3 Dpos = Du*look.Y + Dv*look.Z;
+                        if (nonnan(snap_pos.target3.X)) Dpos.X = 0f;
+                        if (nonnan(snap_pos.target3.Y)) Dpos.Y = 0f;
+                        if (nonnan(snap_pos.target3.Z)) Dpos.Z = 0f;
+                        pos += Dpos;
+                    } else {
+                        // do rotate.
+                        float Dtheta = sens * -Dmx;
+                        float Dphi   = sens * +Dmy;
+                        // Dont allow mouse movement if that angle is snapping.
+                        if (nonnan(snap_ang.target_theta))
+                            Dtheta = 0f;
+                        if (nonnan(snap_ang.target_phi))
+                            Dphi = 0f;
+                        theta += Dtheta;
+                        phi += Dphi;
+                    }
                 }
 
                 { // Snap rotate.
@@ -1024,10 +1043,14 @@ public static class Geez {
                 }
                 // Pos/view scene centre snap.
                 if (isset(held, KEY_R)) {
-                    if (isset(held, KEY_QER_CTRL) == orbit)
-                        snap_ang_to_centre();
-                    else
+                    if (isset(held, KEY_QER_CTRL)) {
+                        set_orbit(true, true, expl: false);
+                        set_zoom(mag(size), expl: false);
+                    }
+                    if (orbit)
                         snap_pos_to_centre();
+                    else
+                        snap_ang_to_centre();
                 }
             }
 
@@ -1101,7 +1124,7 @@ public static class Geez {
             if (get_a_word_in_edgewise > 0) {
                 --get_a_word_in_edgewise;
                 Perv.invoke(PICOGK_VIEWER, "RecalculateBoundingBox");
-                PICOGK_VIEWER.RequestUpdate();
+                // requestupdate message should/must be next in the queue.
                 return;
             } else {
                 Perv.set(PICOGK_VIEWER, "m_oBBox", new BBox3());
@@ -1138,8 +1161,8 @@ public static class Geez {
             if (ortho >= 1f - snap_ortho.atol) {
                 float ortho_dist = get_ortho_dist();
 
-                near = -ortho_dist;
-                far  = +ortho_dist;
+                near = -0.5f*ortho_dist;
+                far  = +0.5f*ortho_dist;
                 // thats farkin heaps deep enough jeff.
 
                 // leave camera.
@@ -1342,20 +1365,19 @@ public static class Geez {
             Vec3 line_point = ZERO3;
             Vec3 line_dir = future_orient.Z;
 
-            float z = dot(pos, line_dir);
             float newz = NAN;
             if (orbit) {
                 // try to do a cheeky plane line intersection.
-                Vec3 point = future_pos;
-                Vec3 normal = get_future_looking().Z;
+                Vec3 plane_point = future_pos;
+                Vec3 plane_normal = get_future_looking().Z;
                 // If looking perfectly vertical, cant do intersection.
-                float denom = dot(normal, line_dir);
-                if (!nearzero(denom)) {
-                    newz = dot(line_point, line_dir)
-                         + dot(normal, point - line_point) / denom;
-                }
+                float denom = dot(plane_normal, line_dir);
+                if (!nearzero(denom))
+                    newz = dot(plane_normal, plane_point - line_point) / denom;
                 // else leave nan.
             }
+
+            float z = dot(future_pos - line_point, line_dir);
             // If not moving at all, dont target.
             if (nearto(newz, z))
                 newz = NAN;
@@ -1363,16 +1385,20 @@ public static class Geez {
 
             Vec3 newpos = line_point;
             // mm need to preserve the nan-ness. requires a clean element assign.
-            if (nearpara(line_dir, uX3))
-                newpos.X = newz;
-            else if (nearpara(line_dir, uY3))
-                newpos.Y = newz;
-            else if (nearpara(line_dir, uZ3))
-                newpos.Z = newz;
-            else {
+            if (isnan(newz)) {
+                if (nearpara(line_dir,  uX3))
+                    newpos.X = NAN;
+                else if (nearpara(line_dir,  uY3))
+                    newpos.Y = NAN;
+                else if (nearpara(line_dir,  uZ3))
+                    newpos.Z = NAN;
+                else
+                    newz = z; // fallthrough.
+            }
+            if (nonnan(newz)) {
                 // otherwise dw about letting glide up/down local z. our snapper
                 // cant handle it (rn).
-                newpos += line_dir * ifnan(newz - z, 0f);
+                newpos += line_dir * newz;
             }
             set_pos(newpos, instant, false);
         }
@@ -1520,12 +1546,10 @@ public static class Geez {
                 return true;
               case VEK.Key_Backspace:
                 if (pressed && !islocked) {
-                    if (ctrl) {
+                    if (ctrl)
                         reset();
-                    } else {
+                    else
                         lemme_get_a_word_in_edgewise();
-                        _ = resize();
-                    }
                 }
                 return true;
 
@@ -1626,10 +1650,11 @@ public static class Geez {
         print("[Geez] using a new hacked-in camera, keybinds:");
         print("  RESETTING");
         print("   - equals (+/=)     reframe view to full upright scene");
-        print("   - backspace        recalc scene (+fix window aspect ratio)");
-        print("   - ctrl+backspace   reset view (+fix window aspect ratio)");
+        print("   - backspace        fix window aspect ratio");
+        print("               [ctrl] also reset view");
         print("  VIEW");
         print("   - click+drag       rotate view");
+        print("                [alt] instead pan view");
         print("   - Z/X              roll view left/right");
         print("               [ctrl] snaps to axis aligned");
         print("   - C                roll to upright");
@@ -1645,6 +1670,7 @@ public static class Geez {
         print("  ZOOM/SPEED/FOV");
         print("   - scroll up/down   move slower/faster");
         print("              [orbit] also zooms in/out");
+        print("               [ctrl] faster zoom");
         print("   - F/G       [free] dial up/down fov");
         print("  SNAPPING");
         print("   - Q                snap view along nearest axis");
@@ -1656,7 +1682,7 @@ public static class Geez {
         print("   - R                snap to scene centre");
         print("              [orbit] snaps pivot point");
         print("               [free] snaps view");
-        print("               [ctrl] swap pivot point/view target");
+        print("               [ctrl] force ortho and zoom to fit scene");
         print("  VIEWING OPTIONS");
         print("   - T                toggle transparency");
         print("   - Y                toggle background dark-mode");
@@ -1739,9 +1765,6 @@ public static class Geez {
     public static IDisposable remember_setup() {
         Colour bgcol = background_colour;
         bool transparent = Geez.transparent;
-        bool expl    = ViewerHack.explicit_scene;
-        Vec3 size    = ViewerHack.size;
-        Vec3 centre  = ViewerHack.centre;
         bool orbit   = ViewerHack.orbit;
         float zoom   = ViewerHack.future_zoom;
         Vec3 pos     = ViewerHack.future_pos;
@@ -1752,9 +1775,6 @@ public static class Geez {
         return Scoped.on_leave(() => {
             background_colour = bgcol;
             Geez.transparent = transparent;
-            ViewerHack.explicit_scene = expl;
-            ViewerHack.set_size(size,                        expl: false);
-            ViewerHack.set_centre(centre,                    expl: false);
             ViewerHack.set_orbit(orbit, false, instant:true, expl: false);
             ViewerHack.set_zoom(zoom,          instant:true, expl: false);
             ViewerHack.set_pos(pos,            instant:true, expl: false);
@@ -1842,54 +1862,127 @@ public static class Geez {
 
 
 
+    // Represents a collection of some rendered objects.
+    public struct Key {
+        public int value { get; }
+        public Key(int v) { value = v; }
+        public static implicit operator int(Key k) => k.value;
+    }
+    public static Key BLANK => new(0);
+    public static Key NOOP => new(-1);
 
-    private static Dictionary<int, object> _geezed = new();
-    private static int _next = 1; // must leave <=0 as illegal.
-    private static int _track(in List<PolyLine> lines, in List<Mesh> meshes) {
-        // nothing added during lockdown.
-        if (lockdown)
-            return BLANK;
-        int key;
-        lock (_geezed) {
-            key = _next++;
-            _geezed.Add(key, (lines, meshes));
-        }
-        return key;
+
+    private static
+        OrderedDictionary<Key, (List<PolyLine>, List<Mesh>, BBox3)> _geezed
+        = new();
+    private static Key _next = new(1); // must leave <=0 as illegal.
+    /* CALLER MUST LOCK: */
+    private static BBox3 _current_bbox() {
+        if (numel(_geezed) == 0)
+            return new();
+        return _geezed.Last().Value.Item3;
     }
-    private static int _track(in Slice<int> group) {
-        if (lockdown)
-            return BLANK;
-        int key;
-        lock (_geezed) {
-            key = _next++;
-            _geezed.Add(key, group);
+    /* CALLER MUST LOCK: */
+    private static Key _push(in List<PolyLine> lines, in List<Mesh> meshes) {
+        if (lockdown) {
+            assert(numel(lines) == 0);
+            assert(numel(meshes) == 0);
         }
-        return key;
-    }
-    private static bool _the_box_that_bounds_them_all(out BBox3 bbox) {
-        bbox = new();
-        bool nonempty = false;
-        lock (_geezed) {
-            foreach (object item in _geezed.Values) {
-                if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
-                    foreach (Mesh mesh in meshes) {
-                        if (mesh.nVertexCount() > 0
-                                && mesh.nTriangleCount() > 0) {
-                            nonempty = true;
-                            bbox.Include(mesh.oBoundingBox());
-                        }
-                    }
-                    foreach (PolyLine line in lines) {
-                        if (line.nVertexCount() > 0) {
-                            nonempty = true;
-                            bbox.Include(line.oBoundingBox());
-                        }
-                    }
-                }
+
+        BBox3 bbox = _current_bbox();
+
+        if (numel(meshes) > 0) {
+            int group_id = _material();
+            foreach (Mesh mesh in meshes) {
+                PICOGK_VIEWER.Add(mesh, group_id);
+                bbox.Include(mesh.oBoundingBox());
             }
         }
-        return nonempty;
+        if (numel(lines) > 0) {
+            // setup dummy group to fix picogk bug. basically they forget to set
+            // the metallic and roughness uniforms when rendering lines, so we
+            // render a dummy mesh just before them which correctly sets
+            // metallic and roughness and then "leaks" these values into the line
+            // render.
+            int dummy_id = _material(fixbug: true);
+            PICOGK_VIEWER.Add(new Mesh(), dummy_id);
+            int group_id = _material();
+            foreach (PolyLine line in lines) {
+                PICOGK_VIEWER.Add(line, group_id);
+                bbox.Include(line.oBoundingBox());
+            }
+        }
+
+        Key key = _next;
+        _next = new(_next.value + 1);
+        _geezed.Add(key, (lines, meshes, bbox));
+
+        ViewerHack.set_size(bbox.vecSize());
+        ViewerHack.set_centre(bbox.vecCenter());
+
+        ViewerHack.make_shit_happen_in_the_future();
+        return key;
     }
+    /* CALLER MUST LOCK: */
+    private static void _remove(Key key) {
+        if (key.value <= 0) // noop.
+            return;
+
+        (List<PolyLine> lines, List<Mesh> meshes, _) = _geezed[key];
+        _geezed.Remove(key);
+
+        foreach (Mesh mesh in meshes)
+            PICOGK_VIEWER.Remove(mesh);
+        foreach (PolyLine line in lines)
+            PICOGK_VIEWER.Remove(line);
+
+        BBox3 bbox = _current_bbox();
+        if (!bbox.bIsEmpty()) {
+            ViewerHack.set_size(bbox.vecSize());
+            ViewerHack.set_centre(bbox.vecCenter());
+        }
+
+        ViewerHack.make_shit_happen_in_the_future();
+    }
+    /* CALLER MUST LOCK: */
+    private static Key _group(Slice<Key> keys) {
+        if (numel(keys) == 0)
+            return BLANK;
+        List<PolyLine> lines = new();
+        List<Mesh> meshes = new();
+        BBox3 bbox = new();
+        Key maxkey = BLANK;
+        foreach (Key subkey in keys) {
+            if (subkey <= 0) // noop.
+                continue;
+            (List<PolyLine> ls, List<Mesh> ms, BBox3 bb) = _geezed[subkey];
+            _geezed.Remove(subkey);
+            lines.AddRange(ls);
+            meshes.AddRange(ms);
+            if (subkey > maxkey) {
+                bbox = bb;
+                maxkey = subkey;
+            }
+        }
+
+        if (maxkey != BLANK)
+            _geezed.Add(maxkey, (lines, meshes, bbox));
+
+        // note latest/current bbox can never change from this.
+
+        return maxkey;
+    }
+    /* CALLER MUST LOCK: */
+    private static bool lockdown_check(out Key lockedkey) {
+        if (lockdown) {
+            lockedkey = _push([], []);
+            return true;
+        }
+        lockedkey = new(int.MinValue); // entirely invalid.
+        return false;
+    }
+
+
     private const int _MATERIAL_DUMMY = int.MinValue;
     private const int _MATERIAL_COMPASS = int.MinValue + 1;
     private const int _MATERIAL_COMPASS_DASHED = int.MinValue + 2;
@@ -2000,129 +2093,58 @@ public static class Geez {
         add(bottom - 0.05f*V, bottom + 0.05f*V);
     }
 
-    private static void _view(in List<PolyLine> lines, in List<Mesh> meshes) {
-        // nothing added during lockdown.
-        if (lockdown)
-            return;
 
-        if (numel(meshes) > 0) {
-            int group_id = _material();
-            foreach (Mesh mesh in meshes)
-                PICOGK_VIEWER.Add(mesh, group_id);
-        }
-        if (numel(lines) > 0) {
-            // setup dummy group to fix picogk bug. basically they forget to set
-            // the metallic and roughness uniforms when rendering lines, so we
-            // render a dummy mesh just before them which correctly sets
-            // metallic and roughness and then "leaks" these values into the line
-            // render.
-            int dummy_id = _material(fixbug: true);
-            PICOGK_VIEWER.Add(new Mesh(), dummy_id);
-            int group_id = _material();
-            foreach (PolyLine line in lines)
-                PICOGK_VIEWER.Add(line, group_id);
-        }
-        ViewerHack.make_shit_happen_in_the_future();
+    public static void remove(Key key) {
+        using var __ = Scoped.locked(_geezed);
+        _remove(key);
     }
-    private static int _push(in List<Mesh> meshes) {
-        _view([], meshes);
-        return _track([], meshes);
-    }
-    private static int _push(in List<PolyLine> lines) {
-        _view(lines, []);
-        return _track(lines, []);
-    }
-    private static int _push(in List<PolyLine> lines, in List<Mesh> meshes) {
-        _view(lines, meshes);
-        return _track(lines, meshes);
-    }
-
-
-
-    private static void _remove(int key, bool recursive=true) {
-        if (key <= 0) // noop.
-            return;
-
-        object item = _geezed[key];
-        _geezed.Remove(key);
-
-        if (item is (List<PolyLine> lines, List<Mesh> meshes)) {
-            foreach (Mesh mesh in meshes)
-                PICOGK_VIEWER.Remove(mesh);
-            foreach (PolyLine line in lines)
-                PICOGK_VIEWER.Remove(line);
-            ViewerHack.make_shit_happen_in_the_future();
-        } else if (item is Slice<int> group) {
-            if (recursive) {
-                foreach (int subkey in group)
-                    _remove(subkey);
-            }
-        } else {
-            assert(false);
-        }
-    }
-    public static void _expand(in HashSet<int> keys, int key) {
-        object item = _geezed[key];
-        if (item is (List<PolyLine>, List<Mesh>)) {
-            keys.Add(key);
-        } else if (item is Slice<int> group) {
-            foreach (int subkey in group)
-                _expand(keys, subkey);
-        } else {
-            assert(false);
-        }
-    }
-    public static void _remove(Slice<int> keys) {
-        HashSet<int> newkeys = new(numel(keys));
-        foreach (int subkey in keys)
-            _expand(newkeys, subkey);
-        foreach (int subkey in newkeys)
-            _remove(subkey, false /* shouldnt encounter groups */);
-    }
-
-    public static void remove(int key) {
-        lock (_geezed)
+    public static void remove(Slice<Key> keys) {
+        using var __ = Scoped.locked(_geezed);
+        foreach (Key key in keys)
             _remove(key);
-    }
-    public static void remove(Slice<int> keys) {
-        lock (_geezed)
-            _remove(keys);
     }
 
     public static void clear() {
-        List<int> keys;
-        lock (_geezed) {
-            keys = new(_geezed.Keys);
-            foreach (int key in keys)
-                _remove(key, false);
-        }
+        using var __ = Scoped.locked(_geezed);
+        List<Key> keys = [.._geezed.Keys];
+        foreach (Key key in keys)
+            _remove(key);
     }
 
-    public static int group(Slice<int> keys) {
-        return _track(keys);
+    public static Key group(Slice<Key> keys) {
+        using var __ = Scoped.locked(_geezed);
+        return _group(keys);
     }
+    public static Key group(params Key[] keys) => group(new Slice<Key>(keys));
 
     public static IDisposable temporary() {
         int last;
         lock (_geezed)
-            last = _next - 1;
+            last = _next.value - 1;
         return Scoped.on_leave(() => {
             lock (_geezed) {
-                for (int i = _next - 1; i >= last; --i) {
-                    if (_geezed.ContainsKey(i))
-                        _remove(i, false);
+                for (int i = _next.value - 1; i >= last; --i) {
+                    if (_geezed.ContainsKey(new(i)))
+                        _remove(new(i));
                 }
             }
         });
     }
 
+    public static List<Key> recent(int count, int ignoring=0) {
+        using var __ = Scoped.locked(_geezed);
 
-    public const int BLANK = 0; // due to locking.
-    public const int CLEAR = -1;
-    public const int NOOP = -2;
+        int end = max(0, numel(_geezed) - ignoring);
+        int start = max(0, end - count);
+        List<Key> keys = new(end - start);
+        for (int i=start; i<end; ++i)
+            keys.Add(_geezed.GetAt(i).Key);
+        return keys;
+    }
+
 
     public class Cycle {
-        protected int[] keys; // rolling buffer.
+        protected Key[] keys; // rolling buffer.
         protected int i; // next index.
 
         public Colour? colour = null;
@@ -2136,7 +2158,7 @@ public static class Geez {
                 Sectioner? sectioner = null
             ) {
             assert(size > 0);
-            keys = new int[size];
+            keys = new Key[size];
             i = 0;
 
             this.colour = colour;
@@ -2146,29 +2168,25 @@ public static class Geez {
             this.sectioner = sectioner;
         }
 
-        public void cycle(int key) {
-            assert(key > 0 || key == BLANK || key == CLEAR || key == NOOP);
-            if (key == CLEAR) {
-                clear();
-                return;
-            }
+        public void cycle(Key key) {
+            assert(key > 0 || key == BLANK || key == NOOP);
             if (key == NOOP)
                 return;
             if (keys[i] != BLANK)
                 Geez.remove(keys[i]);
             keys[i] = key;
-            i = (i == numel(keys) - 1) ? 0 : i + 1;
+            i = (i + 1) % numel(keys);
         }
 
         public void clear() {
             for (int j=0; j<numel(keys); ++j) {
                 if (keys[j] != 0)
                     Geez.remove(keys[j]);
-                keys[j] = 0;
+                keys[j] = BLANK;
             }
         }
 
-        public static Cycle operator<<(Cycle c, int key) {
+        public static Cycle operator<<(Cycle c, Key key) {
             c.cycle(key);
             return c;
         }
@@ -2194,33 +2212,39 @@ public static class Geez {
     }
 
 
-    public static int voxels(in Voxels vox, Colour? colour=null) {
-        if (lockdown) // nada.
-            return BLANK;
+    public static Key voxels(in Voxels vox, Colour? colour=null) {
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         // Apply sectioner.
         Sectioner sect = sectioner ?? dflt_sectioner;
         Voxels new_vox = sect.has_cuts() ? sect.cut(vox) : vox;
         Mesh mesh = new(new_vox);
-        return Geez.mesh(mesh, colour: colour);
+        using (like(colour: colour))
+            return _push([], [mesh]);
     }
 
-    public static int mesh(in Mesh mesh, Colour? colour=null) {
+    public static Key mesh(in Mesh mesh, Colour? colour=null) {
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         using (like(colour: colour))
-            return _push([mesh]);
+            return _push([], [mesh]);
     }
 
 
     private static Mesh _ball_hires;
     private static Mesh _ball_lores;
-    public static int point(in Vec3 p, float r=2f, Colour? colour=null,
+    public static Key point(in Vec3 p, float r=2f, Colour? colour=null,
             bool hires=true) {
         return Geez.points([p], r: r, colour: colour, hires: hires);
     }
 
-    public static int points(in List<Vec3> ps, float r=2f, Colour? colour=null,
+    public static Key points(in List<Vec3> ps, float r=2f, Colour? colour=null,
             bool hires=false) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         Mesh ball = hires ? _ball_hires : _ball_lores;
         List<Mesh> meshes = new();
         foreach (Vec3 p in ps) {
@@ -2231,26 +2255,32 @@ public static class Geez {
         using (dflt_like(colour: COLOUR_RED, alpha: 1f, metallic: 0.1f,
                 roughness: 0f))
         using (like(colour: colour))
-            return _push(meshes);
+            return _push([], meshes);
     }
 
-    public static int line(in PolyLine line) {
+    public static Key line(in PolyLine line) {
         return Geez.lines([line]);
     }
-    public static int line(in List<Vec3> points, Colour? colour=null,
+    public static Key line(in List<Vec3> points, Colour? colour=null,
             float arrow=0f) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         PolyLine line = new(colour ?? Geez.colour ?? COLOUR_GREEN);
         line.Add(points);
         if (arrow > 0f)
             line.AddArrow(arrow);
-        return Geez.lines([line]);
-    }
-    public static int lines(in List<PolyLine> lines) {
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
-            return _push(lines);
+            return _push([line], []);
+    }
+    public static Key lines(in List<PolyLine> lines) {
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
+        using (dflt_like(metallic: dflt_line_metallic,
+                         roughness: dflt_line_roughness))
+            return _push(lines, []);
     }
 
     private static void _frame_lines(out Mesh? mesh, List<PolyLine> lines,
@@ -2277,20 +2307,21 @@ public static class Geez {
         mesh = (!mark_pos) ? null
              : _ball_lores.mshCreateTransformed(0.05f*size*ONE3, frame.pos);
     }
-    public static int frame(in Frame frame, float size=5f, bool mark_pos=true,
+    public static Key frame(in Frame frame, float size=5f, bool mark_pos=true,
             Colour? pos_colour=null) {
         return Geez.frames(new FramesSequence([frame]), size: size,
                 mark_pos: mark_pos, pos_colour: pos_colour);
     }
-    public static int frames(in List<Frame> frames, float size=5f,
+    public static Key frames(in List<Frame> frames, float size=5f,
             bool mark_pos=false, Colour? pos_colour=null) {
         return Geez.frames(new FramesSequence(frames), size: size,
                 mark_pos: mark_pos, pos_colour: pos_colour);
     }
-    public static int frames(in Frames frames, float size=5f,
+    public static Key frames(in Frames frames, float size=5f,
             bool mark_pos=false, Colour? pos_colour=null) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         List<PolyLine> lines = new();
         List<Mesh> meshes = new();
         for (int i=0; i<numel(frames); ++i) {
@@ -2299,32 +2330,33 @@ public static class Geez {
             if (mesh != null)
                 meshes.Add(mesh);
         }
-        int key_line;
+        Key key_line;
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
-            key_line = _push(lines);
+            key_line = _push(lines, []);
         if (!mark_pos)
             return key_line;
-        int key_mesh;
+        Key key_mesh;
         using (dflt_like(colour: COLOUR_WHITE, alpha: 1f, metallic: 0.1f,
                          roughness: 0.8f))
         using (like(colour: pos_colour))
-            key_mesh = _push(meshes);
-        return group([key_line, key_mesh]);
+            key_mesh = _push([], meshes);
+        return _group([key_line, key_mesh]);
     }
 
-    public static int dir(in Vec3 dir, Colour? colour=null, float arrow=1f) {
+    public static Key dir(in Vec3 dir, Colour? colour=null, float arrow=1f) {
         return Geez.dir(new Frame(), dir, colour: colour, arrow: arrow);
     }
-    public static int dir(in Vec3 from, in Vec3 to, Colour? colour=null,
+    public static Key dir(in Vec3 from, in Vec3 to, Colour? colour=null,
             float arrow=1f) {
         return Geez.dir(new Frame(from), to - from, colour: colour,
                 arrow: arrow);
     }
-    public static int dir(in Frame frame, in Vec3 dir, Colour? colour=null,
+    public static Key dir(in Frame frame, in Vec3 dir, Colour? colour=null,
             float arrow=1f) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
         PolyLine line = new(colour ?? Geez.colour ?? COLOUR_WHITE);
         line.nAddVertex(frame * ZERO3);
         line.nAddVertex(frame * dir);
@@ -2332,10 +2364,10 @@ public static class Geez {
             line.AddArrow(arrow);
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
-            return _push([line]);
+            return _push([line], []);
     }
 
-    public static int bbox(in BBox3 bbox, Colour? colour=null) {
+    public static Key bbox(in BBox3 bbox, Colour? colour=null) {
         return Geez.bar(new Bar(bbox), colour: colour);
     }
 
@@ -2378,10 +2410,11 @@ public static class Geez {
         }
     }
 
-    public static int rod(in Rod rod, Colour? colour=null, int rings=-1,
+    public static Key rod(in Rod rod, Colour? colour=null, int rings=-1,
             int columns=6) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
 
         // Note this is not a particularly efficient vectorisation of a rod but
         // its fine.
@@ -2432,73 +2465,43 @@ public static class Geez {
 
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
-            return _push(lines);
+            return _push(lines, []);
     }
 
 
     private static void _bar_lines(List<PolyLine> lines, in Bar bar,
             Colour col) {
         Vec3[] corners = bar.get_corners();
-        PolyLine l;
 
-        // Each corner (+3+3), then the zigzag joining (+6).
-
-        l = new(col);
+        PolyLine l = new(col);
+        // low corner.
         l.nAddVertex(corners[0b000]);
         l.nAddVertex(corners[0b100]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b000]);
+        l.nAddVertex(corners[0b000]); // backtrack
         l.nAddVertex(corners[0b010]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b000]);
+        l.nAddVertex(corners[0b000]); // backtrack
         l.nAddVertex(corners[0b001]);
-        lines.Add(l);
-
-        l = new(col);
-        l.nAddVertex(corners[0b111]);
-        l.nAddVertex(corners[0b011]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b111]);
-        l.nAddVertex(corners[0b101]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b111]);
-        l.nAddVertex(corners[0b110]);
-        lines.Add(l);
-
-        l = new(col);
-        l.nAddVertex(corners[0b100]);
-        l.nAddVertex(corners[0b101]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b101]);
-        l.nAddVertex(corners[0b001]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b001]);
-        l.nAddVertex(corners[0b011]);
-        lines.Add(l);
-        l = new(col);
+        // zizag.
         l.nAddVertex(corners[0b011]);
         l.nAddVertex(corners[0b010]);
-        lines.Add(l);
-        l = new(col);
-        l.nAddVertex(corners[0b010]);
-        l.nAddVertex(corners[0b110]);
-        lines.Add(l);
-        l = new(col);
         l.nAddVertex(corners[0b110]);
         l.nAddVertex(corners[0b100]);
+        l.nAddVertex(corners[0b101]);
+        l.nAddVertex(corners[0b001]);
+        l.nAddVertex(corners[0b101]); // backtrack
+        // high corner
+        l.nAddVertex(corners[0b111]);
+        l.nAddVertex(corners[0b011]);
+        l.nAddVertex(corners[0b111]); // backtrack
+        l.nAddVertex(corners[0b110]);
         lines.Add(l);
     }
 
-    public static int bar(in Bar bar, Colour? colour=null, int divide_x=1,
+    public static Key bar(in Bar bar, Colour? colour=null, int divide_x=1,
             int divide_y=1, int divide_z=1) {
-        if (lockdown)
-            return BLANK;
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
 
         List<PolyLine> lines = new();
         Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
@@ -2537,7 +2540,7 @@ public static class Geez {
 
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
-            return _push(lines);
+            return _push(lines, []);
     }
 
 

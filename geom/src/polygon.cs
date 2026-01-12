@@ -46,7 +46,7 @@ public static class Polygon {
 
         static string vecstr(Vec2 v) => $"({v.X}, {v.Y})";
 
-        // Reject duplicate points + degenerate edges.
+        // Reject duplicate points.
         for (int i=0; i<N; ++i) {
             int i1 = (i + 1) % N;
             Vec2 a = vertices[i];
@@ -96,7 +96,7 @@ public static class Polygon {
                 bool o3z = nearzero(o3);
                 bool o4z = nearzero(o4);
 
-                // Proper intersection
+                // Proper intersection.
                 if (!o1z && !o2z && !o3z && !o4z
                         && ((o1 > 0f) != (o2 > 0f))
                         && ((o3 > 0f) != (o4 > 0f))) {
@@ -105,7 +105,7 @@ public static class Polygon {
                     return false;
                 }
 
-                // Collinear / touching cases (also forbidden)
+                // Collinear/touching.
                 if ((o1z && on_seg(b0, a0, a1))
                         || (o2z && on_seg(b1, a0, a1))
                         || (o3z && on_seg(a0, b0, b1))
@@ -213,6 +213,7 @@ public static class Polygon {
         return new_vertices;
     }
 
+
     public static void fillet(List<Vec2> vertices, int i, float Fr,
             float prec=1f, int? divisions=null, bool only_this_vertex=false) {
       TRY_AGAIN:;
@@ -292,6 +293,19 @@ public static class Polygon {
         }
         vertices.RemoveAt(i);
         vertices.InsertRange(i, replace_b);
+    }
+
+
+    public static void cull_duplicates(List<Vec2> vertices) /* O(N^2) */ {
+        for (int i=0; i<numel(vertices); ++i) {
+            Vec2 v = vertices[i];
+            for (int j=i + 1; j<numel(vertices); ++j) {
+                if (nearto(v, vertices[j])) {
+                    vertices.RemoveAt(j);
+                    --j;
+                }
+            }
+        }
     }
 
 
@@ -380,12 +394,12 @@ public static class Polygon {
         } else {
             slicesize = numel(vertices);
             tilecount = (slicecount == -1)
-                     ? max((int)(abs(by)*200/TWOPI), 10)
-                     : slicecount;
+                      ? max((int)(abs(by)*200/TWOPI), 10)
+                      : slicecount;
             slicecount = 1;
         }
         assert(slicesize >= 3, "each slice is not a polygon");
-        assert(slicecount*tilecount >= (closed ? 3 : 2), "too few slices to "
+        assert(slicecount*tilecount >= (closed ? 4 : 3), "too few slices to "
                                                        + "create a solid");
 
         // Checkme.
@@ -425,7 +439,7 @@ public static class Polygon {
         bool ccw = area(vertices, true) >= 0f;
         Slice<Vec2> swept_vertices = vertices;
         if (!donut) {
-            List<Vec2> copy = new(vertices);
+            List<Vec2> copy = [..vertices];
             // Set to perfectly along axis.
             for (int n=0; n<slicecount; ++n) {
                 copy[n*slicesize] *= uX2;

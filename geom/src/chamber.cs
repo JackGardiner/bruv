@@ -712,7 +712,7 @@ public class Chamber : TPIAP.Pea {
 
         // view a cheeky wireframe while its generating.
         if (!minimise_mem) {
-            List<int> wireframe = new();
+            List<Geez.Key> wireframe = new();
             int N = 16;
             for (int i=0; i<N; ++i) {
                 float z = lerp(cnt_z0, cnt_z6, i, N);
@@ -722,7 +722,7 @@ public class Chamber : TPIAP.Pea {
                     1e-2f,
                     r
                 ).shelled(-1e-2f);
-                int wire = Geez.rod(rod, rings: 2, columns: 0);
+                Geez.Key wire = Geez.rod(rod, rings: 2, columns: 0);
                 wireframe.Add(wire);
             }
             N = 6;
@@ -734,7 +734,7 @@ public class Chamber : TPIAP.Pea {
                     float r = cnt_radius_at(z, 0f, false);
                     contour.Add(fromcyl(r, theta, z));
                 }
-                int wire = Geez.line(contour);
+                Geez.Key wire = Geez.line(contour);
                 wireframe.Add(wire);
             }
 
@@ -903,7 +903,7 @@ public class Chamber : TPIAP.Pea {
         using var __ = key.like();
 
         Voxels vox = new();
-        List<int> mesh_keys = new();
+        List<Geez.Key> mesh_keys = new();
 
       #if false
         print("th_chnl,   30deg helix angle,  1.5mm wi_web: "
@@ -1304,10 +1304,10 @@ public class Chamber : TPIAP.Pea {
                 Lz,
                 neg_Lr
             ).extended(EXTRA, Extend.UP);
-            this_neg.BoolSubtract(new Cone(
+            this_neg.BoolSubtract(Cone.phied(
                 frame.transz(th_chnl/2f + th_ow),
                 PI_4,
-                Lz: Lz // has extra builtin.
+                Lz // has extra builtin.
             ).shelled(2f*neg_Lr)
              .upto_tip());
 
@@ -1346,7 +1346,7 @@ public class Chamber : TPIAP.Pea {
 
     protected Voxels voxels_flange(Geez.Cycle key) {
         using var __ = key.like();
-        List<int> keys = new();
+        List<Geez.Key> keys = new();
 
         Voxels vox;
 
@@ -1472,7 +1472,7 @@ public class Chamber : TPIAP.Pea {
 
         hole = new();
         clearance = new();
-        List<int> keys = new(pm.no_bolt);
+        List<Geez.Key> keys = new(pm.no_bolt);
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             Frame frame = new Frame(fromcyl(pm.Mr_bolt, theta, 0f));
@@ -1536,7 +1536,7 @@ public class Chamber : TPIAP.Pea {
             new Vec3(+overall_Lr, +overall_Lr, overall_Mz + overall_Lz/2f)
         );
         // Since we're actually viewing a pipe, not a box, scale down a little.
-        overall_bbox.Grow(-0.2f*overall_Lr);
+        // overall_bbox.Grow(-0.2f*overall_Lr);
 
 
         /* screen shot a */
@@ -1717,10 +1717,9 @@ public class Chamber : TPIAP.Pea {
 
 
     public Voxels? cutaway(in Voxels part) {
-        List<int> keys = new(4);
 
         // something to look at.
-        keys.Add(Geez.voxels(part));
+        Geez.voxels(part);
 
         float z = cnt_z1;
         Frame f1 = new(
@@ -1747,11 +1746,11 @@ public class Chamber : TPIAP.Pea {
 
         Bar cube1 = new Bar(f1, 100f, 350f, 80f);
         cube1 = cube1.at_edge(Bar.X1_Y0);
-        keys.Add(Geez.bar(cube1));
+        Geez.bar(cube1);
 
         Bar cube2 = new Bar(f2, 50f, 100f, 80f);
         cube2 = cube2.at_edge(Bar.X1_Y0);
-        keys.Add(Geez.bar(cube2));
+        Geez.bar(cube2);
 
         print("created cutting cubes.");
 
@@ -1765,12 +1764,12 @@ public class Chamber : TPIAP.Pea {
         Voxels tmp = (Voxels)cube1;
         tmp.BoolAdd(cube2);
         outer.BoolIntersect(tmp);
-        keys.Add(Geez.voxels(outer));
+        Geez.voxels(outer);
         print("made scissors.");
 
         Voxels cutted = part - outer;
         Geez.voxels(cutted);
-        Geez.remove(keys);
+        Geez.remove(Geez.recent(4, 1));
         print("finished.");
         print();
 
@@ -1792,7 +1791,7 @@ public class Chamber : TPIAP.Pea {
         void screenshot(string name, ref Voxels? vox, float theta, float phi,
                 float zoom) {
             assert(vox != null);
-            int key = Geez.voxels(vox!);
+            Geez.Key key = Geez.voxels(vox!);
             new Geez.Screenshotta(
                 new Geez.ViewAs(
                     pos: Lz/2f*uZ3,
@@ -1872,93 +1871,19 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
+        Vec3 p = 20f*uX3;
 
-        // Voxels a = new Ball(5f);
-        // Geez.voxels(a, COLOUR_RED);
-
-        // using (Lifted l = new(a, new Ball(5f*normalise(uXZ3), 2f))) {
-        //     // l.vox.IntersectImplicit(new Space(new(5f*normalise(uXZ3)), 0f, INF));
-        //     l.vox = new Ball(5f*normalise(uXZ3), 4f);
-        //     Geez.voxels(l.vox, COLOUR_GREEN);
-        // }
-
-        // Thread.Sleep(5000);
-        // Geez.clear();
-        // Geez.voxels(a, COLOUR_BLUE);
-
-
-        // ports.GPort a = new("1/2in", 10f);
-        // Voxels vox = a.voxConstruct(new Leap71.ShapeKernel.LocalFrame());
-        // Geez.voxels(vox);
-        // Geez.frame(new());
-
-
-        // Geez.frame(new(), size: 1f);
-        // Frame f = new(ONE3, cross(-uZ3 - uY3, ONE3 + uZ3), ONE3 + uZ3);
-        // Geez.frame(f, size: 1f);
-        // BBox3 bbox = new();
-        // f.bbox_include_circle(ref bbox, 3f);
-        // f.bbox_include_circle(ref bbox, 3f, 5f);
-        // Geez.rod(new(f, 1e-2f, 3f));
-        // Geez.rod(new(f.transz(5f), 1e-2f, 3f));
-        // Geez.bbox(bbox);
-
-        // {
-        //     Geez.frame(new(), size: 1f);
-        //     Frame f = new(ONE3, cross(-uZ3 - uY3, ONE3 + uZ3), ONE3 + uZ3);
-        //     Geez.frame(f, size: 1f);
-        //     Cone2 c = new(f, 2f, 1.5f, 0.5f);
-        //     Geez.voxels(c, colour: COLOUR_RED);
-        //     Geez.bbox(c.bounds);
-        //     Geez.frame(f, size: 1f);
-        //     Geez.frame(c.tip!, size: 1f, pos_colour: COLOUR_PINK);
-        // }
-        // Geez.clear();
-
-        // Geez.frame(new(), size: 1f);
-
-        void test(Frame f, Cone c) {
-            // using var __ = Geez.temporary();
-            Geez.voxels(
-                ((Voxels)c).voxIntersectImplicit(
-                    new Space(c.centre.rotzx(PI_2), 0f, +INF)
-                ),
-                colour: COLOUR_RED
-            );
-            Geez.voxels(
-                ((Voxels)c.upto_tip()).voxIntersectImplicit(
-                    new Space(c.centre.rotzx(PI_2), -INF, 0f)
-                ),
-                colour: COLOUR_BLUE
-            );
-            Geez.frame(f, size: 1f, pos_colour: COLOUR_BLACK);
-            Geez.frame(c.centre, size: 1f, pos_colour: COLOUR_YELLOW);
-            if (c.outer_tip != null)
-                Geez.frame(c.outer_tip, size: 1f, pos_colour: COLOUR_PINK);
-            if (c.inner_tip != null)
-                Geez.frame(c.inner_tip, size: 1f, pos_colour: COLOUR_CYAN);
-            // print("waiting...");
-            // Console.ReadKey(intercept: true);
-        }
-
-        test(new(0*uXY3), new Cone(new Frame(0*uXY3), 0.25f, Lz: 5f, r0: 2f));
-        // test(new(), new Cone(new Frame(), 0.25f, Lz: -10f, r0: 2f));
-        // test(new(), new Cone(new Frame(), -0.25f, Lz: 10f, r0: 5f));
-        // test(new(), new Cone(new Frame(), -0.25f, Lz: -10f, r0: 5f));
-        // // test(new(), new Cone(new Frame(), 0f, Lz: 10f, r0: 3f));
-        // // test(new(), new Cone(new Frame(), 0.3f, Lz: 8f, r0: 5f, r1: 3f));
-        // // test(new(), new Cone(new Frame(), 0.49f * MathF.PI, Lz: 1f, r0: 0.1f));
-        // // test(new(), new Cone(new Frame(), 0.2f, Lz: 0f, r0: 3f));
-
-        // test(new(), new Cone(new Frame(), 10f, 2f, 4f));
-        // test(new(), new Cone(new Frame(), -10f, 2f, 4f));
-        // test(new(), new Cone(new Frame(), 10f, 1f, 3f, 2f, 5f));
-        // test(new(), new Cone(new Frame(), -10f, 1f, 3f, 2f, 5f));
-        // test(new(), new Cone(new Frame(), 10f, 0f, 5f));
-        // test(new(), new Cone(new Frame(), -10f, 0f, 5f));
-        // test(new(), new Cone(new Frame(), 10f, 1.99f, 2f, 2.99f, 3f));
-        // test(new(), new Cone(new Frame(), -10f, 1.99f, 2f, 2.99f, 3f));
-
+        float D = 14;
+        print("start");
+        Voxels v = new ports.GPort("1/8in", D).voxConstruct(new(p*0f));
+        Geez.voxels(v, colour: COLOUR_RED);
+        print("old");
+        v = new GPort("1/8in", D).filled(new(p*1f), out _);
+        Geez.voxels(v, colour: COLOUR_BLUE);
+        print("new (filled)");
+        v = new GPort("1/8in", D).shelled(new(p*1f), 2f, out _);
+        Geez.voxels(v, colour: COLOUR_GREEN);
+        print("new (shelled)");
     }
 
 

@@ -16,6 +16,49 @@ using TgaIo = PicoGK.TgaIo;
 namespace br {
 
 
+public static partial class Br {
+    public static List<Vec2> circpoints(int no, float r, float theta0=0f) {
+        List<Vec2> points = new();
+        for (int i=0; i<no; ++i)
+            points.Add(frompol(r, theta0 + i*TWOPI/no));
+        return points;
+    }
+    public static List<Vec2> circpoints(Slice<int> no, Slice<float> r,
+            Slice<float>? theta0=null) {
+        if (theta0 == null)
+            theta0 = Slice<float>.filled(0f, numel(no));
+        assert(numel(no) == numel(r));
+        assert(numel(no) == numel(theta0));
+        List<Vec2> points = new();
+        for (int j=0; j<numel(no); ++j) {
+            for (int i=0; i<no[j]; ++i)
+                points.Add(frompol(r[j], theta0[j] + i*TWOPI/no[j]));
+        }
+        return points;
+
+    }
+
+    public static List<Vec3> circpoints(int no, float r, float theta0, float z)
+        // i guess close enough to python list comprehension?
+        => circpoints(no, r, theta0).Select((p) => rejxy(p, z)).ToList();
+
+    public static List<Vec3> circpoints(Slice<int> no, Slice<float> r,
+            Slice<float> theta0, Slice<float> z) {
+        int[] N = cumsum(no.toarray());
+        int jof(int i) {
+            int j = 0;
+            while (j < numel(N) && i >= N[j])
+                ++j;
+            return j;
+        }
+        return circpoints(no, r, theta0)
+                .Select((p, i) => rejxy(p, z[jof(i)]))
+                .ToList();
+    }
+}
+
+
+
 public static class _SDF {
     public static Voxels voxels(IImplicit imp, BBox3 bounds,
             bool enforce_faces=true) {
@@ -914,6 +957,8 @@ public class Cone : AxialShape<Cone> {
     public Frame? inner_tip { get; private set; } // centre translated.
     public Frame? outer_tip { get; private set; } // centre translated.
 
+    public float r0 { get { assert(isfilled); return outer_r0; } }
+    public float r1 { get { assert(isfilled); return outer_r1; } }
     public float phi { get { assert(isfilled); return outer_phi; } }
     public Frame? tip { get { assert(isfilled); return outer_tip; } }
 
@@ -928,58 +973,6 @@ public class Cone : AxialShape<Cone> {
     private Vec2 ABperp;
     private Vec2 CDperp;
 
-
-    public Cone(in Frame bbase, float phi, KeywordOnly? _=null,
-            float Lz=NAN, float r0=NAN, float r1=NAN) {
-        assert(isnan(Lz) || isnan(r0) || isnan(r1));
-        if (isnan(Lz)) {
-            if (isnan(r0)) {
-                assert(nonnan(r1));
-                assert(phi > 0f);
-                r0 = 0f;
-            }
-            if (isnan(r1)) {
-                assert(nonnan(r0));
-                assert(phi < 0f);
-                r1 = 0f;
-            }
-            Lz = (r1 - r0)/tan(phi);
-        }
-        if (isnan(r0) && isnan(r1)) {
-            assert(phi != 0f);
-            if (phi > 0f)
-                r0 = 0f;
-            else
-                r1 = 0f;
-        }
-        r0 = ifnan(r0, r1 - abs(Lz)*tan(phi));
-        r1 = ifnan(r1, r0 + abs(Lz)*tan(phi));
-        assert(nonnan(Lz) && nonnan(r0) && nonnan(r1));
-        Cone o = new(bbase, Lz, r0, r1);
-
-        // c sharp pissing me off.
-        this.centre = o.centre;
-        this.bounds = o.bounds;
-        this.Lz = o.Lz;
-        this.inner_r0 = o.inner_r0;
-        this.inner_r1 = o.inner_r1;
-        this.outer_r0 = o.outer_r0;
-        this.outer_r1 = o.outer_r1;
-        this.inner_phi = o.inner_phi;
-        this.outer_phi = o.outer_phi;
-        this.inner_tip = o.inner_tip;
-        this.outer_tip = o.outer_tip;
-        this.a = o.a;
-        this.b = o.b;
-        this.c = o.c;
-        this.d = o.d;
-        this.magab = o.magab;
-        this.magcd = o.magcd;
-        this.AB = o.AB;
-        this.CD = o.CD;
-        this.ABperp = o.ABperp;
-        this.CDperp = o.CDperp;
-    }
 
     public Cone(in Frame bbase, float Lz, float r0, float r1)
         : this(bbase, Lz, -INF, r0, -INF, r1) {}
@@ -1044,6 +1037,35 @@ public class Cone : AxialShape<Cone> {
         bounds = bbox;
     }
 
+    public static Cone phied(in Frame bbase, float phi, float Lz=NAN,
+            float r0=NAN, float r1=NAN) {
+        assert(isnan(Lz) || isnan(r0) || isnan(r1));
+        if (isnan(Lz)) {
+            if (isnan(r0)) {
+                assert(nonnan(r1));
+                assert(phi > 0f);
+                r0 = 0f;
+            }
+            if (isnan(r1)) {
+                assert(nonnan(r0));
+                assert(phi < 0f);
+                r1 = 0f;
+            }
+            Lz = (r1 - r0)/tan(phi);
+        }
+        if (isnan(r0) && isnan(r1)) {
+            assert(phi != 0f);
+            if (phi > 0f)
+                r0 = 0f;
+            else
+                r1 = 0f;
+        }
+        r0 = ifnan(r0, r1 - abs(Lz)*tan(phi));
+        r1 = ifnan(r1, r0 + abs(Lz)*tan(phi));
+        assert(nonnan(Lz) && nonnan(r0) && nonnan(r1));
+        return new(bbase, Lz, r0, r1);
+    }
+
     public static Cone centred(in Frame centre, float Lz, float inner_r0,
             float outer_r0, float inner_r1, float outer_r1) {
         assert(Lz > 0f, $"Lz={Lz}");
@@ -1062,8 +1084,8 @@ public class Cone : AxialShape<Cone> {
     public Cone upto_tip() {
         if (outer_tip == null)
             throw new Exception("tip kinda far (infinitely)");
-        float Dz = dot(outer_tip.pos - centre.pos, centre.Z);
-        float new_Lz = abs(Dz) + Lz/2f;
+        float z2tip = dot(outer_tip.pos - centre.pos, centre.Z);
+        float new_Lz = abs(z2tip) + Lz/2f;
         float new_inner_r0;
         float new_outer_r0;
         float new_inner_r1;
@@ -1080,7 +1102,24 @@ public class Cone : AxialShape<Cone> {
             new_outer_r1 = 0f;
         }
         return centred(
-            centre.transz(Dz + ((Dz > 0f) ? -new_Lz/2f : new_Lz/2f)),
+            centre.transz(z2tip + ((z2tip > 0f) ? -new_Lz/2f : new_Lz/2f)),
+            new_Lz,
+            new_inner_r0,
+            new_outer_r0,
+            new_inner_r1,
+            new_outer_r1
+        );
+    }
+
+    public Cone lengthed(float Dz0, float Dz1) {
+        float Dz = 0.5f*(Dz1 - Dz0);
+        float new_Lz = Lz + Dz0 + Dz1;
+        float new_outer_r0 = outer_r0 - Dz0*tan(outer_phi);
+        float new_outer_r1 = outer_r1 + Dz1*tan(outer_phi);
+        float new_inner_r0 = inner_r0 - ifnan(Dz0*tan(inner_phi), 0f);
+        float new_inner_r1 = inner_r1 + ifnan(Dz1*tan(inner_phi), 0f);
+        return centred(
+            centre.transz(Dz),
             new_Lz,
             new_inner_r0,
             new_outer_r0,
@@ -1120,11 +1159,7 @@ public class Cone : AxialShape<Cone> {
                 donut = false;
             }
         }
-        // Remove duplicates.
-        if (nearto(vertices[0], vertices[1]))
-            vertices.RemoveAt(0);
-        if (nearto(vertices[^2], vertices[^1]))
-            vertices.RemoveAt(numel(vertices) - 1);
+        Polygon.cull_duplicates(vertices);
         assert(numel(vertices) >= 3, "too thin");
 
         // Make the divs s.t. the longest spacing between vertices is one voxel.
@@ -1167,17 +1202,8 @@ public class Cone : AxialShape<Cone> {
     public override Cone with_centre(in Frame newcentre)
         => centred(newcentre, Lz, inner_r0, outer_r0, inner_r1, outer_r1);
 
-    public override Cone with_Lz(float new_Lz) { // keep phi const.
-        float Dz = (new_Lz - Lz) / 2f;
-        return centred(
-            centre,
-            new_Lz,
-            inner_r0 - Dz*tan(inner_phi),
-            outer_r0 - Dz*tan(outer_phi),
-            inner_r1 + Dz*tan(inner_phi),
-            outer_r1 + Dz*tan(outer_phi)
-        );
-    }
+    public override Cone with_Lz(float new_Lz)
+        => throw new Exception("not for cone");
 
     public override bool isfilled => inner_r0 == -INF;
     public override Cone _shelled(float th)

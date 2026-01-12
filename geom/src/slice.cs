@@ -93,6 +93,9 @@ public class Slice<T> : IReadOnlyList<T> {
     public static implicit operator Slice<T>(List<T> list)
         => new Slice<T>(list);
 
+    public static Slice<T> filled(T elem, int count)
+        => new([elem], tile: count);
+
     public Slice<T> subslice(KeywordOnly? _=null,
             int step=1, int tile=1, int rep=1)
         => new(this, step: step, tile: tile, rep: rep);
@@ -128,6 +131,21 @@ public class Slice<T> : IReadOnlyList<T> {
             return backing[idx];
         }
     }
+
+
+    public T[] toarray() {
+        T[] ret = new T[numel(this)];
+        for (int i=0; i<numel(this); ++i)
+            ret[i] = this[i];
+        return ret;
+    }
+    public List<T> tolist() {
+        List<T> ret = new(numel(this));
+        for (int i=0; i<numel(this); ++i)
+            ret[i] = this[i];
+        return ret;
+    }
+
 
     // pretty dodgy considering slice is meant to be readonly, but i want some
     // clean [1,2,3] syntax to initialise them.
