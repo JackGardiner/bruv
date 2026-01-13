@@ -60,6 +60,8 @@ public class Chamber : TPIAP.Pea {
     // off = offset, normal to surface.
     // Ooff = outer offset.
     // Or = outer radius.
+    // Pr = pressure ratio, upstream / downstream.
+    // Prinv = pressure ratio, downstream / upstream.
     // r = radial coordinate.
     // semith = semi-thickness (half thickness).
     // th = thickness, normal to surface.

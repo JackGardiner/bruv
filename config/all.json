@@ -16,7 +16,6 @@
         "Mr_bolt": 76.0,
         "Bsz_bolt": 6.0,
         "Bln_bolt": 20.0,
-        "Or_bolt": 3.0,
         "Or_washer": 6.0,
 
         "thickness_around_bolt": 5.0,
@@ -111,7 +110,15 @@
         "r_fcg": [48.5],
         "theta0_fcg": [0.0],
 
-        "th_plate": 3.0
+        "th_plate": 3.0,
+
+        "th_inj1": 1.0,
+        "th_inj2": 1.0,
+        "th_nz1": 0.8,
+        "no_il1": 3,
+        "no_il2": 4,
+        "Pr_inj1": 1.15,
+        "Pr_inj2": 1.15
     },
     "printer": {
         "name": "Nikon SLM280 2.0",

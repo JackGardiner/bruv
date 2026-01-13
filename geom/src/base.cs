@@ -1121,6 +1121,7 @@ public class Cone : AxialShape<Cone> {
 
         // Make the divs s.t. the longest spacing between vertices is one voxel.
         int divs = (int)(TWOPI * max(obj.outer_r0, obj.outer_r1) / VOXEL_SIZE);
+        divs /= 3; // eh dont need that much LMAO.
         divs = max(20, divs);
         return Polygon.mesh_revolved(obj.centre, vertices, slicecount: divs,
                                      donut: donut);
