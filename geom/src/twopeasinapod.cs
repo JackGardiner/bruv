@@ -34,6 +34,7 @@ public static class TwoPeasInAPod {
     /* bitwise or (|) ONE(1) of these peas: */
     public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
+    public const int INJECTOR_STU = 4 << (BITC_ACTION + BITC_MODIFIER);
     /* THATS ALL FOLKS */
 
 
@@ -145,6 +146,14 @@ public static class TwoPeasInAPod {
                 Injector injector = config.deserialise<Injector>("injector");
                 injector.initialise();
                 pea = injector;
+            } break;
+
+            case INJECTOR_STU: {
+                // Construct stu's injector object.
+                config.set("injectorstu/pm", config.get_map("part_mating"));
+                InjectorStu stu = config.deserialise<InjectorStu>("injectorstu");
+                stu.initialise();
+                pea = stu;
             } break;
 
             default:

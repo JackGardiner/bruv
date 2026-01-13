@@ -1280,8 +1280,7 @@ public class Chamber : TPIAP.Pea {
             }
             float d0 = dists[idx];
             float d1 = dists[idx + 1];
-            float t = (target - d0) / (d1 - d0);
-            t = clamp(t, 0f, 1f);
+            float t = invlerp(d0, d1, target);
             Vec3 p = lerp(line[idx], line[idx + 1], t);
             points.Add(p);
         }
@@ -1878,10 +1877,10 @@ public class Chamber : TPIAP.Pea {
         Voxels v = new ports.GPort("1/8in", D).voxConstruct(new(p*0f));
         Geez.voxels(v, colour: COLOUR_RED);
         print("old");
-        v = new GPort("1/8in", D).filled(new(p*1f), out _);
+        v = new brGPort("1/8in", D).filled(new(p*1f), out _);
         Geez.voxels(v, colour: COLOUR_BLUE);
         print("new (filled)");
-        v = new GPort("1/8in", D).shelled(new(p*1f), 2f, out _);
+        v = new brGPort("1/8in", D).shelled(new(p*1f), 2f, out _);
         Geez.voxels(v, colour: COLOUR_GREEN);
         print("new (shelled)");
     }

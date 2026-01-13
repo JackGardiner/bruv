@@ -101,6 +101,18 @@
 
         "fRoofThickness": 4.0
     },
+    "injectorstu": {
+        "no_injg": [5, 10],
+        "r_injg": [21, 40.21],
+        "theta0_injg": [0.0, 0.314159],
+
+        "D_fc": 1.0,
+        "no_fcg": [30],
+        "r_fcg": [48.5],
+        "theta0_fcg": [0.0],
+
+        "th_plate": 3.0
+    },
     "printer": {
         "name": "Nikon SLM280 2.0",
         "max_print_angle": 0.785398163397,

@@ -865,7 +865,7 @@ public class Injector : TPIAP.Pea
         Voxels supports = new();
         foreach (Vector3 point in points_supports)
         {
-            Frame support_frame = new(point, point, uZ3);
+            Frame support_frame = new(point, normalise(point), uZ3);
             supports += new Voxels(Polygon.mesh_extruded(
                 support_frame,
                 fMaxAtticZ,

@@ -16,49 +16,6 @@ using TgaIo = PicoGK.TgaIo;
 namespace br {
 
 
-public static partial class Br {
-    public static List<Vec2> circpoints(int no, float r, float theta0=0f) {
-        List<Vec2> points = new();
-        for (int i=0; i<no; ++i)
-            points.Add(frompol(r, theta0 + i*TWOPI/no));
-        return points;
-    }
-    public static List<Vec2> circpoints(Slice<int> no, Slice<float> r,
-            Slice<float>? theta0=null) {
-        if (theta0 == null)
-            theta0 = Slice<float>.filled(0f, numel(no));
-        assert(numel(no) == numel(r));
-        assert(numel(no) == numel(theta0));
-        List<Vec2> points = new();
-        for (int j=0; j<numel(no); ++j) {
-            for (int i=0; i<no[j]; ++i)
-                points.Add(frompol(r[j], theta0[j] + i*TWOPI/no[j]));
-        }
-        return points;
-
-    }
-
-    public static List<Vec3> circpoints(int no, float r, float theta0, float z)
-        // i guess close enough to python list comprehension?
-        => circpoints(no, r, theta0).Select((p) => rejxy(p, z)).ToList();
-
-    public static List<Vec3> circpoints(Slice<int> no, Slice<float> r,
-            Slice<float> theta0, Slice<float> z) {
-        int[] N = cumsum(no.toarray());
-        int jof(int i) {
-            int j = 0;
-            while (j < numel(N) && i >= N[j])
-                ++j;
-            return j;
-        }
-        return circpoints(no, r, theta0)
-                .Select((p, i) => rejxy(p, z[jof(i)]))
-                .ToList();
-    }
-}
-
-
-
 public static class _SDF {
     public static Voxels voxels(IImplicit imp, BBox3 bounds,
             bool enforce_faces=true) {

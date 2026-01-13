@@ -684,7 +684,7 @@ public static class Geez {
         // In perspective, show speed by fov change. Note since fov is unused in
         // ortho we can just still apply it then also.
         public static float fov_tweak() {
-            float t = (zoom - min_zoom) / (max_zoom - min_zoom);
+            float t = invlerp(min_zoom, max_zoom, zoom);
             // Concentrate at [s]lower end.
             t = sqrt(t);
             float scale_up   = fov/PI/2f;

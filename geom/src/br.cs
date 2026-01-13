@@ -413,6 +413,8 @@ public static partial class Br {
     public static float lerp(float a, float b, int i, int N)
         => a + i*(b - a)/(N - 1);
 
+    public static float invlerp(float a, float b, float x) => (x - a) / (b - a);
+
     public static float mag(float a) => abs(a); // same difference type shi.
     public static float mag(Vec2 a) => a.Length();
     public static float mag(Vec3 a) => a.Length();
