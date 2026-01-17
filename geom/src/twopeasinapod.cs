@@ -35,7 +35,6 @@ public static class TwoPeasInAPod {
     public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_SAMPLE = 3 << (BITC_ACTION + BITC_MODIFIER);
-    public const int INJECTOR_STU = 4 << (BITC_ACTION + BITC_MODIFIER);
     /* theres lowk more than 2 peas in this pod. */
     /* THATS ALL FOLKS */
 
@@ -127,47 +126,48 @@ public static class TwoPeasInAPod {
         // Construct the pea.
         Pea pea;
         switch (make & MASK_PEA) {
-            case CHAMBER: {
-                // Construct the chamber object.
-                float max_phi = config.get<float>("printer/max_print_angle");
-                config.set("chamber/phi_mani", max_phi);
-                config.set("chamber/phi_fixt", max_phi);
-                config.set("chamber/phi_inlet", -max_phi);
-                config.set("chamber/phi_tc", max_phi);
-                config.set("chamber/pm", config.get_map("part_mating"));
-                Chamber chamber = config.deserialise<Chamber>("chamber");
-                chamber.initialise();
-                pea = chamber;
-            } break;
+          case CHAMBER: {
+            // Construct the chamber object.
+            float max_phi = config.get<float>("printer/max_print_angle");
+            config.set("chamber/phi_mani", max_phi);
+            config.set("chamber/phi_fixt", max_phi);
+            config.set("chamber/phi_inlet", -max_phi);
+            config.set("chamber/phi_tc", max_phi);
+            config.set("chamber/pm", config.get_map("part_mating"));
+            var cc = config.deserialise<Chamber>("chamber");
+            cc.initialise();
+            pea = cc;
+          } break;
 
-            case INJECTOR: {
-                // Construct the injector object.
-                float max_phi = config.get<float>("printer/max_print_angle");
-                config.set("injector/fPrintAngle", max_phi);
-                config.set("injector/pm", config.get_map("part_mating"));
-                Injector injector = config.deserialise<Injector>("injector");
-                injector.initialise();
-                pea = injector;
-            } break;
+          case INJECTOR: {
+            // Construct the injector object.
+            float max_phi = config.get<float>("printer/max_print_angle");
+            config.set("injector/phi_mw", max_phi);
+            config.set("injector/element/phi", max_phi);
+            config.set("injector/pm", config.get_map("part_mating"));
+            var inj = config.deserialise<Injector>("injector");
+            inj.initialise();
+            pea = inj;
+          } break;
 
-            case INJECTOR_SAMPLE: {
-                pea = new InjectorSample();
-            } break;
+          case INJECTOR_SAMPLE: {
+            // Construct the injector sample object from the injector input
+            // parameters.
+            float max_phi = config.get<float>("printer/max_print_angle");
+            int no_inj = sum(config.get<int[]>("injector/no_injg"));
+            config.new_map("sample");
+            config.set("sample/element", config.get_map("injector/element"));
+            config.set("sample/element/phi", max_phi);
+            config.set("sample/no_inj", no_inj);
+            config.set("sample/pm", config.get_map("part_mating"));
+            var sample = config.deserialise<InjectorSample>("sample");
+            sample.initialise();
+            pea = sample;
+          } break;
 
-            case INJECTOR_STU: {
-                // Construct stu's injector object.
-                float max_phi = config.get<float>("printer/max_print_angle");
-                config.set("injectorstu/pm", config.get_map("part_mating"));
-                config.set("injectorstu/element/phi", max_phi);
-                config.set("injectorstu/phi_mw", max_phi);
-                InjectorStu stu = config.deserialise<InjectorStu>("injectorstu");
-                stu.initialise();
-                pea = stu;
-            } break;
-
-            default:
-                throw new Exception("invalid 'make': unrecognised pea "
-                                 + $"0x{make & MASK_PEA:X}");
+          default:
+            throw new Exception("invalid 'make': unrecognised pea "
+                             + $"0x{make & MASK_PEA:X}");
         }
 
         // Modify the objects.

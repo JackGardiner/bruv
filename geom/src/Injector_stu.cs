@@ -105,8 +105,8 @@ public class InjectorElement {
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
-        float DP_1 = (Pr_inj1 - 1f)*pm.fChamberPressure;
-        float DP_2 = (Pr_inj2 - 1f)*pm.fChamberPressure;
+        float DP_1 = (Pr_inj1 - 1f)*pm.P_cc;
+        float DP_2 = (Pr_inj2 - 1f)*pm.P_cc;
         assert(DP_1 > 0f);
         assert(DP_2 > 0f);
 
@@ -148,15 +148,15 @@ public class InjectorElement {
 
         /* injection fluid state: */
 
-        float mdot_1 = pm.fOxMassFlowRate / N;
-        float mdot_2 = pm.fFuelMassFlowRate / N;
+        float mdot_1 = pm.mdot_LOx / N;
+        float mdot_2 = pm.mdot_IPA / N;
 
         // TODO: f(T) these bad boy, changes a lot w temp!
         float nu_1 = 2.56e-6f; // arithmetic mean of airborne ICD (114K)
         float nu_2 = 2.66e-6f;
 
-        float rho_1 = pm.fOxInjectionRho;
-        float rho_2 = pm.fFuelInjectionRho;
+        float rho_1 = pm.rho_LOx;
+        float rho_2 = pm.rho_IPA;
 
 
         /* stage 1 (LOx): */
@@ -662,7 +662,7 @@ public class InjectorElement {
 
 
 
-public class InjectorStu : TPIAP.Pea {
+public class Injector : TPIAP.Pea {
 
     protected const float EXTRA = 6f;
     protected int DIVISIONS => max(200, (int)(200f / VOXEL_SIZE));
@@ -937,7 +937,7 @@ public class InjectorStu : TPIAP.Pea {
 
         Rod flange = new Rod(
             new Frame(),
-            pm.inj_flange_thickness,
+            pm.flange_thickness_inj,
             pm.flange_outer_radius
         );
 
@@ -954,7 +954,7 @@ public class InjectorStu : TPIAP.Pea {
         }
         key.voxels(vox);
 
-        Fillet.concave(vox, 3f, inplace: true);
+        Fillet.concave(vox, pm.flange_fillet_radius, inplace: true);
         key.voxels(vox);
 
         vox.BoolSubtract(new Rod(
@@ -987,12 +987,12 @@ public class InjectorStu : TPIAP.Pea {
             // for bolt.
             vox.BoolAdd(new Rod(
                 new(rejxy(p, 0f)),
-                pm.inj_flange_thickness,
+                pm.flange_thickness_inj,
                 pm.Bsz_bolt/2f
             ).extended(2f*EXTRA, Extend.UPDOWN));
             // for washer/nut.
             vox.BoolAdd(new Rod(
-                new(rejxy(p, pm.flange_thickness)),
+                new(rejxy(p, pm.flange_thickness_inj)),
                 2f*EXTRA,
                 pm.Or_washer + 0.5f
             ));
@@ -1024,8 +1024,8 @@ public class InjectorStu : TPIAP.Pea {
 
         // Concial outer boundary.
         Cone volC = new(
-            new((pm.inj_flange_thickness - 0.2f)*uZ3),
-            mani_vol.peak.X + mani_vol.Lz - pm.inj_flange_thickness + 0.2f,
+            new((pm.flange_thickness_inj - 0.2f)*uZ3),
+            mani_vol.peak.X + mani_vol.Lz - pm.flange_thickness_inj + 0.2f,
             pm.Mr_bolt + 2f,
             mani_vol.peak.Y
         );

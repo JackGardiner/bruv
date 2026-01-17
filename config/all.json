@@ -18,18 +18,17 @@
         "Bln_bolt": 20.0,
         "Or_washer": 6.0,
 
-        "thickness_around_bolt": 5.0,
-        "flange_thickness": 7.0,
-        "inj_flange_thickness": 7.0,
-        "flange_outer_radius": 78.0,
-        "radial_fillet_radius": 5.0,
-        "axial_fillet_radius": 10.0,
+        "P_cc": 35e5,
+        "mdot_LOx": 1.2,
+        "mdot_IPA": 0.8,
+        "rho_LOx": 1141.0,
+        "rho_IPA": 786.0,
 
-        "fOxMassFlowRate": 1.2,
-        "fFuelMassFlowRate": 0.8,
-        "fOxInjectionRho": 1141.0,
-        "fFuelInjectionRho": 786.0,
-        "fChamberPressure": 35e5
+        "thickness_around_bolt": 5.0,
+        "flange_thickness_cc": 7.0,
+        "flange_thickness_inj": 7.0,
+        "flange_outer_radius": 78.0,
+        "flange_fillet_radius": 3.0
     },
     "chamber": {
         "L_cc": 100.0,
@@ -69,38 +68,6 @@
         "L_tc": 15.0
     },
     "injector": {
-        "no_inj": [5, 10],
-        "r_inj": [21, 40.21],
-        "theta0_inj": [0.0, 0.314159],
-
-        "no_fc": [30],
-        "r_fc": [48.5],
-        "theta0_fc": [0.0],
-        "Or_fc": 0.5,
-
-        "fTargetdPFrac": 0.15,
-
-        "fLOxPostLength": 10.0,
-        "fLOxPostWT": 1.0,
-        "fInjectorPlateThickness": 3.0,
-        "fFuelAnnulusOR": 4.5,
-
-        "fInnerOringPadW": 10.0,
-        "fInnerOringW": 5.0,
-        "fInnerOringMR": 50.0,
-        "fInnerOringDepth": 1.5,
-        "fOuterOringW": 5.0,
-        "fOuterOringMR": 60.0,
-        "fOuterOringDepth": 1.5,
-
-        "fTargetCdOx": 0.35,
-        "fTargetCdFuel": 0.35,
-        "sw_n_1": 4,
-        "sw_n_2": 4,
-
-        "fRoofThickness": 4.0
-    },
-    "injectorstu": {
         "no_injg": [5, 10],
         "r_injg": [21, 40.21],
         "theta0_injg": [0.0, 0.314159],

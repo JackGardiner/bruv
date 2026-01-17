@@ -148,6 +148,8 @@ public class Chamber : TPIAP.Pea {
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
             float theta;
             if (i > 0) {
+                // TODO: check maximum overhang angle (should just be helix
+                // angle?)
                 // got a 3d triangle to solve.
                 float cosa = (r*r - prev_r*prev_r - rho*rho)
                            / (2f * prev_r * rho);
@@ -1353,7 +1355,7 @@ public class Chamber : TPIAP.Pea {
 
         vox = new Rod(
             new Frame(),
-            pm.flange_thickness,
+            pm.flange_thickness_cc,
             pm.flange_outer_radius
         ).extended(EXTRA, Extend.DOWN);
         keys.Add(Geez.voxels(vox));
@@ -1361,7 +1363,7 @@ public class Chamber : TPIAP.Pea {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             float r = pm.Mr_bolt;
-            float Lz = pm.flange_thickness;
+            float Lz = pm.flange_thickness_cc;
             float Lr = pm.Bsz_bolt/2f + pm.thickness_around_bolt;
             Vec3 p = fromcyl(r, theta, 0f);
 
@@ -1477,12 +1479,12 @@ public class Chamber : TPIAP.Pea {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             Frame frame = new Frame(fromcyl(pm.Mr_bolt, theta, 0f));
-            Rod rod = new Rod(frame, pm.flange_thickness, pm.Bsz_bolt/2f);
+            Rod rod = new Rod(frame, pm.flange_thickness_cc, pm.Bsz_bolt/2f);
             keys.Add(Geez.rod(rod));
 
             hole.BoolAdd(rod.extended(EXTRA, Extend.UPDOWN));
             clearance.BoolAdd(new Rod(
-                frame.transz(pm.flange_thickness),
+                frame.transz(pm.flange_thickness_cc),
                 3f*EXTRA,
                 pm.Bsz_bolt/2f + 3f
             ));

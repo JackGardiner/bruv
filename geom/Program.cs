@@ -5,13 +5,12 @@ using TPIAP = TwoPeasInAPod;
 
 
 /* Boot up options: */
-float voxel_size_mm = 2f;
-int make = TPIAP.INJECTOR
-         | TPIAP.VOXELS;
+float voxel_size_mm = 0.4f;
+int make = TPIAP.INJECTOR | TPIAP.VOXELS;
 // See TPIAP for construction guide of `make`.
-bool leave_window_running = false;
-bool sectionview = false;
-Sectioner sectioner = Sectioner.pie(torad(0f), torad(270f));
+bool leave_window_running = true;
+bool sectionview = true;
+Sectioner sectioner = Sectioner.pie(0f, PI);
 
 
 

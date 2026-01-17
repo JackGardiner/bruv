@@ -1,18 +1,16 @@
 
 public class PartMating {
-    /* Cheeky parts interface diagram.
-                    ,- fuel channel
-       cc wall -,      '
-                '      : :       :__|  |_
-    ___________________| |__________|  |_|  ___,- this plane is top of cc
-                | '-'  | |   '-' ,--|  |-'
-                :      : :      :
-                   ,         ,      ,
-     face sealing -'---------'      '-- bolt
-          o-rings
-    */
+    // X_cc = combustion chamber property.
+    // X_chnl = combustion chamber cooling channel property.
+    // X_chnl = combustion chamber cooling channel property.
+    // X_Ioring = inner O-ring property.
+    // X_Ooring = outer O-ring property.
+    // X_bolt = bolt property.
+    // X_washer = washer property.
+    // X_LOx = liquid oxygen (oxidiser) property.
+    // X_IPA = isopropyl alcohol (fuel) property.
 
-    // --- Required for realisable mate: ---
+    /* Required geometric parameters: */
 
     public required float Or_cc { get; init; }
 
@@ -32,21 +30,17 @@ public class PartMating {
     public required float Bln_bolt { get; init; }
     public required float Or_washer { get; init; }
 
-    // --- Descriptive geometry ---
+    /* Non-geometric parameters: */
+    public required float P_cc { get; init; }
+    public required float mdot_LOx { get; init; }
+    public required float mdot_IPA { get; init; }
+    public required float rho_LOx { get; init; }
+    public required float rho_IPA { get; init; }
 
-    // --- Physics/Inlet Data ---
-    public required float fChamberPressure { get; init; }
-    public required float fOxMassFlowRate { get; init; }
-    public required float fFuelMassFlowRate { get; init; }
-    public required float fOxInjectionRho { get; init; }
-    public required float fFuelInjectionRho { get; init; }
-
-    // --- Design Preference Params ---
+    /* For purely visual matches: */
     public required float thickness_around_bolt { get; init; }
-    public required float flange_thickness { get; init; }
-    public required float inj_flange_thickness { get; init; }
-
+    public required float flange_thickness_cc { get; init; }
+    public required float flange_thickness_inj { get; init; }
     public required float flange_outer_radius { get; init; }
-    public required float radial_fillet_radius { get; init; }
-    public required float axial_fillet_radius { get; init; }
+    public required float flange_fillet_radius { get; init; }
 }

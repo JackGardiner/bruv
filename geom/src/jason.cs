@@ -138,6 +138,13 @@ public class Jason {
             parent[leaf] = JsonValue.Create(value);
         }
     }
+    public void new_map(string name) {
+        JsonMap parent = _parent_leaf(name, out string leaf);
+        if (parent.ContainsKey(leaf))
+            throw new Exception($"leaf already exists, of: '{name}'");
+
+        parent[leaf] = new JsonMap();
+    }
 
     public T deserialise<T>(string name) {
         JsonMap parent = _parent_leaf(name, out string leaf);
