@@ -87,7 +87,7 @@ public static class TwoPeasInAPod {
         if (isset(make, LOOKIN_FANCY)) {
             print("entering barcelona...");
             print();
-            string barcelona = fromroot("barcelona/Barcelona.zip");
+            string barcelona = fromroot("assets/Barcelona.zip");
             try {
                 PICOGK_VIEWER.LoadLightSetup(barcelona);
                 // Note that the loading prints a "Loading Lights" message, which
