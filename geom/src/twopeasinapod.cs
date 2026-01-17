@@ -36,6 +36,7 @@ public static class TwoPeasInAPod {
     public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_SAMPLE = 3 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_STU = 4 << (BITC_ACTION + BITC_MODIFIER);
+    /* theres lowk more than 2 peas in this pod. */
     /* THATS ALL FOLKS */
 
 
@@ -155,7 +156,10 @@ public static class TwoPeasInAPod {
 
             case INJECTOR_STU: {
                 // Construct stu's injector object.
+                float max_phi = config.get<float>("printer/max_print_angle");
                 config.set("injectorstu/pm", config.get_map("part_mating"));
+                config.set("injectorstu/element/phi", max_phi);
+                config.set("injectorstu/phi_mw", max_phi);
                 InjectorStu stu = config.deserialise<InjectorStu>("injectorstu");
                 stu.initialise();
                 pea = stu;

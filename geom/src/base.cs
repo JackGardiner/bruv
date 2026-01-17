@@ -1116,7 +1116,7 @@ public class Cone : AxialShape<Cone> {
                 donut = false;
             }
         }
-        Polygon.cull_duplicates(vertices);
+        Polygon.cull_adjacent_duplicates(vertices);
         assert(numel(vertices) >= 3, "too thin");
 
         // Make the divs s.t. the longest spacing between vertices is one voxel.

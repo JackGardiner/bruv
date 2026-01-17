@@ -70,7 +70,7 @@ public class brGPort /* TODO: */ {
             new(-Lz,                downstream_radius),
             new(-Lz,                0f),
         ];
-        Polygon.cull_duplicates(points);
+        Polygon.cull_adjacent_duplicates(points);
 
         Mesh mesh = Polygon.mesh_revolved(face_out, points);
         return new(mesh);
@@ -102,7 +102,7 @@ public class brGPort /* TODO: */ {
             new(-total_bore_depth,       downstream_radius),
             new(-straight_length,        pilot_bore_radius),
         ];
-        Polygon.cull_duplicates(points);
+        Polygon.cull_adjacent_duplicates(points);
 
         Mesh mesh = Polygon.mesh_revolved(face_out, points, donut: true);
         return new(mesh);

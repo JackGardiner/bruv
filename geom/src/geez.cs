@@ -1917,8 +1917,10 @@ public static class Geez {
         _next = new(_next.value + 1);
         _geezed.Add(key, (lines, meshes, bbox));
 
-        ViewerHack.set_size(bbox.vecSize());
-        ViewerHack.set_centre(bbox.vecCenter());
+        if (!bbox.bIsEmpty()) {
+            ViewerHack.set_size(bbox.vecSize());
+            ViewerHack.set_centre(bbox.vecCenter());
+        }
 
         ViewerHack.make_shit_happen_in_the_future();
         return key;

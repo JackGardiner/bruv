@@ -2,10 +2,10 @@ using static br.Br;
 using br;
 using TPIAP = TwoPeasInAPod;
 
-using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using BBox3 = PicoGK.BBox3;
 
 public class InjectorSample : TPIAP.Pea {
 
@@ -54,28 +54,94 @@ public class InjectorSample : TPIAP.Pea {
         };
 
         InjectorElement element = new(){
-            th_inj1 = 0.5f,
-            th_inj2 = 0.5f,
-            no_il1 = 3,
-            no_il2 = 4,
-            Pr_inj1 = 1.1f,
-            Pr_inj2 = 1.1f,
+            phi = PI_4,
+            no_il1 = 5,
+            no_il2 = 5,
+            th_inj1 = 0.8f,
+            th_inj2 = 0.8f,
+            th_nz1 = 0.8f,
+            th_nz2 = 0.8f,
+            Pr_inj1 = 1.15f,
+            Pr_inj2 = 1.15f,
         };
-        element.initialise(pm);
+        element.initialise(pm, 15, out float z0);
 
         element.voxels(ZERO2, out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
 
+        BBox3 bounds = pos.oCalculateBoundingBox();
 
-        /* view, but you should build up the support for sample. */
 
-        Geez.voxels(neg, COLOUR_RED);
-        Geez.voxels(pos, COLOUR_BLUE);
-        Thread.Sleep(4000);
-        Geez.clear();
+        Voxels dividing = Cone.phied(
+            new(z0*uZ3),
+            PI_4,
+            Lz: 20f,
+            r0: 0f
+        );
+        dividing.BoolSubtract(Cone.phied(
+            new((z0 + 2f*SQRT2)*uZ3),
+            PI_4,
+            Lz: 30f,
+            r0: 0f
+        ));
+
+
+        Rod rod = new Rod(
+            new(),
+            bounds.vecSize().Z * 1.2f,
+            hypot(bounds.vecSize().X, bounds.vecSize().Y) / 2f * 1.2f
+        );
+
+        pos.BoolAdd(dividing);
+        pos.BoolIntersect(rod);
+        float th = 5f;
+        pos.BoolAdd(rod.shelled(th));
+        pos.BoolAdd(new Rod(new(), 3f, rod.r + th));
+        pos.BoolAdd(new Rod(new((rod.Lz - 0.05f)*uZ3), th, rod.r + th));
+
 
         Voxels vox = pos; // no copy.
         vox.BoolSubtract(neg);
+        vox.TripleOffset(0.03f);
+
+
+        float R = rod.r + th;
+        float r0 = nonhypot(R, R/3.5f);
+        Bar bar = new Bar(
+            new(),
+            2f*r0,
+            2f*r0,
+            rod.Lz + 2f*th
+        ).extended(3f, Extend.UPDOWN);
+        vox.BoolSubtract(bar.transx(+2f*r0));
+        vox.BoolSubtract(bar.transx(-2f*r0));
+        vox.BoolSubtract(bar.transy(+2f*r0));
+        vox.BoolSubtract(bar.transy(-2f*r0));
+
+
+        Frame at0 = new(new Vec3(rod.r/2f, 0f, rod.Lz));
+        Voxels voxport0 = new Rod(at0, 12f, 9.73f/2f)
+                .shelled(5f)
+                .extended(1f, Extend.DOWN);
+        voxport0.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 20f));
+
+        vox.BoolAdd(voxport0);
+        vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, 9.73f/2f));
+
+        Frame at1 = new(new Vec3(-rod.r/1.5f, 0f, rod.Lz));
+        Geez.frame(at1);
+        Geez.rod(new Rod(at1, 10f, 9.73f/2f));
+        // Voxels voxport1 = new Rod(at0, 20f, 9.73f)
+        //         .shelled(5f)
+        //         .extended(3f, Extend.DOWN);
+        // voxport1.BoolSubtract(new Rod(at0.transz(1f), -5f, 20f));
+
+        // vox.BoolAdd(voxport1);
+        // vox.BoolSubtract(new Rod(at1.transz(-5f), 30f, 9.73f));
+
+        BBox3 outer = vox.oCalculateBoundingBox();
+        print(outer.vecSize());
+
         Geez.voxels(vox);
 
         return vox;

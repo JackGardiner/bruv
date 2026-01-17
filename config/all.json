@@ -112,13 +112,19 @@
 
         "th_plate": 3.0,
 
-        "th_inj1": 1.0,
-        "th_inj2": 1.0,
-        "th_nz1": 0.8,
-        "no_il1": 3,
-        "no_il2": 4,
-        "Pr_inj1": 1.15,
-        "Pr_inj2": 1.15
+        "th_dmw": 2.0,
+        "th_omw": 4.0,
+
+        "element": {
+            "no_il1": 5,
+            "no_il2": 5,
+            "th_inj1": 0.8,
+            "th_inj2": 0.8,
+            "th_nz1": 0.8,
+            "th_nz2": 0.8,
+            "Pr_inj1": 1.25,
+            "Pr_inj2": 1.25
+        }
     },
     "printer": {
         "name": "Nikon SLM280 2.0",

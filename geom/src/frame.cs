@@ -172,23 +172,23 @@ public class Frame {
             this.centre = centre;
         }
 
-        public Frame axial(Vec3 pos) {
+        public Frame axial(Vec3 pos, bool relative=true) {
+            if (!relative)
+                pos = centre / pos;
             // default to as-if lies on x.
             float theta = argxy(pos, ifzero: 0f);
 
             Vec3 Rad = fromcyl(1f, theta, 0f);
             Vec3 Cir = fromcyl(1f, theta + PI_2, 0f);
             Vec3 Axi = uZ3;
-            Rad = centre.to_global_dir(Rad);
-            Cir = centre.to_global_dir(Cir);
-            Axi = centre.to_global_dir(Axi);
-            return new(centre * pos, Rad, Cir, Axi);
+            Frame local = new(pos, Rad, Cir, Axi);
+            return centre + local;
         }
-        public Frame radial(Vec3 pos) {
-            return axial(pos).cycleccw();
+        public Frame radial(Vec3 pos, bool relative=true) {
+            return axial(pos, relative).cycleccw();
         }
-        public Frame circum(Vec3 pos) {
-            return axial(pos).cyclecw();
+        public Frame circum(Vec3 pos, bool relative=true) {
+            return axial(pos, relative).cyclecw();
         }
     }
 
@@ -199,7 +199,9 @@ public class Frame {
             this.centre = centre;
         }
 
-        public Frame normal(Vec3 pos) {
+        public Frame normal(Vec3 pos, bool relative=true) {
+            if (!relative)
+                pos = centre / pos;
             // default to as-if lies on x.
             float theta = argxy(pos, ifzero: 0f);
             float phi = argphi(pos, ifzero: PI_2);
@@ -207,16 +209,14 @@ public class Frame {
             Vec3 Lon = fromsph(1f, theta, phi + PI_2);
             Vec3 Lat = fromcyl(1f, theta + PI_2, 0f);
             Vec3 Nor = fromsph(1f, theta, phi);
-            Lon = centre.to_global_dir(Lon);
-            Lat = centre.to_global_dir(Lat);
-            Nor = centre.to_global_dir(Nor);
-            return new(centre * pos, Lon, Lat, Nor);
+            Frame local = new(pos, Lon, Lat, Nor);
+            return centre + local;
         }
-        public Frame longit(Vec3 pos) {
-            return normal(pos).cycleccw();
+        public Frame longit(Vec3 pos, bool relative=true) {
+            return normal(pos, relative).cycleccw();
         }
-        public Frame latit(Vec3 pos) {
-            return normal(pos).cyclecw();
+        public Frame latit(Vec3 pos, bool relative=true) {
+            return normal(pos, relative).cyclecw();
         }
     }
 

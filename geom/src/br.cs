@@ -58,9 +58,8 @@ public static partial class Br {
 
     /* swap me */
     public static void swap<T>(ref T a, ref T b) {
-        T c = a;
-        a = b;
-        b = c;
+        (b, a) = (a, b);
+        // oh damn i didnt know u could do that.
     }
 
     /* bit tricks. */
@@ -290,9 +289,9 @@ public static partial class Br {
     public static float round(float a) => float.Round(a);
     public static float floor(float a) => float.Floor(a);
     public static float ceil(float a)  => float.Ceiling(a);
-    public static int iround(float a) => (int)float.Round(a);
-    public static int ifloor(float a) => (int)float.Floor(a);
-    public static int iceil(float a)  => (int)float.Ceiling(a);
+    public static int iround(float a) => (int)round(a);
+    public static int ifloor(float a) => (int)floor(a);
+    public static int iceil(float a)  => (int)ceil(a);
 
     public static Vec2 round(Vec2 a) => Vec2.Round(a);
     public static Vec2 floor(Vec2 a) => new(floor(a.X), floor(a.Y));
@@ -413,6 +412,14 @@ public static partial class Br {
     public static float lerp(float a, float b, int i, int N)
         => a + i*(b - a)/(N - 1);
 
+    public static Colour lerp(Colour a, Colour b, float t)
+        => new(
+            lerp(a.R, b.R, t),
+            lerp(a.G, b.G, t),
+            lerp(a.B, b.B, t),
+            lerp(a.A, b.A, t)
+        );
+
     public static float invlerp(float a, float b, float x) => (x - a) / (b - a);
 
     public static float mag(float a) => abs(a); // same difference type shi.
@@ -483,6 +490,8 @@ public static partial class Br {
         => new(r*cos(theta), r*sin(theta), z);
     public static Vec3 fromsph(float r, float theta, float phi)
         => new(r*cos(theta)*sin(phi), r*sin(theta)*sin(phi), r*cos(phi));
+    public static Vec3 fromzr(Vec2 zr, float theta)
+        => rejxy(frompol(zr.Y, theta), zr.X);
 
     public static float magpara(Vec3 a, Vec3 b) {
         assert(!nearzero(b));

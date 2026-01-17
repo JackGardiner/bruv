@@ -296,15 +296,14 @@ public static class Polygon {
     }
 
 
-    public static void cull_duplicates(List<Vec2> vertices) /* O(N^2) */ {
-        for (int i=0; i<numel(vertices); ++i) {
-            Vec2 v = vertices[i];
-            for (int j=i + 1; j<numel(vertices); ++j) {
-                if (nearto(v, vertices[j])) {
-                    vertices.RemoveAt(j);
-                    --j;
-                }
-            }
+    public static void cull_adjacent_duplicates(List<Vec2> vertices) {
+        for (int i=0; i<numel(vertices) - 1; /* nuthin */) {
+            Vec2 a = vertices[i];
+            Vec2 b = vertices[i + 1];
+            if (nearto(a, b))
+                vertices.RemoveAt(i);
+            else
+                ++i;
         }
     }
 
@@ -343,9 +342,7 @@ public static class Polygon {
                 ++j;
             return j;
         }
-        return circle(no, r, theta0)
-                .Select((p, i) => rejxy(p, z[jof(i)]))
-                .ToList();
+        return [..circle(no, r, theta0).Select((p, i) => rejxy(p, z[jof(i)]))];
     }
 
 

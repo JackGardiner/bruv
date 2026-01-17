@@ -11,34 +11,38 @@ using BBox3 = PicoGK.BBox3;
 
 
 // X_chnl = cooling channel property.
+// X_ch1 = inner injector element chamber property.
+// X_ch2 = outer injector element chamber property.
+// X_dmw = LOx/IPA dividing manifold wall property.
 // X_fc = film cooling property.
 // X_fcg = grouped film cooling property (each index = one group).
-// X_il1 = inlet to inner axial injector property.
-// X_il2 = inlet to outer axial injector property.
+// X_il1 = inner injector element inlet property.
+// X_il2 = outer injector element inlet property.
 // X_inj = axial injector property.
 // X_injg = grouped axial injector property (each index = one group).
 // X_inj1 = inner axial injector property.
 // X_inj2 = outer axial injector property.
 // X_IPA = IPA manifold property.
 // X_LOx = LOx manifold property.
-// X_nz1 = nozzle of inner axial injector property.
-// X_nz2 = nozzle of outer axial injector property.
+// X_nz1 = inner axial injector nozzle property.
+// X_nz2 = outer axial injector nozzle property.
+// X_omw = outer manifold wall property.
 // X_plate = base plate propoerty.
 
 
-/* INEJCTOR ELEMENT DESIGN, SWIRL/SHEAR COAXIAL.
+/* INEJCTOR ELEMENT DESIGN, BI-SWIRL COAXIAL.
    the big boy.
 
 
              ',',        ,-| |---,
                ',',    ,'.  .    .',_____     | ^ +r
-         ,-| |---'-'--|  .  .    . .    .       |
+         ,-| |---'-'--|  .  .    . .    .     | |
        ,'.  .         ',_____________   .     |    -z
-     ,'  .  .         .. .  .    . ..   .         - >
+     ,'  .  .         .. .  .    . ..   .     |   -->
 - - - - - - - - - - - - - - - - - - - - - - - + - - -
-    .    .  .         .. .  .    . ..   .      \
+    .    .  .         .. .  .    . ..   .     |\
 FOR INJ1:.  .         .. .  .    . ..   .     | '- origin
-    A    B  C         DE .  .    . .F   .
+    A    B  C         DE .  .    . .F   .     |
                       .  .  .    . .    .     |
 FOR INJ2:             .  .  .    . .    .
                       A  B  C    D E    F
@@ -57,22 +61,28 @@ clearest ascii diagram.
 
 
 public class InjectorElementPoints {
-    public Vec2 A { get; set; } = NAN2;
-    public Vec2 B { get; set; } = NAN2;
-    public Vec2 C { get; set; } = NAN2;
-    public Vec2 D { get; set; } = NAN2;
-    public Vec2 E { get; set; } = NAN2;
-    public Vec2 F { get; set; } = NAN2;
+    public Vec2 A = NAN2;
+    public Vec2 B = NAN2;
+    public Vec2 C = NAN2;
+    public Vec2 D = NAN2;
+    public Vec2 E = NAN2;
+    public Vec2 F = NAN2;
 }
 
 
 public class InjectorElement {
     public InjectorElementPoints points1 = new();
     public InjectorElementPoints points2 = new();
-    public required float th_inj1 { get; init; } // TODO: make DEF thinner.
-    public required float th_inj2 { get; init; } // TODO: make DEF thinner.
+
+    public required float phi { get; init; }
+    /* ^ must be same as LOx/OPA dividing cone */
+
     public required int no_il1 { get; init; }
     public required int no_il2 { get; init; }
+    public required float th_inj1 { get; init; }
+    public required float th_inj2 { get; init; }
+    public required float th_nz1 { get; init; }
+    public required float th_nz2 { get; init; }
     public required float Pr_inj1 { get; init; }
     public required float Pr_inj2 { get; init; }
     public float D_il1 = NAN;
@@ -84,186 +94,295 @@ public class InjectorElement {
 
 
     private bool inited = false;
-    public void initialise(in PartMating pm) {
+    public void initialise(in PartMating pm, int N, out float z0_cone) {
         assert(!inited);
+        assert(phi > 0f);
+        assert(phi <= PI_2);
+        assert(N >= 1);
 
-      #if false
-        /* JACKERY. this is now injector element dimensioning logic. i have
-           modifed it slightly (pure renaming + iteration loop restructure) */
-        /* ALSO make sure to turn that `false` three lines up into a `true`. */
+        assert(nearto(th_nz1, th_inj1), "havent implemented it yet");
+        assert(nearto(th_nz2, th_inj2), "havent implemented it yet");
 
-        // Within this:
-        //    _inj1 -> _1
-        //    _inj2 -> _2
-        //   AND all lengths are in metres. converted to mm at end.
+        // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
-        int N = numel(points_inj);
+        float DP_1 = (Pr_inj1 - 1f)*pm.fChamberPressure;
+        float DP_2 = (Pr_inj2 - 1f)*pm.fChamberPressure;
+        assert(DP_1 > 0f);
+        assert(DP_2 > 0f);
 
-        float DP_1 = Pr_inj1*pm.fChamberPressure;
-        float DP_2 = Pr_inj2*pm.fChamberPressure;
+
+        /* Arbitrary params: */
+
+        // Reasonable bounds for inlet counts:
+        assert(within(no_il1, 2, 6));
+        assert(within(no_il2, 2, 6));
+
+        // Coefficients of nozzle opening: IR_ch/IR_nz
+        // reasonable bounds: idx?
+        float Rbar_ch1 = 1.4f;
+        float Rbar_ch2 = 1.2f;
+
+        // Relative nozzle lengths: L_nz/2/IR_nz
+        // idk why they put a factor of 2.
+        // Lbar_nz1 is prescribed as 1.0 by procedure.
+        float Lbar_nz1 = 1.5f;
+        float Lbar_nz2 = 0.5f;
+
+        // Relative chamber lengths: L_ch/IR_ch
+        // reasonable bounds: [2, 3]
+        float Lbar_ch1 = 4.0f;
+        float Lbar_ch2 = 100f; // fuck off uge. clipped at end of this function.
+
+        // Spray cone angle of stage 1.
+        // reasonable bounds: [60deg, 80deg]
+        float twoalpha_1 = torad(80f);
+
+        // Mixing residence time.
+        // reasonable bounds: [0.1ms, 1.5ms]
+        float tau_i = 0.15e-3f;
+
+        // idk why these are separate variables (in the paper).
+        float C_1 = Rbar_ch1;
+        float C_2 = Rbar_ch2;
+
+
+        /* injection fluid state: */
 
         float mdot_1 = pm.fOxMassFlowRate / N;
         float mdot_2 = pm.fFuelMassFlowRate / N;
 
-        // Arbitrary params.
-        float Rbar_in1 = 1.4f; // coefficients of nozzle opening
-        float Rbar_in2 = 1f; //TODO: should be bigger?  1 is convenient
-        float lbar_n1 = 1f; // relative nozzle lengths:  l_n / (2 * R_n)
-        float lbar_n2 = 0.5f;
-        float twoalpha_1 = torad(80f); // spray cone angle of stage 1
-        float C_1 = 2f;
-        float C_2 = 1.2f;
+        // TODO: f(T) these bad boy, changes a lot w temp!
+        float nu_1 = 2.56e-6f; // arithmetic mean of airborne ICD (114K)
+        float nu_2 = 2.66e-6f;
 
-        float nu_LOx = 2.56e-6f; // at arithmetic mean of airborne ICD (114K)
-        float nu_IPA = 2.66e-6f; // m2/s //TODO: f(T) this bad boy, it changes a lot w temp!
-        float rho_LOx = pm.fOxInjectionRho;
-        float rho_IPA = pm.fFuelInjectionRho;
+        float rho_1 = pm.fOxInjectionRho;
+        float rho_2 = pm.fFuelInjectionRho;
 
 
         /* stage 1 (LOx): */
 
-        float A_1 = GraphLookup.GetA(twoalpha_1, lbar_n1);
-        float mu_1 = GraphLookup.GetFlowCoefficient(A_1, C_1);
+        float A_1 = GraphLookup.get_A(twoalpha_1, Lbar_nz1);
+        float mu_il1 = GraphLookup.get_mu_il(A_1, C_1);
+        float rmbar_1 = GraphLookup.get_rmbar(A_1, Rbar_ch1);
 
-        // Nozzle and inlet radii.
-        float r_F1 = 0.475f*sqrt(mdot_1/mu_1/sqrt(rho_LOx*DP_1));
-        float mystery1 = Rbar_in1 * r_F1; // TODO: ion get it
-        float r_C1 = sqrt(mystery1*r_F1/no_il1/A_1);
+        float Ir_nz1 = 0.475f*sqrt(mdot_1/mu_il1/sqrt(rho_1*DP_1));
+        float L_nz1 = 2f*Lbar_nz1*Ir_nz1;
 
-        float Re_in1 = 2f*mdot_1/PI/sqrt(no_il1)/r_C1/rho_LOx/nu_LOx;
+        float Ir_ch1 = Rbar_ch1*Ir_nz1;
+        float L_ch1 = Lbar_ch1*Ir_ch1;
 
-        float Dz_B1D1 = 4f * r_C1;
-        float Dz_E1F1 = 2f * r_F1; // TODO: checkme
-        float Dz_mystery = 2.5f * mystery1; // TODO: wtf
-
-        float rmbar_1 = GraphLookup.GetRelativeVortexRadius(A_1, Rbar_in1);
+        float Ir_il1 = sqrt(Ir_ch1*Ir_nz1/no_il1/A_1);
+        float L_il1 = Ir_ch1 + 3f*Ir_il1;
 
 
         /* stage 2 (IPA): */
 
-        // Required physical gas-vortex radius (constant)
-        float r_m2_req = r_F1 + th_nz1 + 0.3f;
-        // Initial guess for nozzle radius
-        float r_F2 = r_m2_req;
+        float min_fluid_inner_radius_2 = Ir_nz1 + th_nz1*1e-3f + 0.3e-3f;
+
+        // Initial guess for nozzle radius.
+        float Ir_nz2 = min_fluid_inner_radius_2;
 
         // Iteratively solve nozzle dimensions.
         float A_2 = NAN;
-        float mu_2 = NAN;
+        float mu_il2 = NAN;
         float rmbar_2 = NAN;
 
-        float tolerance = 0.001f;
-        int max_iters = 100;
-        for (int iter=0; iter<max_iters; ++iter) {
+        const int MAX_ITERS = 100;
+        const float TOLERANCE = 0.001e-3f;
+        float diff = +INF;
+        for (int iter=0; iter<MAX_ITERS; ++iter) {
+
             // 1. Calculate current flow coefficient mu based on current Rn.
-            mu_2 = (mdot_1 + mdot_2)/PI/squared(r_F2)/sqrt(2f*rho_IPA*DP_2);
+            mu_il2 = (mdot_1 + mdot_2)/PI/squared(Ir_nz2)/sqrt(2f*rho_2*DP_2);
 
             // 2. Find A based on mu (from Fig 34).
-            A_2 = GraphLookup.GetAFromMu(mu_2, C_2);
+            A_2 = GraphLookup.get_A_from_mu_il(mu_il2, C_2);
 
             // 3. Find dimensionless relative vortex radius (from Fig 35).
-            rmbar_2 = GraphLookup.GetRelativeVortexRadius(A_2, Rbar_in2);
+            rmbar_2 = GraphLookup.get_rmbar(A_2, Rbar_ch2);
+            // float fluid_inner_radius_2 = rmbar_2 * Ir_nz2;
+            float fluid_inner_radius_2 = rmbar_2;
+
+            // Leave if we're under tol (note we recalced 1.2.3.).
+            if (diff < TOLERANCE)
+                break;
+            assert(iter != MAX_ITERS - 1);
 
             // 4. Calculate NEW physical nozzle radius.
-            float new_r_F2 = r_m2_req / rmbar_2;
-            float diff = abs(new_r_F2 - r_F2);
-            r_F2 = new_r_F2;
-            if (diff < tolerance)
-                break;
+            float next = min_fluid_inner_radius_2 / fluid_inner_radius_2;
+            diff = abs(next - Ir_nz2);
+            Ir_nz2 = next;
 
-            assert(iter != max_iters - 1);
+            // re-loop to re-calc mu/A/rmbar.
         }
+        assert(Ir_nz2 >= min_fluid_inner_radius_2);
 
-        float mystery2 = Rbar_in2 * r_F2; // TODO: wtf
-        float r_C2 = sqrt(mystery2*r_F2/no_il2/A_2);
+        float L_nz2 = 2f*Lbar_nz2*Ir_nz2;
 
-        float Re_in2 = 2f*mdot_2/PI/sqrt(no_il2)/r_C2/rho_IPA/nu_IPA;
+        float Ir_ch2 = Rbar_ch2*Ir_nz2;
+        float L_ch2 = Lbar_ch2*Ir_ch2;
+
+        float Ir_il2 = sqrt(Ir_ch2*Ir_nz2/no_il2/A_2);
+        float L_il2 = Ir_ch2 + 3f*Ir_il2;
 
 
-        /* combining: */
+        /* Inner nozzle vertical offset: */
 
         float K_m = mdot_1/mdot_2;
-        float phi_1 = 1f - squared(rmbar_1);
-        float phi_2 = 1f - squared(rmbar_2);
+        float cspf_1 = 1f - squared(rmbar_1); // coefficient of stage passage
+        float cspf_2 = 1f - squared(rmbar_2); //   fullness.
+        float mixing_length = SQRT2 * tau_i
+                            * (
+                                K_m/(K_m + 1f)*mu_il2/cspf_2*sqrt(DP_2/rho_2)
+                               + 1f/(K_m + 1f)*mu_il1/cspf_1*sqrt(DP_1/rho_1)
+                            );
 
-        float tau_i = 0.15e-3f; // TODO: what even is this.
-        float l_mix = SQRT2 * tau_i
-                    * (
-                        K_m/(K_m + 1f)*mu_2/phi_2*sqrt(DP_2/rho_IPA)
-                       + 1f/(K_m + 1f)*mu_1/phi_1*sqrt(DP_1/rho_LOx)
-                    );
+        float z0_inj1 = L_nz2 - mixing_length;
 
-        float l_n2 = 2f*lbar_n2*sw_R_n2; // stage 2 nozzle length
 
-        sw_delta_l_n = l_n2 - l_mix;
-
-        using (StreamWriter writer = new StreamWriter("exports/injector_report.txt")) {
-            writer.WriteLine("Injector Report");
-            writer.WriteLine("===============");
-            writer.WriteLine();
-            writer.WriteLine($"Total elements count: {N}");
-            writer.WriteLine();
-            writer.WriteLine("Stage 1 (LOX):");
-            writer.WriteLine($"  - Nozzle inner radius: {sw_R_n1} mm");
-            writer.WriteLine($"  - Nozzle Reynolds number: {Re_in1}");
-            writer.WriteLine($"  - Nozzle outer radius: {sw_R_1} mm");
-            writer.WriteLine($"  - A_1: {A_1}");
-            writer.WriteLine($"  - Rbar_in1: {Rbar_in1}");
-            writer.WriteLine($"  - rm_bar_1: {rm_bar_1}");
-            writer.WriteLine($"  - Tangential inlet radius: {sw_r_in1} mm");
-            writer.WriteLine($"  - phi_1: {phi_1}");
-            writer.WriteLine($"  - Reynolds number at tangential inlet: {Re_in1}");
-            writer.WriteLine();
-            writer.WriteLine("Stage 2 (IPA):");
-            writer.WriteLine($"  - Nozzle outer radius: {sw_R_n2} mm");
-            writer.WriteLine($"  - Nozzle Reynolds number: {Re_in2}");
-            writer.WriteLine($"  - A_2: {A_2}");
-            writer.WriteLine($"  - Mixing length: {l_mix} mm");
-            writer.WriteLine($"  - Annulus radial gap: {sw_R_n2 - sw_R_1} mm");
-            writer.WriteLine($"  - Nozzle length: {l_n2} mm");
-            writer.WriteLine($"  - Tangential inlet radius: {sw_r_in2} mm");
-            writer.WriteLine($"  - delta_L (inset length) {sw_delta_l_n} mm");
-            writer.WriteLine($"  - phi_2: {phi_2}");
-            writer.WriteLine($"  - Reynolds number at tangential inlet: {Re_in2}");
-            writer.WriteLine();
-        }
-
+        // Requires some turbulence.
+        float Re_il1 = 2f*mdot_1/PI/sqrt(no_il1)/Ir_il1/rho_1/nu_1;
+        float Re_il2 = 2f*mdot_2/PI/sqrt(no_il2)/Ir_il2/rho_2/nu_2;
+        // assert(Re_il1 > 10e3f);
+        // assert(Re_il2 > 10e3f);
+        // nm we dont meet it :)
 
         /* FINAL ACTION: */
         // - set all 1&2 points A-F.
         // - set inlet 1&2 D&L.
 
-      #else
-        // Just put dummy.
+        points2.F = 1e3f * new Vec2(0f, Ir_nz2);
+        points2.E = points2.F + 1e3f * new Vec2(L_nz2, 0f);
+        float Dr_E2D2 = Ir_ch2 - Ir_nz2;
+        points2.D = points2.E + 1e3f * new Vec2(Dr_E2D2/tan(phi), Dr_E2D2);
+        points2.B = points2.E + 1e3f * new Vec2(L_ch2, Dr_E2D2);
+        points2.C = points2.B + 1e3f * new Vec2(-Ir_il2, 0f);
+        float Dr_B2A2 = 0f - Ir_ch2;
+        points2.A = points2.B + 1e3f * new Vec2(Dr_B2A2/tan(-phi), Dr_B2A2);
 
-        points1.A = new(10f, 0f);
-        points1.B = new(8f, 2f);
-        points1.C = new(7f, 2f);
-        points1.D = new(6f, 2f);
-        points1.E = new(5f, 1f);
-        points1.F = new(3f, 1f);
+        points1.F = 1e3f * new Vec2(z0_inj1, Ir_nz1);
+        points1.E = points1.F + 1e3f * new Vec2(L_nz1, 0f);
+        float Dr_E1D1 = Ir_ch1 - Ir_nz1;
+        points1.D = points1.E + 1e3f * new Vec2(Dr_E1D1/tan(phi), Dr_E1D1);
+        points1.B = points1.E + 1e3f * new Vec2(L_ch1, Dr_E1D1);
+        points1.C = points1.B + 1e3f * new Vec2(-Ir_il1, 0f);
+        float Dr_B1A1 = 0f - Ir_ch1;
+        points1.A = points1.B + 1e3f * new Vec2(Dr_B1A1/tan(-phi), Dr_B1A1);
 
-        points2.A = new(6.5f, 2f);
-        points2.B = new(4.5f, 4f);
-        points2.C = new(4f, 4f);
-        points2.D = new(3f, 4f);
-        points2.E = new(2f, 3f);
-        points2.F = new(1f, 3f);
+        assert(points1.A.X > points1.B.X, $"Az={points1.A.X}, Bz={points1.B.X}");
+        assert(points1.B.X > points1.C.X, $"Bz={points1.B.X}, Cz={points1.C.X}");
+        assert(points1.C.X > points1.D.X, $"Cz={points1.C.X}, Dz={points1.D.X}");
+        assert(points1.D.X > points1.E.X, $"Dz={points1.D.X}, Ez={points1.E.X}");
+        assert(points1.E.X > points1.F.X, $"Ez={points1.E.X}, Fz={points1.F.X}");
 
-        D_il1 = 0.8f;
-        D_il2 = 0.7f;
-        L_il1 = points1.C.Y + th_inj1 + 2f;
-        L_il2 = points2.C.Y + th_inj2 + 2f;
-      #endif
+        assert(points2.A.X > points2.B.X, $"Az={points2.A.X}, Bz={points2.B.X}");
+        assert(points2.B.X > points2.C.X, $"Bz={points2.B.X}, Cz={points2.C.X}");
+        assert(points2.C.X > points2.D.X, $"Cz={points2.C.X}, Dz={points2.D.X}");
+        assert(points2.D.X > points2.E.X, $"Dz={points2.D.X}, Ez={points2.E.X}");
+        assert(points2.E.X > points2.F.X, $"Ez={points2.E.X}, Fz={points2.F.X}");
 
+        points2.A = points1.D;
+        points2.B = Polygon.line_intersection(
+            points1.D, points1.E,
+            points2.D, points2.C,
+            out _
+        );
+
+        points2.A.X -= th_inj1/sin(phi);
+        points2.B.X -= th_inj1/sin(phi);
+        z0_cone = Polygon.line_intersection(
+            points2.B, points2.A,
+            ZERO2, uX2,
+            out _
+        ).X;
+
+        points2.C.X = points2.B.X - 1e3f * 2.5f*Ir_il2;
+
+        this.D_il1 = 1e3f * 2f*Ir_il1;
+        this.D_il2 = 1e3f * 2f*Ir_il2;
+        this.L_il1 = 1e3f * L_il1;
+        this.L_il2 = 1e3f * L_il2;
 
         inited = true;
+
+
+        // cheeky report.
+        File.WriteAllLines(fromroot($"exports/injector_element_report.txt"), [
+            $"Injector Element Report",
+            $"=======================",
+            $"",
+            $"Element count: {N}",
+            $"",
+            $"Stage 1 (LOx):",
+            $"  - Nozzle inner radius: {Ir_nz1*1e3f} mm",
+            $"  - Nozzle length: {L_nz1*1e3f} mm",
+            $"  - Chamber inner radius: {Ir_ch1*1e3f} mm",
+            $"  - Chamber length: {L_ch1*1e3f} mm",
+            $"  - Inlet radius: {Ir_il1*1e3f} mm",
+            $"  - Inlet Reynolds number: {Re_il1}",
+            $"  - Pressure difference: {DP_1*1e-5} bar",
+            $"  - Mass flow rate: {mdot_1} kg/s",
+            $"  - A_1: {A_1}",
+            $"  - rmbar_1: {rmbar_1}",
+            $"  - cspf_1: {cspf_1}",
+            $"",
+            $"Stage 2 (IPA):",
+            $"  - Nozzle inner radius: {Ir_nz2*1e3f} mm",
+            $"  - Nozzle length: {L_nz2*1e3f} mm",
+            $"  - Chamber inner radius: {Ir_ch2*1e3f} mm",
+            $"  - Chamber length: {L_ch2*1e3f} mm",
+            $"  - Inlet radius: {Ir_il2*1e3f} mm",
+            $"  - Inlet Reynolds number: {Re_il2}",
+            $"  - Pressure difference: {DP_2*1e-5} bar",
+            $"  - Mass flow rate: {mdot_2} kg/s",
+            $"  - A_2: {A_2}",
+            $"  - rmbar_2: {rmbar_2}",
+            $"  - cspf_2: {cspf_2}",
+            $"",
+            $"Interactions:",
+            $"  - Mixing length: {mixing_length*1e3f} mm",
+            $"  - Annulus inner radius: {Ir_nz1*1e3f + th_nz1} mm",
+            $"  - Annulus outer radius: {Ir_nz2*1e3f} mm",
+            $"  - Annulus radial gap: {(Ir_nz2 - Ir_nz1)*1e3f - th_nz1} mm",
+            $"  - Inner injector axial offset: {z0_inj1*1e3f} mm",
+        ]);
     }
+
+
+    public void peep_points(Vec2 at) {
+        Vec3 A1 = rejxy(at, 0f) + fromzr(points1.A, 0f);
+        Vec3 B1 = rejxy(at, 0f) + fromzr(points1.B, 0f);
+        Vec3 C1 = rejxy(at, 0f) + fromzr(points1.C, 0f);
+        Vec3 D1 = rejxy(at, 0f) + fromzr(points1.D, 0f);
+        Vec3 E1 = rejxy(at, 0f) + fromzr(points1.E, 0f);
+        Vec3 F1 = rejxy(at, 0f) + fromzr(points1.F, 0f);
+        Vec3 A2 = rejxy(at, 0f) + fromzr(points2.A, 0f);
+        Vec3 B2 = rejxy(at, 0f) + fromzr(points2.B, 0f);
+        Vec3 C2 = rejxy(at, 0f) + fromzr(points2.C, 0f);
+        Vec3 D2 = rejxy(at, 0f) + fromzr(points2.D, 0f);
+        Vec3 E2 = rejxy(at, 0f) + fromzr(points2.E, 0f);
+        Vec3 F2 = rejxy(at, 0f) + fromzr(points2.F, 0f);
+        Geez.point(A1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 0/5f));
+        Geez.point(B1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 1/5f));
+        Geez.point(C1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 2/5f));
+        Geez.point(D1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 3/5f));
+        Geez.point(E1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 4/5f));
+        Geez.point(F1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 5/5f));
+        Geez.point(A2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 0/5f));
+        Geez.point(B2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 1/5f));
+        Geez.point(C2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 2/5f));
+        Geez.point(D2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 3/5f));
+        Geez.point(E2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 4/5f));
+        Geez.point(F2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 5/5f));
+        Geez.line([fromcyl(points2.F.X, 0f, 0f)]);
+        Geez.frame(new(rejxy(at, 0f)), mark_pos: false);
+    }
+
 
 
     public void voxels(Vec2 at, out Voxels pos, out Voxels neg) {
         assert(inited);
         assert(nearzero(points1.A.Y));
-        assert(nearto(points1.D.Y, points2.A.Y));
 
         // Make inner and outer.
         layer_voxels(at, points1, th_inj1, no_il1, D_il1, L_il1,
@@ -285,7 +404,7 @@ public class InjectorElement {
     }
 
 
-    public static void layer_voxels(Vec2 at, InjectorElementPoints points,
+    private static void layer_voxels(Vec2 at, InjectorElementPoints points,
             float th, float no_inlet, float D_inlet, float L_inlet,
             out Voxels pos, out Voxels neg, float EXTRA=6f) {
 
@@ -305,7 +424,7 @@ public class InjectorElement {
             new(-2f*EXTRA, points.F.Y),
             new(-2f*EXTRA, 0f),
         ];
-        Polygon.cull_duplicates(neg_points);
+        Polygon.cull_adjacent_duplicates(neg_points);
         neg = new(Polygon.mesh_revolved(
             new(rejxy(at, 0f)),
             neg_points,
@@ -324,14 +443,13 @@ public class InjectorElement {
         // Add the tangential inlets.
         for (int i=0; i<no_inlet; ++i) {
             float theta = i*TWOPI/no_inlet;
-            Vec3 inlet = rejxy(at + frompol(points.C.Y, theta), points.C.X);
+            Vec3 inlet = fromzr(points.C, theta);
             // move radially inwards to make tangent outer.
             inlet -= D_inlet/2f * fromcyl(1f, theta, 0f);
             // make frame circum to this element centre.
             Frame frame = new Frame.Cyl(new(rejxy(at, 0f))).circum(inlet);
             Rod pipe = new Rod(
                 frame,
-                // points.C.Y + th + EXTRA,
                 L_inlet,
                 D_inlet/2f
             );
@@ -344,75 +462,48 @@ public class InjectorElement {
     public static class GraphLookup {
         /* https://doi.org/10.2514/5.9781600866760.0019.0103 */
 
-        // --- Spray Cone Angle Plot (Independent X: A, Dependent Y: TwoAlpha) ---
-        // Samples at lbar_n = 2.0 and 0.5
-        private static readonly Vec2[] SprayCone_A_to_TwoAlpha_N2 = {
-            new(0.421421f, 56.09843f), new(0.927129f, 66.71354f),
-            new(1.299385f, 73.60281f), new(1.636524f, 78.17224f),
-            new(2.064969f, 82.74165f), new(2.661984f, 87.24077f),
-            new(3.167691f, 89.77153f), new(3.834943f, 92.51318f),
-            new(4.326602f, 94.41125f), new(5.007903f, 96.66081f),
-            new(5.661108f, 98.27768f), new(6.356455f, 99.61336f),
-            new(7.044778f, 100.8084f), new(7.585603f, 101.3708f),
-            new(8.091308f, 101.7926f)
-        };
 
-        private static readonly Vec2[] SprayCone_A_to_TwoAlpha_N05 = {
-            new(0.456541f, 56.59052f), new(0.695346f, 65.16697f),
-            new(0.870938f, 70.29878f), new(1.046533f, 74.93849f),
-            new(1.313432f, 80.56239f), new(1.573309f, 84.78032f),
-            new(1.833188f, 88.36555f), new(2.128183f, 91.59930f),
-            new(2.549605f, 95.18454f), new(2.914838f, 97.50440f),
-            new(3.427569f, 100.3163f), new(3.898157f, 102.5659f),
-            new(4.319579f, 104.1828f), new(4.783144f, 105.7996f),
-            new(5.260755f, 107.2056f), new(5.808605f, 108.8225f),
-            new(6.525022f, 110.5097f), new(7.220371f, 111.7047f),
-            new(7.676910f, 112.0562f), new(8.091308f, 112.5483f)
+        // Spray cone angle (Fig. 34a, transposed + torad).
+        //             x: twoalpha
+        //             y: A
+        //  sampled over: Lbar_n
+        private static readonly float A_tbl0_Lbar_nz = 0.5f;
+        private static readonly Vec2[] A_tbl0 = {
+            new(0.9876909f, 0.456541f), new(1.1373782f, 0.695346f),
+            new(1.2269452f, 0.870938f), new(1.3079234f, 1.046533f),
+            new(1.4060790f, 1.313432f), new(1.4796957f, 1.573309f),
+            new(1.5422698f, 1.833188f), new(1.5987094f, 2.128183f),
+            new(1.6612836f, 2.549605f), new(1.7017728f, 2.914838f),
+            new(1.7508497f, 3.427569f), new(1.7901127f, 3.898157f),
+            new(1.8183329f, 4.319579f), new(1.8465514f, 4.783144f),
+            new(1.8710907f, 5.260755f), new(1.8993109f, 5.808605f),
+            new(1.9287581f, 6.525022f), new(1.9496148f, 7.220371f),
+            new(1.9557496f, 7.676910f), new(1.9643384f, 8.091308f)
         };
-
-        public static float GetSprayConeAngle(float targetA, float lbar_n) {
-            assert(within(lbar_n, 0.5f, 2.0f));
-            Vec2 left = new(0.5f, lookup(SprayCone_A_to_TwoAlpha_N05, targetA));
-            Vec2 right = new(2.0f, lookup(SprayCone_A_to_TwoAlpha_N2, targetA));
-            return torad(sample(left, right, lbar_n));
+        private static readonly float A_tbl1_Lbar_nz = 2.0f;
+        private static readonly Vec2[] A_tbl1 = {
+            new(0.9791023f, 0.421421f), new(1.1643709f, 0.927129f),
+            new(1.2846114f, 1.299385f), new(1.3643630f, 1.636524f),
+            new(1.4441142f, 2.064969f), new(1.5226387f, 2.661984f),
+            new(1.5668088f, 3.167691f), new(1.6146596f, 3.834943f),
+            new(1.6477872f, 4.326602f), new(1.6870494f, 5.007903f),
+            new(1.7152691f, 5.661108f), new(1.7385811f, 6.356455f),
+            new(1.7594385f, 7.044778f), new(1.7692542f, 7.585603f),
+            new(1.7766160f, 8.091308f)
+        };
+        public static float get_A(float twoalpha, float Lbar_nz) {
+            Vec2 p0 = new(A_tbl0_Lbar_nz, lookup(A_tbl0, twoalpha));
+            Vec2 p1 = new(A_tbl1_Lbar_nz, lookup(A_tbl1, twoalpha));
+            return sample(p0, p1, Lbar_nz, false);
         }
 
-        // --- Spray Cone Angle Plot (Independent X: TwoAlpha, Dependent Y: A) ---
-        private static readonly Vec2[] SprayCone_TwoAlpha_to_A_N2 = {
-            new(56.09843f, 0.421421f), new(66.71354f, 0.927129f),
-            new(73.60281f, 1.299385f), new(78.17224f, 1.636524f),
-            new(82.74165f, 2.064969f), new(87.24077f, 2.661984f),
-            new(89.77153f, 3.167691f), new(92.51318f, 3.834943f),
-            new(94.41125f, 4.326602f), new(96.66081f, 5.007903f),
-            new(98.27768f, 5.661108f), new(99.61336f, 6.356455f),
-            new(100.8084f, 7.044778f), new(101.3708f, 7.585603f),
-            new(101.7926f, 8.091308f)
-        };
 
-        private static readonly Vec2[] SprayCone_TwoAlpha_to_A_N05 = {
-            new(56.59052f, 0.456541f), new(65.16697f, 0.695346f),
-            new(70.29878f, 0.870938f), new(74.93849f, 1.046533f),
-            new(80.56239f, 1.313432f), new(84.78032f, 1.573309f),
-            new(88.36555f, 1.833188f), new(91.59930f, 2.128183f),
-            new(95.18454f, 2.549605f), new(97.50440f, 2.914838f),
-            new(100.3163f, 3.427569f), new(102.5659f, 3.898157f),
-            new(104.1828f, 4.319579f), new(105.7996f, 4.783144f),
-            new(107.2056f, 5.260755f), new(108.8225f, 5.808605f),
-            new(110.5097f, 6.525022f), new(111.7047f, 7.220371f),
-            new(112.0562f, 7.676910f), new(112.5483f, 8.091308f)
-        };
-
-        public static float GetA(float twoalpha, float lbar_n) {
-            assert(within(lbar_n, 0.5f, 2.0f));
-            twoalpha = todeg(twoalpha);
-            Vec2 left = new(0.5f, lookup(SprayCone_TwoAlpha_to_A_N05, twoalpha));
-            Vec2 right = new(2.0f, lookup(SprayCone_TwoAlpha_to_A_N2, twoalpha));
-            return sample(left, right, lbar_n);
-        }
-
-        // --- Flow Coefficient Plot (Independent X: A, Dependent Y: Mu_in) ---
-        // Samples at C = 1.0 and 4.0
-        private static readonly Vec2[] FlowCoeff_C1 = {
+        // Flow coefficient (Fig. 34b).
+        //             x: A
+        //             y: mu_il
+        //  sampled over: C
+        private static readonly float mu_il_tbl0_C = 1.0f;
+        private static readonly Vec2[] mu_il_tbl0 = {
             new(0.827858f, 0.400318f), new(0.947264f, 0.373270f),
             new(1.026863f, 0.353858f), new(1.146268f, 0.331901f),
             new(1.305473f, 0.309626f), new(1.416915f, 0.291169f),
@@ -425,8 +516,8 @@ public class InjectorElement {
             new(7.299502f, 0.085601f), new(7.689552f, 0.081782f),
             new(8.000000f, 0.079236f)
         };
-
-        private static readonly Vec2[] FlowCoeff_C4 = {
+        private static readonly float mu_il_tbl1_C = 4.0f;
+        private static readonly Vec2[] mu_il_tbl1 = {
             new(1.082585f, 0.399364f), new(1.194027f, 0.377725f),
             new(1.313432f, 0.354177f), new(1.424875f, 0.336993f),
             new(1.560198f, 0.321400f), new(1.703481f, 0.305807f),
@@ -439,19 +530,19 @@ public class InjectorElement {
             new(6.145271f, 0.135879f), new(6.766166f, 0.127924f),
             new(7.379101f, 0.121559f), new(8.031838f, 0.115195f)
         };
-
-        public static float GetFlowCoefficient(float targetA, float C) {
-            assert(within(C, 1.0f, 4.0f));
-            float left = lookup(FlowCoeff_C1, targetA);
-            float right = lookup(FlowCoeff_C4, targetA);
-            // graph show midpoint between C=1 and C=4 curves is at C=3.
-            // https://www.desmos.com/calculator/avfdhjpouz
-            float t = 1/3f * (pow(4f, (C - 1f)/3f) - 1f);
-            return lerp(left, right, t);
+        public static float get_mu_il(float A, float C) {
+            Vec2 p0 = new(mu_il_tbl0_C, lookup(mu_il_tbl0, A));
+            Vec2 p1 = new(mu_il_tbl1_C, lookup(mu_il_tbl1, A));
+            return sample(p0, p1, C, false);
         }
 
-        // --- Flow Coefficient Plot (Inverse: Mu_in -> A) ---
-        private static readonly Vec2[] FlowCoeff_C1_Inv = {
+
+        // Geometric characteristic parameter (Fig. 34b, transposed).
+        //             x: mu_il
+        //             y: A
+        //  sampled over: C
+        private static readonly float A_from_mu_il_tbl0_C = 1.0f;
+        private static readonly Vec2[] A_from_mu_il_tbl0 = {
             new(0.079236f, 8.000000f), new(0.081782f, 7.689552f),
             new(0.085601f, 7.299502f), new(0.091329f, 6.726366f),
             new(0.098966f, 6.073631f), new(0.107239f, 5.484577f),
@@ -464,8 +555,8 @@ public class InjectorElement {
             new(0.353858f, 1.026863f), new(0.373270f, 0.947264f),
             new(0.400318f, 0.827858f)
         };
-
-        private static readonly Vec2[] FlowCoeff_C4_Inv = {
+        private static readonly float A_from_mu_il_tbl1_C = 4.0f;
+        private static readonly Vec2[] A_from_mu_il_tbl1 = {
             new(0.115195f, 8.031838f), new(0.121559f, 7.379101f),
             new(0.127924f, 6.766166f), new(0.135879f, 6.145271f),
             new(0.143834f, 5.556216f), new(0.152426f, 5.054724f),
@@ -478,17 +569,19 @@ public class InjectorElement {
             new(0.336993f, 1.424875f), new(0.354177f, 1.313432f),
             new(0.377725f, 1.194027f), new(0.399364f, 1.082585f)
         };
-
-        public static float GetAFromMu(float mu_in, float C) {
-            assert(within(C, 1.0f, 4.0f));
-            Vec2 left = new(1.0f, lookup(FlowCoeff_C1_Inv, mu_in));
-            Vec2 right = new(4.0f, lookup(FlowCoeff_C4_Inv, mu_in));
-            return sample(left, right, C);
+        public static float get_A_from_mu_il(float mu_il, float C) {
+            Vec2 p0 = new(A_from_mu_il_tbl0_C, lookup(A_from_mu_il_tbl0, mu_il));
+            Vec2 p1 = new(A_from_mu_il_tbl1_C, lookup(A_from_mu_il_tbl1, mu_il));
+            return sample(p0, p1, C, false);
         }
 
-        // --- Relative Liquid Vortex Radius (Independent X: A, Dependent Y: r_m_on_R_n) ---
-        // Samples at Rbar_in = 1, 3, and 4
-        private static readonly Vec2[] Vortex_R1 = {
+
+        // Relative liquid vortex radius (Fig. 34b, transposed).
+        //             x: A
+        //             y: rmbar
+        //  sampled over: Rbar_ch
+        private static readonly float rmbar_tbl0_Rbar_ch = 1.0f;
+        private static readonly Vec2[] rmbar_tbl0 = {
             new(0.523076f, 0.300632f), new(0.676923f, 0.356258f),
             new(0.953845f, 0.413780f), new(1.212306f, 0.459924f),
             new(1.606152f, 0.519975f), new(1.901537f, 0.557901f),
@@ -499,19 +592,8 @@ public class InjectorElement {
             new(6.283075f, 0.753856f), new(6.769228f, 0.763338f),
             new(7.347693f, 0.772819f), new(8.000000f, 0.781037f)
         };
-
-        private static readonly Vec2[] Vortex_R3 = {
-            new(0.916922f, 0.301264f), new(0.990769f, 0.331606f),
-            new(1.107691f, 0.362579f), new(1.396921f, 0.410619f),
-            new(1.667691f, 0.449178f), new(2.024615f, 0.487737f),
-            new(2.461537f, 0.519343f), new(2.769229f, 0.541466f),
-            new(3.224613f, 0.568015f), new(3.735383f, 0.589507f),
-            new(4.523076f, 0.619216f), new(5.212306f, 0.640708f),
-            new(5.975383f, 0.661568f), new(6.775382f, 0.679267f),
-            new(7.495382f, 0.695070f), new(8.049228f, 0.703919f)
-        };
-
-        private static readonly Vec2[] Vortex_R4 = {
+        private static readonly float rmbar_tbl1_Rbar_ch = 4.0f;
+        private static readonly Vec2[] rmbar_tbl1 = {
             new(1.224614f, 0.299368f), new(1.464615f, 0.341719f),
             new(1.692306f, 0.368268f), new(1.993845f, 0.397977f),
             new(2.313845f, 0.421365f), new(2.646153f, 0.440961f),
@@ -522,20 +604,21 @@ public class InjectorElement {
             new(6.873845f, 0.578129f), new(7.458459f, 0.590139f),
             new(8.067689f, 0.600885f)
         };
-
-        public static float GetRelativeVortexRadius(float targetA, float rbar_in)
-        {
-            assert(within(rbar_in, 1.0f, 4.0f));
-            Vec2 left;
-            Vec2 right;
-            if (rbar_in <= 3.0f) {
-                left = new(1.0f, lookup(Vortex_R1, targetA));
-                right = new(3.0f, lookup(Vortex_R3, targetA));
-            } else {
-                left = new(3.0f, lookup(Vortex_R3, targetA));
-                right = new(4.0f, lookup(Vortex_R4, targetA));
-            }
-            return sample(left, right, rbar_in);
+        public static float get_rmbar(float A, float Rbar_ch) {
+            // Plot shows midpoint between Rbar_ch=1 and Rbar_ch=4 curves is at
+            // Rbar_ch~=3 (instead of 2). so, dont use a linear interpolation
+            // between curves sampled at different Rbar_ch.
+            // https://www.desmos.com/calculator/avfdhjpouz
+            assert(nearto(rmbar_tbl0_Rbar_ch, 1.0f));
+            assert(nearto(rmbar_tbl1_Rbar_ch, 4.0f));
+            assert(within(Rbar_ch, 1.0f, 4.0f));
+            float t = 1/3f * (pow(4f, (Rbar_ch - 1f)/3f) - 1f);
+            float rmbar_at1 = lookup(rmbar_tbl0, A);
+            float rmbar_at4 = lookup(rmbar_tbl1, A);
+            assert(rmbar_at1 > rmbar_at4); // vague bounds check.
+            float rmbar = lerp(rmbar_at1, rmbar_at4, t);
+            assert(rmbar > 0f);
+            return rmbar;
         }
 
 
@@ -547,6 +630,8 @@ public class InjectorElement {
 
             int lo = 0;
             int hi = numel(points) - 1;
+            // assert(within(x, points[lo].X, points[hi].X));
+            // ^ allow extrapolation.
 
             int idx = -1;
             while (lo <= hi) {
@@ -558,19 +643,16 @@ public class InjectorElement {
                     hi = mid - 1;
                 }
             }
-            assert(within(idx, -1, numel(points) - 1));
-            if (idx == numel(points) - 1) {
-                // assert(nearto(points[^1].X, x));
-                --idx;
-            }
-            if (idx == -1)
-                idx += 1;
+            idx = clamp(idx, 0, numel(points) - 2);
             return sample(points[idx], points[idx + 1], x);
         }
 
-        private static float sample(Vec2 left, Vec2 right, float x) {
+        private static float sample(Vec2 left, Vec2 right, float x,
+                bool extend=true) {
             assert(right.X > left.X);
             float t = invlerp(left.X, right.X, x);
+            if (!extend)
+                assert(within(t, 0f, 1f));
             return lerp(left.Y, right.Y, t);
         }
     }
@@ -616,9 +698,14 @@ public class InjectorStu : TPIAP.Pea {
 
     public required float th_plate { get; init; }
 
+    public required float phi_mw { get; init; }
+    public required float th_dmw { get; init; }
+    public required float th_omw { get; init; }
+    protected float z0_mw = NAN;
+
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.initialise(pm);
+        element.initialise(pm, numel(points_inj), out z0_mw);
     }
 
 
@@ -648,16 +735,7 @@ public class InjectorStu : TPIAP.Pea {
             slicecount: DIVISIONS/2
         ));
 
-        // injector holes.
-        foreach (Vec2 p in points_inj) {
-            vox.BoolSubtract(new Rod(
-                new(rejxy(p, 0f)),
-                th_plate,
-                5f // TODO:
-            ).extended(2f*EXTRA, Extend.UPDOWN));
-        }
-
-        // film cooling holes.
+        // Film cooling holes.
         foreach (Vec2 p in points_fc) {
             vox.BoolSubtract(new Rod(
                 new(rejxy(p, 0f)),
@@ -701,36 +779,36 @@ public class InjectorStu : TPIAP.Pea {
             out Voxels neg_LOx, out Voxels neg_IPA) {
         using var __ = key.like();
 
-        float phi = torad(45f); // TODO:
-        float Lr = Or_chnl + (th_plate + 2.5f)*tan(phi); // TODO:
 
-        // create roof + interior volume.
-        float z0 = 8f; // TODO:
-        // https://www.desmos.com/calculator/tusqawwtn5
-        Vec2 peak = new( /* (z,r) */
-            Lr/2f/tan(phi) + z0/2f,
-            Lr/2f - z0/2f*tan(phi)
-        );
-        vol = new ManiVol(){
-            A = Cone.phied(new(), -phi, peak.X, r0: Lr),
-            B = Cone.phied(new(z0*uZ3), phi, peak.X - z0 + EXTRA),
-            peak = peak,
-            th = 5f // TODO:
-        };
+        { // create roof + interior volume.
+            float max_r = Or_chnl + 1.8f*th_plate/tan(phi_mw);
+            // https://www.desmos.com/calculator/tusqawwtn5
+            Vec2 peak = new( /* (z,r) */
+                max_r/2f/tan(phi_mw) + z0_mw/2f,
+                max_r/2f - z0_mw/2f*tan(phi_mw)
+            );
+            vol = new ManiVol{
+                A = Cone.phied(new(), -phi_mw, peak.X, r0: max_r),
+                B = Cone.phied(new(z0_mw*uZ3), phi_mw, peak.X - z0_mw + EXTRA),
+                peak = peak,
+                th = th_omw
+            };
+        }
 
         // For lox/ipa boundary:
-        float th = 3f; // TODO:
-        float Dz = th/sin(phi);
+        float th = th_dmw;
+        float Dz = th/sin(phi_mw);
 
         Voxels neg = new();
         Voxels pos = new();
 
-        List<Geez.Key> keys = new(numel(points_inj));
+        List<Geez.Key> keys = new(2*numel(points_inj));
 
         { // lox-ipa boundary.
             foreach (Vec2 p in points_inj) {
-                Mesh po = Cone.phied(new(rejxy(p, th_plate)), phi, peak.X);
-                Mesh ne = Cone.phied(new(rejxy(p, th_plate + Dz)), phi, peak.X);
+                Frame at = new(rejxy(p, z0_mw));
+                Mesh po = Cone.phied(at, phi_mw, vol.peak.X);
+                Mesh ne = Cone.phied(at.transz(Dz), phi_mw, vol.peak.X);
                 keys.Add(Geez.mesh(po));
                 pos.BoolAdd(new(po));
                 neg.BoolAdd(new(ne));
@@ -756,21 +834,22 @@ public class InjectorStu : TPIAP.Pea {
 
 
         { // supports.
-            float min_r = pm.Ir_Ioring - 0.5f;
-            float max_r = pm.Or_Ioring + 0.5f;
+            // TODO:
+            float min_r = pm.Ir_Ioring - 1.3f;
+            float max_r = pm.Or_Ioring + 1.3f;
             float length = max_r - min_r;
-            float aspect_ratio = 2f;
+            float aspect_ratio = 1.5f;
             float width = length / aspect_ratio;
 
-            //TODO:
-            int no = 30;
+            // TODO:
+            int no = 50;
             float Mr = ave(min_r, max_r);
             float z = pm.Lz_Ioring + th_plate/3f;
             List<Vec3> points = Polygon.circle(no, Mr, 0f, z);
             foreach (Vec3 p in points) {
                 Mesh m = Polygon.mesh_extruded(
                     Frame.cyl_axial(p), // x = +radial, y = +circumferential
-                    peak.X,
+                    vol.peak.X,
                     [
                         // diamond.
                         new(0f,         -width/2f),
@@ -817,7 +896,6 @@ public class InjectorStu : TPIAP.Pea {
         pos.BoolSubtract(neg);
         key.voxels(pos);
         return pos;
-
     }
 
 
@@ -844,35 +922,33 @@ public class InjectorStu : TPIAP.Pea {
         ).extended(EXTRA, Extend.UPDOWN));
 
         // walling.
-        pos = port.shelled(new(Lz*uZ3), 1.5f, out _);
+        pos = port.shelled(new(Lz*uZ3), 4f, out _);
         pos.BoolAdd(new Rod(
             new(),
             Lz,
-            port.downstream_radius,
-            port.downstream_radius + 1.5f*2f
-        ));
+            port.downstream_radius
+        ).shelled(4f));
         key_asi.voxels(pos);
     }
 
 
-    protected Voxels voxels_flange(Geez.Cycle key, in ManiVol mani_vol) {
+    protected Voxels voxels_flange(Geez.Cycle key) {
         using var __ = key.like();
-        List<Geez.Key> keys = new();
 
-        Voxels vox;
-
-        vox = new Rod(
+        Rod flange = new Rod(
             new Frame(),
-            pm.flange_thickness,
+            pm.inj_flange_thickness,
             pm.flange_outer_radius
-        ).extended(EXTRA, Extend.DOWN);
+        );
+
+        Voxels vox = flange.extended(EXTRA, Extend.DOWN);
         key.voxels(vox);
 
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             vox.BoolAdd(new Rod(
                 new(fromcyl(pm.Mr_bolt, theta, 0f)),
-                pm.inj_flange_thickness,
+                flange.Lz,
                 pm.Bsz_bolt/2f + pm.thickness_around_bolt
             ).extended(EXTRA, Extend.DOWN));
         }
@@ -881,17 +957,11 @@ public class InjectorStu : TPIAP.Pea {
         Fillet.concave(vox, 3f, inplace: true);
         key.voxels(vox);
 
-        vox.BoolSubtract(mani_vol.A);
-        vox.BoolSubtract(new Rod(
-            new((th_plate + EXTRA)*uZ3),
-            -2f*EXTRA - th_plate - EXTRA,
-            Ir_chnl
-        ));
         vox.BoolSubtract(new Rod(
             new(),
-            -2f*EXTRA,
-            mani_vol.A.r0
-        ));
+            flange.Lz,
+            Or_chnl
+        ).extended(EXTRA, Extend.UPDOWN));
         key.voxels(vox);
 
         return vox;
@@ -972,7 +1042,7 @@ public class InjectorStu : TPIAP.Pea {
                 1.5f*pm.Mr_bolt,
                 2f*(pm.Or_washer + 2f),
                 mani_vol.peak.X + mani_vol.Lz
-            ));
+            ).extended(EXTRA, Extend.DOWN));
             key.voxels(vox);
         }
 
@@ -1084,28 +1154,25 @@ public class InjectorStu : TPIAP.Pea {
             key.voxels(_pos);
         }
 
-        brGPort port_LOx_inlet = new("1/2in", 14f); // TODO:
+        brGPort port_LOx_inlet = new("1/2in", 21.1f);
         brGPort port_LOx_pt    = new("1/4in", D_pt);
         brGPort port_IPA_pt    = new("1/4in", D_pt);
         brGPort port_cc_pt     = new("1/4in", D_pt);
 
-        // determine spacing:  ASI in middle, LOX inlet and 3x PT spaced evenly
-        float r_LOx_inlet = 0.6f*pm.Or_cc;
-        float r_LOx_pt = 0.8f*pm.Or_cc;
-        assert(numel(r_injg) == 2);
-        float r_IPA_pt = ave(r_injg[0], r_injg[1]);
-        float r_cc_pt = ave(r_injg[0], r_injg[1]);
-        // thru for IPA/chamber.
+        float r_LOx_inlet = mani_vol.peak.Y;
+        float r_LOx_pt    = mani_vol.peak.Y;
+        float r_IPA_pt    = mani_vol.peak.Y;
+        float r_cc_pt     = mani_vol.peak.Y;
 
         Frame at_LOx_inlet = new(new Vec3(-r_LOx_inlet, 0f, height));
-        Frame at_LOx_pt    = new(new Vec3(+r_LOx_pt, 0f, height));
-        Frame at_IPA_pt    = new(new Vec3(0f, +r_IPA_pt, height));
-        Frame at_cc_pt     = new(new Vec3(0f, -r_cc_pt, height));
+        Frame at_LOx_pt    = new(new Vec3(+r_LOx_pt,    0f, height));
+        Frame at_IPA_pt    = new(new Vec3(0f,    +r_IPA_pt, height));
+        Frame at_cc_pt     = new(new Vec3(0f,     -r_cc_pt, height));
 
-        portme(port_LOx_inlet, at_LOx_inlet, 2f, neg_LOx);
-        portme(port_LOx_pt,    at_LOx_pt,    2f, neg_LOx);
-        portme(port_IPA_pt,    at_IPA_pt,    2f, neg_IPA);
-        portme(port_cc_pt,     at_cc_pt,     2f);
+        portme(port_LOx_inlet, at_LOx_inlet, 4f, neg_LOx);
+        portme(port_LOx_pt,    at_LOx_pt,    4f, neg_LOx);
+        portme(port_IPA_pt,    at_IPA_pt,    4f, neg_IPA);
+        portme(port_cc_pt,     at_cc_pt,     4f);
 
         pos = _pos;
         neg = _neg;
@@ -1202,24 +1269,27 @@ public class InjectorStu : TPIAP.Pea {
         /* perform all the steps of creating the part. */
 
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
+        Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
         Geez.Cycle key_maniwalls = new(colour: COLOUR_PINK);
         Geez.Cycle key_asi = new(colour: COLOUR_WHITE);
         Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
-        Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
 
-        voxels_elements(out Voxels? pos_elements, out Voxels? neg_elements);
-        Geez.voxels(neg_elements, COLOUR_RED);
-        Geez.voxels(pos_elements, COLOUR_BLUE);
-        Thread.Sleep(4000);
-        Geez.clear();
-        Geez.voxels(pos_elements - neg_elements);
-        return null;
+        // Geez.voxels(neg_elements, COLOUR_RED);
+        // Geez.voxels(pos_elements, COLOUR_BLUE);
+        // Thread.Sleep(4000);
+        // Geez.clear();
+        // Geez.voxels(pos_elements - neg_elements);
+        // return null;
 
         Voxels? plate = voxels_plate();
         key_plate.voxels(plate);
         step("created plate.");
+
+        voxels_elements(out Voxels? pos_elements, out Voxels? neg_elements);
+        key_elements.voxels(neg_elements);
+        step("created injector elements");
 
         Voxels? maniwalls = voxels_maniwalls(key_maniwalls,
                 out ManiVol mani_vol, out Voxels neg_LOx, out Voxels neg_IPA);
@@ -1232,7 +1302,7 @@ public class InjectorStu : TPIAP.Pea {
         substep("created bolts.");
         Voxels? orings = voxels_orings();
         substep("created O-rings.");
-        Voxels? flange = voxels_flange(key_flange, mani_vol);
+        Voxels? flange = voxels_flange(key_flange);
         step("created flange.");
 
         Voxels? gussets = voxels_gussets(key_gussets, mani_vol);
@@ -1244,6 +1314,8 @@ public class InjectorStu : TPIAP.Pea {
 
         add(ref plate, key_plate);
         substep("added plate.");
+        add(ref pos_elements);
+        substep("added elements.");
         add(ref maniwalls, key_maniwalls);
         substep("added manifold walls.");
         add(ref pos_asi, key_asi);
@@ -1257,6 +1329,8 @@ public class InjectorStu : TPIAP.Pea {
 
         step("added material.");
 
+        sub(ref neg_elements, key_elements);
+        substep("subtracted elements.");
         sub(ref bolts);
         substep("subtracted bolts.");
         sub(ref orings);
