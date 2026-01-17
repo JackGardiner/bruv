@@ -128,7 +128,7 @@ public static class TwoPeasInAPod {
         switch (make & MASK_PEA) {
           case CHAMBER: {
             // Construct the chamber object.
-            float max_phi = config.get<float>("printer/max_print_angle");
+            var max_phi = config.get<float>("printer/max_print_angle");
             config.set("chamber/phi_mani", max_phi);
             config.set("chamber/phi_fixt", max_phi);
             config.set("chamber/phi_inlet", -max_phi);
@@ -141,7 +141,7 @@ public static class TwoPeasInAPod {
 
           case INJECTOR: {
             // Construct the injector object.
-            float max_phi = config.get<float>("printer/max_print_angle");
+            var max_phi = config.get<float>("printer/max_print_angle");
             config.set("injector/phi_mw", max_phi);
             config.set("injector/element/phi", max_phi);
             config.set("injector/pm", config.get_map("part_mating"));
@@ -153,8 +153,9 @@ public static class TwoPeasInAPod {
           case INJECTOR_SAMPLE: {
             // Construct the injector sample object from the injector input
             // parameters.
-            float max_phi = config.get<float>("printer/max_print_angle");
-            int no_inj = sum(config.get<int[]>("injector/no_injg"));
+            var max_phi = config.get<float>("printer/max_print_angle");
+            var no_injg = config.get<List<int>>("injector/no_injg");
+            int no_inj = sum(no_injg.ToArray());
             config.new_map("sample");
             config.set("sample/element", config.get_map("injector/element"));
             config.set("sample/element/phi", max_phi);

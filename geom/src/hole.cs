@@ -7,8 +7,7 @@ using Mesh = PicoGK.Mesh;
 
 namespace br {
 
-
-public class brGPort /* TODO: */ {
+public class GPort {
     public string size { get; }
     public float downstream_diameter { get; }
 
@@ -24,7 +23,7 @@ public class brGPort /* TODO: */ {
         => required_thread_length + 0.5f*pilot_bore_diameter;
 
 
-    public brGPort(string size, float downstream_diameter) {
+    public GPort(string size, float downstream_diameter) {
         this.size = size;
         this.downstream_diameter = downstream_diameter;
 
@@ -51,7 +50,7 @@ public class brGPort /* TODO: */ {
             return "3/4in";
         throw new Exception($"unknown port size mm: {size}");
     }
-    public brGPort(float size, float downstream_diameter)
+    public GPort(float size, float downstream_diameter)
         : this(_from_size_mm(size), downstream_diameter) {}
 
 
@@ -108,7 +107,5 @@ public class brGPort /* TODO: */ {
         return new(mesh);
     }
 }
-
-
 
 }

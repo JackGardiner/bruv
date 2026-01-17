@@ -37,7 +37,7 @@ public class PartMating {
     public required float rho_LOx { get; init; }
     public required float rho_IPA { get; init; }
 
-    /* For purely visual matches: */
+    /* Nice to agree on for purely visual matches: */
     public required float thickness_around_bolt { get; init; }
     public required float flange_thickness_cc { get; init; }
     public required float flange_thickness_inj { get; init; }

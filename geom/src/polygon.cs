@@ -176,41 +176,47 @@ public static class Polygon {
             bool closed=false) {
         assert(numel(vertices) >= 2);
         assert(divisions >= 2);
+
+        float[] ell = new float[numel(vertices)]; // of each segment.
         float Ell = 0f;
-        for (int i=1; i<numel(vertices); ++i)
-            Ell += mag(vertices[i] - vertices[i - 1]);
-        float L_seg;
-        if (closed) {
-            Ell += mag(vertices[^1] - vertices[0]);
-            L_seg = Ell / divisions;
-        } else {
-            L_seg = Ell / (divisions - 1);
+        for (int i=0; i<numel(vertices); ++i) {
+            Vec2 a = vertices[i];
+            Vec2 b = vertices[(i + 1) % numel(vertices)];
+            ell[i] = mag(a - b);
+            assert(!nearzero(ell[i]), "zero length edge");
+            Ell += ell[i];
         }
-        List<Vec2> new_vertices = new(divisions){vertices[0]};
-        float accum = 0f;
-        int seg = 1;
-        Vec2 prev = vertices[0];
-        while (numel(new_vertices) < divisions) {
-            if (numel(new_vertices) == divisions - 1 && !closed) {
-                new_vertices.Add(vertices[^1]);
-                continue;
+        float interval = closed
+                       ? sum(ell) / divisions
+                       : (sum(ell) - ell[^1]) / (divisions - 1);
+
+        float accumulated = 0f;
+        int seg = 0;
+        List<Vec2> resampled = new(divisions);
+        for (int i=0; i<divisions; ++i) {
+            float target = i*interval;
+
+            while (target > accumulated + ell[seg]) {
+                accumulated += ell[seg];
+                seg = (seg + 1) % numel(vertices);
             }
-            Vec2 upto = vertices[seg % numel(vertices)];
-            float ell = mag(upto - prev);
-            if (accum + ell >= L_seg) {
-                float t = (L_seg - accum) / ell;
-                new_vertices.Add(prev + t*(upto - prev));
-                prev = new_vertices[^1];
-                accum = 0f;
-            } else {
-                seg = (seg + 1) % (closed
-                                 ? numel(vertices) + 1
-                                 : numel(vertices));
-                prev = upto;
-                accum += ell;
-            }
+
+            float t = (target - accumulated) / ell[seg];
+            Vec2 a = vertices[seg];
+            Vec2 b = vertices[(seg + 1) % numel(vertices)];
+            resampled.Add(Br.lerp(a, b, t));
         }
-        return new_vertices;
+        return resampled;
+    }
+
+
+    public static List<Vec2> lerp(List<Vec2> a, List<Vec2> b, float t) {
+        int N = numel(a);
+        assert(N == numel(b));
+        List<Vec2> vertices = new(N);
+        for (int i=0; i<N; ++i)
+            vertices.Add(Br.lerp(a[i], b[i], t));
+        return vertices;
     }
 
 
@@ -233,7 +239,7 @@ public static class Polygon {
         assert(!nearzero(mag_bc));
         Vec2 BA = (a - b) / mag_ba;
         Vec2 BC = (c - b) / mag_bc;
-        float beta = acos(clamp(dot(BA, BC), -1f, 1f));
+        float beta = argbeta(BA, BC);
         // Insanely sharp point.
         assert(!nearzero(beta));
         // Already a straight line.

@@ -905,7 +905,7 @@ public class Injector : TPIAP.Pea {
         // TODO: fix asi magic numbers
         float Lz = 54f;
         // create augmented spark igniter through-port
-        brGPort port = new brGPort("1/4in", 6.35f); // 1/4in OD for SS insert?
+        GPort port = new GPort("1/4in", 6.35f); // 1/4in OD for SS insert?
         // TODO: ^
 
         // fluid volume.
@@ -968,13 +968,15 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected void voxels_elements(out Voxels pos, out Voxels neg) {
+    protected void voxels_elements(Geez.Cycle key, out Voxels pos,
+            out Voxels neg) {
         pos = new();
         neg = new();
         foreach (Vec2 p in points_inj) {
             element.voxels(p, out Voxels this_pos, out Voxels this_neg);
             pos.BoolAdd(this_pos);
             neg.BoolAdd(this_neg);
+            key.voxels(neg);
         }
     }
 
@@ -1030,17 +1032,20 @@ public class Injector : TPIAP.Pea {
             mani_vol.peak.Y
         );
 
+        float wi = 2f*(pm.Or_washer + 2f);
+        float semiwi = wi/2f;
+
         // Big blocks for each bolt.
         Slice<Vec2> points = Polygon.circle(pm.no_bolt, pm.Mr_bolt);
         for (int i=0; i<numel(points); ++i) {
             Vec2 p = points[i];
             Frame frame = Frame.cyl_axial(rejxy(p, 0f));
             // x=+radial, y=+circum.
-
+            float Dx = -0.5f*pm.Mr_bolt + 0.5f*mani_vol.peak.Y;
             vox.BoolAdd(new Bar(
-                frame.transx(-pm.Mr_bolt/2f),
-                1.5f*pm.Mr_bolt,
-                2f*(pm.Or_washer + 2f),
+                frame.transx(Dx),
+                2f*abs(Dx) + EXTRA,
+                wi,
                 mani_vol.peak.X + mani_vol.Lz
             ).extended(EXTRA, Extend.DOWN));
             key.voxels(vox);
@@ -1048,54 +1053,71 @@ public class Injector : TPIAP.Pea {
 
         // Trim down.
         vox.BoolIntersect(volC);
+        key.voxels(vox);
 
         // Add the thrust structure mounts.
         assert(numel(points)%2 == 0);
         for (int i=0; i<numel(points); ++i) {
             if (i%2 == 0) // only every second.
                 continue;
+
             // vertical loft: rectangle -> circle
             Vec2 p = points[i];
-            // move in 20mm. TODO:
-            p = (mag(p) - 20f)*normalise(p);
-            // calc z of intersection with cone C.
-            float t = invlerp(volC.r0, volC.r1, mag(p));
-            float z0 = lerp(0f, volC.Lz, t);
-            z0 += volC.bbase.pos.Z;
-            Vec3 at = rejxy(p, z0);
+            p = (mag(p) - 20f)*normalise(p); // move in 20mm. TODO:
 
-            Leap71.ShapeKernel.LocalFrame bot = new(
-                at,
-                uZ3,
-                normalise(at - at*uZ3)
-            );
-            Leap71.ShapeKernel.LocalFrame top = new(
-                at + (mani_vol.peak.X + 15f - at.Z)*uZ3,
-                uZ3,
-                normalise(at - at*uZ3)
-            );
+            float z0;
+            { // calc z of intersection with cone C and s.t. rect can be flat.
+                float t = invlerp(volC.r0, volC.r1, mag(p) - semiwi);
+                z0 = lerp(0f, volC.Lz, t);
+                z0 += volC.bbase.pos.Z;
+            }
+
+            Frame bot = Frame.cyl_axial(rejxy(p, z0)); // x=+radial
+            Frame top = bot.transz(54f - bot.pos.Z, false); // TODO:
 
             float strut_area = squared(2f*(pm.Bsz_bolt/2f) + 4f);
             float strut_radius = 1.2f*sqrt(strut_area/PI);
 
-            Rectangle rectangle = new(2*(pm.Or_washer+2f), 2*(pm.Or_washer+2f));
-            Circle circle = new(strut_radius);
+            int N = DIVISIONS / 5;
+            N = max(12, N);
+            N -= N % 4;
 
-            float loft_height = top.vecGetPosition().Z - bot.vecGetPosition().Z;
-            BaseLoft strut = new(bot, rectangle, circle, loft_height);
-            Leap71.ShapeKernel.BaseBox bridge = new(
-                bot.oTranslate(0.04f*loft_height*uZ3),
-                -bot.vecGetPosition().Z,
-                2f*(pm.Or_washer + 2f),
-                2f*(pm.Or_washer + 2f)
-            );
+            int M = max(10, DIVISIONS/10);
 
-            vox.BoolAdd(new(strut.mshConstruct()));
-            vox.BoolAdd(new(bridge.mshConstruct()));
-            vox.BoolSubtract(
-                new Leap71.ShapeKernel.BaseCylinder(top, -10f, 3f)
-                 .voxConstruct()
-            );
+            List<Vec2> V_rect = [
+                new(+semiwi, +semiwi),
+                new(-semiwi, +semiwi),
+                new(-semiwi, -semiwi),
+                new(+semiwi, -semiwi),
+            ];
+            V_rect = Polygon.resample(V_rect, N, true);
+
+            List<Vec2> V_circ = Polygon.circle(N, strut_radius, +PI_4);
+
+            // Start with box.
+            List<Vec2> vertices = [..V_rect];
+            List<Frame> frames = [bot.transz(-z0)];
+
+            // Interp between square and circle, with continuous derivative also.
+            for (int j=0; j<M; ++j) {
+                float t = lerp(0f, 1f, j, M);
+                // smooth https://www.desmos.com/calculator/hf7a0a7upp.
+              #if false
+                float n = 1.25f;
+                float s = pow(t, n) / (pow(t, n) + pow(1f - t, n));
+              #else
+                float s = t*t*(3f - 2f*t);
+              #endif
+                vertices.AddRange(Polygon.lerp(V_rect, V_circ, s));
+                frames.Add(bot.lerp(top, t));
+            }
+
+            // Rect->circle + base.
+            Mesh m = Polygon.mesh_swept(new FramesSequence(frames), vertices);
+            vox.BoolAdd(new(m));
+
+            // Bolt hole ish.
+            vox.BoolSubtract(new Rod(top, -10f, 3f));
 
             key.voxels(vox);
         }
@@ -1131,7 +1153,7 @@ public class Injector : TPIAP.Pea {
         Voxels _pos = new();
         Voxels _neg = new();
 
-        void portme(brGPort port, Frame at, float th, in Voxels? sub=null) {
+        void portme(GPort port, Frame at, float th, in Voxels? sub=null) {
             Voxels this_pos = port.shelled(at, th, out _);
             this_pos.BoolAdd(new Rod(at, -height, port.downstream_radius + th));
             Voxels this_neg = port.filled(at, out _);
@@ -1154,10 +1176,10 @@ public class Injector : TPIAP.Pea {
             key.voxels(_pos);
         }
 
-        brGPort port_LOx_inlet = new("1/2in", 21.1f);
-        brGPort port_LOx_pt    = new("1/4in", D_pt);
-        brGPort port_IPA_pt    = new("1/4in", D_pt);
-        brGPort port_cc_pt     = new("1/4in", D_pt);
+        GPort port_LOx_inlet = new("1/2in", 21.1f);
+        GPort port_LOx_pt    = new("1/4in", D_pt);
+        GPort port_IPA_pt    = new("1/4in", D_pt);
+        GPort port_cc_pt     = new("1/4in", D_pt);
 
         float r_LOx_inlet = mani_vol.peak.Y;
         float r_LOx_pt    = mani_vol.peak.Y;
@@ -1238,13 +1260,6 @@ public class Injector : TPIAP.Pea {
                 key_part.voxels(part);
             print($"   | {msg}");
         }
-        // void no_step(string msg) {
-        //     ++step_count;
-        //     if (take_screenshots)
-        //         Geez.wipe_screenshot(step_count.ToString());
-        //     print($"[--] {msg}");
-        // }
-
 
         /* shorthand for adding/subtracting a component into the part. */
         void _op(_Op func, ref Voxels? vox, Geez.Cycle? key, bool keepme,
@@ -1276,19 +1291,12 @@ public class Injector : TPIAP.Pea {
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
 
-        // Geez.voxels(neg_elements, COLOUR_RED);
-        // Geez.voxels(pos_elements, COLOUR_BLUE);
-        // Thread.Sleep(4000);
-        // Geez.clear();
-        // Geez.voxels(pos_elements - neg_elements);
-        // return null;
-
         Voxels? plate = voxels_plate();
         key_plate.voxels(plate);
         step("created plate.");
 
-        voxels_elements(out Voxels? pos_elements, out Voxels? neg_elements);
-        key_elements.voxels(neg_elements);
+        voxels_elements(key_elements, out Voxels? pos_elements,
+                out Voxels? neg_elements);
         step("created injector elements");
 
         Voxels? maniwalls = voxels_maniwalls(key_maniwalls,

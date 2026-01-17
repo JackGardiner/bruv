@@ -1059,6 +1059,9 @@ public class Chamber : TPIAP.Pea {
         neg = [..wall, ..fillet, c, a];
 
         // Fixed-count fillet for the outer corner and the overhang corner.
+        string why;
+        print(neg_min_z);
+        assert(Polygon.is_simple(neg, out why), why);
         Polygon.fillet(neg, numel(neg) - 2, Fr_c, divisions: divisions_c);
         Polygon.fillet(neg, numel(neg) - 1, Fr_a, divisions: divisions_a);
 
@@ -1066,6 +1069,9 @@ public class Chamber : TPIAP.Pea {
         pos = [d, e, C, A];
         Polygon.fillet(pos, 3, Fr_a + th_omani, divisions: divisions_a);
         Polygon.fillet(pos, 2, Fr_c + th_omani, divisions: divisions_c);
+
+        assert(Polygon.is_simple(neg, out why), why);
+        assert(Polygon.is_simple(pos, out why), why);
 
         // Place the inlet some way up the lower edge. Note the last coordinate
         // stores the axial angle.
@@ -1874,19 +1880,6 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Vec3 p = 20f*uX3;
-
-        float D = 14;
-        print("start");
-        Voxels v = new ports.GPort("1/8in", D).voxConstruct(new(p*0f));
-        Geez.voxels(v, colour: COLOUR_RED);
-        print("old");
-        v = new brGPort("1/8in", D).filled(new(p*1f), out _);
-        Geez.voxels(v, colour: COLOUR_BLUE);
-        print("new (filled)");
-        v = new brGPort("1/8in", D).shelled(new(p*1f), 2f, out _);
-        Geez.voxels(v, colour: COLOUR_GREEN);
-        print("new (shelled)");
     }
 
 

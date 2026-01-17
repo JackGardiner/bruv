@@ -89,13 +89,14 @@ public class Jason {
                        Activator.CreateInstance(listtype)!;
 
             foreach (JsonNode? item in jsonlist) {
-                if (node is not JsonValue value)
-                    throw new Exception($"list element is not a value, of: "
-                            + $"'{name}'");
-                if (!value.TryGetValue(out T? result))
-                    throw new Exception($"list element is not of type "
-                            + $"{typeof(T).Name}, of: '{name}'");
-                list.Add(result!);
+                try {
+                    object itemo = JsonSerializer.Deserialize(item, elemtype)
+                                ?? throw new Exception("deserialised to null");
+                    list.Add(itemo);
+                } catch (Exception e) {
+                    throw new Exception("failed to parse list element, "
+                            + $"exception: {e}");
+                }
             }
             return (T)list!;
         } else if (type == typeof(JsonMap)) {
