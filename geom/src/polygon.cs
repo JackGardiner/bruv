@@ -171,6 +171,30 @@ public static class Polygon {
         return a0 + t*Da;
     }
 
+    public static Vec2 corner_normal(Vec2 a, Vec2 b, Vec2 c, float dist) {
+        // a -> b -> c.
+        // find the point `dist` away from `b` s.t. it is bisecting the angle
+        // <abc (measured ccw about b).
+
+        Vec2 ba = a - b;
+        Vec2 bc = c - b;
+        float beta = arg(bc) - arg(ba);
+        beta = wraprad(beta, true); // enforce ccw.
+        return b + frompol(dist, arg(ba) + beta/2f);
+    }
+    public static Vec2 corner_thicken(Vec2 a, Vec2 b, Vec2 c, float th) {
+        // a -> b -> c.
+        // find the point out from `b` s.t. it is bisecting the angle <abc
+        // (measured ccw about b) and s.t. the normal thickness at a and c is
+        // `th`.
+        Vec2 ba = a - b;
+        Vec2 bc = c - b;
+        float beta = arg(bc) - arg(ba);
+        beta = wraprad(beta, true); // enforce ccw.
+        float dist = th / sin(beta / 2f);
+        return b + frompol(dist, arg(ba) + beta/2f);
+    }
+
 
     public static List<Vec2> resample(Slice<Vec2> vertices, int divisions,
             bool closed=false) {

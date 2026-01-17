@@ -2242,13 +2242,13 @@ public static class Geez {
         return Geez.points([p], r: r, colour: colour, hires: hires);
     }
 
-    public static Key points(in List<Vec3> ps, float r=2f, Colour? colour=null,
+    public static Key points(in Slice<Vec3> ps, float r=2f, Colour? colour=null,
             bool hires=false) {
         using var __ = Scoped.locked(_geezed);
         if (lockdown_check(out Key lockedkey))
             return lockedkey;
         Mesh ball = hires ? _ball_hires : _ball_lores;
-        List<Mesh> meshes = new();
+        List<Mesh> meshes = new(numel(ps));
         foreach (Vec3 p in ps) {
             assert(isgood(p), $"p={p}");
             Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
@@ -2258,6 +2258,32 @@ public static class Geez {
                 roughness: 0f))
         using (like(colour: colour))
             return _push([], meshes);
+    }
+    public static Key points(in Slice<Vec3> ps, Colour colour0, Colour colour1,
+            float r=2f, bool hires=false) {
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
+        int N = numel(ps);
+        Mesh ball = hires ? _ball_hires : _ball_lores;
+        List<Mesh> meshes = new(N);
+        List<Colour> cols = new(N);
+        for (int i=0; i<N; ++i) {
+            Vec3 p = ps[i];
+            assert(isgood(p), $"p={p}");
+            Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
+            meshes.Add(mesh);
+            float t = lerp(0f, 1f, i, N);
+            cols.Add(lerp(colour0, colour1, t));
+        }
+        List<Key> keys = new(N);
+        using (dflt_like(colour: COLOUR_RED, alpha: 1f, metallic: 0.1f,
+                roughness: 0f))
+        for (int i=0; i<N; ++i) {
+            using (like(colour: cols[i]))
+                keys.Add(_push([], [meshes[i]]));
+        }
+        return group(keys);
     }
 
     public static Key line(in PolyLine line) {

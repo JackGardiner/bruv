@@ -2,6 +2,7 @@ using static br.Br;
 using br;
 using TPIAP = TwoPeasInAPod;
 
+using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
@@ -33,7 +34,42 @@ public class InjectorSample : TPIAP.Pea {
     }
 
 
+    public Voxels one(Vec2 at) {
+
+        element.voxels(at, out Voxels? pos, out Voxels? neg);
+        // injector element = pos - neg.
+
+        Voxels cone = Cone.phied(
+            new(rejxy(at, z0_cone)),
+            PI_4,
+            Lz: 20f,
+            r0: 0f
+        );
+        cone.BoolSubtract(Cone.phied(
+            new(rejxy(at, z0_cone + 2f*SQRT2)),
+            PI_4,
+            Lz: 20f,
+            r0: 0f
+        ));
+        cone.BoolIntersect(Cone.phied(
+            new Frame(rejxy(at, 30f)).flipzx(),
+            PI_4,
+            Lz: 30f
+        ));
+
+        cone.BoolAdd(new Rod(new(rejxy(at)), 3f, 12f));
+
+        return pos + cone - neg;
+    }
+
     public Voxels? voxels() {
+
+        Voxels a = one(ZERO2);
+        Voxels b = one(30f*uX2);
+        a.IntersectImplicit(new Space(new Frame().rotzx(PI_2), 0f, +INF));
+        Geez.voxels(a + b);
+        return a + b;
+
         element.voxels(ZERO2, out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
 

@@ -457,12 +457,25 @@ public static partial class Br {
     public static float argphiy(Vec3 a, float ifzero=PI_2)
         => nearzero(a) ? ifzero : acos(a.Y/mag(a));
 
-    public static float argbeta(Vec2 a, Vec2 b, float ifzero=PI_4)
-        => argbeta(rejxy(a), rejxy(b), ifzero);
-    public static float argbeta(Vec3 a, Vec3 b, float ifzero=PI_4) {
+    public static float argbeta(Vec2 a, Vec2 b, bool signed=false,
+            float ifzero=PI_4) {
         if (nearzero(a) || nearzero(b))
             return ifzero;
-        return atan2(mag(cross(a, b)), dot(a, b));
+        float arga = arg(a);
+        float argb = arg(b);
+        float beta = wraprad(argb - arga);
+        if (!signed)
+            beta = abs(beta);
+        return beta;
+    }
+    public static float argbeta(Vec3 a, Vec3 b, bool signed=false,
+            float ifzero=PI_4) {
+        if (nearzero(a) || nearzero(b))
+            return ifzero;
+        float beta = atan2(mag(cross(a, b)), dot(a, b));
+        if (!signed)
+            beta = abs(beta);
+        return beta;
     }
 
     public static Vec2 normalise(Vec2 a) {
@@ -490,7 +503,7 @@ public static partial class Br {
         => new(r*cos(theta), r*sin(theta), z);
     public static Vec3 fromsph(float r, float theta, float phi)
         => new(r*cos(theta)*sin(phi), r*sin(theta)*sin(phi), r*cos(phi));
-    public static Vec3 fromzr(Vec2 zr, float theta)
+    public static Vec3 fromzr(Vec2 zr, float theta=0f)
         => rejxy(frompol(zr.Y, theta), zr.X);
 
     public static float magpara(Vec3 a, Vec3 b) {
@@ -529,6 +542,12 @@ public static partial class Br {
              + cross(about, p)*sinby
              + about*dot(about, p)*(1f - cosby);
     }
+
+    public static Vec2 flipx(Vec2 a) => new(-a.X, a.Y);
+    public static Vec2 flipy(Vec2 a) => new(a.X, -a.Y);
+    public static Vec3 flipx(Vec3 a) => new(-a.X, a.Y, a.Z);
+    public static Vec3 flipy(Vec3 a) => new(a.X, -a.Y, a.Z);
+    public static Vec3 flipz(Vec3 a) => new(a.X, a.Y, -a.Z);
 
     public static void rotfromto(Vec3 a, Vec3 b, out Vec3 about, out float by) {
         // We want to go from a->b.

@@ -1341,7 +1341,7 @@ public class Chamber : TPIAP.Pea {
              .at_face(Bar.Y0);
             this_pos.BoolAdd(web);
             this_pos.IntersectImplicit(new Space(
-                frame.translate(new Vec3(0f, -pos_Lr/SQRTH + web.Lx/2f, Lz))
+                frame.translate(new Vec3(0f, -pos_Lr*SQRT2 + web.Lx/2f, Lz))
                      .rotyz(phi_tc),
                 -INF,
                 0f
@@ -1880,6 +1880,16 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
+        // Vec2 a = frompol(1f, 0f);
+        // Vec2 b = frompol(1f, PI_4);
+        // Vec2 c = frompol(1f, PI_2);
+        Vec2 a = new(4.0771093f, 4.0771093f);
+        Vec2 b = new(7.396275f, 4.0771093f);
+        Vec2 c = new(5.3384023f, 2.0192358f);
+        Geez.frame(new());
+        Geez.points([..new List<Vec2>{a,b,c}.Select((p)=>fromzr(p))], 0.1f);
+        Geez.point(fromzr(Polygon.corner_normal(a, b, c, 0.2f)), 0.1f, COLOUR_BLUE);
+        Geez.point(fromzr(Polygon.corner_thicken(a, b, c, 0.2f)), 0.1f, COLOUR_BLUE);
     }
 
 

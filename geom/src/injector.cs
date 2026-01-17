@@ -34,22 +34,20 @@ using BBox3 = PicoGK.BBox3;
    the big boy.
 
 
-             ',',        ,-| |---,
-               ',',    ,'.  .    .',_____     | ^ +r
-         ,-| |---'-'--|  .  .    . .    .     | |
-       ,'.  .         ',_____________   .     |    -z
-     ,'  .  .         .. .  .    . ..   .     |   -->
-- - - - - - - - - - - - - - - - - - - - - - - + - - -
-    .    .  .         .. .  .    . ..   .     |\
-FOR INJ1:.  .         .. .  .    . ..   .     | '- origin
-    A    B  C         DE .  .    . .F   .     |
-                      .  .  .    . .    .     |
-FOR INJ2:             .  .  .    . .    .
-                      A  B  C    D E    F
-
-D1 and A2 are not necessarily coincident, but D1.Y == A2.Y.
-
-lox/ipa boundary not guaranteed to align with inj1 narrowing.
+                  ,------| |--,
+                  .',     .   .',______ ^ +r
+         ,-| |-------',   .   . .     . |
+       ,'.  .     .  . ',__________   .
+     ,'  .  .     .  .  . .   . . .   .  -> -z
+- - - - - - - - - - - - - - - - - - - +
+    .    .  .     .  .  . .   . . .   . \
+FOR INJ1:.  .     .  .  . .   . . .   .  '- origin
+    A    B  C     .  D  E .   . . F   .
+                  .  .    .   . .     .
+FOR INJ2:         .  .    .   . .     .
+                  B  A    C   D E     F
+define D1 as the intersection between B1C1 & B2E1.
+define A2 = D1.
 
 the C1 and C2 holes are offset s.t. their outer edge is tangential with the inner
 boundary. so, the picture is a little misleading in that they may appear
@@ -60,19 +58,19 @@ clearest ascii diagram.
 */
 
 
-public class InjectorElementPoints {
-    public Vec2 A = NAN2;
-    public Vec2 B = NAN2;
-    public Vec2 C = NAN2;
-    public Vec2 D = NAN2;
-    public Vec2 E = NAN2;
-    public Vec2 F = NAN2;
-}
-
-
 public class InjectorElement {
-    public InjectorElementPoints points1 = new();
-    public InjectorElementPoints points2 = new();
+    public Vec2 A1 = NAN2;
+    public Vec2 B1 = NAN2;
+    public Vec2 C1 = NAN2;
+    public Vec2 D1 = NAN2;
+    public Vec2 E1 = NAN2;
+    public Vec2 F1 = NAN2;
+    public Vec2 A2 = NAN2;
+    public Vec2 B2 = NAN2;
+    public Vec2 C2 = NAN2;
+    public Vec2 D2 = NAN2;
+    public Vec2 E2 = NAN2;
+    public Vec2 F2 = NAN2;
 
     public required float phi { get; init; }
     /* ^ must be same as LOx/OPA dividing cone */
@@ -82,26 +80,24 @@ public class InjectorElement {
     public required float th_inj1 { get; init; }
     public required float th_inj2 { get; init; }
     public required float th_nz1 { get; init; }
-    public required float th_nz2 { get; init; }
+    public required float th_il1 { get; init; }
+    public required float th_il2 { get; init; }
     public required float Pr_inj1 { get; init; }
     public required float Pr_inj2 { get; init; }
+    public required float Fr { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
     public float L_il2 = NAN;
-    public float EXTRA { get; init; } = 6f;
-    public float Fr { get; init; } = 0.2f;
+    private const float EXTRA = 6f;
 
 
     private bool inited = false;
-    public void initialise(in PartMating pm, int N, out float z0_cone) {
+    public void initialise(in PartMating pm, int N, out float z0_dmw) {
         assert(!inited);
         assert(phi > 0f);
         assert(phi <= PI_2);
         assert(N >= 1);
-
-        assert(nearto(th_nz1, th_inj1), "havent implemented it yet");
-        assert(nearto(th_nz2, th_inj2), "havent implemented it yet");
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
@@ -251,52 +247,57 @@ public class InjectorElement {
         // - set all 1&2 points A-F.
         // - set inlet 1&2 D&L.
 
-        points2.F = 1e3f * new Vec2(0f, Ir_nz2);
-        points2.E = points2.F + 1e3f * new Vec2(L_nz2, 0f);
+        F2 = 1e3f * new Vec2(0f, Ir_nz2);
+        E2 = F2 + 1e3f * new Vec2(L_nz2, 0f);
         float Dr_E2D2 = Ir_ch2 - Ir_nz2;
-        points2.D = points2.E + 1e3f * new Vec2(Dr_E2D2/tan(phi), Dr_E2D2);
-        points2.B = points2.E + 1e3f * new Vec2(L_ch2, Dr_E2D2);
-        points2.C = points2.B + 1e3f * new Vec2(-Ir_il2, 0f);
+        D2 = E2 + 1e3f * new Vec2(Dr_E2D2/tan(phi), Dr_E2D2);
+        B2 = E2 + 1e3f * new Vec2(L_ch2, Dr_E2D2);
+        C2 = B2 + 1e3f * new Vec2(-Ir_il2, 0f);
         float Dr_B2A2 = 0f - Ir_ch2;
-        points2.A = points2.B + 1e3f * new Vec2(Dr_B2A2/tan(-phi), Dr_B2A2);
+        A2 = B2 + 1e3f * new Vec2(Dr_B2A2/tan(-phi), Dr_B2A2);
 
-        points1.F = 1e3f * new Vec2(z0_inj1, Ir_nz1);
-        points1.E = points1.F + 1e3f * new Vec2(L_nz1, 0f);
+        F1 = 1e3f * new Vec2(z0_inj1, Ir_nz1);
+        E1 = F1 + 1e3f * new Vec2(L_nz1, 0f);
         float Dr_E1D1 = Ir_ch1 - Ir_nz1;
-        points1.D = points1.E + 1e3f * new Vec2(Dr_E1D1/tan(phi), Dr_E1D1);
-        points1.B = points1.E + 1e3f * new Vec2(L_ch1, Dr_E1D1);
-        points1.C = points1.B + 1e3f * new Vec2(-Ir_il1, 0f);
+        D1 = E1 + 1e3f * new Vec2(Dr_E1D1/tan(phi), Dr_E1D1);
+        B1 = E1 + 1e3f * new Vec2(L_ch1, Dr_E1D1);
+        C1 = B1 + 1e3f * new Vec2(-Ir_il1, 0f);
         float Dr_B1A1 = 0f - Ir_ch1;
-        points1.A = points1.B + 1e3f * new Vec2(Dr_B1A1/tan(-phi), Dr_B1A1);
+        A1 = B1 + 1e3f * new Vec2(Dr_B1A1/tan(-phi), Dr_B1A1);
 
-        assert(points1.A.X > points1.B.X, $"Az={points1.A.X}, Bz={points1.B.X}");
-        assert(points1.B.X > points1.C.X, $"Bz={points1.B.X}, Cz={points1.C.X}");
-        assert(points1.C.X > points1.D.X, $"Cz={points1.C.X}, Dz={points1.D.X}");
-        assert(points1.D.X > points1.E.X, $"Dz={points1.D.X}, Ez={points1.E.X}");
-        assert(points1.E.X > points1.F.X, $"Ez={points1.E.X}, Fz={points1.F.X}");
+        assert(A1.X > B1.X, $"A1z={A1.X}, B1z={B1.X}");
+        assert(B1.X > C1.X, $"B1z={B1.X}, C1z={C1.X}");
+        assert(C1.X > D1.X, $"C1z={C1.X}, D1z={D1.X}");
+        assert(D1.X > E1.X, $"D1z={D1.X}, E1z={E1.X}");
+        assert(E1.X > F1.X, $"E1z={E1.X}, F1z={F1.X}");
+        assert(F1.X > 0f, $"F1z={F1.X}");
 
-        assert(points2.A.X > points2.B.X, $"Az={points2.A.X}, Bz={points2.B.X}");
-        assert(points2.B.X > points2.C.X, $"Bz={points2.B.X}, Cz={points2.C.X}");
-        assert(points2.C.X > points2.D.X, $"Cz={points2.C.X}, Dz={points2.D.X}");
-        assert(points2.D.X > points2.E.X, $"Dz={points2.D.X}, Ez={points2.E.X}");
-        assert(points2.E.X > points2.F.X, $"Ez={points2.E.X}, Fz={points2.F.X}");
+        assert(A2.X > B2.X, $"A2z={A2.X}, B2z={B2.X}");
+        assert(B2.X > C2.X, $"B2z={B2.X}, C2z={C2.X}");
+        assert(C2.X > D2.X, $"C2z={C2.X}, D2z={D2.X}");
+        assert(D2.X > E2.X, $"D2z={D2.X}, E2z={E2.X}");
+        assert(E2.X > F2.X, $"E2z={E2.X}, F2z={F2.X}");
+        assert(nearzero(F2.X), $"F2z={F2.X}");
 
-        points2.A = points1.D;
-        points2.B = Polygon.line_intersection(
-            points1.D, points1.E,
-            points2.D, points2.C,
+        // Now snap inj2 upper setcion to integrate with dividing manifold wall.
+
+        A2 = D1;
+        B2 = Polygon.line_intersection(
+            D1, E1,
+            D2, C2,
             out _
         );
 
-        points2.A.X -= th_inj1/sin(phi);
-        points2.B.X -= th_inj1/sin(phi);
-        z0_cone = Polygon.line_intersection(
-            points2.B, points2.A,
+        A2.X -= th_nz1/sin(phi);
+        B2.X -= th_nz1/sin(phi);
+        z0_dmw = Polygon.line_intersection(
+            B2, A2,
             ZERO2, uX2,
             out _
         ).X;
 
-        points2.C.X = points2.B.X - 1e3f * 2.5f*Ir_il2;
+        // perfectly placed.
+        C2.X = Polygon.corner_thicken(D2, B2, A2, 1e3f*Ir_il2).X;
 
         this.D_il1 = 1e3f * 2f*Ir_il1;
         this.D_il2 = 1e3f * 2f*Ir_il2;
@@ -349,48 +350,108 @@ public class InjectorElement {
     }
 
 
-    public void peep_points(Vec2 at) {
-        Vec3 A1 = rejxy(at, 0f) + fromzr(points1.A, 0f);
-        Vec3 B1 = rejxy(at, 0f) + fromzr(points1.B, 0f);
-        Vec3 C1 = rejxy(at, 0f) + fromzr(points1.C, 0f);
-        Vec3 D1 = rejxy(at, 0f) + fromzr(points1.D, 0f);
-        Vec3 E1 = rejxy(at, 0f) + fromzr(points1.E, 0f);
-        Vec3 F1 = rejxy(at, 0f) + fromzr(points1.F, 0f);
-        Vec3 A2 = rejxy(at, 0f) + fromzr(points2.A, 0f);
-        Vec3 B2 = rejxy(at, 0f) + fromzr(points2.B, 0f);
-        Vec3 C2 = rejxy(at, 0f) + fromzr(points2.C, 0f);
-        Vec3 D2 = rejxy(at, 0f) + fromzr(points2.D, 0f);
-        Vec3 E2 = rejxy(at, 0f) + fromzr(points2.E, 0f);
-        Vec3 F2 = rejxy(at, 0f) + fromzr(points2.F, 0f);
-        Geez.point(A1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 0/5f));
-        Geez.point(B1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 1/5f));
-        Geez.point(C1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 2/5f));
-        Geez.point(D1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 3/5f));
-        Geez.point(E1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 4/5f));
-        Geez.point(F1, r: 0.2f, colour: lerp(COLOUR_RED, COLOUR_YELLOW, 5/5f));
-        Geez.point(A2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 0/5f));
-        Geez.point(B2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 1/5f));
-        Geez.point(C2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 2/5f));
-        Geez.point(D2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 3/5f));
-        Geez.point(E2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 4/5f));
-        Geez.point(F2, r: 0.2f, colour: lerp(COLOUR_GREEN, COLOUR_BLUE, 5/5f));
-        Geez.line([fromcyl(points2.F.X, 0f, 0f)]);
-        Geez.frame(new(rejxy(at, 0f)), mark_pos: false);
-    }
-
-
-
     public void voxels(Vec2 at, out Voxels pos, out Voxels neg) {
         assert(inited);
-        assert(nearzero(points1.A.Y));
 
-        // Make inner and outer.
-        layer_voxels(at, points1, th_inj1, no_il1, D_il1, L_il1,
-                out Voxels pos1, out Voxels neg1);
-        layer_voxels(at, points2, th_inj2, no_il2, D_il2, L_il2,
-                out Voxels pos2, out Voxels neg2);
+        Frame frame = new(rejxy(at, 0f));
+
+        // Make volume by revolve.
+
+        // divisions on revolves about z.
+        int N = (int)(TWOPI * max(C1.X, C2.X) / VOXEL_SIZE);
+        N /= 3;
+        N = max(10, N);
+
+        // general fillet divisions.
+        int M = N/20;
+        M -= M % 2; // force even.
+        M = max(M, 4);
+
+
+        // Make injector 1.
+        assert(nearzero(A1.Y));
+        List<Vec2> neg_points1 = [
+            A1,
+            B1,
+            D1,
+            E1,
+            F1,
+            // Extend outer inj to plate + extra.
+            new(-EXTRA, F1.Y),
+            new(-EXTRA, 0f),
+        ];
+        List<Vec2> pos_points1 = [
+            Polygon.corner_thicken(flipy(B1), A1, B1, th_inj1),
+            Polygon.corner_thicken(A1, B1, D1, th_inj1),
+            Polygon.line_intersection(
+                A2, B2,
+                B1 + th_inj1*uY2, D1 + th_inj1*uY2,
+                out _
+            ),
+            Polygon.line_intersection(
+                A2, B2,
+                E1 + th_nz1*uY2, E1 + th_nz1*uY2 + uX2,
+                out _
+            ),
+            Polygon.corner_thicken(D1, E1, F1, th_nz1),
+            F1 + th_nz1*uY2,
+            F1*uX2,
+        ];
+        Polygon.cull_adjacent_duplicates(pos_points1);
+        Polygon.fillet(pos_points1, 1, th_inj1, divisions: M); // B
+        pos_points1.Insert(0, flipy(pos_points1[1])); // for fillet purposes.
+        Polygon.fillet(pos_points1, 1, th_inj1, divisions: M); // A
+        pos_points1 = pos_points1[(1 + M/2)..]; // trim points.
+        if (!nearzero(pos_points1[0].Y))
+            pos_points1.Insert(0, pos_points1[0]*uX2);
+
+
+        // Make injector 2.
+        assert(!nearzero(A2.Y));
+        assert(nearzero(F2.X));
+        List<Vec2> neg_points2 = [
+            A2,
+            B2,
+            D2,
+            E2,
+            F2,
+            new(-EXTRA, F2.Y),
+            new(-EXTRA, 0f),
+        ];
+        neg_points2.Insert(0, neg_points2[0]*uX2);
+        List<Vec2> pos_points2 = [
+            Polygon.corner_thicken(A2*uX2, A2, B2, th_inj2),
+            Polygon.corner_thicken(A2, B2, D2, th_inj2),
+            new(0f, D2.Y + th_inj2),
+            ZERO2,
+        ];
+        pos_points2.Insert(0, pos_points2[0]*uX2);
+
+
+        Voxels neg1 = new(Polygon.mesh_revolved(
+            frame,
+            neg_points1,
+            slicecount: N
+        ));
+        Voxels pos1 = new(Polygon.mesh_revolved(
+            frame,
+            pos_points1,
+            slicecount: N
+        ));
+        Voxels neg2 = new(Polygon.mesh_revolved(
+            frame,
+            neg_points2,
+            slicecount: N
+        ));
+        Voxels pos2 = new(Polygon.mesh_revolved(
+            frame,
+            pos_points2,
+            slicecount: N
+        ));
+
         // dont let it delete inner injector.
         neg2.BoolSubtract(pos1);
+
 
         // Send to returns.
         pos = pos1; // no copy.
@@ -398,63 +459,70 @@ public class InjectorElement {
         neg = neg1; // no copy.
         neg.BoolAdd(neg2);
 
-        // Tiny fillet to not have razor edges.
-        Fillet.convex(neg, Fr, true);
+
+        // Add inlets.
+        voxels_il(at, no_il1, C1, D_il1, L_il1, th_il1, phi, out Voxels pos_il1,
+            out Voxels neg_il1);
+        voxels_il(at, no_il2, C2, D_il2, L_il2, th_il2, phi, out Voxels pos_il2,
+            out Voxels neg_il2);
+        pos.BoolAdd(pos_il1);
+        pos.BoolAdd(pos_il2);
+        neg.BoolAdd(neg_il1);
+        neg.BoolAdd(neg_il2);
+
+
+        // Dreaded fillet.
         Fillet.concave(pos, Fr, true);
+        Fillet.both(neg, Fr, true);
+
+        // dont let the inner nozzle end get filleted.
+        Rod just_the_tip = new(frame.transz(F1.X), 1.4f*Fr, F1.Y, F1.Y + th_nz1);
+        pos.BoolAdd(just_the_tip);
+        neg.BoolSubtract(just_the_tip);
     }
 
 
-    private static void layer_voxels(Vec2 at, InjectorElementPoints points,
-            float th, float no_inlet, float D_inlet, float L_inlet,
-            out Voxels pos, out Voxels neg, float EXTRA=6f) {
-
-        // Make volume by revolve.
-        int N = (int)(TWOPI * points.C.X / VOXEL_SIZE);
-        N /= 3;
-        N = max(10, N);
-
-        List<Vec2> neg_points = [
-            points.A*uX2,
-            points.A,
-            points.B,
-            points.D,
-            points.E,
-            points.F,
-            // Extend outer inj to plate + 2*extra.
-            new(-2f*EXTRA, points.F.Y),
-            new(-2f*EXTRA, 0f),
-        ];
-        Polygon.cull_adjacent_duplicates(neg_points);
-        neg = new(Polygon.mesh_revolved(
-            new(rejxy(at, 0f)),
-            neg_points,
-            slicecount: N
-        ));
-
-        // Stash the shell in pos.
-        pos = neg.voxOffset(th);
-        // Stop at the correct heights.
-        pos.BoolSubtract(new Rod(
-            new(rejxy(at, points.F.X)),
-            -points.F.X - 3f*EXTRA,
-            points.F.Y + EXTRA
-        ));
-
+    private static void voxels_il(Vec2 at, int no, Vec2 C, float D, float L,
+            float th, float phi, out Voxels pos, out Voxels neg) {
+        pos = new();
+        neg = new();
         // Add the tangential inlets.
-        for (int i=0; i<no_inlet; ++i) {
-            float theta = i*TWOPI/no_inlet;
-            Vec3 inlet = fromzr(points.C, theta);
+        for (int i=0; i<no; ++i) {
+            float theta = i*TWOPI/no;
+            Vec3 inlet = fromzr(C, theta);
             // move radially inwards to make tangent outer.
-            inlet -= D_inlet/2f * fromcyl(1f, theta, 0f);
+            inlet -= D/2f * fromcyl(1f, theta, 0f);
             // make frame circum to this element centre.
             Frame frame = new Frame.Cyl(new(rejxy(at, 0f))).circum(inlet);
-            Rod pipe = new Rod(
+            // x=+axial, y=+radial.
+            Rod pipe = new Rod(frame, L, D/2f);
+            neg.BoolAdd(pipe.extended(D, Extend.UP));
+
+            Voxels this_pos = pipe.shelled(th);
+
+            // support.
+            Bar tear = new Bar(
+                frame.rotxy(-PI_4),
+                L,
+                D/2f + th
+            ).at_edge(Bar.X0_Y0);
+            Bar web = new Bar(
                 frame,
-                L_inlet,
-                D_inlet/2f
-            );
-            neg.BoolAdd(pipe);
-            pos.BoolAdd(pipe.shelled(th));
+                L/sin(phi), // axial
+                th,         // radial
+                L           // circum
+            ).at_face(Bar.X0);
+            this_pos.BoolAdd(tear);
+            this_pos.BoolAdd(web);
+            this_pos.IntersectImplicit(new Space(
+                frame.translate(new Vec3(-tear.Ly*SQRT2 + web.Ly/2f, 0f, L))
+                     .rotzx(-phi),
+                -INF,
+                0f
+            ));
+            this_pos.IntersectImplicit(new Space(new(), 0f, +INF));
+
+            pos.BoolAdd(this_pos);
         }
     }
 
