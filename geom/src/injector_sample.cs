@@ -31,6 +31,8 @@ public class InjectorSample : TPIAP.Pea {
     public required float th_plate { get; init; }
     public required float th_dmw { get; init; }
 
+    private static float extra_on_base = 3f;
+
     public float[] z0_cone = [];
     public float[] max_r = [];
     public int N => numel(element);
@@ -90,7 +92,8 @@ public class InjectorSample : TPIAP.Pea {
                 .girthed(R)
                 .extended(EXTRA, Extend.UPDOWN));
 
-        Voxels bot = new Rod(at, th_plate, Rmid);
+        Voxels bot = new Rod(at, th_plate, Rmid)
+                .extended(extra_on_base, Extend.DOWN);
 
         Voxels dividing = Cone.phied(
             at.transz(element.z0_dmw),
@@ -101,7 +104,8 @@ public class InjectorSample : TPIAP.Pea {
                 .girthed(Rmid)
                 .extended(EXTRA, Extend.UPDOWN));
 
-        Voxels sides = interior.shelled(th_outer);
+        Voxels sides = interior.shelled(th_outer)
+                .extended(extra_on_base, Extend.DOWN);
 
         Voxels vox = pos; // no copy.
         vox.BoolAdd(top);
@@ -139,7 +143,7 @@ public class InjectorSample : TPIAP.Pea {
             R,
             flat_off,
             th_datum
-        );
+        ).extended(extra_on_base, Extend.DOWN);
         datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         datum.BoolSubtract(
             (Voxels)new Bar(
@@ -173,7 +177,8 @@ public class InjectorSample : TPIAP.Pea {
             interior.r + L_BSPPEIGTH,
             spanner_IPA,
             Lz_side
-        ).at_face(Bar.X1);
+        ).at_face(Bar.X1)
+         .extended(extra_on_base, Extend.DOWN);
         pad.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         vox.BoolAdd(pad);
 
@@ -229,6 +234,16 @@ public class InjectorSample : TPIAP.Pea {
         ));
 
 
+
+        /* Nozzle extension. */
+        vox.BoolAdd(new Rod(
+            at,
+            3*VOXEL_SIZE,
+            element.F1.Y,
+            element.F1.Y + element.th_nz1
+        ).extended(extra_on_base, Extend.DOWN));
+
+
         return vox;
     }
 
@@ -260,7 +275,7 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-            // return new(i*50*uX3);
+            // return new(i*50*uX3 + extra_on_base*uZ3);
             // or try to stack nicely:
 
             i = remap[i];
@@ -271,7 +286,7 @@ public class InjectorSample : TPIAP.Pea {
             Vec3 point = new(
                 x0 + (i % 2) * buildplate.Lx/5f,
                 y0 + (i % 4) * buildplate.Ly/4f,
-                0f
+                extra_on_base
             );
             point += rejxy(corrections[i]);
             Frame at = new(point);
