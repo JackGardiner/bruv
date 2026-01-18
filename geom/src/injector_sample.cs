@@ -107,31 +107,42 @@ public class InjectorSample : TPIAP.Pea {
         pad.BoolSubtract(rod);
         vox.BoolAdd(pad);
 
+        // ports
+        float bspp1_8_drill_rad = 8.2f/2; // tap drill size (undersize)
+        float bspp1_8_diamond_xy = 8.2f/sqrt(2); // inscribed square (face-face dist)
+
         // top port
         Frame at0 = new(rejxy(at) + new Vec3(0, 0f, rod.Lz));
-        Voxels voxport0 = new Rod(at0, 12f, 9.73f/2f)
+        Voxels voxport0 = new Rod(at0, 12f, bspp1_8_drill_rad)
                 .shelled(5f)
                 .extended(1f, Extend.DOWN);
         voxport0.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 20f));
 
         vox.BoolAdd(voxport0);
-        vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, 9.73f/2f));
+        vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, bspp1_8_drill_rad));
 
         // side port
         // create frame at port pad, facing radially inwards
-        Frame at1 = new(
+        Frame at1 = new Frame(
             rejxy(at) + new Vec3(r0 + (8f - th)*2, 0f, 9f),
             -uX3
+        ).rotxy(PI/4f);
+        Voxels voxport1 = new Bar(
+            at1,
+            15f,
+            bspp1_8_diamond_xy
         );
-        Voxels voxport1 = new Rod(at0, 12f, 9.73f/2f)
-                .shelled(5f)
-                .extended(1f, Extend.DOWN);
-        voxport1.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 15f));
+        voxport1.BoolSubtract(rod);
+        vox.BoolSubtract(voxport1);
+        // Voxels voxport1 = new Rod(at0, 12f, 9.73f/2f)
+        //         .shelled(5f)
+        //         .extended(1f, Extend.DOWN);
+        // voxport1.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 15f));
 
-        vox.BoolAdd(voxport1);
-        Voxels side_fluid = new Rod(at1.transz(-0.5f), 15f, 9.73f/2f);
-        side_fluid.BoolSubtract(rod);
-        vox.BoolSubtract(side_fluid);
+        // vox.BoolAdd(voxport1);
+        // Voxels side_fluid = new Rod(at1.transz(-0.5f), 15f, 9.73f/2f);
+        // side_fluid.BoolSubtract(rod);
+        // vox.BoolSubtract(side_fluid);
 
 
         // Frame at1 = new(rejxy(at) + new Vec3(-rod.r/1.5f, 0f, rod.Lz));
@@ -152,8 +163,9 @@ public class InjectorSample : TPIAP.Pea {
 
     public Voxels? voxels() {
 
-        Geez.voxels(make(ZERO2, element0, z0_cone0, max_r_0));
-        Geez.voxels(make(50*uX2, element1, z0_cone1, max_r_1));
-        return null;
+        Voxels voxout = new(make(ZERO2, element0, z0_cone0, max_r_0));
+        Geez.voxels(voxout);
+        // Geez.voxels(make(50*uX2, element1, z0_cone1, max_r_1));
+        return voxout;
     }
 }
