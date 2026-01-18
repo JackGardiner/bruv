@@ -10,7 +10,7 @@ using BBox3 = PicoGK.BBox3;
 
 public class InjectorSample : TPIAP.Pea {
 
-    public string name => "injector_sample";
+    public string name => "injector-sample";
 
     public void anything()
         => throw new NotImplementedException();
@@ -28,9 +28,8 @@ public class InjectorSample : TPIAP.Pea {
     public required PartMating pm { get; init; }
     public required InjectorElement[] element { get; init; }
     public required int[] no_inj { get; init; }
-    public required float phi_dmw { get; init; }
-    public required float th_dmw { get; init; }
     public required float th_plate { get; init; }
+    public required float th_dmw { get; init; }
 
     public float[] z0_cone = [];
     public float[] max_r = [];
@@ -40,30 +39,35 @@ public class InjectorSample : TPIAP.Pea {
         assert(N == numel(no_inj));
         z0_cone = new float[N];
         max_r = new float[N];
-        for (int i=0; i<N; ++i)
-            element[i].initialise(pm, no_inj[i], out z0_cone[i], out max_r[i]);
+        for (int i=0; i<N; ++i) {
+            element[i].initialise(pm, no_inj[i]);
+            File.Move(
+                InjectorElement.REPORT_PATH,
+                fromroot($"exports/injector-sample-{i}-report.txt"),
+                overwrite: true
+            );
+        }
     }
 
 
-    public static Voxels make(Frame at, InjectorElement element, float phi_dmw,
-            float th_dmw, float th_plate, float z0_cone, float max_r,
-            ImageSignedDist img, bool datum_on_opposite) {
-        assert(phi_dmw == element.phi);
+    public static Voxels make(Frame at, InjectorElement element, float th_plate,
+            float th_dmw, ImageSignedDist img, bool datum_on_opposite) {
 
         const float EXTRA = 30f;
         const float th_outer = 3f;
 
         // position inlets s.t. port isnt straight on one.
-        element.voxels(at.rotxy(-PI_2 - 0.666f*PI/element.no_il2),
-                out Voxels? pos, out Voxels? neg);
+        element.voxels(
+                at.rotxy(-PI_2 - 2/3f*PI/element.no_il2), th_plate, th_dmw,
+                out Voxels? pos, out Voxels? neg,
+                please_put_the_inner_injector_on_the_build_plate: true
+            );
         // injector element = pos - neg.
-        BBox3 bounds = pos.oCalculateBoundingBox();
-        Vec3 size = bounds.vecSize();
 
         Rod interior /* kinda, loosy goosy top and bottom (dujj) */ = new(
             at,
-            size.Z - 1f,
-            max_r + 3f
+            element.max_z - 1f,
+            element.max_r + 2f
         );
 
         float R = interior.r + th_outer;
@@ -89,8 +93,8 @@ public class InjectorSample : TPIAP.Pea {
         Voxels bot = new Rod(at, th_plate, Rmid);
 
         Voxels dividing = Cone.phied(
-            at.transz(z0_cone),
-            phi_dmw,
+            at.transz(element.z0_dmw),
+            element.phi,
             r1: R
         ).shelled(-th_dmw);
         dividing.BoolIntersect(interior
@@ -158,7 +162,7 @@ public class InjectorSample : TPIAP.Pea {
 
         /* PORTS */
         float r_BSPPEIGTH = 8.2f/2f; // tap drill size (undersize)
-        float L_BSPPEIGTH = 10f;
+        float L_BSPPEIGTH = 15f;
         float r_port = r_BSPPEIGTH + 5f;
         float spanner_IPA = 17f;
         float spanner_LOx = 17f;
@@ -207,16 +211,19 @@ public class InjectorSample : TPIAP.Pea {
 
 
         // Worlds cheekiest label.
-        float label_height = 5f;
+        float label_height = 4f;
         float label_th = 0.5f;
-        float label_off = 0.2f;
+        float label_z0 = -0.2f;
+        // float label_x0 = ave(th_outer, L_BSPPEIGTH);
+        // float label_x0 = (2f*th_outer + 3f*L_BSPPEIGTH) / 5f;
+        float label_x0 = L_BSPPEIGTH - 2.5f - label_height/2f;
         Frame label = at;
-        label = label.transx(interior.r + L_BSPPEIGTH - 2.5f - label_height/2f);
-        label = label.transz(Lz_side - label_off);
+        label = label.transx(interior.r + label_x0);
+        label = label.transz(Lz_side + label_z0);
         label = label.rotxy(PI_2);
         vox.BoolAdd(img.voxels_on_plane(
             label,
-            label_th + label_off,
+            label_th - label_z0,
             label_height,
             ImageSignedDist.HEIGHT
         ));
@@ -231,10 +238,32 @@ public class InjectorSample : TPIAP.Pea {
         Geez.bar(buildplate);
 
         assert(N == 8);
+        Vec2[] corrections = [
+            new(+2.0f, +3.0f),
+            new(+2.0f, +2.5f),
+            new(+2.0f, +0.9f),
+            new(+2.0f, -0.8f),
+
+            new(-2.0f, +1.45f),
+            new(-2.0f, -0.15f),
+            new(-2.0f, -2.2f),
+            new(-2.0f, -2.85f),
+        ];
+        int[] remap = [
+            0,
+            6,
+            5,
+            3,
+            1,
+            2,
+            4,
+            7,
+        ];
         Frame get_at(int i) {
             // return new(i*50*uX3);
             // or try to stack nicely:
 
+            i = remap[i];
             float x0 = -buildplate.Lx/4f - buildplate.Lx/10f;
             float y0 = -buildplate.Ly/2f + buildplate.Ly/8f;
             if (i >= 4)
@@ -244,13 +273,16 @@ public class InjectorSample : TPIAP.Pea {
                 y0 + (i % 4) * buildplate.Ly/4f,
                 0f
             );
+            point += rejxy(corrections[i]);
             Frame at = new(point);
             if (i % 2 != 0)
                 at = at.rotxy(PI);
             return at;
         }
 
+        Voxels all = new();
         for (int i=0; i<N; ++i) {
+            print($"Creating injector sample {i}.");
             Frame at = get_at(i);
 
             ImageSignedDist img = new(
@@ -262,20 +294,19 @@ public class InjectorSample : TPIAP.Pea {
             Voxels vox = make(
                 at,
                 element[i],
-                phi_dmw,
-                th_dmw,
                 th_plate,
-                z0_cone[i],
-                max_r[i],
+                th_dmw,
                 img,
                 i % 2 == 0
             );
+            Geez.voxels(vox);
+            all.BoolAdd(vox);
+
             BBox3 bounds = vox.oCalculateBoundingBox();
             print($"Bounding size: {bounds.vecSize()}");
-            Geez.voxels(vox);
 
             TPIAP.save_mesh_only($"injector-sample-{i}", new(vox));
         }
-        return null;
+        return all;
     }
 }

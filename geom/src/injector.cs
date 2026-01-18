@@ -84,11 +84,16 @@ public class InjectorElement {
     public required float th_il2 { get; init; }
     public required float Pr_inj1 { get; init; }
     public required float Pr_inj2 { get; init; }
-    public required float Fr { get; init; }
+    public required float Fr_LOx { get; init; }
+    public required float Fr_IPA { get; init; }
+    public required float Fr_small { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
     public float L_il2 = NAN;
+    public float z0_dmw = NAN;
+    public float max_r = NAN;
+    public float max_z = NAN;
 
     // Coefficients of nozzle opening: IR_ch/IR_nz
     // reasonable bounds: idx?
@@ -115,10 +120,11 @@ public class InjectorElement {
 
 
     private const float EXTRA = 6f;
+    public static string REPORT_PATH
+        => fromroot($"exports/injector-element-report.txt");
 
     private bool inited = false;
-    public void initialise(in PartMating pm, int N, out float z0_dmw,
-            out float max_r) {
+    public void initialise(in PartMating pm, int N) {
         assert(!inited);
         assert(phi > 0f);
         assert(phi <= PI_2);
@@ -298,7 +304,7 @@ public class InjectorElement {
 
         A2.X -= th_nz1/sin(phi);
         B2.X -= th_nz1/sin(phi);
-        z0_dmw = Polygon.line_intersection(
+        this.z0_dmw = Polygon.line_intersection(
             B2, A2,
             ZERO2, uX2,
             out _
@@ -321,13 +327,18 @@ public class InjectorElement {
         Vec3 inlet2 = fromzr(C2, 0f) - D_il2/2f*uX3;
         Frame frame2 = Frame.cyl_circum(inlet2);
         Vec3 furthest2 = frame2 * new Vec3(0f, D_il2/2f + th_il2, this.L_il2);
-        max_r = max(magxy(furthest1), magxy(furthest2));
+        this.max_r = max(magxy(furthest1), magxy(furthest2));
+
+
+        // Calculate furthest axial point.
+        max_z = max(A1.X + th_inj1, B2.X);
+
 
         inited = true;
 
 
         // cheeky report.
-        File.WriteAllLines(fromroot($"exports/injector_element_report.txt"), [
+        File.WriteAllLines(REPORT_PATH, [
             $"Injector Element Report",
             $"=======================",
             $"",
@@ -369,7 +380,9 @@ public class InjectorElement {
     }
 
 
-    public void voxels(Frame at, out Voxels pos, out Voxels neg) {
+    public void voxels(Frame at, float th_plate, float th_dmw,
+            out Voxels pos, out Voxels neg,
+            bool please_put_the_inner_injector_on_the_build_plate=false) {
         assert(inited);
 
         // Make volume by revolve.
@@ -477,6 +490,38 @@ public class InjectorElement {
         neg.BoolAdd(neg2);
 
 
+        // Add in cone divider and plate (for fillet purposes).
+        pos.BoolAdd(Cone.phied(
+            at.transz(z0_dmw),
+            phi,
+            r1: B2.Y + th_inj2 + Fr_LOx + th_dmw/cos(phi) + 1f
+        ).shelled(-th_dmw));
+        pos.BoolAdd(new Rod(
+            at,
+            th_plate,
+            D2.Y + th_inj2 + Fr_IPA + 1f
+        ));
+
+        // Do big fillets (before inlets and pos/neg collapse)
+        Voxels mask_LOx = Cone.phied(
+            at.transz(z0_dmw + th_dmw/sin(phi)/2f),
+            phi,
+            r1: B2.Y + th_inj2 + Fr_LOx + th_dmw/cos(phi) + 1f
+        );
+        Voxels mask_IPA = new Rod(
+            at,
+            max_z + Fr_IPA,
+            D2.Y + th_inj2 + Fr_IPA + 1f
+        ).extended(1f, Extend.UPDOWN);
+        mask_IPA.BoolSubtract(mask_LOx);
+
+        mask_LOx.BoolIntersect(Fillet.concave(pos, Fr_LOx));
+        mask_IPA.BoolIntersect(Fillet.concave(pos, Fr_IPA));
+        pos.BoolAdd(mask_LOx);
+        pos.BoolAdd(mask_IPA);
+
+
+
         // Add inlets.
         voxels_il(at, no_il1, C1, D_il1, L_il1, th_il1, phi, out Voxels pos_il1,
             out Voxels neg_il1);
@@ -489,11 +534,20 @@ public class InjectorElement {
 
 
         // Dreaded fillet.
-        Fillet.concave(pos, Fr, true);
-        Fillet.both(neg, Fr, true);
+        Fillet.concave(pos, Fr_small, true);
+        Fillet.both(neg, Fr_small, true);
 
         // dont let the inner nozzle end get filleted.
-        Rod just_the_tip = new(at.transz(F1.X), 1.4f*Fr, F1.Y, F1.Y + th_nz1);
+        Rod just_the_tip = new(
+            at.transz(F1.X),
+            1.4f*Fr_small,
+            F1.Y,
+            F1.Y + th_nz1
+        );
+        if (please_put_the_inner_injector_on_the_build_plate) {
+            // Make the tip a little bigger..
+            just_the_tip = just_the_tip.extended(F1.X, Extend.DOWN);
+        }
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
     }
@@ -542,6 +596,7 @@ public class InjectorElement {
             pos.BoolAdd(this_pos);
         }
     }
+
 
 
     public static class GraphLookup {
@@ -786,11 +841,10 @@ public class Injector : TPIAP.Pea {
     public required float phi_mw { get; init; }
     public required float th_dmw { get; init; }
     public required float th_omw { get; init; }
-    protected float z0_mw = NAN;
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.initialise(pm, numel(points_inj), out z0_mw, out _);
+        element.initialise(pm, numel(points_inj));
     }
 
 
@@ -864,25 +918,25 @@ public class Injector : TPIAP.Pea {
             out Voxels neg_LOx, out Voxels neg_IPA) {
         using var __ = key.like();
 
+        float z0_dmw = element.z0_dmw;
 
         { // create roof + interior volume.
             float max_r = Or_chnl + 1.8f*th_plate/tan(phi_mw);
             // https://www.desmos.com/calculator/tusqawwtn5
             Vec2 peak = new( /* (z,r) */
-                max_r/2f/tan(phi_mw) + z0_mw/2f,
-                max_r/2f - z0_mw/2f*tan(phi_mw)
+                max_r/2f/tan(phi_mw) + z0_dmw/2f,
+                max_r/2f - z0_dmw/2f*tan(phi_mw)
             );
             vol = new ManiVol{
                 A = Cone.phied(new(), -phi_mw, peak.X, r0: max_r),
-                B = Cone.phied(new(z0_mw*uZ3), phi_mw, peak.X - z0_mw + EXTRA),
+                B = Cone.phied(new(z0_dmw*uZ3), phi_mw, peak.X - z0_dmw + EXTRA),
                 peak = peak,
                 th = th_omw
             };
         }
 
         // For lox/ipa boundary:
-        float th = th_dmw;
-        float Dz = th/sin(phi_mw);
+        float Dz = th_dmw/sin(phi_mw);
 
         Voxels neg = new();
         Voxels pos = new();
@@ -891,7 +945,7 @@ public class Injector : TPIAP.Pea {
 
         { // lox-ipa boundary.
             foreach (Vec2 p in points_inj) {
-                Frame at = new(rejxy(p, z0_mw));
+                Frame at = new(rejxy(p, z0_dmw));
                 Mesh po = Cone.phied(at, phi_mw, vol.peak.X);
                 Mesh ne = Cone.phied(at.transz(Dz), phi_mw, vol.peak.X);
                 keys.Add(Geez.mesh(po));
@@ -1058,7 +1112,8 @@ public class Injector : TPIAP.Pea {
         pos = new();
         neg = new();
         foreach (Vec2 p in points_inj) {
-            element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
+            element.voxels(new(rejxy(p)), th_plate, th_dmw,
+                    out Voxels po, out Voxels ne);
             pos.BoolAdd(po);
             neg.BoolAdd(ne);
             key.voxels(neg);

@@ -156,8 +156,8 @@ public static class TwoPeasInAPod {
             // Construct the injector sample object from the injector input
             // parameters.
             var max_phi = config.get<float>("printer/max_print_angle");
-            var th_dmw = config.get<float>("injector/th_dmw");
             var th_plate = config.get<float>("injector/th_plate");
+            var th_dmw = config.get<float>("injector/th_dmw");
             var no_injg = config.get<List<int>>("injector/no_injg");
             var element = config.get_map("injector/element");
 
@@ -166,9 +166,8 @@ public static class TwoPeasInAPod {
 
             config.new_map("sample");
             config.set("sample/pm", config.get_map("part_mating"));
-            config.set("sample/phi_dmw", max_phi);
-            config.set("sample/th_dmw", th_dmw);
             config.set("sample/th_plate", th_plate);
+            config.set("sample/th_dmw", th_dmw);
 
             List<JsonMap> elements = [];
             List<int> no_injs = [];
@@ -196,19 +195,15 @@ public static class TwoPeasInAPod {
                     elements[^1]["Rbar_ch2"] = Rbar_ch2;
             }
 
-            // setup();
+    /* 0 */ setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+    /* 1 */ setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+    /* 2 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+    /* 3 */ setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+    /* 4 */ setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
 
-            // setup(no_inj:  7, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-
-            // setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
-            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.325f);
-            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.45f);
+    /* 5 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
+    /* 6 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.3f);
+    /* 7 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.4f);
 
             config.set("sample/element", elements);
             config.set("sample/no_inj", no_injs);
