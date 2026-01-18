@@ -7,6 +7,7 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using BBox3 = PicoGK.BBox3;
+using System.IO.Pipelines;
 
 public class InjectorSample : TPIAP.Pea {
 
@@ -48,7 +49,6 @@ public class InjectorSample : TPIAP.Pea {
 
         BBox3 bounds = pos.oCalculateBoundingBox();
 
-
         Voxels dividing = Cone.phied(
             new(rejxy(at, z0_cone)),
             PI_4,
@@ -62,13 +62,12 @@ public class InjectorSample : TPIAP.Pea {
             r0: 0f
         ));
 
-        Geez.rod(new(new(rejxy(at)), 40f, max_r));
-
+        bounds = pos.oCalculateBoundingBox();
 
         Rod rod = new Rod(
             new(rejxy(at)),
-            bounds.vecSize().Z * 1.2f,
-            hypot(bounds.vecSize().X, bounds.vecSize().Y) / 2f * 1.2f
+            bounds.vecSize().Z + 4f,
+            max_r + 2f
         );
 
         pos.BoolAdd(dividing);
@@ -83,7 +82,7 @@ public class InjectorSample : TPIAP.Pea {
         vox.BoolSubtract(neg);
         vox.TripleOffset(0.03f);
 
-
+        // flats
         float R = rod.r + th;
         float r0 = nonhypot(R, R/3.5f);
         Bar bar = new Bar(
@@ -97,8 +96,19 @@ public class InjectorSample : TPIAP.Pea {
         vox.BoolSubtract(bar.transy(+2f*r0));
         vox.BoolSubtract(bar.transy(-2f*r0));
 
+        // port pad
+        float height_total = vox.oCalculateBoundingBox().vecSize().Z;
+        Voxels pad = new Bar(
+            new Frame(rejxy(at)).transx(r0),
+            (8f - th)*2, // 8mm total depth
+            15, // width
+            height_total
+        );
+        pad.BoolSubtract(rod);
+        vox.BoolAdd(pad);
 
-        Frame at0 = new(rejxy(at) + new Vec3(rod.r/2f, 0f, rod.Lz));
+        // top port
+        Frame at0 = new(rejxy(at) + new Vec3(0, 0f, rod.Lz));
         Voxels voxport0 = new Rod(at0, 12f, 9.73f/2f)
                 .shelled(5f)
                 .extended(1f, Extend.DOWN);
@@ -107,9 +117,26 @@ public class InjectorSample : TPIAP.Pea {
         vox.BoolAdd(voxport0);
         vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, 9.73f/2f));
 
-        Frame at1 = new(rejxy(at) + new Vec3(-rod.r/1.5f, 0f, rod.Lz));
-        Geez.frame(at1);
-        Geez.rod(new Rod(at1, 10f, 9.73f/2f));
+        // side port
+        // create frame at port pad, facing radially inwards
+        Frame at1 = new(
+            rejxy(at) + new Vec3(r0 + (8f - th)*2, 0f, 9f),
+            -uX3
+        );
+        Voxels voxport1 = new Rod(at0, 12f, 9.73f/2f)
+                .shelled(5f)
+                .extended(1f, Extend.DOWN);
+        voxport1.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 15f));
+
+        vox.BoolAdd(voxport1);
+        Voxels side_fluid = new Rod(at1.transz(-0.5f), 15f, 9.73f/2f);
+        side_fluid.BoolSubtract(rod);
+        vox.BoolSubtract(side_fluid);
+
+
+        // Frame at1 = new(rejxy(at) + new Vec3(-rod.r/1.5f, 0f, rod.Lz));
+        // Geez.frame(at1);
+        // Geez.rod(new Rod(at1, 10f, 9.73f/2f));
         // Voxels voxport1 = new Rod(at0, 20f, 9.73f)
         //         .shelled(5f)
         //         .extended(3f, Extend.DOWN);
