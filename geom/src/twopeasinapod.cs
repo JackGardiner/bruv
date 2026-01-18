@@ -1,6 +1,8 @@
 using static br.Br;
 using br;
 
+using JsonMap = System.Text.Json.Nodes.JsonObject; // object is a stupid name.
+
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 
@@ -154,18 +156,62 @@ public static class TwoPeasInAPod {
             // Construct the injector sample object from the injector input
             // parameters.
             var max_phi = config.get<float>("printer/max_print_angle");
+            var th_dmw = config.get<float>("injector/th_dmw");
+            var th_plate = config.get<float>("injector/th_plate");
             var no_injg = config.get<List<int>>("injector/no_injg");
-            int no_inj = sum(no_injg.ToArray());
+            var element = config.get_map("injector/element");
+
+            element = (JsonMap)element.DeepClone();
+            element["phi"] = max_phi;
+
             config.new_map("sample");
             config.set("sample/pm", config.get_map("part_mating"));
+            config.set("sample/phi_dmw", max_phi);
+            config.set("sample/th_dmw", th_dmw);
+            config.set("sample/th_plate", th_plate);
 
-            config.set("sample/element0", config.get_map("injector/element"));
-            config.set("sample/element0/phi", max_phi);
-            config.set("sample/no_inj0", no_inj);
+            List<JsonMap> elements = [];
+            List<int> no_injs = [];
+            void setup(int no_inj=-1, int no_il=-1, float twoalpha_1=NAN,
+                    float Rbar_ch1=NAN, float Rbar_ch2=NAN,
+                    float Lbar_nz2=NAN, float Lbar_ch1=NAN) {
+                elements.Add((JsonMap)element.DeepClone());
+                no_injs.Add(sum(no_injg.ToArray()));
 
-            config.set("sample/element1", config.get_map("injector/element"));
-            config.set("sample/element1/phi", max_phi);
-            config.set("sample/no_inj1", no_inj);
+                if (no_inj != -1)
+                    no_injs[^1] = no_inj;
+                if (no_il != -1) {
+                    elements[^1]["no_il1"] = no_il;
+                    elements[^1]["no_il2"] = no_il;
+                }
+                if (nonnan(twoalpha_1))
+                    elements[^1]["twoalpha_1"] = twoalpha_1;
+                if (nonnan(Lbar_nz2))
+                    elements[^1]["Lbar_nz2"] = Lbar_nz2;
+                if (nonnan(Lbar_ch1))
+                    elements[^1]["Lbar_ch1"] = Lbar_ch1;
+                if (nonnan(Rbar_ch1))
+                    elements[^1]["Rbar_ch1"] = Rbar_ch1;
+                if (nonnan(Rbar_ch2))
+                    elements[^1]["Rbar_ch2"] = Rbar_ch2;
+            }
+
+            // setup();
+
+            // setup(no_inj:  7, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+
+            // setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
+            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.325f);
+            setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.45f);
+
+            config.set("sample/element", elements);
+            config.set("sample/no_inj", no_injs);
 
             var sample = config.deserialise<InjectorSample>("sample");
             sample.initialise();

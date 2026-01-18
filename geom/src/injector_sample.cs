@@ -7,7 +7,6 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using BBox3 = PicoGK.BBox3;
-using System.IO.Pipelines;
 
 public class InjectorSample : TPIAP.Pea {
 
@@ -27,145 +26,256 @@ public class InjectorSample : TPIAP.Pea {
 
 
     public required PartMating pm { get; init; }
-    public required InjectorElement element0 { get; init; }
-    public required InjectorElement element1 { get; init; }
-    public required int no_inj0 { get; init; }
-    public required int no_inj1 { get; init; }
-    public float z0_cone0 = NAN;
-    public float z0_cone1 = NAN;
-    public float max_r_0 = NAN;
-    public float max_r_1 = NAN;
+    public required InjectorElement[] element { get; init; }
+    public required int[] no_inj { get; init; }
+    public required float phi_dmw { get; init; }
+    public required float th_dmw { get; init; }
+    public required float th_plate { get; init; }
+
+    public float[] z0_cone = [];
+    public float[] max_r = [];
+    public int N => numel(element);
     public void initialise() {
-        element0.initialise(pm, no_inj0, out z0_cone0, out max_r_0);
-        element1.initialise(pm, no_inj1, out z0_cone1, out max_r_1);
+        assert(N == numel(element));
+        assert(N == numel(no_inj));
+        z0_cone = new float[N];
+        max_r = new float[N];
+        for (int i=0; i<N; ++i)
+            element[i].initialise(pm, no_inj[i], out z0_cone[i], out max_r[i]);
     }
 
 
-    public static Voxels make(Vec2 at, InjectorElement element, float z0_cone,
-            float max_r) {
+    public static Voxels make(Frame at, InjectorElement element, float phi_dmw,
+            float th_dmw, float th_plate, float z0_cone, float max_r,
+            ImageSignedDist img, bool datum_on_opposite) {
+        assert(phi_dmw == element.phi);
 
-        element.voxels(at, out Voxels? pos, out Voxels? neg);
+        const float EXTRA = 30f;
+        const float th_outer = 3f;
+
+        // position inlets s.t. port isnt straight on one.
+        element.voxels(at.rotxy(-PI_2 - 0.666f*PI/element.no_il2),
+                out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
-
         BBox3 bounds = pos.oCalculateBoundingBox();
+        Vec3 size = bounds.vecSize();
+
+        Rod interior /* kinda, loosy goosy top and bottom (dujj) */ = new(
+            at,
+            size.Z - 1f,
+            max_r + 3f
+        );
+
+        float R = interior.r + th_outer;
+        float Rmid = interior.r + th_outer/2;
+
+
+        /* WALLS */
+
+        Cone top_cone = Cone.phied(
+            at.transz(interior.Lz + interior.r).flipzx(),
+            PI_4,
+            r1: interior.r + 3f
+        ).shelled(th_outer)
+         .upto_tip();
+        float Lz_side = (at / top_cone.centre.pos).Z
+                      - lerp(-top_cone.Lz/2f, +top_cone.Lz/2f,
+                             invlerp(top_cone.outer_r0, top_cone.outer_r1, R));
+        Voxels top = (Voxels)top_cone;
+        top.BoolIntersect(interior
+                .girthed(R)
+                .extended(EXTRA, Extend.UPDOWN));
+
+        Voxels bot = new Rod(at, th_plate, Rmid);
 
         Voxels dividing = Cone.phied(
-            new(rejxy(at, z0_cone)),
-            PI_4,
-            Lz: 20f,
-            r0: 0f
-        );
-        dividing.BoolSubtract(Cone.phied(
-            new(rejxy(at, z0_cone + 2f*SQRT2)),
-            PI_4,
-            Lz: 30f,
-            r0: 0f
-        ));
+            at.transz(z0_cone),
+            phi_dmw,
+            r1: R
+        ).shelled(-th_dmw);
+        dividing.BoolIntersect(interior
+                .girthed(Rmid)
+                .extended(EXTRA, Extend.UPDOWN));
 
-        bounds = pos.oCalculateBoundingBox();
-
-        Rod rod = new Rod(
-            new(rejxy(at)),
-            bounds.vecSize().Z + 4f,
-            max_r + 2f
-        );
-
-        pos.BoolAdd(dividing);
-        pos.BoolIntersect(rod);
-        float th = 5f;
-        pos.BoolAdd(rod.shelled(th));
-        pos.BoolAdd(new Rod(new(rejxy(at)), 3f, rod.r + th));
-        pos.BoolAdd(new Rod(new(rejxy(at, rod.Lz - 0.05f)), th, rod.r + th));
-
+        Voxels sides = interior.shelled(th_outer);
 
         Voxels vox = pos; // no copy.
+        vox.BoolAdd(top);
+        vox.BoolAdd(bot);
+        vox.BoolAdd(dividing);
+        vox.BoolAdd(sides);
         vox.BoolSubtract(neg);
-        vox.TripleOffset(0.03f);
 
-        // flats
-        float R = rod.r + th;
-        float r0 = nonhypot(R, R/3.5f);
+
+        /* FLATS */
+
+        float flat_length = R/3.5f;
+        float flat_off = nonhypot(R, flat_length);
         Bar bar = new Bar(
-            new(rejxy(at)),
-            2f*r0,
-            2f*r0,
-            rod.Lz + 2f*th
-        ).extended(3f, Extend.UPDOWN);
-        vox.BoolSubtract(bar.transx(+2f*r0));
-        vox.BoolSubtract(bar.transx(-2f*r0));
-        vox.BoolSubtract(bar.transy(+2f*r0));
-        vox.BoolSubtract(bar.transy(-2f*r0));
+            at,
+            Lz_side,
+            2.1f*flat_length
+        ).extended(EXTRA, Extend.UPDOWN);
+        // vox.BoolSubtract(bar.transx(+flat_off).at_face(Bar.X1));
+        // ^ overriden by port pad.
+        // vox.BoolSubtract(bar.transx(-flat_off).at_face(Bar.X0));
+        // ^ at stag point, lets not thin it.
+        vox.BoolSubtract(bar.transy(+flat_off).at_face(Bar.Y1));
+        vox.BoolSubtract(bar.transy(-flat_off).at_face(Bar.Y0));
 
-        // port pad
-        float height_total = vox.oCalculateBoundingBox().vecSize().Z;
-        Voxels pad = new Bar(
-            new Frame(rejxy(at)).transx(r0),
-            (8f - th)*2, // 8mm total depth
-            15, // width
-            height_total
+
+        /* DATUM? */
+        const float th_datum = 3f;
+        Vec3 datum_orient = ONE3;
+        if (datum_on_opposite)
+            datum_orient = flipy(datum_orient);
+        Vec3 datum_corner = new(-R, -flat_off, 0f);
+        Voxels datum = new Bar(
+            at.translate(datum_orient * datum_corner/2f),
+            R,
+            flat_off,
+            th_datum
         );
-        pad.BoolSubtract(rod);
+        datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
+        datum.BoolSubtract(
+            (Voxels)new Bar(
+                at.translate(datum_orient * datum_corner),
+                th_datum,
+                R/3f
+            ).at_edge(datum_on_opposite ? Bar.X1_Y0 : Bar.X1_Y1)
+             .extended(EXTRA, Extend.UPDOWN)
+            -
+            (Voxels)new Rod(
+                at.translate(datum_orient * (datum_corner + uXY3*R/3f)),
+                th_datum,
+                R/3f
+            ).extended(EXTRA, Extend.UPDOWN)
+            /* syntax is sick as fr */
+        );
+        vox.BoolAdd(datum);
+
+
+
+        /* PORTS */
+        float r_BSPPEIGTH = 8.2f/2f; // tap drill size (undersize)
+        float L_BSPPEIGTH = 10f;
+        float r_port = r_BSPPEIGTH + 5f;
+        float spanner_IPA = 17f;
+        float spanner_LOx = 17f;
+
+        // side port pad
+        Voxels pad = new Bar(
+            at,
+            interior.r + L_BSPPEIGTH,
+            spanner_IPA,
+            Lz_side
+        ).at_face(Bar.X1);
+        pad.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         vox.BoolAdd(pad);
 
-        // ports
-        float bspp1_8_drill_rad = 8.2f/2; // tap drill size (undersize)
-        float bspp1_8_diamond_xy = 8.2f/sqrt(2); // inscribed square (face-face dist)
+        // side port
+        Frame at1 = new Frame.Cyl(at).radial(
+            new(interior.r + L_BSPPEIGTH, 0f, r_port)
+        ).flipzx();
+        Voxels port_IPA = new Bar(
+            at1.rotxy(PI_4),
+            magxy(at / at1.pos),
+            2f * r_BSPPEIGTH*SQRTH // size diag to tap size.
+        );
+        port_IPA.BoolSubtract(interior);
+        vox.BoolSubtract(port_IPA);
 
         // top port
-        Frame at0 = new(rejxy(at) + new Vec3(0, 0f, rod.Lz));
-        Voxels voxport0 = new Rod(at0, 12f, bspp1_8_drill_rad)
-                .shelled(5f)
-                .extended(1f, Extend.DOWN);
-        voxport0.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 20f));
-
-        vox.BoolAdd(voxport0);
-        vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, bspp1_8_drill_rad));
-
-        // side port
-        // create frame at port pad, facing radially inwards
-        Frame at1 = new Frame(
-            rejxy(at) + new Vec3(r0 + (8f - th)*2, 0f, 9f),
-            -uX3
-        ).rotxy(PI/4f);
-        Voxels voxport1 = new Bar(
-            at1,
-            15f,
-            bspp1_8_diamond_xy
-        );
-        voxport1.BoolSubtract(rod);
-        vox.BoolSubtract(voxport1);
-        // Voxels voxport1 = new Rod(at0, 12f, 9.73f/2f)
-        //         .shelled(5f)
-        //         .extended(1f, Extend.DOWN);
-        // voxport1.BoolSubtract(new Rod(at0.transz(0.5f), -2f, 15f));
-
-        // vox.BoolAdd(voxport1);
-        // Voxels side_fluid = new Rod(at1.transz(-0.5f), 15f, 9.73f/2f);
-        // side_fluid.BoolSubtract(rod);
-        // vox.BoolSubtract(side_fluid);
+        Frame at0 = top_cone.inner_tip!.flipzx();
+        // we get r_BSPPEIGTH length for free by trimming cone.
+        Voxels port_LOx = new Rod(at0, L_BSPPEIGTH - r_BSPPEIGTH, r_port)
+                .extended(0.1f + r_port, Extend.DOWN);
+        port_LOx.BoolSubtract(top_cone.positive.transz(th_outer*SQRT2));
+        // flats.
+        Bar lox_flat = new Bar(
+            at0,
+            EXTRA,
+            EXTRA,
+            L_BSPPEIGTH
+        ).extended(EXTRA, Extend.UPDOWN); // big fucking box (dujj).
+        port_LOx.BoolSubtract(lox_flat.transy(+spanner_LOx/2f).at_face(Bar.Y1));
+        port_LOx.BoolSubtract(lox_flat.transy(-spanner_LOx/2f).at_face(Bar.Y0));
+        vox.BoolAdd(port_LOx);
+        vox.BoolSubtract(new Rod(at0, L_BSPPEIGTH - r_BSPPEIGTH, r_BSPPEIGTH)
+                .extended(0.1f + r_BSPPEIGTH, Extend.DOWN)
+                .extended(EXTRA, Extend.UP));
 
 
-        // Frame at1 = new(rejxy(at) + new Vec3(-rod.r/1.5f, 0f, rod.Lz));
-        // Geez.frame(at1);
-        // Geez.rod(new Rod(at1, 10f, 9.73f/2f));
-        // Voxels voxport1 = new Rod(at0, 20f, 9.73f)
-        //         .shelled(5f)
-        //         .extended(3f, Extend.DOWN);
-        // voxport1.BoolSubtract(new Rod(at0.transz(1f), -5f, 20f));
+        // Worlds cheekiest label.
+        float label_height = 5f;
+        float label_th = 0.5f;
+        float label_off = 0.2f;
+        Frame label = at;
+        label = label.transx(interior.r + L_BSPPEIGTH - 2.5f - label_height/2f);
+        label = label.transz(Lz_side - label_off);
+        label = label.rotxy(PI_2);
+        vox.BoolAdd(img.voxels_on_plane(
+            label,
+            label_th + label_off,
+            label_height,
+            ImageSignedDist.HEIGHT
+        ));
 
-        // vox.BoolAdd(voxport1);
-        // vox.BoolSubtract(new Rod(at1.transz(-5f), 30f, 9.73f));
 
-        BBox3 outer = vox.oCalculateBoundingBox();
-        print(outer.vecSize());
         return vox;
     }
 
     public Voxels? voxels() {
+        Bar buildplate = new(new(), VOXEL_SIZE, 100f);
+        TPIAP.save_mesh_only($"buildplate-100x100", buildplate);
+        Geez.bar(buildplate);
 
-        Voxels voxout = new(make(ZERO2, element0, z0_cone0, max_r_0));
-        Geez.voxels(voxout);
-        // Geez.voxels(make(50*uX2, element1, z0_cone1, max_r_1));
-        return voxout;
+        assert(N == 8);
+        Frame get_at(int i) {
+            // return new(i*50*uX3);
+            // or try to stack nicely:
+
+            float x0 = -buildplate.Lx/4f - buildplate.Lx/10f;
+            float y0 = -buildplate.Ly/2f + buildplate.Ly/8f;
+            if (i >= 4)
+                x0 += buildplate.Lx/2f;
+            Vec3 point = new(
+                x0 + (i % 2) * buildplate.Lx/5f,
+                y0 + (i % 4) * buildplate.Ly/4f,
+                0f
+            );
+            Frame at = new(point);
+            if (i % 2 != 0)
+                at = at.rotxy(PI);
+            return at;
+        }
+
+        for (int i=0; i<N; ++i) {
+            Frame at = get_at(i);
+
+            ImageSignedDist img = new(
+                fromroot($"assets/sample-labels/sample-{i}.tga"),
+                invert: true,
+                flipy: true
+            );
+
+            Voxels vox = make(
+                at,
+                element[i],
+                phi_dmw,
+                th_dmw,
+                th_plate,
+                z0_cone[i],
+                max_r[i],
+                img,
+                i % 2 == 0
+            );
+            BBox3 bounds = vox.oCalculateBoundingBox();
+            print($"Bounding size: {bounds.vecSize()}");
+            Geez.voxels(vox);
+
+            TPIAP.save_mesh_only($"injector-sample-{i}", new(vox));
+        }
+        return null;
     }
 }

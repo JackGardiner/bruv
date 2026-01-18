@@ -130,7 +130,7 @@ public class Jason {
             JsonList list = new();
             foreach (var item in enumerable) {
                 assert(item != null);
-                JsonNode? node = JsonValue.Create(item);
+                JsonNode? node = JsonSerializer.SerializeToNode(item);
                 list.Add(node);
             }
             parent[leaf] = list;

@@ -89,8 +89,32 @@ public class InjectorElement {
     public float D_il2 = NAN;
     public float L_il1 = NAN;
     public float L_il2 = NAN;
-    private const float EXTRA = 6f;
 
+    // Coefficients of nozzle opening: IR_ch/IR_nz
+    // reasonable bounds: idx?
+    public float Rbar_ch1 { get; init; } = 1.4f;
+    public float Rbar_ch2 { get; init; } = 1.2f;
+
+    // Relative nozzle lengths: L_nz/2/IR_nz
+    // idk why they put a factor of 2.
+    // Lbar_nz1 is prescribed as 1.0 by procedure.
+    public float Lbar_nz1 { get; init; } = 1.0f;
+    public float Lbar_nz2 { get; init; } = 0.5f;
+
+    // Relative chamber lengths: L_ch/IR_ch
+    // reasonable bounds: [2, 3]
+    public float Lbar_ch1 { get; init; } = 4.0f;
+
+    // Spray cone angle of stage 1.
+    // reasonable bounds: [60deg, 80deg]
+    public float twoalpha_1 { get; init; } = torad(80f);
+
+    // Mixing residence time.
+    // reasonable bounds: [0.1ms, 1.5ms]
+    public float tau_i { get; init; } = 0.15e-3f;
+
+
+    private const float EXTRA = 6f;
 
     private bool inited = false;
     public void initialise(in PartMating pm, int N, out float z0_dmw,
@@ -114,29 +138,9 @@ public class InjectorElement {
         assert(within(no_il1, 2, 6));
         assert(within(no_il2, 2, 6));
 
-        // Coefficients of nozzle opening: IR_ch/IR_nz
-        // reasonable bounds: idx?
-        float Rbar_ch1 = 1.4f;
-        float Rbar_ch2 = 1.2f;
-
-        // Relative nozzle lengths: L_nz/2/IR_nz
-        // idk why they put a factor of 2.
-        // Lbar_nz1 is prescribed as 1.0 by procedure.
-        float Lbar_nz1 = 1.5f;
-        float Lbar_nz2 = 0.5f;
-
-        // Relative chamber lengths: L_ch/IR_ch
-        // reasonable bounds: [2, 3]
-        float Lbar_ch1 = 4.0f;
-        float Lbar_ch2 = 100f; // fuck off uge. clipped at end of this function.
-
-        // Spray cone angle of stage 1.
-        // reasonable bounds: [60deg, 80deg]
-        float twoalpha_1 = torad(80f);
-
-        // Mixing residence time.
-        // reasonable bounds: [0.1ms, 1.5ms]
-        float tau_i = 0.15e-3f;
+        // Set chamber 2 length to fuck off uge. its clipped at end of this
+        // function.
+        float Lbar_ch2 = 100f;
 
         // idk why these are separate variables (in the paper).
         float C_1 = Rbar_ch1;
@@ -235,6 +239,7 @@ public class InjectorElement {
                             );
 
         // float z0_inj1 = L_nz2 - mixing_length;
+        assert(mixing_length <= L_nz2);
         float Dr_nz = Ir_nz2 - Ir_nz1;
         float z0_inj1 = mixing_length + Dr_nz/tan(twoalpha_1/2f);
 
@@ -364,10 +369,8 @@ public class InjectorElement {
     }
 
 
-    public void voxels(Vec2 at, out Voxels pos, out Voxels neg) {
+    public void voxels(Frame at, out Voxels pos, out Voxels neg) {
         assert(inited);
-
-        Frame frame = new(rejxy(at, 0f));
 
         // Make volume by revolve.
 
@@ -443,22 +446,22 @@ public class InjectorElement {
 
 
         Voxels neg1 = new(Polygon.mesh_revolved(
-            frame,
+            at,
             neg_points1,
             slicecount: N
         ));
         Voxels pos1 = new(Polygon.mesh_revolved(
-            frame,
+            at,
             pos_points1,
             slicecount: N
         ));
         Voxels neg2 = new(Polygon.mesh_revolved(
-            frame,
+            at,
             neg_points2,
             slicecount: N
         ));
         Voxels pos2 = new(Polygon.mesh_revolved(
-            frame,
+            at,
             pos_points2,
             slicecount: N
         ));
@@ -490,13 +493,13 @@ public class InjectorElement {
         Fillet.both(neg, Fr, true);
 
         // dont let the inner nozzle end get filleted.
-        Rod just_the_tip = new(frame.transz(F1.X), 1.4f*Fr, F1.Y, F1.Y + th_nz1);
+        Rod just_the_tip = new(at.transz(F1.X), 1.4f*Fr, F1.Y, F1.Y + th_nz1);
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
     }
 
 
-    private static void voxels_il(Vec2 at, int no, Vec2 C, float D, float L,
+    private static void voxels_il(Frame at, int no, Vec2 C, float D, float L,
             float th, float phi, out Voxels pos, out Voxels neg) {
         pos = new();
         neg = new();
@@ -507,10 +510,10 @@ public class InjectorElement {
             // move radially inwards to make tangent outer.
             inlet -= D/2f * fromcyl(1f, theta, 0f);
             // make frame circum to this element centre.
-            Frame frame = new Frame.Cyl(new(rejxy(at, 0f))).circum(inlet);
+            Frame frame = new Frame.Cyl(at).circum(inlet);
             // x=+axial, y=+radial.
-            Rod pipe = new Rod(frame, L, D/2f);
-            neg.BoolAdd(pipe.extended(D, Extend.UP));
+            Rod pipe = new(frame, L, D/2f);
+            neg.BoolAdd(pipe.extended(3*VOXEL_SIZE, Extend.UP));
 
             Voxels this_pos = pipe.shelled(th);
 
@@ -1055,9 +1058,9 @@ public class Injector : TPIAP.Pea {
         pos = new();
         neg = new();
         foreach (Vec2 p in points_inj) {
-            element.voxels(p, out Voxels this_pos, out Voxels this_neg);
-            pos.BoolAdd(this_pos);
-            neg.BoolAdd(this_neg);
+            element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
+            pos.BoolAdd(po);
+            neg.BoolAdd(ne);
             key.voxels(neg);
         }
     }
