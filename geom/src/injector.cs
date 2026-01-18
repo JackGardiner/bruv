@@ -93,7 +93,8 @@ public class InjectorElement {
 
 
     private bool inited = false;
-    public void initialise(in PartMating pm, int N, out float z0_dmw) {
+    public void initialise(in PartMating pm, int N, out float z0_dmw,
+            out float max_r) {
         assert(!inited);
         assert(phi > 0f);
         assert(phi <= PI_2);
@@ -305,6 +306,17 @@ public class InjectorElement {
         this.D_il2 = 1e3f * 2f*Ir_il2;
         this.L_il1 = 1e3f * L_il1;
         this.L_il2 = 1e3f * L_il2;
+
+
+        // Calculate furthest radial point.
+
+        Vec3 inlet1 = fromzr(C1, 0f) - D_il1/2f*uX3;
+        Frame frame1 = Frame.cyl_circum(inlet1); // x=+axial, y=+radial.
+        Vec3 furthest1 = frame1 * new Vec3(0f, D_il1/2f + th_il1, this.L_il1);
+        Vec3 inlet2 = fromzr(C2, 0f) - D_il2/2f*uX3;
+        Frame frame2 = Frame.cyl_circum(inlet2);
+        Vec3 furthest2 = frame2 * new Vec3(0f, D_il2/2f + th_il2, this.L_il2);
+        max_r = max(magxy(furthest1), magxy(furthest2));
 
         inited = true;
 
@@ -775,7 +787,7 @@ public class Injector : TPIAP.Pea {
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.initialise(pm, numel(points_inj), out z0_mw);
+        element.initialise(pm, numel(points_inj), out z0_mw, out _);
     }
 
 

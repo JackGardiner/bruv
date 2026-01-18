@@ -32,13 +32,16 @@ public class InjectorSample : TPIAP.Pea {
     public required int no_inj1 { get; init; }
     public float z0_cone0 = NAN;
     public float z0_cone1 = NAN;
+    public float max_r_0 = NAN;
+    public float max_r_1 = NAN;
     public void initialise() {
-        element0.initialise(pm, no_inj0, out z0_cone0);
-        element1.initialise(pm, no_inj1, out z0_cone1);
+        element0.initialise(pm, no_inj0, out z0_cone0, out max_r_0);
+        element1.initialise(pm, no_inj1, out z0_cone1, out max_r_1);
     }
 
 
-    public static Voxels make(Vec2 at, InjectorElement element, float z0_cone) {
+    public static Voxels make(Vec2 at, InjectorElement element, float z0_cone,
+            float max_r) {
 
         element.voxels(at, out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
@@ -58,6 +61,8 @@ public class InjectorSample : TPIAP.Pea {
             Lz: 30f,
             r0: 0f
         ));
+
+        Geez.rod(new(new(rejxy(at)), 40f, max_r));
 
 
         Rod rod = new Rod(
@@ -120,8 +125,8 @@ public class InjectorSample : TPIAP.Pea {
 
     public Voxels? voxels() {
 
-        Geez.voxels(make(ZERO2, element0, z0_cone0));
-        Geez.voxels(make(50*uX2, element1, z0_cone1));
+        Geez.voxels(make(ZERO2, element0, z0_cone0, max_r_0));
+        Geez.voxels(make(50*uX2, element1, z0_cone1, max_r_1));
         return null;
     }
 }
