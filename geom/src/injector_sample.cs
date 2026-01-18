@@ -26,64 +26,34 @@ public class InjectorSample : TPIAP.Pea {
 
 
     public required PartMating pm { get; init; }
-    public required InjectorElement element { get; init; }
-    public required int no_inj { get; init; }
-    public float z0_cone = NAN;
+    public required InjectorElement element0 { get; init; }
+    public required InjectorElement element1 { get; init; }
+    public required int no_inj0 { get; init; }
+    public required int no_inj1 { get; init; }
+    public float z0_cone0 = NAN;
+    public float z0_cone1 = NAN;
     public void initialise() {
-        element.initialise(pm, no_inj, out z0_cone);
+        element0.initialise(pm, no_inj0, out z0_cone0);
+        element1.initialise(pm, no_inj1, out z0_cone1);
     }
 
 
-    public Voxels one(Vec2 at) {
+    public static Voxels make(Vec2 at, InjectorElement element, float z0_cone) {
 
         element.voxels(at, out Voxels? pos, out Voxels? neg);
-        // injector element = pos - neg.
-
-        Voxels cone = Cone.phied(
-            new(rejxy(at, z0_cone)),
-            PI_4,
-            Lz: 20f,
-            r0: 0f
-        );
-        cone.BoolSubtract(Cone.phied(
-            new(rejxy(at, z0_cone + 2f*SQRT2)),
-            PI_4,
-            Lz: 20f,
-            r0: 0f
-        ));
-        cone.BoolIntersect(Cone.phied(
-            new Frame(rejxy(at, 30f)).flipzx(),
-            PI_4,
-            Lz: 30f
-        ));
-
-        cone.BoolAdd(new Rod(new(rejxy(at)), 3f, 12f));
-
-        return pos + cone - neg;
-    }
-
-    public Voxels? voxels() {
-
-        Voxels a = one(ZERO2);
-        Voxels b = one(30f*uX2);
-        a.IntersectImplicit(new Space(new Frame().rotzx(PI_2), 0f, +INF));
-        Geez.voxels(a + b);
-        return a + b;
-
-        element.voxels(ZERO2, out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
 
         BBox3 bounds = pos.oCalculateBoundingBox();
 
 
         Voxels dividing = Cone.phied(
-            new(z0_cone*uZ3),
+            new(rejxy(at, z0_cone)),
             PI_4,
             Lz: 20f,
             r0: 0f
         );
         dividing.BoolSubtract(Cone.phied(
-            new((z0_cone + 2f*SQRT2)*uZ3),
+            new(rejxy(at, z0_cone + 2f*SQRT2)),
             PI_4,
             Lz: 30f,
             r0: 0f
@@ -91,7 +61,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         Rod rod = new Rod(
-            new(),
+            new(rejxy(at)),
             bounds.vecSize().Z * 1.2f,
             hypot(bounds.vecSize().X, bounds.vecSize().Y) / 2f * 1.2f
         );
@@ -100,8 +70,8 @@ public class InjectorSample : TPIAP.Pea {
         pos.BoolIntersect(rod);
         float th = 5f;
         pos.BoolAdd(rod.shelled(th));
-        pos.BoolAdd(new Rod(new(), 3f, rod.r + th));
-        pos.BoolAdd(new Rod(new((rod.Lz - 0.05f)*uZ3), th, rod.r + th));
+        pos.BoolAdd(new Rod(new(rejxy(at)), 3f, rod.r + th));
+        pos.BoolAdd(new Rod(new(rejxy(at, rod.Lz - 0.05f)), th, rod.r + th));
 
 
         Voxels vox = pos; // no copy.
@@ -112,7 +82,7 @@ public class InjectorSample : TPIAP.Pea {
         float R = rod.r + th;
         float r0 = nonhypot(R, R/3.5f);
         Bar bar = new Bar(
-            new(),
+            new(rejxy(at)),
             2f*r0,
             2f*r0,
             rod.Lz + 2f*th
@@ -123,7 +93,7 @@ public class InjectorSample : TPIAP.Pea {
         vox.BoolSubtract(bar.transy(-2f*r0));
 
 
-        Frame at0 = new(new Vec3(rod.r/2f, 0f, rod.Lz));
+        Frame at0 = new(rejxy(at) + new Vec3(rod.r/2f, 0f, rod.Lz));
         Voxels voxport0 = new Rod(at0, 12f, 9.73f/2f)
                 .shelled(5f)
                 .extended(1f, Extend.DOWN);
@@ -132,7 +102,7 @@ public class InjectorSample : TPIAP.Pea {
         vox.BoolAdd(voxport0);
         vox.BoolSubtract(new Rod(at0.transz(-0.5f), 30f, 9.73f/2f));
 
-        Frame at1 = new(new Vec3(-rod.r/1.5f, 0f, rod.Lz));
+        Frame at1 = new(rejxy(at) + new Vec3(-rod.r/1.5f, 0f, rod.Lz));
         Geez.frame(at1);
         Geez.rod(new Rod(at1, 10f, 9.73f/2f));
         // Voxels voxport1 = new Rod(at0, 20f, 9.73f)
@@ -145,9 +115,13 @@ public class InjectorSample : TPIAP.Pea {
 
         BBox3 outer = vox.oCalculateBoundingBox();
         print(outer.vecSize());
-
-        Geez.voxels(vox);
-
         return vox;
+    }
+
+    public Voxels? voxels() {
+
+        Geez.voxels(make(ZERO2, element0, z0_cone0));
+        Geez.voxels(make(50*uX2, element1, z0_cone1));
+        return null;
     }
 }

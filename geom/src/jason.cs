@@ -114,12 +114,15 @@ public class Jason {
     }
     public JsonMap get_map(string name) => get<JsonMap>(name);
 
-    public void set<T>(string name, in T value) {
+    public void set<T>(string name, in T value, bool overwrite=false) {
         Type type = typeof(T);
 
         JsonMap parent = _parent_leaf(name, out string leaf);
-        if (parent.ContainsKey(leaf))
-            throw new Exception($"leaf already exists, of: '{name}'");
+        if (parent.ContainsKey(leaf)) {
+            if (!overwrite)
+                throw new Exception($"leaf already exists, of: '{name}'");
+            parent.Remove(leaf);
+        }
 
         if (_is_list(type, out _)) {
             if (value is not System.Collections.IEnumerable enumerable)

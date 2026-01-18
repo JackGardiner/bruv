@@ -233,7 +233,9 @@ public class InjectorElement {
                                + 1f/(K_m + 1f)*mu_il1/cspf_1*sqrt(DP_1/rho_1)
                             );
 
-        float z0_inj1 = L_nz2 - mixing_length;
+        // float z0_inj1 = L_nz2 - mixing_length;
+        float Dr_nz = Ir_nz2 - Ir_nz1;
+        float z0_inj1 = mixing_length + Dr_nz/tan(twoalpha_1/2f);
 
 
         // Requires some turbulence.

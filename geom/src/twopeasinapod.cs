@@ -157,10 +157,16 @@ public static class TwoPeasInAPod {
             var no_injg = config.get<List<int>>("injector/no_injg");
             int no_inj = sum(no_injg.ToArray());
             config.new_map("sample");
-            config.set("sample/element", config.get_map("injector/element"));
-            config.set("sample/element/phi", max_phi);
-            config.set("sample/no_inj", no_inj);
             config.set("sample/pm", config.get_map("part_mating"));
+
+            config.set("sample/element0", config.get_map("injector/element"));
+            config.set("sample/element0/phi", max_phi);
+            config.set("sample/no_inj0", no_inj);
+
+            config.set("sample/element1", config.get_map("injector/element"));
+            config.set("sample/element1/phi", max_phi);
+            config.set("sample/no_inj1", no_inj);
+
             var sample = config.deserialise<InjectorSample>("sample");
             sample.initialise();
             pea = sample;
