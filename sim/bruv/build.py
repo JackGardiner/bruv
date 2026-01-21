@@ -21,6 +21,8 @@ __all__ = ("BuildError", "build")
 
 
 
+# TODO: sim actually also depends on bridge.h.
+
 _FILES_SIM = []
 _FILES_BRIDGE = []
 
@@ -388,6 +390,10 @@ def _build_bridge():
         # okie now can delete them (just in case me).
         for p in copied.values():
             p.unlink()
+
+        # Touch all files to ensure mtime is updated.
+        for p in paths.subfiles(paths.BIN_BRIDGE):
+            p.touch()
 
         print()
     except Exception:

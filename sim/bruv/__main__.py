@@ -16,5 +16,5 @@ def main():
 if __name__ == "__main__":
     import sys as _sys
     if len(_sys.argv) > 1:
-        raise RuntimeError("bruv does not have commandline args")
+        raise RuntimeError("bruv does not have command line args")
     _sys.exit(main())

@@ -14,25 +14,45 @@ def fromroot(rel):
     return ROOT / rel
 
 
+def shortstr(path):
+    if path.is_relative_to(ROOT):
+        path = path.relative_to(ROOT)
+    return path.as_posix()
+
+
 def subfiles(directory, ext="", as_str=False, as_rel=False):
     files = [p for p in directory.glob("**/*" + ext) if p.is_file()]
-    # ignore some things.
+    # Ignore files inside pycaches.
     files = [p for p in files if ("__pycache__" not in p.resolve().parts)]
+    # Ignore hidden files.
     files = [p for p in files if not p.name.startswith(".")]
+    # Transform to requested format.
     if as_rel:
         files = [x.relative_to(directory) for x in files]
     if as_str:
         files = [str(x) for x in files]
     return files
 
+def subdirs(directory, as_str=False, as_rel=False):
+    dirs = [p for p in directory.glob("**/*") if p.is_dir()]
+    # Ignore hidden files.
+    dirs = [p for p in dirs if not p.name.startswith(".")]
+    # Note we dont ignore pycaches.
+    # Transform to requested format.
+    if as_rel:
+        dirs = [x.relative_to(directory) for x in dirs]
+    if as_str:
+        dirs = [str(x) for x in dirs]
+    return dirs
 
-def wipe(directory, including_itself=True):
+
+def wipe(directory, including_itself=True, ignore_errors=False):
     if including_itself:
-        shutil.rmtree(directory)
+        shutil.rmtree(directory, ignore_errors=ignore_errors)
         return
     for entry in directory.iterdir():
         if entry.is_dir():
-            shutil.rmtree(entry)
+            shutil.rmtree(entry, ignore_errors=ignore_errors)
         else:
             entry.unlink()
 

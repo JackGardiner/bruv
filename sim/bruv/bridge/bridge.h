@@ -1,10 +1,9 @@
 // c my beloved.
 
+// See ./readme.md for an explanation.
+
 #ifndef BRIDGE_H_
 #define BRIDGE_H_
-
-// Only expose a state array and execute function. The python front-end is
-// responsible for interpreting the state array in the correct way.
 
 
 // bloody msvc.
@@ -12,31 +11,64 @@
   #define __attribute(...) /* ignored */
 #endif
 
-typedef char assert_size_f64_[(sizeof(double) == 8) ? 1 : -1];
-typedef char assert_size_i64_[(sizeof(long long) == 8) ? 1 : -1];
-typedef char assert_size_u64_[(sizeof(unsigned long long) == 8) ? 1 : -1];
-typedef char assert_size_ptr_[(sizeof(void*) == 8) ? 1 : -1];
+typedef char c_assert_size_f64_[(sizeof(double) == 8) ? 1 : -1];
+typedef char c_assert_size_i64_[(sizeof(long long) == 8) ? 1 : -1];
+typedef char c_assert_size_u64_[(sizeof(unsigned long long) == 8) ? 1 : -1];
+typedef char c_assert_size_ptr_[(sizeof(void*) == 8) ? 1 : -1];
 
+// Ensure the symbol is emitted in the final c lib (not bridge).
+#define C_EMIT                                                      \
+    __declspec(dllexport) /* to work with msvc (as well as gcc). */ \
+    __attribute((__used__))                                         \
+    __attribute((__externally_visible__)) /* since we use godfile. */
+
+
+
+/* INTERPRETATION HASH */
+
+// Integer type to store the interpretation hash.
+typedef unsigned long long c_IH;
+
+// Enum type to represent an entry to add to a hash. The entry is a type combined
+// any of the flags.
+typedef unsigned int c_IHentry;
+
+#define C_F64     ((c_IHentry)1)
+#define C_I64     ((c_IHentry)2)
+#define C_PTR_F32 ((c_IHentry)3)
+#define C_PTR_F64 ((c_IHentry)4)
+#define C_PTR_I8  ((c_IHentry)5)
+#define C_PTR_I16 ((c_IHentry)6)
+#define C_PTR_I32 ((c_IHentry)7)
+#define C_PTR_I64 ((c_IHentry)8)
+#define C_PTR_U8  ((c_IHentry)9)
+#define C_PTR_U16 ((c_IHentry)10)
+#define C_PTR_U32 ((c_IHentry)11)
+#define C_PTR_U64 ((c_IHentry)12)
+
+#define C_INPUT       ((c_IHentry)0x10000000U)
+#define C_OUTPUT      ((c_IHentry)0x20000000U)
+#define C_INPUT_DATA  ((c_IHentry)0x40000000U)
+#define C_OUTPUT_DATA ((c_IHentry)0x80000000U)
+
+
+// Initial value of an interpretation hash.
+C_EMIT c_IH c_ih_initial(void);
+
+// Appends the given node to the interpretation hash, returning the new running
+// hash.
+C_EMIT c_IH c_ih_add(c_IH running, const char* add_name, c_IHentry add_entry);
+
+
+
+/* ENTRYPOINT */
 
 typedef unsigned long long c_eight_bytes
     /* aliases the real state struct */
     __attribute((__may_alias__));
 
-    /* expose in dll */
-    __declspec(dllexport) // __declspec to work with msvc (as well as gcc).
-    // teehee this is applied to c_execute.
-    // i luv non-whitespace-aware languages.
-    // shitass msvc using the opposite convention to gcc in terms of attr
-    // placement tho.
-
 // Returns null on success, otherwise a string error message.
-const char* c_execute(c_eight_bytes* c_state)
-    /* must be emmited */
-    __attribute((__used__))
-    __attribute((__externally_visible__));
-
-// TODO: hash the believed state interpration and compare/check input and
-// expected
+C_EMIT const char* c_execute(c_eight_bytes* state, c_IH interpretation_hash);
 
 
 #endif

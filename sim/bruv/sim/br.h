@@ -49,6 +49,9 @@ typedef double  f64;  // 64-bit floating-point number (IEEE-754).
 //      evaluated like a macro.
 #define generic(contents...) ( _Generic(contents) )
 
+// coming soon in C23 (releasing 2024).
+#define static_assert(x...) _Static_assert((x), "just read the code smile")
+
 
 // Refers to the type of `x`. If `x` is a type, refers to that same type.
 // - `x` must be an expression or type.
@@ -61,6 +64,15 @@ typedef double  f64;  // 64-bit floating-point number (IEEE-754).
 // - `x` must be an expression or type.
 // - Expands to an expression with an undefined value but of the given type.
 #define objof(T...) ( *(typeof(T)*)objof_evaled_() )
+
+// Returns 1 if `typeof(A)` and `typeof(B)` are the same unqualified type, 0
+// otherwise.
+// - To compare types without ignoring qualifiers, make both types pointed to.
+// - "Unqualifiered" means without modifiers such as const, volatile, and
+//      restrict, however it will also strip array sizes (i.e. `i32[2]` is the
+//      "same" as `i32[1]` and `i32[]` and etc.).
+// - `A` and `B` must be expressions or types.
+#define sametype(A, B) ( __builtin_types_compatible_p(typeof(A), typeof(B)) )
 
 
 // Returns the size of `typeof(x)`, in bytes. yeah, cheeky sizeof overwrite.
@@ -97,6 +109,9 @@ typedef double  f64;  // 64-bit floating-point number (IEEE-754).
 
 // Returns 1 if every bit in `mask` is zero (cleared) in `x`, 0 otherwise.
 #define isclr(x, mask) ( ((x) & (mask)) == 0 )
+
+
+#define within(x, lo, hi) ((lo) <= (x) && (x) <= (hi)) // TODO:
 
 
 // Expands to positive infinity in the given type.
