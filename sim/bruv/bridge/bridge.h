@@ -7,7 +7,7 @@
 
 
 // bloody msvc.
-#ifndef __GCC__
+#ifndef __GNUC__
   #define __attribute(...) /* ignored */
 #endif
 
@@ -19,8 +19,7 @@ typedef char c_assert_size_ptr_[(sizeof(void*) == 8) ? 1 : -1];
 // Ensure the symbol is emitted in the final c lib (not bridge).
 #define C_EMIT                                                      \
     __declspec(dllexport) /* to work with msvc (as well as gcc). */ \
-    __attribute((__used__))                                         \
-    __attribute((__externally_visible__)) /* since we use godfile. */
+    __attribute((__used__, __externally_visible__)) /* since we use godfile. */
 
 
 
@@ -57,7 +56,7 @@ C_EMIT c_IH c_ih_initial(void);
 
 // Appends the given node to the interpretation hash, returning the new running
 // hash.
-C_EMIT c_IH c_ih_add(c_IH running, const char* add_name, c_IHentry add_entry);
+C_EMIT c_IH c_ih_append(c_IH running, const char* name, c_IHentry entry);
 
 
 

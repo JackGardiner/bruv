@@ -1,20 +1,22 @@
+"""
+Builds (if needed) and runs bruv.
+"""
+
+import sys
+
+from . import build
+from . import frontend
 
 def main():
     # Compile me (if needed).
-    from . import build
     try:
         build.build(must=False)
     except build.BuildError:
         return 2
-
     # Run me.
-    from . import frontend
-    frontend.run()
-
-    return 0
+    return frontend.main()
 
 if __name__ == "__main__":
-    import sys as _sys
-    if len(_sys.argv) > 1:
+    if len(sys.argv) > 1:
         raise RuntimeError("bruv does not have command line args")
-    _sys.exit(main())
+    sys.exit(main())

@@ -2,21 +2,37 @@
 GUI front-end for the c back-end.
 """
 
-def run():
-    from . import bridge
+import sys
+import numpy as np
+
+from . import bridge
+
+def main():
     print("loaded bridge:", bridge)
 
     interp = bridge.Interpretation()
-    interp.add("hi", "f64", bridge.FLAG_INPUT)
-    interp.add("bye", "f64", bridge.FLAG_INPUT)
-    interp.add("another_one", "i64", bridge.FLAG_OUTPUT)
-    interp.add("data", "u16[]", 0)
+    interp.append("hi",   interp.F64, interp.INPUT)
+    interp.append("bye",  interp.F64, interp.OUTPUT)
+    interp.append("size", interp.I64, interp.INPUT)
+    interp.append("data", interp.PTR_U16, interp.INPUT | interp.INPUT_DATA | interp.OUTPUT_DATA)
     interp.finalise()
 
     state = bridge.State(interp)
-    state.set_f64(0, 1234.5678e9)
-    print("state:", state)
-    print("state[0]:", state.get_f64(0))
+    state["hi"] = 1234.5678e9
+    state["bye"] = 1234.5678e9
+    arr = np.array([1.0, 2.0, 3.0, 80.0], dtype=np.uint16)
+    state["size"] = len(arr)
+    state["data"] = arr
+    print("state.hi:", state["hi"])
+    print("state.bye:", state["bye"])
+    print("state.size:", state["size"])
+    print("state.data:", state["data"].view(state["size"]))
 
     ret = state.execute()
     print("returned:", ret)
+    print("modified array:", arr)
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        raise RuntimeError("bruv.frontend does not have command line args")
+    sys.exit(main())

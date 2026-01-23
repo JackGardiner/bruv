@@ -15,9 +15,9 @@ c_IH c_ih_initial(void) {
     return HASH_SEED;
 }
 
-c_IH c_ih_add(c_IH running, const char* add_name, c_IHentry add_entry) {
-    u64 name_hash = hash_bytes(add_name, strlen(add_name));
-    u64 entry_hash = hash_u64((u64)add_entry);
+c_IH c_ih_append(c_IH running, const char* name, c_IHentry entry) {
+    u64 name_hash = hash_bytes(name, strlen(name));
+    u64 entry_hash = hash_u64((u64)entry);
     // Combine in order-dependant fashion.
     running = hash_aug(running, name_hash);
     running = hash_aug(running, entry_hash);

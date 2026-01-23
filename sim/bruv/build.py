@@ -3,7 +3,6 @@ Compiles the sim library and cythonises the bridge module.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -16,78 +15,72 @@ from Cython.Build import cythonize
 
 from . import paths
 
-__all__ = ("BuildError", "build")
+__all__ = ["BuildError", "build"]
 
 
 
 
-# TODO: sim actually also depends on bridge.h.
-
-_FILES_SIM = []
-_FILES_BRIDGE = []
-
-def _save_sim(cmd, extra_args):
+def _save_sim(cmd, deps, gcc_extra_args):
     data = {
         "command": cmd,
-        "files": [str(p) for p in _FILES_SIM],
-        "extra_args": extra_args,
+        "dependancies": [str(p) for p in deps],
+        "gcc_extra_args": gcc_extra_args,
     }
-    with open(paths.SIM_CACHE, "w", encoding="utf-8") as f:
+    with paths.SIM_CACHE.open("w", encoding="utf-8") as f:
         json.dump(data, f)
 
 def _load_sim():
     try:
-        with open(paths.SIM_CACHE, "r", encoding="utf-8") as f:
+        with paths.SIM_CACHE.open("r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             raise BuildError()
-        if set(data.keys()) != {"command", "files", "extra_args"}:
+        if set(data.keys()) != {"command", "dependancies", "gcc_extra_args"}:
             raise BuildError()
         for arr in data.values():
             if not isinstance(arr, list):
                 raise BuildError()
             if not all(isinstance(s, str) for s in arr):
                 raise BuildError()
-        data["files"] = [Path(p) for p in data["files"]]
+        data["dependancies"] = [Path(p) for p in data["dependancies"]]
     except (BuildError, FileNotFoundError, json.JSONDecodeError):
         data = None
     return data
 
 
 
-def _save_bridge():
+def _save_bridge(deps):
     data = {
-        "files": [str(p) for p in _FILES_BRIDGE],
+        "dependancies": [str(p) for p in deps],
     }
-    with open(paths.BRIDGE_CACHE, "w", encoding="utf-8") as f:
+    with paths.BRIDGE_CACHE.open("w", encoding="utf-8") as f:
         json.dump(data, f)
 
 def _load_bridge():
     try:
-        with open(paths.BRIDGE_CACHE, "r", encoding="utf-8") as f:
+        with paths.BRIDGE_CACHE.open("r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             raise BuildError()
-        if set(data.keys()) != {"files"}:
+        if set(data.keys()) != {"dependancies"}:
             raise BuildError()
         for arr in data.values():
             if not isinstance(arr, list):
                 raise BuildError()
             if not all(isinstance(s, str) for s in arr):
                 raise BuildError()
-        data["files"] = [Path(p) for p in data["files"]]
+        data["dependancies"] = [Path(p) for p in data["dependancies"]]
     except (BuildError, FileNotFoundError, json.JSONDecodeError):
         data = None
     return data
 
 
-def _needa_sim():
+
+def _needa_sim(deps, built):
     # Check if sim has already been built and can be reused.
 
     # Check existance.
-    if not paths.SIM_LIB.is_file():
-        return True
-    if paths.SIM_STUBS is not None and not paths.SIM_STUBS.is_file():
+    if not all(p.is_file() for p in built):
         return True
 
     # Check that it was compiled in the same manner we intend to (and with the
@@ -101,44 +94,36 @@ def _needa_sim():
         cmd = None # yeah nah
     if data["command"] != cmd:
         return True
-    if set(data["files"]) != set(_FILES_SIM):
+    if set(data["dependancies"]) != set(deps):
         return True
-    if data["extra_args"]: # any is nono.
+    if len(data["gcc_extra_args"]) > 0: # any is nono.
         return True
 
     # Check that nothing has been modified.
-    here = Path(__file__).resolve() # this file is also a dependancy.
-    deps = _FILES_SIM + [here]
-    outs = paths.subfiles(paths.BIN_SIM)
-    if paths.max_mtime(deps) > paths.max_mtime(outs):
+    if paths.max_mtime(deps) > paths.max_mtime(built):
         return True
 
     # YIPEEE
     return False
 
 
-def _needa_bridge(): # same deal as _needa_sim
-
-    # Note checking the "correct" bridge compiled file exists is lowk hard, so
-    # instead we just check for any .pyd in the right spot.
-    if not paths.subfiles(paths.BIN_BRIDGE, ext=".pyd"):
+def _needa_bridge(deps, built): # same deal as _needa_sim
+    if not all(p.is_file() for p in built):
+        return True
+    # ensure at least one .pyd exists.
+    if all((p.suffix != ".pyd") for p in built):
         return True
 
-    # Check that it was compiled in the same manner we intend to.
     data = _load_bridge()
-    if data is None: # missing
+    if data is None:
         return True
-    if set(data["files"]) != set(_FILES_BRIDGE):
+    if set(data["dependancies"]) != set(deps):
         return True
 
-    here = Path(__file__).resolve()
-    deps = _FILES_BRIDGE + [here]
-    outs = paths.subfiles(paths.BIN_BRIDGE)
-    if paths.max_mtime(deps) > paths.max_mtime(outs):
+    if paths.max_mtime(deps) > paths.max_mtime(built):
         return True
 
     return False
-
 
 
 
@@ -250,21 +235,25 @@ def _gcc_cmd(extra_args=()):
     out = paths.SIM_LIB
 
     # Check for alternative directives.
-    DIRECTIVE_ARGSS = {"-S", "-E"}
-    disas = "-S" in extra_args
+    DIRECTIVE_ARGSS = {"-E", "-S", "-c"}
     prepro = "-E" in extra_args
-    given_directives = [disas, prepro]
+    disas = "-S" in extra_args
+    nolink = "-c" in extra_args
+    given_directives = [prepro, disas, nolink]
     extra_args = [x for x in extra_args if x not in DIRECTIVE_ARGSS]
 
     if sum(given_directives) > 1:
-        print("\nerror: cannot both disas (-S) and preprocess (-E)")
+        print("\nerror: cannot multiple directives (-E/-S/-c)")
         raise BuildError()
-    if disas:
-        directive = ["-S"]
-        out = paths.SIM_DISAS
-    elif prepro:
+    if prepro:
         directive = ["-E"]
         out = paths.SIM_PREPRO
+    elif disas:
+        directive = ["-S"]
+        out = paths.SIM_DISAS
+    elif nolink:
+        directive = ["-c"]
+        out = paths.SIM_OBJ
 
     # Compile and link (dm) in one step (word dont check dm).
     cmd = [
@@ -289,8 +278,8 @@ def _gcc_cmd(extra_args=()):
 
     return cmd, builds_lib
 
-def _build_sim(extra_args=()):
-    cmd, builds_lib = _gcc_cmd(extra_args)
+def _build_sim(deps, gcc_extra_args=()):
+    cmd, builds_lib = _gcc_cmd(gcc_extra_args)
     print(f">> {" ".join(cmd)}\n")
 
     # Ensure output dir.
@@ -308,16 +297,19 @@ def _build_sim(extra_args=()):
     # - The way lto is setup (at least on gcc) means that some warnings never
     #     trigger (specifically the 0-sized alloc and array-bounds warnings, but
     #     there are probably more).
-    srcs = [p for p in _FILES_SIM if p.suffix == ".c"]
+    srcs = [p for p in deps if p.suffix == ".c"]
     srcs = sorted(srcs) # just arbitrary but consistent ordering.
     if not srcs:
-        print("error: must have at-least one source file\n")
+        print("error: must have at-least one source sim (.c) file\n")
         raise BuildError()
-    tostr = lambda p: p.relative_to(paths.SIM).as_posix()
-    godfile = "".join(f"#include \"{tostr(p)}\"\n" for p in srcs)
+    def to_include(p):
+        path = p.relative_to(paths.SIM).as_posix()
+        path = json.dumps(path)
+        return f"#include {path}\n"
+    godfile = "".join(to_include(p) for p in srcs)
 
 
-    _save_sim(cmd, extra_args) # stash me.
+    _save_sim(cmd, deps, gcc_extra_args) # stash me.
 
     # Execute gcc (with working dir in the source files (required)).
     proc = subprocess.Popen(
@@ -341,14 +333,18 @@ def _build_sim(extra_args=()):
     return builds_lib
 
 
-def _build_bridge():
+def _build_bridge(deps):
 
     # Ensure output dir.
     paths.BIN_BRIDGE.mkdir(parents=True, exist_ok=True)
 
     # Force different cmdline args for the cython setup.
     old_argv = sys.argv[1:]
-    sys.argv[1:] = ["build_ext", "--build-lib", paths.BIN_BRIDGE, "--inplace"]
+    sys.argv[1:] = [
+        "build_ext",
+        "--build-lib", str(paths.BIN_BRIDGE),
+        "--inplace"
+    ]
     try:
 
         # holy shit cython/setuptools/disttools whatever is a fucking huge pain
@@ -358,13 +354,21 @@ def _build_bridge():
         # build_dir. unreal. lets just copy the bridge source into bin and build
         # it there all pretend like.
 
-        _save_bridge() # stash me.
+        _save_bridge(deps) # stash me.
 
-        # Copy into bin.
-        relled = {p: p.relative_to(paths.BRIDGE) for p in _FILES_BRIDGE}
-        copied = {p: paths.BIN_BRIDGE / relled[p] for p in _FILES_BRIDGE}
-        for p in _FILES_BRIDGE:
+        # Copy the bridge dir into bin.
+        inbridge = paths.subfiles(paths.BRIDGE)
+        relled = {p: p.relative_to(paths.BRIDGE) for p in inbridge}
+        copied = {p: paths.BIN_BRIDGE / relled[p] for p in inbridge}
+        for p in inbridge:
             shutil.copy(p, copied[p])
+
+        # Get source pyx files.
+        pyxs = [str(p) for p in relled.values() if p.suffix == ".pyx"]
+        pyxs = sorted(pyxs) # arbitrary but consistent ordering.
+        if not pyxs:
+            print("error: must have at-least one source bridge (.pyx) file\n")
+            raise BuildError()
 
         with paths.pushd(paths.BIN_BRIDGE):
             if sys.platform == "win32":
@@ -376,9 +380,8 @@ def _build_bridge():
                     "runtime_library_dirs": [str(paths.BIN_SIM)],
                 }
             ext = setuptools.Extension(
-                "bridge",
-                sources=[str(relled[p]) for p in _FILES_BRIDGE
-                         if p.suffix == ".pyx"],
+                paths.BRIDGE_MODULE_NAME,
+                sources=pyxs,
                 include_dirs=[str(paths.BIN_BRIDGE), np.get_include()],
                 libraries=[str(paths.SIM_LIB_NAME)], # points to stub on windows,
                                                      # shared lib on other.
@@ -387,7 +390,7 @@ def _build_bridge():
             )
             setuptools.setup(ext_modules=cythonize([ext]))
 
-        # okie now can delete them (just in case me).
+        # okie now can delete the copied source (justin caseme).
         for p in copied.values():
             p.unlink()
 
@@ -396,6 +399,8 @@ def _build_bridge():
             p.touch()
 
         print()
+    except BuildError:
+        raise
     except Exception:
         print("\nerror: when cythonising:")
         traceback.print_exc()
@@ -411,12 +416,12 @@ class BuildError(RuntimeError):
     pass
 
 
-def build(extra_args=(), must=True):
-    global _FILES_SIM, _FILES_BRIDGE # yipee
-
-    # Recompute source files.
-    _FILES_SIM = paths.subfiles(paths.SIM)
-    _FILES_BRIDGE = paths.subfiles(paths.BRIDGE)
+def build(gcc_extra_args=(), must=True):
+    # Recompute dependancies and previous build products.
+    sim_deps = paths.sim_deps()
+    bridge_deps = paths.bridge_deps()
+    sim_built = paths.sim_built()
+    bridge_built = paths.bridge_built()
 
     # Build sim lib then cythonise bridge. Note both may be able to re-use the
     # previous build (cython actually does some caching of its own but we help it
@@ -424,34 +429,41 @@ def build(extra_args=(), must=True):
     # in wool it has no idea whats going on)).
 
     try:
-        if not must and not _needa_sim():
+        if not must and not _needa_sim(sim_deps, sim_built):
             print("Using previously built sim library.") # no \n
         else:
             print("Rebuilding sim library...\n")
-            if not _build_sim(extra_args):
+            if not _build_sim(sim_deps, gcc_extra_args):
                 # may have been given args which dont build the actual library.
                 print("that's all folks.")
                 return
             print("Rebuilt sim library.\n")
     except BuildError:
         # dont leak half-baked goods.
-        paths.wipe(paths.BIN_SIM)
-        return False
+        try:
+            paths.wipe(paths.BIN_SIM)
+        except Exception:
+            pass
+        raise
 
     try:
-        if not must and not _needa_bridge():
+        if not must and not _needa_bridge(bridge_deps, bridge_built):
             print("Using previously cythonised bridge.\n")
         else:
             print("Cythonising bridge...\n")
-            _build_bridge()
+            _build_bridge(bridge_deps)
             print("Cythonised bridge.\n")
     except BuildError:
-        paths.wipe(paths.BIN_BRIDGE)
-        return False
-
-    return True
-
+        try:
+            paths.wipe(paths.BIN_BRIDGE)
+        except Exception:
+            pass
+        raise
 
 
 if __name__ == "__main__":
-    sys.exit(not build(sys.argv[1:]))
+    try:
+        build(sys.argv[1:])
+        sys.exit(0)
+    except BuildError:
+        sys.exit(1)

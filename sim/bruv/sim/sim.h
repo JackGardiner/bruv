@@ -5,11 +5,11 @@
 
 
 // Canonical intpretation of the state array.
-#define SIM_INTERPRETATION          \
-    X(hi,          f64,  C_INPUT)   \
-    X(bye,         f64,  C_INPUT)   \
-    X(another_one, i64,  C_OUTPUT)  \
-    X(data,        u16*, 0)
+#define SIM_INTERPRETATION  \
+    X(hi,   f64,  C_INPUT)  \
+    X(bye,  f64,  C_OUTPUT) \
+    X(size, i64,  C_INPUT)  \
+    X(data, u16*, C_INPUT | C_INPUT_DATA | C_OUTPUT_DATA)
 
 
 // Da state array.

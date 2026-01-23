@@ -22,7 +22,7 @@ cdef extern from "bridge.h":
     cdef c_IHentry C_INPUT_DATA
     cdef c_IHentry C_OUTPUT_DATA
     c_IH c_ih_initial()
-    c_IH c_ih_add(c_IH running, const char* add_name, c_IHentry add_entry)
+    c_IH c_ih_append(c_IH running, const char* name, c_IHentry entry)
 
     ctypedef unsigned long long c_eight_bytes
     const char* c_execute(c_eight_bytes* state, c_IH interpretation_hash)
@@ -35,61 +35,112 @@ cimport numpy as np
 np.import_array()
 
 
+# NOTE: ./__init__.py is what the frontend actually interacts with when accessing
+#       the cython. If additional symbols are intended to be exported, modify the
+#       `__all__` in there.
 
-FLAG_INPUT = C_INPUT
-FLAG_OUTPUT = C_OUTPUT
-FLAG_INPUT_DATA = C_INPUT_DATA
-FLAG_OUTPUT_DATA = C_OUTPUT_DATA
-_FLAG_ALL = FLAG_INPUT | FLAG_OUTPUT | FLAG_INPUT_DATA | FLAG_OUTPUT_DATA
+
 
 cdef class Interpretation:
+
+    F64 = C_F64
+    I64 = C_I64
+    PTR_F32 = C_PTR_F32
+    PTR_F64 = C_PTR_F64
+    PTR_I8  = C_PTR_I8
+    PTR_I16 = C_PTR_I16
+    PTR_I32 = C_PTR_I32
+    PTR_I64 = C_PTR_I64
+    PTR_U8  = C_PTR_U8
+    PTR_U16 = C_PTR_U16
+    PTR_U32 = C_PTR_U32
+    PTR_U64 = C_PTR_U64
+    TYPES = {
+        C_F64, C_I64,
+        C_PTR_F32, C_PTR_F64,
+        C_PTR_I8, C_PTR_I16, C_PTR_I32, C_PTR_I64,
+        C_PTR_U8, C_PTR_U16, C_PTR_U32, C_PTR_U64,
+    }
+
+    INPUT  = C_INPUT
+    OUTPUT = C_OUTPUT
+    INPUT_DATA  = C_INPUT_DATA
+    OUTPUT_DATA = C_OUTPUT_DATA
+    FLAGS = C_INPUT | C_OUTPUT | C_INPUT_DATA | C_OUTPUT_DATA
+
     def __init__(Interpretation self):
-        self._running = c_ih_initial()
+        self._hash = c_ih_initial()
+        self._mapping = {}
         self._length = 0
         self._finalised = 0
 
-    _ALLOWED_KINDS = {
-        "f64": C_F64,
-        "i64": C_I64,
-        "f32[]": C_PTR_F32,
-        "f64[]": C_PTR_F64,
-        "i8[]":  C_PTR_I8,
-        "i16[]": C_PTR_I16,
-        "i32[]": C_PTR_I32,
-        "i64[]": C_PTR_I64,
-        "u8[]":  C_PTR_U8,
-        "u16[]": C_PTR_U16,
-        "u32[]": C_PTR_U32,
-        "u64[]": C_PTR_U64,
-    }
-    def add(self, str name, str kind, flags):
-        if type(flags) is not int:
+    def append(Interpretation self, str name, object itype, object iflags):
+        """
+        Appends the given member to the state interpretation. `name` should be a
+        string of the member name, `itype` should be a type (`F64`, `I64`,
+        or `PTR_*`), and `iflags` should be a bitwise combination of any
+        requirement flags (`INPUT`, `OUTPUT`, `INPUT_DATA`, and `OUTPUT_DATA`).
+        """
+        if type(itype) is not int:
+            raise ValueError("expected integer type, got "
+                            f"{repr(type(itype).__name__)}")
+        if type(iflags) is not int:
             raise ValueError("expected integer flags, got "
-                            f"{repr(type(flags).__name__)}")
-        if kind not in self._ALLOWED_KINDS:
-            raise ValueError(f"invalid kind: {repr(kind)}")
-        if (flags & ~_FLAG_ALL) != 0:
-            raise ValueError(f"invalid flags: 0x{flags:X}")
+                            f"{repr(type(itype).__name__)}")
+        if itype not in self.TYPES:
+            raise ValueError(f"unrecognised type: 0x{itype:X}")
+        if (iflags & ~self.FLAGS) != 0:
+            raise ValueError(f"unrecognised flags: 0x{itype:X}")
         if self._finalised != 0:
             raise RuntimeError("cannot modify finalised interpretation")
+        if name in self._mapping:
+            raise ValueError(f"name already exists: {repr(name)}")
+
         # Convert to the args c expects.
-        cdef c_IHentry entry = <c_IHentry>self._ALLOWED_KINDS[kind]
-        entry |= <c_IHentry>flags
-        b_name = name.encode("utf-8")
-        cdef const char* c_name = <const char*>b_name
-        self._running = c_ih_add(self._running, c_name, entry)
+        bytesname = name.encode("utf-8") # also owns the memory.
+        cdef const char* c_name = <const char*>bytesname
+        cdef c_IHentry c_entry = <c_IHentry>itype | <c_IHentry>iflags
+        self._hash = c_ih_append(self._hash, c_name, c_entry)
+        self._mapping[name] = (int(self._length), itype, iflags)
         self._length += 1
 
-    def finalise(self):
+    def finalise(Interpretation self):
+        """
+        Singals that the interpretation is finished and cannot be modified in the
+        future.
+        """
         self._finalised = 1
 
 
     # PRIVATE
 
-    cdef c_IH _running
+    cdef c_IH _hash
+    cdef dict _mapping
     cdef int _length
     cdef int _finalised
 
+
+
+
+cdef class Buffer:
+    cdef void* ptr
+    cdef object dt
+
+    # def __cinit__(self, ptr, dt):
+    #     self.ptr = NULL if ptr is None else ptr
+    #     self.dt = dt
+
+    def view(self, numel):
+        if type(numel) is not int:
+            raise ValueError("expected integer numel, got "
+                            f"{repr(type(numel).__name__)}")
+        if self.ptr == NULL:
+            if numel != 0:
+                raise MemoryError("expected non-empty buffer")
+            return None
+        cdef long long totalsize = <long long>(numel * self.dt.itemsize)
+        cdef unsigned char[:] view = <unsigned char[:totalsize]>self.ptr
+        return np.asarray(view, copy=False).view(self.dt)
 
 
 cdef class State:
@@ -103,65 +154,135 @@ cdef class State:
         self._interp = interp
 
 
-    # STATE GETTERS
+    def __getitem__(State self, str name):
+        if name not in self._interp._mapping:
+            raise KeyError(f"missing name: {repr(name)}")
+        idx, itype, iflags = self._interp._mapping[name]
 
-    def get_f64(State self, int idx):
         cdef c_eight_bytes raw = self._get(idx)
-        cdef double val
-        memcpy(&val, &raw, 8)
-        return val
-
-    def get_i64(State self, int idx):
-        cdef c_eight_bytes raw = self._get(idx)
-        cdef long long val
-        memcpy(&val, &raw, 8)
-        return val
-
-    def get_array(State self, int idx, int numel, object dtype):
-        cdef object dt = self._checked_dtype(dtype)
-        assert idx >= 0
-        assert numel >= 0
-
-        cdef c_eight_bytes raw = self._get_raw(idx)
+        cdef double asfloat
+        cdef long long asint
         cdef void* ptr
-        memcpy(&ptr, &raw, 8)
-        if ptr == NULL:
-            assert numel == 0
-            return None
-        cdef long long arrsize = numel * dt.itemsize
-        cdef unsigned char[:] view = <unsigned char[:arrsize]>ptr
-        return np.asarray(view, copy=False).view(dt)
+
+        if itype == Interpretation.F64:
+            memcpy(&asfloat, &raw, 8)
+            return asfloat
+        elif itype == Interpretation.I64:
+            memcpy(&asint, &raw, 8)
+            return asint
+        else:
+            # otherwise an array type.
+            dt = self._TO_DTYPE[itype]
+            memcpy(&ptr, &raw, 8)
+            buffer = Buffer()
+            buffer.ptr = ptr
+            buffer.dt = dt
+            # return Buffer(ptr, dt)
+            return buffer
 
 
-    # STATE SETTERS
-
-    def set_f64(State self, int idx, double val):
-        cdef c_eight_bytes raw
-        memcpy(&raw, &val, 8)
-        self._set(idx, raw)
-
-    def set_i64(State self, int idx, long long val):
-        cdef c_eight_bytes raw
-        memcpy(&raw, &val, 8)
-        self._set(idx, raw)
-
-    def set_array_null(State self, int idx):
-        self._set(idx, <c_eight_bytes>0)
-    def set_array(State self, int idx, object arr):
-        if arr is None:
-            self._set(idx, <c_eight_bytes>0)
-            return
-
-        if arr.ndim != 1:
-            raise TypeError("array must be 1D")
-        if not arr.flags["C_CONTIGUOUS"]:
-            raise TypeError("array must be C-contiguous.")
-        cdef object dt = self._checked_dtype(arr.dtype)
+    def __setitem__(State self, str name, object value):
+        if name not in self._interp._mapping:
+            raise KeyError(f"missing name: {repr(name)}")
+        idx, itype, iflags = self._interp._mapping[name]
 
         cdef c_eight_bytes raw
-        cdef void* val = np.PyArray_DATA(arr)
-        memcpy(&raw, &val, 8)
+        cdef double asfloat
+        cdef long long asint
+        cdef void* ptr
+
+        if itype == Interpretation.F64:
+            asfloat = value
+            memcpy(&raw, &asfloat, 8)
+        elif itype == Interpretation.I64:
+            asint = value
+            memcpy(&raw, &asint, 8)
+        else:
+            # otherwise an array type.
+            if value is None: # treat as null pointer.
+                raw = <c_eight_bytes>0
+            else:
+                if value.ndim != 1:
+                    raise TypeError("array must be 1D")
+                if not value.flags["C_CONTIGUOUS"]:
+                    raise TypeError("array must be C-contiguous")
+                if not value.flags["ALIGNED"]:
+                    raise TypeError("array must be aligned")
+                dt = value.dtype
+                edt = self._TO_DTYPE[itype]
+                if dt != edt:
+                    raise TypeError(f"incorrect array dtype, expected {edt}, "
+                                    f"got {dt}")
+                ptr = np.PyArray_DATA(value)
+                memcpy(&raw, &ptr, 8)
+
         self._set(idx, raw)
+
+
+
+    # # STATE GETTERS
+
+    # def get_f64(State self, str name):
+    #     cdef int idx = self._interp._mapping[name]
+    #     cdef c_eight_bytes raw = self._get(idx)
+    #     cdef double val
+    #     memcpy(&val, &raw, 8)
+    #     return val
+
+    # def get_i64(State self, str name):
+    #     cdef int idx = self._interp._mapping[name]
+    #     cdef c_eight_bytes raw = self._get(idx)
+    #     cdef long long val
+    #     memcpy(&val, &raw, 8)
+    #     return val
+
+    # def get_ptr(State self, str name, int numel, object dtype):
+    #     cdef int idx = self._interp._mapping[name]
+    #     cdef object dt = self._checked_dtype(dtype)
+    #     assert numel >= 0
+
+    #     cdef c_eight_bytes raw = self._get_raw(idx)
+    #     cdef void* ptr
+    #     memcpy(&ptr, &raw, 8)
+    #     if ptr == NULL:
+    #         if numel != 0:
+    #             raise MemoryError() # ig?
+    #         return None
+    #     cdef long long arrsize = numel * dt.itemsize
+    #     cdef unsigned char[:] view = <unsigned char[:arrsize]>ptr
+    #     return np.asarray(view, copy=False).view(dt)
+
+
+    # # STATE SETTERS
+
+    # def set_f64(State self, str name, double val):
+    #     cdef int idx = self._interp._mapping[name]
+    #     cdef c_eight_bytes raw
+    #     memcpy(&raw, &val, 8)
+    #     self._set(idx, raw)
+
+    # def set_i64(State self, str name, long long val):
+    #     cdef int idx = self._interp._mapping[name]
+    #     cdef c_eight_bytes raw
+    #     memcpy(&raw, &val, 8)
+    #     self._set(idx, raw)
+
+    # def set_ptr(State self, str name, object arr):
+    #     cdef int idx = self._interp._mapping[name]
+    #     if arr is None: # treat as null pointer.
+    #         self._set(idx, <c_eight_bytes>0)
+    #         return
+
+    #     if arr.ndim != 1:
+    #         raise TypeError("array must be 1D")
+    #     if not arr.flags["C_CONTIGUOUS"]:
+    #         raise TypeError("array must be C-contiguous.")
+    #     cdef object dt = self._checked_dtype(arr.dtype)
+
+    #     cdef c_eight_bytes raw
+    #     cdef void* val = np.PyArray_DATA(arr)
+    #     memcpy(&raw, &val, 8)
+    #     self._set(idx, raw)
 
 
     # EXECUTE
@@ -174,7 +295,7 @@ cdef class State:
         """
         # Since we already have our state array in a format c can work with, we
         # can jus hand it over.
-        cdef const char* ret = c_execute(self._array, self._interp._running)
+        cdef const char* ret = c_execute(self._array, self._interp._hash)
         # Return success or convert ret to string.
         if ret == NULL:
             return None
@@ -184,16 +305,18 @@ cdef class State:
 
     # PRIVATE
 
-    _ALLOWED_KINDS = {b"f": {4, 8}, b"i": {1, 2, 4, 8}, b"u": {1, 2, 4, 8}}
-    def _checked_dtype(State self, object dtype):
-        cdef object dt = np.dtype(dtype)
-        if dt.kind not in self._ALLOWED_KINDS:
-            raise TypeError("unsupported dtype")
-        if dt.itemsize not in self._ALLOWED_KINDS[dt.kind]:
-            raise TypeError("unsupported dtype")
-        if dt.byteorder not in {"=", "|"}:
-            raise TypeError("unsupported dtype")
-        return dt
+    _TO_DTYPE = { # native endianness.
+        Interpretation.PTR_F32: np.dtype("=f4"),
+        Interpretation.PTR_F64: np.dtype("=f8"),
+        Interpretation.PTR_I8:  np.dtype("i1"),
+        Interpretation.PTR_I16: np.dtype("=i2"),
+        Interpretation.PTR_I32: np.dtype("=i4"),
+        Interpretation.PTR_I64: np.dtype("=i8"),
+        Interpretation.PTR_U8:  np.dtype("u1"),
+        Interpretation.PTR_U16: np.dtype("=u2"),
+        Interpretation.PTR_U32: np.dtype("=u4"),
+        Interpretation.PTR_U64: np.dtype("=u8"),
+    }
 
     cdef Interpretation _interp
     cdef c_eight_bytes* _array
