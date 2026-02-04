@@ -696,7 +696,7 @@ public static class Geez {
         private static float fov_full()
             => clamp(fov + fov_tweak(), min_fov, max_fov);
         private static Snapper snap_fov = new(20f, dflt_fov, false);
-        public static float dflt_fov => torad(60f);
+        public static float dflt_fov => torad(75f);
         public static float min_fov => torad(10f);
         public static float max_fov => torad(170f);
 
@@ -1425,6 +1425,10 @@ public static class Geez {
         /* Viewer.IKeyHandler */
         public bool bHandleEvent(Viewer viewer, VEK key, bool pressed,
                 bool shift, bool ctrl, bool alt, bool cmd) {
+            // BUG: KEY_RIGHT messages don't send when W+S are pressed...
+            //      KEY_LEFT messages don't send when W+D are pressed...
+            //      baffling. windows/glfw bug?
+
             // couple of these keys are inexplicably unlabelled by picogk.
             const VEK VEK_Key_Shift    = (VEK)340;
             const VEK VEK_Key_Ctrl     = (VEK)341;
@@ -2372,23 +2376,25 @@ public static class Geez {
         return _group([key_line, key_mesh]);
     }
 
-    public static Key dir(in Vec3 dir, Colour? colour=null, float arrow=1f) {
+    public static Key dir(in Vec3 dir, Colour? colour=null, float arrow=0f) {
         return Geez.dir(new Frame(), dir, colour: colour, arrow: arrow);
     }
     public static Key dir(in Vec3 from, in Vec3 to, Colour? colour=null,
-            float arrow=1f) {
+            float arrow=0f) {
         return Geez.dir(new Frame(from), to - from, colour: colour,
                 arrow: arrow);
     }
     public static Key dir(in Frame frame, in Vec3 dir, Colour? colour=null,
-            float arrow=1f) {
+            float arrow=0f) {
         using var __ = Scoped.locked(_geezed);
         if (lockdown_check(out Key lockedkey))
             return lockedkey;
         PolyLine line = new(colour ?? Geez.colour ?? COLOUR_WHITE);
         line.nAddVertex(frame * ZERO3);
         line.nAddVertex(frame * dir);
-        if (arrow > 0f)
+        if (arrow == 0f)
+            arrow = 0.2f*mag(dir);
+        if (nonnan(arrow))
             line.AddArrow(arrow);
         using (dflt_like(metallic: dflt_line_metallic,
                          roughness: dflt_line_roughness))
