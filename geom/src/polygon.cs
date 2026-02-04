@@ -244,7 +244,7 @@ public static class Polygon {
     }
 
 
-    public static void fillet(List<Vec2> vertices, int i, float Fr,
+    public static void fillet(List<Vec2> vertices, int i, float FR,
             float prec=1f, int? divisions=null, bool only_this_vertex=false) {
       TRY_AGAIN:;
         int N = numel(vertices);
@@ -270,7 +270,7 @@ public static class Polygon {
         if (nearto(abs(beta), PI))
             return;
         // Find the two points which will be joined by a circular arc.
-        float ell = Fr / tan(0.5f*beta);
+        float ell = FR / tan(0.5f*beta);
         Vec2 d = b + BA*ell;
         // Radius may be too great for these points.
         if (ell > min(mag_ba, mag_bc)) {
@@ -303,7 +303,7 @@ public static class Polygon {
             goto TRY_AGAIN;
         }
         // Find the centre of the circular arc.
-        float off = Fr / sin(0.5f*beta);
+        float off = FR / sin(0.5f*beta);
         Vec2 centre = b + normalise(BA + BC)*off;
         // Angles of each arc endpoint.
         float theta0 = arg(b - centre);
@@ -319,7 +319,7 @@ public static class Polygon {
         List<Vec2> replace_b = new(divs);
         for (int j=0; j<divs; ++j) {
             float theta = theta0 + j*Ltheta/(divs - 1);
-            replace_b.Add(centre + frompol(Fr, theta));
+            replace_b.Add(centre + frompol(FR, theta));
         }
         vertices.RemoveAt(i);
         vertices.InsertRange(i, replace_b);

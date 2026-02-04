@@ -1,34 +1,24 @@
 
 public class PartMating {
-    // X_cc = combustion chamber property.
-    // X_chnl = combustion chamber cooling channel property.
-    // X_chnl = combustion chamber cooling channel property.
-    // X_Ioring = inner O-ring property.
-    // X_Ooring = outer O-ring property.
-    // X_bolt = bolt property.
-    // X_washer = washer property.
-    // X_LOx = liquid oxygen (oxidiser) property.
-    // X_IPA = isopropyl alcohol (fuel) property.
 
     /* Required geometric parameters: */
 
-    public required float Or_cc { get; init; }
+    public required float R_cc { get; init; }
 
     public required float Mr_chnl { get; init; }
     public required float min_wi_chnl { get; init; }
 
-    public required float Ir_Ioring { get; init; }
-    public required float Ir_Ooring { get; init; }
-    public required float Or_Ioring { get; init; }
-    public required float Or_Ooring { get; init; }
+    public required float IR_Ioring { get; init; }
+    public required float IR_Ooring { get; init; }
+    public required float OR_Ioring { get; init; }
+    public required float OR_Ooring { get; init; }
     public required float Lz_Ioring { get; init; }
     public required float Lz_Ooring { get; init; }
 
     public required int no_bolt { get; init; }
-    public required float Mr_bolt { get; init; }
-    public required float Bsz_bolt { get; init; }
-    public required float Bln_bolt { get; init; }
-    public required float Or_washer { get; init; }
+    public required float r_bolt { get; init; }
+    public required float D_bolt { get; init; }
+    public required float D_washer { get; init; }
 
     /* Non-geometric parameters: */
     public required float P_cc { get; init; }

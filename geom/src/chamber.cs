@@ -19,68 +19,16 @@ public class Chamber : TPIAP.Pea {
     // to coincide with +x vector and theta=PI_2 radial-outwards vector to
     // coincide with +y vector. Define the +y vector to be vertical upwards when
     // the motor is setup on the (horizontal) thrust stand.
-    //
-    //
-    // Context for 'X':
-    // cnt_X = chamber contour construction value.
-    // X_cc = chamber property.
-    // X_chnl = cooling channel property.
-    // X_conv = nozzle converging section property.
-    // X_div = nozzle diverging section property.
-    // X_exit = nozzle exit property.
-    // X_gas = gas/gas volume (aka interior of cc+nozzle) property.
-    // X_imani = fuel inlet manifold inner (wall) property.
-    // X_inlet = fuel inlet property.
-    // X_iw = inner wall property.
-    // X_mani = fuel inlet manifold property.
-    // X_fixt = fixtures property (note fixtures are at nozzle).
-    // X_omani = fuel inlet manifold outer (wall) property.
-    // X_ow = outer wall property.
-    // X_part = entire chamber+nozzle part property.
-    // X_tc = thermocouple property.
-    // X_tht = nozzle throat property.
-    // X_web = between-cooling-channel wall property.
-    //
-    // Legend for 'X':
-    // A = area.
-    // AEAT = nozzle exit area to throat area ratio.
-    // beta = angle between two line segments.
-    // Bln = bolt length (i.e. 10e-3 for M4x10).
-    // Bsz = bolt size (i.e. 4e-3 for M4x10).
-    // D_ = discrete change in this variable.
-    // ell = arc length.
-    // Fr = fillet radius.
-    // Ir = inner radius.
-    // Ioff = inner offset.
-    // L = length.
-    // L_ = length along this coordinate path.
-    // Mr = middle radius (average of inner and outer).
-    // NLF = nozzle length as a fraction of the length of a 15deg cone.
-    // no = number of things.
-    // off = offset, normal to surface.
-    // Ooff = outer offset.
-    // Or = outer radius.
-    // Pr = pressure ratio, upstream / downstream.
-    // Prinv = pressure ratio, downstream / upstream.
-    // r = radial coordinate.
-    // semith = semi-thickness (half thickness).
-    // th = thickness, normal to surface.
-    // phi = axial angle relative to +Z.
-    // theta = circumferential angular coordinate.
-    // wi = circumferential width.
-    // x = x coordinate.
-    // y = y coordinate.
-    // z = z coordinate.
 
     public required PartMating pm { get; init; }
 
     public required float L_cc { get; init; }
 
     public required float AEAT { get; init; }
-    public required float r_tht { get; init; }
-    public float r_exit = NAN;
+    public required float R_tht { get; init; }
+    public float R_exit = NAN;
     protected void initialise_exit() {
-        r_exit = sqrt(AEAT) * r_tht;
+        R_exit = sqrt(AEAT) * R_tht;
     }
 
     public required float NLF { get; init; }
@@ -117,10 +65,6 @@ public class Chamber : TPIAP.Pea {
         float A = theta_chnl_lookup[i];
         float B = theta_chnl_lookup[j];
         return lerp(A, B, t);
-
-        // assert(pm.no_bolt == 8, "change special constant smile");
-        // z = z/cnt_z6 - 0.5f;
-        // return 7.7f*TWOPI/no_chnl * 0.5f*sin(PI*z);
     }
     protected void initialise_chnl() {
         no_chnl = no_web;
@@ -171,8 +115,8 @@ public class Chamber : TPIAP.Pea {
         for (int i=0; i<N; ++i)
             theta_chnl_lookup[i] += Dtheta;
 
-        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(r_exit + th_iw + th_chnl)
-                                            - squared(r_exit + th_iw));
+        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(R_exit + th_iw + th_chnl)
+                                            - squared(R_exit + th_iw));
     }
 
     public required float th_imani { get; init; }
@@ -188,7 +132,7 @@ public class Chamber : TPIAP.Pea {
     public required float D_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float phi_inlet { get; init; }
-    public required float Fr_inlet { get; init; }
+    public required float FR_inlet { get; init; }
 
     public required float theta_tc { get; init; }
     public required int no_tc { get; init; }
@@ -328,31 +272,31 @@ public class Chamber : TPIAP.Pea {
         // The wid sdf gives the distance to the channel mid-contour.
         cnt_wid_off = th_iw + 0.5f*th_web;
 
-        cnt_X = EXTRA + 1.1f*max(pm.Mr_chnl, r_exit);
+        cnt_X = EXTRA + 1.1f*max(pm.Mr_chnl, R_exit);
 
 
-        cnt_r_conv = 1.5f*r_tht;
+        cnt_r_conv = 1.5f*R_tht;
 
         cnt_z0 = 0f;
-        cnt_r0 = pm.Or_cc;
+        cnt_r0 = pm.R_cc;
 
         cnt_z1 = L_cc;
-        cnt_r1 = pm.Or_cc;
+        cnt_r1 = pm.R_cc;
 
         cnt_z2 = cnt_z1 - cnt_r_conv*sin(phi_conv);
-        cnt_r2 = pm.Or_cc - cnt_r_conv*(1f - cos(phi_conv));
+        cnt_r2 = pm.R_cc - cnt_r_conv*(1f - cos(phi_conv));
 
-        cnt_r3 = r_tht * (2.5f - 1.5f*cos(phi_conv));
+        cnt_r3 = R_tht * (2.5f - 1.5f*cos(phi_conv));
         cnt_z3 = cnt_z2 + (cnt_r3 - cnt_r2)/tan(phi_conv);
 
-        cnt_z4 = cnt_z3 - 1.5f*r_tht*sin(phi_conv);
-        cnt_r4 = r_tht;
+        cnt_z4 = cnt_z3 - 1.5f*R_tht*sin(phi_conv);
+        cnt_r4 = R_tht;
 
-        cnt_z5 = cnt_z4 + 0.382f*r_tht*sin(phi_div);
-        cnt_r5 = r_tht*(1.382f - 0.382f*cos(phi_div));
+        cnt_z5 = cnt_z4 + 0.382f*R_tht*sin(phi_div);
+        cnt_r5 = R_tht*(1.382f - 0.382f*cos(phi_div));
 
-        cnt_z6 = cnt_z4 + NLF*(3.732051f*r_exit - 3.683473f*r_tht);
-        cnt_r6 = r_exit;
+        cnt_z6 = cnt_z4 + NLF*(3.732051f*R_exit - 3.683473f*R_tht);
+        cnt_r6 = R_exit;
 
         cnt_zP = (cnt_z5*tan(phi_div) - cnt_z6*tan(phi_exit) + cnt_r6 - cnt_r4)
                / (tan(phi_div) - tan(phi_exit));
@@ -372,7 +316,7 @@ public class Chamber : TPIAP.Pea {
 
 
         cnt_wid_r0 = pm.Mr_chnl;
-        cnt_wid_r4 = pm.Or_cc + th_iw + 0.5f*th_web;
+        cnt_wid_r4 = pm.R_cc + th_iw + 0.5f*th_web;
 
         cnt_wid_alpha = 2f;
         cnt_wid_r_s = (cnt_wid_r0 - cnt_wid_r4)
@@ -468,13 +412,13 @@ public class Chamber : TPIAP.Pea {
         if (within(arg(d12), PI_2 + phi_conv, PI_2)) {
             update(ref dist, +mag(d12) - cnt_r_conv);
         }
-        Vec2 d34 = q - new Vec2(cnt_z4, 2.5f*r_tht);
+        Vec2 d34 = q - new Vec2(cnt_z4, 2.5f*R_tht);
         if (within(arg(d34), -PI_2 + phi_conv, -PI_2)) {
-            update(ref dist, -mag(d34) + 1.5f*r_tht);
+            update(ref dist, -mag(d34) + 1.5f*R_tht);
         }
-        Vec2 d56 = q - new Vec2(cnt_z4, 1.382f*r_tht);
+        Vec2 d56 = q - new Vec2(cnt_z4, 1.382f*R_tht);
         if (within(arg(d56), -PI_2, -PI_2 + phi_div)) {
-            update(ref dist, -mag(d56) + 0.382f*r_tht);
+            update(ref dist, -mag(d56) + 0.382f*R_tht);
         }
 
         // Check that bloody rotated parabola.
@@ -641,9 +585,9 @@ public class Chamber : TPIAP.Pea {
         } else if (z <= cnt_z3) {
             r = tan(phi_conv)*(z - cnt_z3) + cnt_r3;
         } else if (z <= cnt_z4) {
-            r = 2.5f*r_tht - nonhypot(1.5f*r_tht, z - cnt_z4);
+            r = 2.5f*R_tht - nonhypot(1.5f*R_tht, z - cnt_z4);
         } else if (z <= cnt_z5) {
-            r = 1.382f*r_tht - nonhypot(0.382f*r_tht, z - cnt_z4);
+            r = 1.382f*R_tht - nonhypot(0.382f*R_tht, z - cnt_z4);
         } else if (z <= cnt_z6) {
             float p;
             p = 4f*cnt_para_az*(cnt_para_cz - z);
@@ -651,7 +595,7 @@ public class Chamber : TPIAP.Pea {
             p = (-cnt_para_bz - p) / 2f / cnt_para_az;
             r = (cnt_para_ar*p + cnt_para_br)*p + cnt_para_cr;
         } else {
-            r = r_exit;
+            r = R_exit;
         }
         // Also note i couldnt be bothered to put the widened analytic solns.
 
@@ -911,13 +855,13 @@ public class Chamber : TPIAP.Pea {
 
       #if false
         print("th_chnl,   30deg helix angle,  1.5mm wi_web: "
-           + $"{(TWOPI*r_tht/no_web - 1.5f)*cos(torad(30f))} mm");
+           + $"{(TWOPI*R_tht/no_web - 1.5f)*cos(torad(30f))} mm");
         print("th_chnl,   30deg helix angle,  1.5mm th_web: "
-           + $"{TWOPI*r_tht/no_web*cos(torad(30f)) - 1.5f} mm");
+           + $"{TWOPI*R_tht/no_web*cos(torad(30f)) - 1.5f} mm");
         print("wi_chnl,   30deg helix angle,  1.5mm wi_web: "
-           + $"{TWOPI*r_tht/no_web - 1.5f} mm");
+           + $"{TWOPI*R_tht/no_web - 1.5f} mm");
         print("wi_chnl,   30deg helix angle,  1.5mm th_web: "
-           + $"{TWOPI*r_tht/no_web - 1.5f/cos(torad(30f))} mm");
+           + $"{TWOPI*R_tht/no_web - 1.5f/cos(torad(30f))} mm");
       #endif
         float wi_web = 1.5f / cos(torad(30f));
 
@@ -1007,9 +951,9 @@ public class Chamber : TPIAP.Pea {
  |  ,-'
  '-'      - e
         */
-        float Fr_a = 2f;
-        float Fr_b = 1.5f;
-        float Fr_c = 2f;
+        float FR_a = 2f;
+        float FR_b = 1.5f;
+        float FR_c = 2f;
         int divisions_a = DIVISIONS/100;
         int divisions_c = DIVISIONS/80;
 
@@ -1037,16 +981,16 @@ public class Chamber : TPIAP.Pea {
         float phi_aA = 1.25f*PI - 0.5f*phi_mani;
         Vec2 A = a + frompol(th_omani/cos(phi_aA), phi_aA);
         Vec2 C = c + uY2*th_omani/cos(phi_mani);
-        Vec2 d = new(cnt_z6, r_tht); // throat radius reasonable lower extreme.
+        Vec2 d = new(cnt_z6, R_tht); // throat radius reasonable lower extreme.
         Vec2 e = new(
             (d.Y - b.Y)/tan(phi_mani) + b.X - th_omani/sin(phi_mani),
-            r_tht
+            R_tht
         );
 
         // Now fillet the lower corner.
         neg.Add(c); // temp, to ensure the line.
         int divs_fillet = DIVISIONS/10;
-        Polygon.fillet(neg, numel(neg) - 2, Fr_b, divisions: divs_fillet);
+        Polygon.fillet(neg, numel(neg) - 2, FR_b, divisions: divs_fillet);
         neg.RemoveAt(numel(neg) - 1);
 
         // Note that this fillet has made the polygon variable-length, so
@@ -1059,13 +1003,13 @@ public class Chamber : TPIAP.Pea {
         neg = [..wall, ..fillet, c, a];
 
         // Fixed-count fillet for the outer corner and the overhang corner.
-        Polygon.fillet(neg, numel(neg) - 2, Fr_c, divisions: divisions_c);
-        Polygon.fillet(neg, numel(neg) - 1, Fr_a, divisions: divisions_a);
+        Polygon.fillet(neg, numel(neg) - 2, FR_c, divisions: divisions_c);
+        Polygon.fillet(neg, numel(neg) - 1, FR_a, divisions: divisions_a);
 
         // Pos so easyyy with all fixed-division fillets.
         pos = [d, e, C, A];
-        Polygon.fillet(pos, 3, Fr_a + th_omani, divisions: divisions_a);
-        Polygon.fillet(pos, 2, Fr_c + th_omani, divisions: divisions_c);
+        Polygon.fillet(pos, 3, FR_a + th_omani, divisions: divisions_a);
+        Polygon.fillet(pos, 2, FR_c + th_omani, divisions: divisions_c);
 
         // Place the inlet some way up the lower edge. Note the last coordinate
         // stores the axial angle.
@@ -1147,11 +1091,11 @@ public class Chamber : TPIAP.Pea {
         if (!filletless) {
             Voxels mask = new Rod(
                 inlet.transz(-zextra),
-                zextra + 1.1f*Fr_inlet,
-                D_inlet/2f + 1.1f*Fr_inlet
+                zextra + 1.1f*FR_inlet,
+                D_inlet/2f + 1.1f*FR_inlet
             );
             using (Lifted l = new(vox, mask))
-                Fillet.concave(l.vox, Fr_inlet, inplace: true);
+                Fillet.concave(l.vox, FR_inlet, inplace: true);
             key.cycle(Geez.voxels(vox));
         }
 
@@ -1175,10 +1119,10 @@ public class Chamber : TPIAP.Pea {
 
         for (int i=0; i<no_fixt; ++i) {
             float theta = i*TWOPI/no_fixt + PI/no_fixt;
-            List<Vec2> points = [new(cnt_z6, r_tht)];
+            List<Vec2> points = [new(cnt_z6, R_tht)];
             points.Add(new(
                 points[^1].X,
-                r_exit + th_iw + th_chnl + th_omani + 15f
+                R_exit + th_iw + th_chnl + th_omani + 15f
             ));
             points.Add(points[^1] - uX2*14);
             points.Add(
@@ -1209,7 +1153,7 @@ public class Chamber : TPIAP.Pea {
         Frame inlet_end = inlet.transz(L_inlet).flipzx().rotxy(PI_2);
 
         float phi = PI_2 + phi_inlet;
-        float ell = (magxy(inlet_end.pos) - r_tht)/cos(phi);
+        float ell = (magxy(inlet_end.pos) - R_tht)/cos(phi);
         vox.BoolAdd(new Rod(
             inlet_end,
             L_inlet,
@@ -1219,11 +1163,11 @@ public class Chamber : TPIAP.Pea {
         if (!filletless) {
             Voxels mask = new Rod(
                 inlet,
-                1.4f*Fr_inlet,
-                D_inlet/2f + 1.4f*Fr_inlet
+                1.4f*FR_inlet,
+                D_inlet/2f + 1.4f*FR_inlet
             ).extended(zextra, Extend.DOWN);
             using (Lifted l = new(vox, mask))
-                Fillet.concave(l.vox, Fr_inlet, inplace: true);
+                Fillet.concave(l.vox, FR_inlet, inplace: true);
         }
 
         vox.BoolAdd(new Bar(
@@ -1362,13 +1306,13 @@ public class Chamber : TPIAP.Pea {
 
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            float r = pm.Mr_bolt;
+            float r = pm.r_bolt;
             float Lz = pm.flange_thickness_cc;
-            float Lr = pm.Bsz_bolt/2f + pm.thickness_around_bolt;
+            float Lr = pm.D_bolt/2f + pm.thickness_around_bolt;
             Vec3 p = fromcyl(r, theta, 0f);
 
             List<Vec2> tracezr = new();
-            float rlo = pm.Or_cc + th_iw + th_chnl + th_ow - r;
+            float rlo = pm.R_cc + th_iw + th_chnl + th_ow - r;
             float zhi = squared((Lr - rlo)/Lr/2f)*10f;
             int N = DIVISIONS/16;
             for (int j=0; j<N; ++j) {
@@ -1389,7 +1333,7 @@ public class Chamber : TPIAP.Pea {
                     continue;
                 tracexy.Add(frompol(Lr, t));
             }
-            float length = 2f*(r - pm.Or_cc - th_iw - th_chnl - th_ow);
+            float length = 2f*(r - pm.R_cc - th_iw - th_chnl - th_ow);
             Vec2 A = frompol(Lr, -PI - theta_stop)
                    + frompol(length, -PI - theta_stop + PI_2);
             Vec2 B = frompol(Lr, -PI + theta_stop)
@@ -1478,15 +1422,15 @@ public class Chamber : TPIAP.Pea {
         List<Geez.Key> keys = new(pm.no_bolt);
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            Frame frame = new Frame(fromcyl(pm.Mr_bolt, theta, 0f));
-            Rod rod = new Rod(frame, pm.flange_thickness_cc, pm.Bsz_bolt/2f);
+            Frame frame = new Frame(fromcyl(pm.r_bolt, theta, 0f));
+            Rod rod = new Rod(frame, pm.flange_thickness_cc, pm.D_bolt/2f);
             keys.Add(Geez.rod(rod));
 
             hole.BoolAdd(rod.extended(EXTRA, Extend.UPDOWN));
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_cc),
                 3f*EXTRA,
-                pm.Bsz_bolt/2f + 3f
+                pm.D_washer/2f
             ));
         }
 
@@ -1494,14 +1438,14 @@ public class Chamber : TPIAP.Pea {
         keys.Add(Geez.rod(new Rod(
             new(ZERO3, -uZ3),
             pm.Lz_Ioring,
-            pm.Ir_Ioring,
-            pm.Or_Ioring
+            pm.IR_Ioring,
+            pm.OR_Ioring
         ), rings: 2, columns: 6));
         keys.Add(Geez.rod(new Rod(
             new(ZERO3, -uZ3),
             pm.Lz_Ooring,
-            pm.Ir_Ooring,
-            pm.Or_Ooring
+            pm.IR_Ooring,
+            pm.OR_Ooring
         ), rings: 2, columns: 6));
 
         key.cycle(Geez.group(keys));
@@ -1529,8 +1473,8 @@ public class Chamber : TPIAP.Pea {
 
 
         /* create overall bounding box to size screenshots. */
-        float overall_Lr = pm.Mr_bolt
-                         + pm.Bsz_bolt/2f
+        float overall_Lr = pm.r_bolt
+                         + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
         float overall_Lz = cnt_z6 - cnt_z0 + 2f*EXTRA;
         float overall_Mz = overall_Lz/2f - EXTRA;
@@ -1641,14 +1585,14 @@ public class Chamber : TPIAP.Pea {
 
         // Fillet the throat to stop it looking like a discontinuity lmao.
         if (!filletless) {
-            float Fr = 0.75f*r_tht;
+            float FR = 0.75f*R_tht;
             Voxels mask = new Donut(
                 new Frame(cnt_z4*uZ3),
-                r_tht + th_iw + th_chnl + th_ow,
-                Fr + 3f
+                R_tht + th_iw + th_chnl + th_ow,
+                FR + 3f
             );
             using (Lifted l = new(part, mask))
-                Fillet.concave(l.vox, Fr, inplace: true);
+                Fillet.concave(l.vox, FR, inplace: true);
             substep("filleted throat.", view_part: true);
         } else {
             substep("skipping throat fillet.");
@@ -1709,7 +1653,7 @@ public class Chamber : TPIAP.Pea {
         part.BoolSubtract(new Rod(
             new Frame(ZERO3, -uZ3),
             2f*EXTRA,
-            pm.Mr_bolt + pm.Bsz_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
+            pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
         ));
         substep("clipped bottom excess.", view_part: true);
 
@@ -1740,7 +1684,7 @@ public class Chamber : TPIAP.Pea {
         f1 = f1.transx(50f);
         f1 = f1.cyclecw();
 
-        Frame f2 = new(fromcyl(pm.Mr_bolt, 3*TWOPI/pm.no_bolt, 0f));
+        Frame f2 = new(fromcyl(pm.r_bolt, 3*TWOPI/pm.no_bolt, 0f));
         f2 = f2.transx(-f2.pos.X, false);
         f2 = f2.transz(-EXTRA, false);
         f2 = f2.cycleccw();
@@ -1782,8 +1726,8 @@ public class Chamber : TPIAP.Pea {
 
     public void drawings(in Voxels part) {
 
-        float Lr = pm.Mr_bolt
-                 + pm.Bsz_bolt/2f
+        float Lr = pm.r_bolt
+                 + pm.D_bolt/2f
                  + pm.thickness_around_bolt;
         float Lz = cnt_z6 - cnt_z0;
 
@@ -1874,16 +1818,12 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        // Vec2 a = frompol(1f, 0f);
-        // Vec2 b = frompol(1f, PI_4);
-        // Vec2 c = frompol(1f, PI_2);
-        Vec2 a = new(4.0771093f, 4.0771093f);
-        Vec2 b = new(7.396275f, 4.0771093f);
-        Vec2 c = new(5.3384023f, 2.0192358f);
-        Geez.frame(new());
-        Geez.points([..new List<Vec2>{a,b,c}.Select((p)=>fromzr(p))], 0.1f);
-        Geez.point(fromzr(Polygon.corner_normal(a, b, c, 0.2f)), 0.1f, COLOUR_BLUE);
-        Geez.point(fromzr(Polygon.corner_thicken(a, b, c, 0.2f)), 0.1f, COLOUR_BLUE);
+        Vec3 v = uZ3;
+        Geez.dir(v);
+        Vec3 a = rotzx(v, PI_4);
+        Geez.dir(a, colour: COLOUR_BLUE);
+        a = rotyz(a, PI_4);
+        Geez.dir(a, colour: COLOUR_GREEN);
     }
 
 

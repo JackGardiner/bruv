@@ -1,22 +1,21 @@
 {
     "part_mating": {
-        "Or_cc": 50.0,
+        "R_cc": 50.0,
 
         "Mr_chnl": 60.0,
         "min_wi_chnl": 2.0,
 
-        "Ir_Ioring": 52.5,
-        "Or_Ioring": 55.5,
-        "Ir_Ooring": 64.5,
-        "Or_Ooring": 67.5,
+        "IR_Ioring": 52.5,
+        "OR_Ioring": 55.5,
+        "IR_Ooring": 64.5,
+        "OR_Ooring": 67.5,
         "Lz_Ioring": 2.0,
         "Lz_Ooring": 2.0,
 
         "no_bolt": 8,
-        "Mr_bolt": 76.0,
-        "Bsz_bolt": 6.0,
-        "Bln_bolt": 20.0,
-        "Or_washer": 6.0,
+        "r_bolt": 76.0,
+        "D_bolt": 6.3,
+        "D_washer": 12.5,
 
         "P_cc": 35e5,
         "mdot_LOx": 1.2,
@@ -24,7 +23,7 @@
         "rho_LOx": 1141.0,
         "rho_IPA": 786.0,
 
-        "thickness_around_bolt": 5.0,
+        "thickness_around_bolt": 6.0,
         "flange_thickness_cc": 7.0,
         "flange_thickness_inj": 7.0,
         "flange_outer_radius": 78.0,
@@ -34,7 +33,7 @@
         "L_cc": 100.0,
 
         "AEAT": 5.2,
-        "r_tht": 23.0,
+        "R_tht": 23.0,
 
         "NLF": 0.94,
         "phi_conv": -0.7853981633974483,
@@ -59,7 +58,7 @@
         "L_inlet": 15.0,
         "D_inlet": 12.7,
         "th_inlet": 3.0,
-        "Fr_inlet": 7.0,
+        "FR_inlet": 7.0,
 
         "theta_tc": 1.5707963267948966,
         "no_tc": 6,
@@ -92,17 +91,17 @@
             "th_nz1": 0.8,
             "Pr_inj1": 1.25,
             "Pr_inj2": 1.25,
-            "Fr_LOx": 2.0,
-            "Fr_IPA": 4.0,
-            "Fr_small": 0.3
+            "FR_LOx": 2.0,
+            "FR_IPA": 4.0,
+            "FR_small": 0.3
         }
     },
     "printer": {
         "name": "Nikon SLM280 2.0",
         "max_print_angle": 0.785398163397,
-        "bed_size_width": 280,
-        "bed_size_length": 280,
-        "bed_size_height": 365
+        "bed_size_width": 280.0,
+        "bed_size_length": 280.0,
+        "bed_size_height": 365.0
     },
     "material": {
         "name": "CuCr1Zr-NHT",
@@ -112,7 +111,7 @@
         "vertical_yield_strength": 175e6,
         "horizontal_elongation_at_break": 0.37,
         "vertical_elongation_at_break": 0.39,
-        "vickers_hardness": 75,
+        "vickers_hardness": 75.0,
         "mean_roughness": 24e-6,
         "roughness_depth": 135e-6,
         "electrical_conductivity": 11.5e6

@@ -1195,26 +1195,26 @@ public class Tubing {
     public Slice<Vec3> points { get; }
     public float ID { get; }
     public float th { get; }
-    public float Fr { get; }
+    public float FR { get; }
 
     public Tubing(in Slice<Vec3> points, float OD)
         : this(points, 0f, 0.5f*OD) {}
-    public Tubing(in Slice<Vec3> points, float ID, float th, float Fr=0f) {
+    public Tubing(in Slice<Vec3> points, float ID, float th, float FR=0f) {
         assert(numel(points) >= 2, $"numel={numel(points)}");
         assert(ID >= 0f);
         assert(th > 0f);
-        assert(Fr >= 0f);
+        assert(FR >= 0f);
         this.points = points;
         this.ID = ID;
         this.th = th;
-        this.Fr = Fr;
+        this.FR = FR;
     }
 
     public static implicit operator Voxels(Tubing obj) {
         Voxels vox = new();
         Voxels inner = new();
         bool hollow = obj.ID > 1e-3f;
-        bool filleted = obj.Fr > 1e-3f;
+        bool filleted = obj.FR > 1e-3f;
 
         if (hollow) {
             for (int i=1; i<numel(obj.points); ++i) {
@@ -1232,9 +1232,9 @@ public class Tubing {
         }
         if (filleted) {
             if (hollow)
-                vox = inner.voxDoubleOffset(obj.th + obj.Fr, -obj.Fr);
+                vox = inner.voxDoubleOffset(obj.th + obj.FR, -obj.FR);
             else
-                vox = vox.voxDoubleOffset(obj.Fr, -obj.Fr);
+                vox = vox.voxDoubleOffset(obj.FR, -obj.FR);
         }
         if (hollow)
             vox.BoolSubtract(inner);

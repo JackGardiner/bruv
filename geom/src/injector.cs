@@ -10,26 +10,6 @@ using Mesh = PicoGK.Mesh;
 using BBox3 = PicoGK.BBox3;
 
 
-// X_chnl = cooling channel property.
-// X_ch1 = inner injector element chamber property.
-// X_ch2 = outer injector element chamber property.
-// X_dmw = LOx/IPA dividing manifold wall property.
-// X_fc = film cooling property.
-// X_fcg = grouped film cooling property (each index = one group).
-// X_il1 = inner injector element inlet property.
-// X_il2 = outer injector element inlet property.
-// X_inj = axial injector property.
-// X_injg = grouped axial injector property (each index = one group).
-// X_inj1 = inner axial injector property.
-// X_inj2 = outer axial injector property.
-// X_IPA = IPA manifold property.
-// X_LOx = LOx manifold property.
-// X_nz1 = inner axial injector nozzle property.
-// X_nz2 = outer axial injector nozzle property.
-// X_omw = outer manifold wall property.
-// X_plate = base plate propoerty.
-
-
 /* INEJCTOR ELEMENT DESIGN, BI-SWIRL COAXIAL.
    the big boy.
 
@@ -84,9 +64,9 @@ public class InjectorElement {
     public required float th_il2 { get; init; }
     public required float Pr_inj1 { get; init; }
     public required float Pr_inj2 { get; init; }
-    public required float Fr_LOx { get; init; }
-    public required float Fr_IPA { get; init; }
-    public required float Fr_small { get; init; }
+    public required float FR_LOx { get; init; }
+    public required float FR_IPA { get; init; }
+    public required float FR_small { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
@@ -494,29 +474,29 @@ public class InjectorElement {
         pos.BoolAdd(Cone.phied(
             at.transz(z0_dmw),
             phi,
-            r1: B2.Y + th_inj2 + Fr_LOx + th_dmw/cos(phi) + 1f
+            r1: B2.Y + th_inj2 + FR_LOx + th_dmw/cos(phi) + 1f
         ).shelled(-th_dmw));
         pos.BoolAdd(new Rod(
             at,
             th_plate,
-            D2.Y + th_inj2 + Fr_IPA + 1f
+            D2.Y + th_inj2 + FR_IPA + 1f
         ));
 
         // Do big fillets (before inlets and pos/neg collapse)
         Voxels mask_LOx = Cone.phied(
             at.transz(z0_dmw + th_dmw/sin(phi)/2f),
             phi,
-            r1: B2.Y + th_inj2 + Fr_LOx + th_dmw/cos(phi) + 1f
+            r1: B2.Y + th_inj2 + FR_LOx + th_dmw/cos(phi) + 1f
         );
         Voxels mask_IPA = new Rod(
             at,
-            max_z + Fr_IPA,
-            D2.Y + th_inj2 + Fr_IPA + 1f
+            max_z + FR_IPA,
+            D2.Y + th_inj2 + FR_IPA + 1f
         ).extended(1f, Extend.UPDOWN);
         mask_IPA.BoolSubtract(mask_LOx);
 
-        mask_LOx.BoolIntersect(Fillet.concave(pos, Fr_LOx));
-        mask_IPA.BoolIntersect(Fillet.concave(pos, Fr_IPA));
+        mask_LOx.BoolIntersect(Fillet.concave(pos, FR_LOx));
+        mask_IPA.BoolIntersect(Fillet.concave(pos, FR_IPA));
         pos.BoolAdd(mask_LOx);
         pos.BoolAdd(mask_IPA);
 
@@ -534,13 +514,13 @@ public class InjectorElement {
 
 
         // Dreaded fillet.
-        Fillet.concave(pos, Fr_small, true);
-        Fillet.both(neg, Fr_small, true);
+        Fillet.concave(pos, FR_small, true);
+        Fillet.both(neg, FR_small, true);
 
         // dont let the inner nozzle end get filleted.
         Rod just_the_tip = new(
             at.transz(F1.X),
-            1.4f*Fr_small,
+            1.4f*FR_small,
             F1.Y,
             F1.Y + th_nz1
         );
@@ -857,9 +837,9 @@ public class Injector : TPIAP.Pea {
             new(-EXTRA, 0f),
             new(-EXTRA, Ir_chnl),
             new(th_edge, Ir_chnl),
-            new(th_plate + th_oring, pm.Or_Ioring + 0.5f),
-            new(th_plate + th_oring, pm.Ir_Ioring - 0.5f),
-            new(th_plate, pm.Ir_Ioring - 1f - th_oring*tan(phi_inner)),
+            new(th_plate + th_oring, pm.OR_Ioring + 0.5f),
+            new(th_plate + th_oring, pm.IR_Ioring - 0.5f),
+            new(th_plate, pm.IR_Ioring - 1f - th_oring*tan(phi_inner)),
             new(th_plate, 0f),
         ];
 
@@ -974,8 +954,8 @@ public class Injector : TPIAP.Pea {
 
         { // supports.
             // TODO:
-            float min_r = pm.Ir_Ioring - 1.3f;
-            float max_r = pm.Or_Ioring + 1.3f;
+            float min_r = pm.IR_Ioring - 1.3f;
+            float max_r = pm.OR_Ioring + 1.3f;
             float length = max_r - min_r;
             float aspect_ratio = 1.5f;
             float width = length / aspect_ratio;
@@ -1086,9 +1066,9 @@ public class Injector : TPIAP.Pea {
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             vox.BoolAdd(new Rod(
-                new(fromcyl(pm.Mr_bolt, theta, 0f)),
+                new(fromcyl(pm.r_bolt, theta, 0f)),
                 flange.Lz,
-                pm.Bsz_bolt/2f + pm.thickness_around_bolt
+                pm.D_bolt/2f + pm.thickness_around_bolt
             ).extended(EXTRA, Extend.DOWN));
         }
         key.voxels(vox);
@@ -1125,18 +1105,18 @@ public class Injector : TPIAP.Pea {
         Voxels vox = new();
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            Vec2 p = frompol(pm.Mr_bolt, theta);
+            Vec2 p = frompol(pm.r_bolt, theta);
             // for bolt.
             vox.BoolAdd(new Rod(
                 new(rejxy(p, 0f)),
                 pm.flange_thickness_inj,
-                pm.Bsz_bolt/2f
+                pm.D_bolt/2f
             ).extended(2f*EXTRA, Extend.UPDOWN));
             // for washer/nut.
             vox.BoolAdd(new Rod(
                 new(rejxy(p, pm.flange_thickness_inj)),
                 2f*EXTRA,
-                pm.Or_washer + 0.5f
+                pm.D_washer/2f
             ));
         }
         return vox;
@@ -1147,14 +1127,14 @@ public class Injector : TPIAP.Pea {
         Voxels vox = new Rod(
             new(),
             pm.Lz_Ioring,
-            pm.Ir_Ioring,
-            pm.Or_Ioring
+            pm.IR_Ioring,
+            pm.OR_Ioring
         ).extended(2f*EXTRA, Extend.DOWN);
         vox.BoolAdd(new Rod(
             new(),
             pm.Lz_Ooring,
-            pm.Ir_Ooring,
-            pm.Or_Ooring
+            pm.IR_Ooring,
+            pm.OR_Ooring
         ).extended(2f*EXTRA, Extend.DOWN));
         return vox;
     }
@@ -1164,24 +1144,24 @@ public class Injector : TPIAP.Pea {
 
         Voxels vox = new();
 
-        // Concial outer boundary.
+        // Conical outer boundary.
         Cone volC = new(
             new((pm.flange_thickness_inj - 0.2f)*uZ3),
             mani_vol.peak.X + mani_vol.Lz - pm.flange_thickness_inj + 0.2f,
-            pm.Mr_bolt + 2f,
+            pm.r_bolt + 2f,
             mani_vol.peak.Y
         );
 
-        float wi = 2f*(pm.Or_washer + 2f);
+        float wi = pm.D_washer + 4f;
         float semiwi = wi/2f;
 
         // Big blocks for each bolt.
-        Slice<Vec2> points = Polygon.circle(pm.no_bolt, pm.Mr_bolt);
+        Slice<Vec2> points = Polygon.circle(pm.no_bolt, pm.r_bolt);
         for (int i=0; i<numel(points); ++i) {
             Vec2 p = points[i];
             Frame frame = Frame.cyl_axial(rejxy(p, 0f));
             // x=+radial, y=+circum.
-            float Dx = -0.5f*pm.Mr_bolt + 0.5f*mani_vol.peak.Y;
+            float Dx = -0.5f*pm.r_bolt + 0.5f*mani_vol.peak.Y;
             vox.BoolAdd(new Bar(
                 frame.transx(Dx),
                 2f*abs(Dx) + EXTRA,
@@ -1215,7 +1195,7 @@ public class Injector : TPIAP.Pea {
             Frame bot = Frame.cyl_axial(rejxy(p, z0)); // x=+radial
             Frame top = bot.transz(54f - bot.pos.Z, false); // TODO:
 
-            float strut_area = squared(2f*(pm.Bsz_bolt/2f) + 4f);
+            float strut_area = squared(2f*(pm.D_bolt/2f) + 4f);
             float strut_radius = 1.2f*sqrt(strut_area/PI);
 
             int N = DIVISIONS / 5;
@@ -1362,8 +1342,8 @@ public class Injector : TPIAP.Pea {
 
 
         /* create overall bounding box to size screenshots. */
-        float overall_Lr = pm.Mr_bolt
-                         + pm.Bsz_bolt/2f
+        float overall_Lr = pm.r_bolt
+                         + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
         float overall_Lz = 54f; // approx total height
         float overall_Mz = overall_Lz/2f;

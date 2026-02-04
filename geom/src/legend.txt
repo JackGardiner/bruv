@@ -1,0 +1,93 @@
+
+consider a variable:
+  <pre>_<X>_<suf>
+
+
+PREFIXES/SUFFIXES:
+
+SHARED:
+  X_cc = chamber property.
+  X_chnl = cooling channel property.
+  X_Ioring = inner part interface O-ring property.
+  X_IPA = IPA property.
+  X_LOx = LOx property.
+  X_Ooring = outer part interface O-ring property.
+  X_bolt = part interface bolt property.
+  X_washer = part interface washer property.
+
+CHAMBER:
+  cnt_X = chamber contour construction value.
+  X_cc = chamber property.
+  X_conv = nozzle converging section property.
+  X_div = nozzle diverging section property.
+  X_exit = nozzle exit property.
+  X_gas = gas/gas volume (aka interior of cc+nozzle) property.
+  X_imani = fuel inlet manifold inner (wall) property.
+  X_inlet = fuel inlet property.
+  X_iw = inner wall property.
+  X_mani = fuel inlet manifold property.
+  X_fixt = fixtures property (note fixtures are at nozzle).
+  X_omani = fuel inlet manifold outer (wall) property.
+  X_ow = outer wall property.
+  X_part = entire chamber+nozzle part property.
+  X_tc = thermocouple property.
+  X_tht = nozzle throat property.
+  X_web = between-cooling-channel wall property.
+
+INJECTOR:
+  X_ch1 = inner injector element chamber property.
+  X_ch2 = outer injector element chamber property.
+  X_dmw = LOx/IPA dividing manifold wall property.
+  X_fc = film cooling property.
+  X_fcg = grouped film cooling property (each index = one group).
+  X_il1 = inner injector element inlet property.
+  X_il2 = outer injector element inlet property.
+  X_inj = injector element property.
+  X_injg = grouped injector element property (each index = one group).
+  X_inj1 = inner injector element property.
+  X_inj2 = outer injector element property.
+  X_nz1 = inner injector element nozzle property.
+  X_nz2 = outer injector element nozzle property.
+  X_omw = outer manifold wall property.
+  X_plate = base plate propoerty.
+
+
+
+<X>:
+
+COORDINATES:
+  x = x coordinate.
+  y = y coordinate.
+  z = z coordinate.
+  r = radial coordinate (typically along xy plane).
+  theta = angular coordinate (convention depends on `r`:
+               r along xy plane: theta measured from +X in direction of +Y
+               r along zx plane: theta measured from +Z in direction of +X
+               r along yz plane: theta measured from +Y in direction of +Z)
+  phi = axial angle relative to +Z.
+  L_ = length traced along this coordinate path (may be angular).
+  M_ = coordinate of middle.
+
+LENGTHS/ANGLES:
+  R = radius
+  D = diameter
+  off = distance normal to surface.
+  th = thickness normal to surface.
+  wi = circumferential width (non-angular).
+  ell = arc length.
+  L = length (typically axial).
+  I_ = inner length.
+  O_ = outer length.
+  M_ = middle length (average of inner and outer).
+  semi_ = semi-length (half that length).
+  FR = fillet radius.
+
+ALL OTHER:
+  A = area.
+  AEAT = nozzle exit area to throat area ratio.
+  beta = angle between two line segments.
+  D_ = discrete change in this variable.
+  NLF = nozzle length as a fraction of the length of a 15deg cone.
+  no = number of things.
+  Pr = pressure ratio, upstream / downstream.
+  Prinv = pressure ratio, downstream / upstream.

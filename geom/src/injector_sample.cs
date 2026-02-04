@@ -21,7 +21,8 @@ public class InjectorSample : TPIAP.Pea {
     public void set_modifiers(int mods) {
         _ = popbits(ref mods, TPIAP.MINIMISE_MEM);
         _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
-        assert(mods == 0);
+        if (mods != 0)
+            throw new NotImplementedException();
     }
 
 
@@ -31,16 +32,13 @@ public class InjectorSample : TPIAP.Pea {
     public required float th_plate { get; init; }
     public required float th_dmw { get; init; }
 
-    private static float extra_on_base = 3f;
+    public static float EXTEND_BASE_BY = 3f;
+    public static bool MAKE_PRINTABLE = true;
 
-    public float[] z0_cone = [];
-    public float[] max_r = [];
     public int N => numel(element);
     public void initialise() {
         assert(N == numel(element));
         assert(N == numel(no_inj));
-        z0_cone = new float[N];
-        max_r = new float[N];
         for (int i=0; i<N; ++i) {
             element[i].initialise(pm, no_inj[i]);
             File.Move(
@@ -62,7 +60,7 @@ public class InjectorSample : TPIAP.Pea {
         element.voxels(
                 at.rotxy(-PI_2 - 2/3f*PI/element.no_il2), th_plate, th_dmw,
                 out Voxels? pos, out Voxels? neg,
-                please_put_the_inner_injector_on_the_build_plate: true
+                please_put_the_inner_injector_on_the_build_plate: MAKE_PRINTABLE
             );
         // injector element = pos - neg.
 
@@ -93,7 +91,7 @@ public class InjectorSample : TPIAP.Pea {
                 .extended(EXTRA, Extend.UPDOWN));
 
         Voxels bot = new Rod(at, th_plate, Rmid)
-                .extended(extra_on_base, Extend.DOWN);
+                .extended(EXTEND_BASE_BY, Extend.DOWN);
 
         Voxels dividing = Cone.phied(
             at.transz(element.z0_dmw),
@@ -105,7 +103,7 @@ public class InjectorSample : TPIAP.Pea {
                 .extended(EXTRA, Extend.UPDOWN));
 
         Voxels sides = interior.shelled(th_outer)
-                .extended(extra_on_base, Extend.DOWN);
+                .extended(EXTEND_BASE_BY, Extend.DOWN);
 
         Voxels vox = pos; // no copy.
         vox.BoolAdd(top);
@@ -143,7 +141,7 @@ public class InjectorSample : TPIAP.Pea {
             R,
             flat_off,
             th_datum
-        ).extended(extra_on_base, Extend.DOWN);
+        ).extended(EXTEND_BASE_BY, Extend.DOWN);
         datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         datum.BoolSubtract(
             (Voxels)new Bar(
@@ -178,7 +176,7 @@ public class InjectorSample : TPIAP.Pea {
             spanner_IPA,
             Lz_side
         ).at_face(Bar.X1)
-         .extended(extra_on_base, Extend.DOWN);
+         .extended(EXTEND_BASE_BY, Extend.DOWN);
         pad.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         vox.BoolAdd(pad);
 
@@ -236,12 +234,14 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* Nozzle extension. */
-        vox.BoolAdd(new Rod(
-            at,
-            3*VOXEL_SIZE,
-            element.F1.Y,
-            element.F1.Y + element.th_nz1
-        ).extended(extra_on_base, Extend.DOWN));
+        if (MAKE_PRINTABLE) {
+            vox.BoolAdd(new Rod(
+                at,
+                3*VOXEL_SIZE,
+                element.F1.Y,
+                element.F1.Y + element.th_nz1
+            ).extended(EXTEND_BASE_BY, Extend.DOWN));
+        }
 
 
         return vox;
@@ -252,7 +252,6 @@ public class InjectorSample : TPIAP.Pea {
         TPIAP.save_mesh_only($"buildplate-100x100", buildplate);
         Geez.bar(buildplate);
 
-        assert(N == 8);
         Vec2[] corrections = [
             new(+2.0f, +3.0f),
             new(+2.0f, +2.5f),
@@ -275,8 +274,11 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-            // return new(i*50*uX3 + extra_on_base*uZ3);
+          #if false
+            return new(i*50*uX3 + EXTEND_BASE_BY*uZ3);
+          #else
             // or try to stack nicely:
+            assert(N == 8);
 
             i = remap[i];
             float x0 = -buildplate.Lx/4f - buildplate.Lx/10f;
@@ -286,13 +288,14 @@ public class InjectorSample : TPIAP.Pea {
             Vec3 point = new(
                 x0 + (i % 2) * buildplate.Lx/5f,
                 y0 + (i % 4) * buildplate.Ly/4f,
-                extra_on_base
+                EXTEND_BASE_BY
             );
             point += rejxy(corrections[i]);
             Frame at = new(point);
             if (i % 2 != 0)
                 at = at.rotxy(PI);
             return at;
+          #endif
         }
 
         Voxels all = new();
