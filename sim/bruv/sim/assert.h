@@ -5,11 +5,16 @@
 // Cheeky jumping-assert.
 
 
-// TODO: make sure this isnt jumped to with zero ret lmao.
-#define assertion_has_failed() ( setjmp(assert_jump_) )
+// `setjmp` wrapper, sets up assertions to jump to here on failure and returns
+// non-zero if any assertion fails.
+i32 assertion_has_failed(void);
 
-#define assertion_message() ( (const char*)assert_msg_ )
+// Returns the message of an assert. Only valid if an assert has failed.
+const char* assertion_message(void);
 
+// Asserts that `x` is non-zero. If `x` is zero, the assertion fails and the most
+// recent call of `assertion_has_failed` is jumped to, with `fmt_and_args` parsed
+// in a printf-manner and used as the error message.
 #define assert(x, fmt_and_args...) do {                                         \
         if (__builtin_expect_with_probability(!(x), 0, 1.0)) {                  \
             int off = snprintf(assert_msg_, numel(assert_msg_),                 \
@@ -22,11 +27,12 @@
                     off = -1;                                                   \
             } else off = -1;                                                    \
             if (!within(off, 0, numel(assert_msg_) - 1))                        \
-                strncpy(assert_msg_, "christ it overflew (or errored)",         \
-                        numel(assert_msg_));                                    \
+                __builtin_strncpy(assert_msg_, "christ it overflew (or "        \
+                        "errored)", numel(assert_msg_));                        \
             longjmp(assert_jump_, 1);                                           \
         }                                                                       \
     } while (0)
+
 
 
 /* PRIVATE */

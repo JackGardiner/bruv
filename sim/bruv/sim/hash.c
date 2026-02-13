@@ -14,8 +14,6 @@ u64 hash_u64(u64 x) {
 }
 
 u64 hash_bytes(const void* buf, i64 size) {
-    // assert(isspan(buf, size)); TODO:
-
     // FNV-1a algorithm.
     // https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
     #define HASH_FNV_OFFSET ((u64)0xCBF29CE484222325U)

@@ -25,7 +25,7 @@ def subfiles(directory, ext="", recursive=True, as_str=False, as_rel=False):
     files = [path for path in directory.glob(pattern) if path.is_file()]
     parts = lambda p: p.relative_to(directory).parts
     # Ignore hidden.
-    dirs = [path for path in files
+    files = [path for path in files
             if all(not part.startswith(".") for part in parts(path))]
     # Ignore files inside pycaches.
     files = [path for path in files

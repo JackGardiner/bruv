@@ -18,7 +18,6 @@
 
 #include <setjmp.h>
 #include <stdio.h>
-#include <string.h>
 
 
 #ifdef NULL
@@ -104,52 +103,9 @@ typedef double  f64;  // 64-bit floating-point number (IEEE-754).
 #define unlikely(x...) ( __builtin_expect_with_probability(!!(x), 0, 0.95) )
 
 
-// Returns 1 if every bit in `mask` is one (set) in `x`, 0 otherwise.
-#define isset(x, mask) ( ((x) & (mask)) == (mask) )
-
-// Returns 1 if every bit in `mask` is zero (cleared) in `x`, 0 otherwise.
-#define isclr(x, mask) ( ((x) & (mask)) == 0 )
-
-
-#define within(x, lo, hi) ((lo) <= (x) && (x) <= (hi)) // TODO:
-
-
-// Expands to positive infinity in the given type.
-#define inf(x...) ( generic(typeof(x),  \
-        f32: __builtin_inff(),          \
-        f64: __builtin_inf())           \
-    )
-#define INF  ( inf(f64) )
-#define fINF ( inf(f32) )
-
-// Returns 1 if `x` is an infinite value, 0 otherwise.
-#define isinf(x...) ( (x) == inf(x) || (x) == -inf(x) )
-// Returns 1 if `x` is not an infinite value, 0 otherwise.
-#define noninf(x...) (!isinf(x))
-
-
-// Expands to a quiet NaN in the given type.
-// - Do not use this with `==` to test for nans (nan always compare unequal), use
-//      `isnan` or `nonnan`.
-#define nan(x...) ( generic(typeof(x),  \
-        f32: __builtin_nanf(""),        \
-        f64: __builtin_nan(""))         \
-    )
-#define NAN  ( nan(f64) )
-#define fNAN ( nan(f32) )
-
-// Returns 1 if `x` is NaN, 0 otherwise.
-#define isnan(x...) ( (x) != (x) )
-// Returns 1 if `x` is not NaN, 0 otherwise.
-#define notnan(x...) (!isnan(x))
-
-
-// Returns 1 if `x` is not infinite and not NaN, 0 otherwise.
-#define isgood(x...) (noninf(x) && nonnan(x))
-
-
-// Function attribute to suppress unused warnings.
-#define UNUSED_OK __attribute((__unused__))
+// Returns 1 if `x` is in `low..high` (inclusive), 0 otherwise.
+// - `low` must be <=`high`.
+#define within(x, low, high) ((low) <= (x) && (x) <= (high))
 
 
 

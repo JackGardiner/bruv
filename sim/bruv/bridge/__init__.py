@@ -1,5 +1,5 @@
 """
-Proxy module for the bridge cython.
+Proxy module for the bridge cython, lazy-loading all symbols.
 """
 
 import importlib

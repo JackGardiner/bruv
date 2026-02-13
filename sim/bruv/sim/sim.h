@@ -13,15 +13,15 @@
 
 
 // Da state array.
-typedef struct brState {
+typedef struct simState {
     #define X(name, type, flags) type name;
     SIM_INTERPRETATION
     #undef X
-} brState;
+} simState;
 
 // Returns the hash of the canonical interpretation of the state array.
 c_IH sim_interpretation_hash(void);
 
 // Errors handled via failed asserts. Called required to setup assertion failed
 // handling.
-void sim_execute(brState* rstr s);
+void sim_execute(simState* rstr s);

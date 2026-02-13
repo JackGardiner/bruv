@@ -8,12 +8,12 @@
 #define HASH_SEED ((u64)0x9E3779B97F4A7C15U)
 
 
-// Hashes the given 64b integer.
+// Hashes the given 64 bit integer.
 // - Each input value returns a unique hash.
 // - 0 returns 0.
 u64 hash_u64(u64 x);
 
-// Hashes the given byte sequence using the 64b FNV-1a hashing algorithm.
+// Hashes the given byte sequence using the 64 bit FNV-1a hashing algorithm.
 // - FNV-1a has quite good avalanching and ok speed, however if it is critical a
 //      specialised (most likely simd) hashing function would be a much better
 //      option.

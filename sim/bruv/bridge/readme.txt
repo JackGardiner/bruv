@@ -61,5 +61,4 @@ State array interpretation:
   For following a pointers data (note this includes buffer moving/resizing):
   - INPUT_DATA
   - OUTPUT_DATA
-  Note none of these flags are required or mutually exclusive, and all are set in
-  addition to the type.
+  Note none of these flags are required or mutually exclusive.

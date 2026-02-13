@@ -26,7 +26,7 @@ c_IH sim_interpretation_hash(void) {
 }
 
 
-void sim_execute(brState* rstr s) {
+void sim_execute(simState* rstr s) {
     printf("<START>\n");
     printf("dujj\nhi: %f\nbye: %f\n", s->hi, s->bye);
     for (int i=0; i<s->size; ++i)

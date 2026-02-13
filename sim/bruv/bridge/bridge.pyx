@@ -1,6 +1,6 @@
 # man get me into c as quickly as possible.
 
-# See ./readme.md for an explanation.
+# See ./readme.txt for an explanation.
 
 cdef extern from "bridge.h":
     ctypedef unsigned long long c_IH
@@ -126,10 +126,6 @@ cdef class Buffer:
     cdef void* ptr
     cdef object dt
 
-    # def __cinit__(self, ptr, dt):
-    #     self.ptr = NULL if ptr is None else ptr
-    #     self.dt = dt
-
     def view(self, numel):
         if type(numel) is not int:
             raise ValueError("expected integer numel, got "
@@ -145,6 +141,10 @@ cdef class Buffer:
 
 cdef class State:
     def __cinit__(State self, Interpretation interp):
+        """
+        Creates an uninitialised state array, interpreted as per the given
+        `interp`.
+        """
         self._array = NULL # in-case of throw
         if not interp._finalised:
             raise ValueError("requires finalised interpretation")
@@ -155,9 +155,12 @@ cdef class State:
 
 
     def __getitem__(State self, str name):
+        """
+        Returns the slot `name` (typed according to the interpretation).
+        """
         if name not in self._interp._mapping:
             raise KeyError(f"missing name: {repr(name)}")
-        idx, itype, iflags = self._interp._mapping[name]
+        idx, itype, _ = self._interp._mapping[name]
 
         cdef c_eight_bytes raw = self._get(idx)
         cdef double asfloat
@@ -177,14 +180,17 @@ cdef class State:
             buffer = Buffer()
             buffer.ptr = ptr
             buffer.dt = dt
-            # return Buffer(ptr, dt)
             return buffer
 
 
     def __setitem__(State self, str name, object value):
+        """
+        Sets the slot `name` to the given `value` (validating its type against
+        the interpretation).
+        """
         if name not in self._interp._mapping:
             raise KeyError(f"missing name: {repr(name)}")
-        idx, itype, iflags = self._interp._mapping[name]
+        idx, itype, _ = self._interp._mapping[name]
 
         cdef c_eight_bytes raw
         cdef double asfloat
@@ -219,74 +225,6 @@ cdef class State:
         self._set(idx, raw)
 
 
-
-    # # STATE GETTERS
-
-    # def get_f64(State self, str name):
-    #     cdef int idx = self._interp._mapping[name]
-    #     cdef c_eight_bytes raw = self._get(idx)
-    #     cdef double val
-    #     memcpy(&val, &raw, 8)
-    #     return val
-
-    # def get_i64(State self, str name):
-    #     cdef int idx = self._interp._mapping[name]
-    #     cdef c_eight_bytes raw = self._get(idx)
-    #     cdef long long val
-    #     memcpy(&val, &raw, 8)
-    #     return val
-
-    # def get_ptr(State self, str name, int numel, object dtype):
-    #     cdef int idx = self._interp._mapping[name]
-    #     cdef object dt = self._checked_dtype(dtype)
-    #     assert numel >= 0
-
-    #     cdef c_eight_bytes raw = self._get_raw(idx)
-    #     cdef void* ptr
-    #     memcpy(&ptr, &raw, 8)
-    #     if ptr == NULL:
-    #         if numel != 0:
-    #             raise MemoryError() # ig?
-    #         return None
-    #     cdef long long arrsize = numel * dt.itemsize
-    #     cdef unsigned char[:] view = <unsigned char[:arrsize]>ptr
-    #     return np.asarray(view, copy=False).view(dt)
-
-
-    # # STATE SETTERS
-
-    # def set_f64(State self, str name, double val):
-    #     cdef int idx = self._interp._mapping[name]
-    #     cdef c_eight_bytes raw
-    #     memcpy(&raw, &val, 8)
-    #     self._set(idx, raw)
-
-    # def set_i64(State self, str name, long long val):
-    #     cdef int idx = self._interp._mapping[name]
-    #     cdef c_eight_bytes raw
-    #     memcpy(&raw, &val, 8)
-    #     self._set(idx, raw)
-
-    # def set_ptr(State self, str name, object arr):
-    #     cdef int idx = self._interp._mapping[name]
-    #     if arr is None: # treat as null pointer.
-    #         self._set(idx, <c_eight_bytes>0)
-    #         return
-
-    #     if arr.ndim != 1:
-    #         raise TypeError("array must be 1D")
-    #     if not arr.flags["C_CONTIGUOUS"]:
-    #         raise TypeError("array must be C-contiguous.")
-    #     cdef object dt = self._checked_dtype(arr.dtype)
-
-    #     cdef c_eight_bytes raw
-    #     cdef void* val = np.PyArray_DATA(arr)
-    #     memcpy(&raw, &val, 8)
-    #     self._set(idx, raw)
-
-
-    # EXECUTE
-
     def execute(State self):
         """
         Executes the sim library on the current state. Returns None on success,
@@ -305,7 +243,7 @@ cdef class State:
 
     # PRIVATE
 
-    _TO_DTYPE = { # native endianness.
+    _TO_DTYPE = {                        # native endianness.
         Interpretation.PTR_F32: np.dtype("=f4"),
         Interpretation.PTR_F64: np.dtype("=f8"),
         Interpretation.PTR_I8:  np.dtype("i1"),

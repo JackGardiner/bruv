@@ -153,6 +153,9 @@ def _gcc_cmd(extra_args=()):
         "-fsigned-char", # Required by the program. No real reason, just helpful
                          # to choose one.
 
+        "-fno-builtin", # we override a lot of builtins with our own
+                        # implementation.
+
         "-fmax-errors=5",
         "-Werror",
 
@@ -235,25 +238,23 @@ def _gcc_cmd(extra_args=()):
     out = paths.SIM_LIB
 
     # Check for alternative directives.
-    DIRECTIVE_ARGSS = {"-E", "-S", "-c"}
-    prepro = "-E" in extra_args
-    disas = "-S" in extra_args
-    nolink = "-c" in extra_args
-    given_directives = [prepro, disas, nolink]
-    extra_args = [x for x in extra_args if x not in DIRECTIVE_ARGSS]
+    DIRECTIVE_ARGS = {
+        "-E": paths.SIM_PREPRO,
+        "-S": paths.SIM_DISAS,
+        "-c": paths.SIM_OBJ,
+    }
+    given_directives = {arg: (arg in extra_args) for arg in DIRECTIVE_ARGS}
+    extra_args = [arg for arg in extra_args if arg not in DIRECTIVE_ARGS]
 
-    if sum(given_directives) > 1:
-        print("\nerror: cannot multiple directives (-E/-S/-c)")
+    if sum(given_directives.values()) > 1:
+        print("error: cannot multiple directives "
+             f"({'/'.join(map(str, DIRECTIVE_ARGS))})")
         raise BuildError()
-    if prepro:
-        directive = ["-E"]
-        out = paths.SIM_PREPRO
-    elif disas:
-        directive = ["-S"]
-        out = paths.SIM_DISAS
-    elif nolink:
-        directive = ["-c"]
-        out = paths.SIM_OBJ
+    for arg, path in DIRECTIVE_ARGS.items():
+        if given_directives[arg]:
+            directive = [arg]
+            out = path
+            break
 
     # Compile and link (dm) in one step (word dont check dm).
     cmd = [
@@ -270,11 +271,11 @@ def _gcc_cmd(extra_args=()):
 
         "-o", str(out),
 
-        *extra_args
+        *extra_args,
     ]
 
     # Any directive other than none results in no sim lib.
-    builds_lib = sum(given_directives) == 0
+    builds_lib = sum(given_directives.values()) == 0
 
     return cmd, builds_lib
 

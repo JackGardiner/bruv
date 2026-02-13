@@ -8,7 +8,6 @@ import numpy as np
 from . import bridge
 
 def main():
-    print("loaded bridge:", bridge)
 
     interp = bridge.Interpretation()
     interp.append("hi",   interp.F64, interp.INPUT)
@@ -31,6 +30,9 @@ def main():
     ret = state.execute()
     print("returned:", ret)
     print("modified array:", arr)
+
+    return ret is not None
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

@@ -1,6 +1,6 @@
 // c my beloved.
 
-// See ./readme.md for an explanation.
+// See ./readme.txt for an explanation.
 
 #ifndef BRIDGE_H_
 #define BRIDGE_H_
@@ -32,23 +32,23 @@ typedef unsigned long long c_IH;
 // any of the flags.
 typedef unsigned int c_IHentry;
 
-#define C_F64     ((c_IHentry)1)
-#define C_I64     ((c_IHentry)2)
-#define C_PTR_F32 ((c_IHentry)3)
-#define C_PTR_F64 ((c_IHentry)4)
-#define C_PTR_I8  ((c_IHentry)5)
-#define C_PTR_I16 ((c_IHentry)6)
-#define C_PTR_I32 ((c_IHentry)7)
-#define C_PTR_I64 ((c_IHentry)8)
-#define C_PTR_U8  ((c_IHentry)9)
-#define C_PTR_U16 ((c_IHentry)10)
-#define C_PTR_U32 ((c_IHentry)11)
-#define C_PTR_U64 ((c_IHentry)12)
+#define C_F64     ((c_IHentry)0x1)
+#define C_I64     ((c_IHentry)0x2)
+#define C_PTR_F32 ((c_IHentry)0x3)
+#define C_PTR_F64 ((c_IHentry)0x4)
+#define C_PTR_I8  ((c_IHentry)0x5)
+#define C_PTR_I16 ((c_IHentry)0x6)
+#define C_PTR_I32 ((c_IHentry)0x7)
+#define C_PTR_I64 ((c_IHentry)0x8)
+#define C_PTR_U8  ((c_IHentry)0x9)
+#define C_PTR_U16 ((c_IHentry)0xA)
+#define C_PTR_U32 ((c_IHentry)0xB)
+#define C_PTR_U64 ((c_IHentry)0xC)
 
-#define C_INPUT       ((c_IHentry)0x10000000U)
-#define C_OUTPUT      ((c_IHentry)0x20000000U)
-#define C_INPUT_DATA  ((c_IHentry)0x40000000U)
-#define C_OUTPUT_DATA ((c_IHentry)0x80000000U)
+#define C_INPUT       ((c_IHentry)0x10U)
+#define C_OUTPUT      ((c_IHentry)0x20U)
+#define C_INPUT_DATA  ((c_IHentry)0x40U)
+#define C_OUTPUT_DATA ((c_IHentry)0x80U)
 
 
 // Initial value of an interpretation hash.
