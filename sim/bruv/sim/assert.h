@@ -26,9 +26,10 @@ const char* assertion_message(void);
                 if (off2 < 0 || off + off2 > numel(assert_msg_) - 1)            \
                     off = -1;                                                   \
             } else off = -1;                                                    \
-            if (!within(off, 0, numel(assert_msg_) - 1))                        \
+            if (!within(off, 0, numel(assert_msg_) - 1)) {                      \
                 __builtin_strncpy(assert_msg_, "christ it overflew (or "        \
                         "errored)", numel(assert_msg_));                        \
+            }                                                                   \
             longjmp(assert_jump_, 1);                                           \
         }                                                                       \
     } while (0)

@@ -132,12 +132,13 @@ def _gcc_cmd(extra_args=()):
     # gcc args used for compiling.
     comp_args = [
         "-std=c11",
+        "-m64",
+        "-fPIC",
 
         # Include the src dir (which (should) be the working dir). Note that
         # using the dot allows for tidier `__FILE__` macros and such.
         "-iquote", ".",
 
-        "-m64",
         "-O3",
         "-fipa-pta",
         "-fwhole-program", # possible because of godfile compilation. must mark
@@ -146,15 +147,32 @@ def _gcc_cmd(extra_args=()):
 
         "-march=native", # build+tune for this machine, since builds are never
         "-mtune=native", #   distributed anywhere.
-        "-fPIC",
 
-        "-masm=intel",
-
-        "-fsigned-char", # Required by the program. No real reason, just helpful
-                         # to choose one.
+        # I'm not sure if this is a mingw bug or if im misinterpreting the asm
+        # and the ms abi, but it seems that gcc never assumes the stack is
+        # 16-byte aligned. From the ms-abi, it says that frame functions should
+        # have a 16-byte aligned stack, yet it seems gcc will explicitly align
+        # it when it needs it, even in what i think is a frame function?
+        # specifically, i found this when using builtins such as
+        # `__builtin_fabs`. See https://godbolt.org/z/r7a1bc76v for
+        # demonstration. Would love some concrete evidence as to whether these
+        # options are fine to use and whether its a compiler bug.
+        # For now: looks good, let's ship it.
+        # Follow-up: idk why i didn't think of this at the time but mingw-clang
+        # doesn't have the same issues, it seems to correctly identify that the
+        # stack is already 16-byte aligned. So yeah, likely a gcc/mingw-gcc bug.
+        "-mpreferred-stack-boundary=4",
+        "-mincoming-stack-boundary=4",
 
         "-fno-builtin", # we override a lot of builtins with our own
                         # implementation.
+
+        "-DBR_COMPILING=1", # let source code know we compiling fr.
+
+        "-masm=intel", # inline and output assembly in intel syntax.
+
+        "-fsigned-char", # Required by the program. No real reason, just helpful
+                         # to choose one.
 
         "-fmax-errors=5",
         "-Werror",
@@ -196,6 +214,7 @@ def _gcc_cmd(extra_args=()):
                                    # longer useful.
 
         "-fno-ident", # gootbye gcc signature.
+
         "-fno-exceptions",
         "-fno-unwind-tables",
         "-fno-asynchronous-unwind-tables",
