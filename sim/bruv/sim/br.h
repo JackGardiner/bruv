@@ -948,7 +948,7 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 // Ultra long macros defined in here. Big ass file. Also put before the other one
 // bc some of those depend on these.
-#include "br.ii"
+#include "br_impl_long.h"
 
 // Most implementations in here.
-#include "br.i"
+#include "br_impl.h"
