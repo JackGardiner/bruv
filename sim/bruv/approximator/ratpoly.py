@@ -7,8 +7,11 @@ import itertools
 import math
 
 import numpy as np
+import scipy
 
-__all__ = ["IdxGenerator", "Evaluator", "Printer",
+__all__ = ["IdxGenerator",
+           "Evaluator", "EvaluatorAbsOnly", "EvaluatorRelOnly",
+           "Printer",
            "Polynomial", "RationalPolynomial"]
 
 
@@ -162,8 +165,8 @@ class IdxGenerator:
             if blitz > 0:
                 min_cost = int(max_cost / (2 + 1.0/blitz))
                 max_cost -= min_cost
-            for pidxs, pcost in allidxs(dims, min_cost, max_cost, blitz=blitz):
-                for qidxs, _ in allidxs_at_cost(dims, cost - pcost, blitz=blitz):
+            for pidxs, pcost in cls.all_idxs_1D(dims, min_cost, max_cost, blitz):
+                for qidxs, _ in cls.at_cost_1D(dims, cost - pcost, blitz):
                     # if the numerator and denominator both dont have constants,
                     # x can be factored from both.
                     #  (x + x^2) / x == 1 + x
@@ -184,67 +187,102 @@ class IdxGenerator:
 
 
 
-class Evaluator:
-    def __init__(self, real_values, relweight=1, absweight=2,
-            residuals_are_geommean=True, error_is_rms=False):
+class EvaluatorBase:
+    def __init__(self, leave_when_better_than):
+        self.leave_when_better_than = leave_when_better_than
+
+    def _call_ret(self, residuals):
+        error = residuals.max()
+        error = float(error)
+        leave = False
+        if self.leave_when_better_than is not None:
+            leave = error < self.leave_when_better_than
+        return residuals, error, leave
+
+class Evaluator(EvaluatorBase):
+    def __init__(self, real_values, weight_rel=1, weight_abs=1, weight_max=1,
+            leave_when_better_than=None):
+        super().__init__(leave_when_better_than)
         self.real_values = real_values
-        self.real_value_span = real_values.max() - real_values.min()
-        self.relweight = relweight
-        self.absweight = absweight
-        self.residuals_are_geommean = residuals_are_geommean
-        self.error_is_rms = error_is_rms
+        self._real_value_span = real_values.max() - real_values.min()
+        self.weight_rel = weight_rel
+        self.weight_abs = weight_abs
+        self.weight_max = weight_max
 
     def __call__(self, values):
-        if self.relweight > 0:
-            relative = (values - self.real_values) / self.real_value_span
-        if self.absweight > 0:
-            absolute = values / self.real_values - 1
+        relative = (values - self.real_values.ravel()) / self._real_value_span
+        relative = np.abs(relative)
+        absolute = values / self.real_values.ravel() - 1
+        absolute = np.abs(absolute)
 
-        if self.relweight > 0 and self.absweight > 0:
-            if self.residuals_are_geommean:
-                relative = np.log(relative)
-                absolute = np.log(absolute)
-            relative *= self.relweight
-            absolute *= self.absweight
+        relative *= self.weight_rel
+        absolute *= self.weight_abs
 
-        if self.relweight > 0 and self.absweight > 0:
-            residuals = relative + absolute
-        elif self.relweight > 0:
-            residuals = relative
-        elif self.absweight > 0:
-            residuals = absolute
+        residuals = self.weight_rel*relative + self.weight_abs*absolute
+        residuals /= self.weight_rel + self.weight_abs
 
-        if self.relweight > 0 and self.absweight > 0:
-            residuals /= self.relweight + self.absweight
-            if self.residuals_are_geommean:
-                residuals = np.exp(residuals)
+        residuals += self.weight_max * residuals.max()
+        residuals /= self.weight_max + 1.0
 
-        if self.error_is_rms:
-            error = np.sqrt(np.mean(residual**2))
-        else:
-            error = residuals.max()
+        return self._call_ret(residuals)
 
-        leave = False # never
-        return residuals, float(error), leave
+    def abs_error(self, values):
+        return (values - self.real_values) / self._real_value_span
+    def rel_error(self, values):
+        return values / self.real_values - 1
+
+class EvaluatorAbsOnly(EvaluatorBase):
+    def __init__(self, real_values, leave_when_better_than=None):
+        super().__init__(leave_when_better_than)
+        self.real_values = real_values.ravel()
+
+    def __call__(self, values):
+        residuals = values / self.real_values - 1
+        residuals = np.abs(residuals)
+        return self._call_ret(residuals)
+
+class EvaluatorRelOnly(EvaluatorBase):
+    def __init__(self, real_values, leave_when_better_than=None):
+        super().__init__(leave_when_better_than)
+        self.real_values = real_values.ravel()
+        self._real_value_span = real_values.max() - real_values.min()
+        self.leave_when_better_than = leave_when_better_than
+
+    def __call__(self, values):
+        residuals = (values - self.real_values) / self._real_value_span
+        residuals = np.abs(residuals)
+        return self._call_ret(residuals)
+
+class EvaluatorMaxOnly(EvaluatorBase):
+    def __init__(self, real_values, leave_when_better_than=None):
+        super().__init__(leave_when_better_than)
+        self.real_values = real_values.ravel()
+        self.leave_when_better_than = leave_when_better_than
+
+    def __call__(self, values):
+        residuals = values / self.real_values - 1
+        residuals = np.abs(residuals)
+        residuals = np.full_like(residuals, residuals.max())
+        return self._call_ret(residuals)
 
 
 
 class Printer:
-    def __init__(self, print_all_below=0.012, padto=55):
+    def __init__(self, print_all_below=0.012, padto=40):
         self.padto = padto
         self.print_all_below = print_all_below
         self._best = float("inf")
         self._line_start = None
 
     def trying(self, pidxs, qidxs):
-        s = f"[{pidxs}, {qidxs}]"
+        s = f"{pidxs}, {qidxs}"
         print(s + " " * (self.padto - len(s)), end="\r")
         self._line_start = s
 
     def tried(self, ratpoly, error):
         if error <= max(self._best, self.print_all_below):
             s = f"{self._line_start} .."
-            s += "." * (padto - len(s))
+            s += "." * (self.padto - len(s))
             s += f" {100 * error:.4g}%"
             print(s + " *" * (error <= self._best))
         self._best = min(self._best, error)
@@ -314,9 +352,9 @@ class RationalPolynomial:
         values = values.ravel()
 
         if any((x == 0.0).any() for x in flatcoords):
-            raise Exception("zero!")
+            raise Exception("zero-coord in input")
         if any(((x > 0.0) != (x[0] > 0.0)).any() for x in flatcoords):
-            raise Exception("zero?")
+            raise Exception("zero-coord in input?")
 
         def initial_coeffs(pidxs, qidxs):
             initial = np.zeros(len(pidxs) - 1 + len(qidxs))
@@ -334,7 +372,7 @@ class RationalPolynomial:
         def find_best(pidxs, qidxs):
             maxidx = max(pidxs)
             maxidx = max(maxidx, max(qidxs))
-            maxdegree = degreeof(maxidx)
+            maxdegree = degreeof(dims, maxidx)
             # dont evaluate super low degree, just bump up.
             maxdegree = max(maxdegree, 6 // dims)
             if maxdegree > find_best.N:
@@ -348,7 +386,7 @@ class RationalPolynomial:
             # Optimise via least squares, since its significantly more stable
             # than a minimise-max-error optimiser.
             diff = lambda coeffs: compute(coeffs)[1]
-            coeffs = initial_coeffs()
+            coeffs = initial_coeffs(pidxs, qidxs)
             res = scipy.optimize.least_squares(diff, coeffs,
                     method="lm") # seems like the best method after testing.
             return compute(res.x)
@@ -371,7 +409,7 @@ class RationalPolynomial:
             if leave:
                 break
         assert best_ratpoly is not None
-        return best_ratpoly
+        return best_ratpoly, best_error
 
     def __init__(self, p, q):
         assert p.dims == q.dims
@@ -384,7 +422,8 @@ class RationalPolynomial:
             assert self.dims == len(coords)
             assert all(c.shape == coords[0].shape for c in coords)
         flatcoords = [x.ravel() for x in coords]
-        ones = self.ones(*flatcoords)
+        maxdegree = max(self.p.degree, self.q.degree)
+        ones = yup_all_ones(maxdegree, *flatcoords)
         value = self.eval_ones(ones)
         value = value.reshape(coords[0].shape)
         return value

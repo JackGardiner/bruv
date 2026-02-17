@@ -4,8 +4,10 @@ Array/grid creation functions.
 
 import numpy as np
 
-__all__ = ["linspace", "arcspace"]
+__all__ = ["meshgrid", "linspace", "arcspace"]
 
+
+meshgrid = np.meshgrid
 
 def concentrate(X, c, s):
     # https://www.desmos.com/calculator/nncnokstzq
