@@ -7,7 +7,9 @@ import numpy as np
 
 from . import bridge
 
-def main():
+__all__ = ["run"]
+
+def run():
 
     interp = bridge.Interpretation()
     interp.append("hi",   interp.F64, interp.INPUT)
@@ -37,4 +39,4 @@ def main():
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         raise RuntimeError("bruv.frontend does not have command line args")
-    sys.exit(main())
+    sys.exit(run())

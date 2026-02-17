@@ -14,7 +14,7 @@ def main():
     except build.BuildError:
         return 2
     # Run me.
-    return frontend.main()
+    return frontend.run()
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

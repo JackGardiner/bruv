@@ -1,5 +1,5 @@
 """
-Deletes any directories and files created from compiling.
+Delete any directories and files created from compiling.
 """
 
 import traceback
@@ -34,8 +34,8 @@ def clean():
         return False
 
     # Del bin and any pycaches.
-    dirs = [paths.BIN] + [p for p in paths.subdirs(paths.BRUV)
-                          if p.name == "__pycache__"]
+    dirs = [paths.BIN, paths.OUT] + [p for p in paths.subdirs(paths.BRUV)
+                                     if p.name == "__pycache__"]
     files = [] # no explicit files.
     deleted = 0
     deleted += sum(map(del_dir, dirs))

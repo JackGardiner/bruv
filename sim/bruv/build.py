@@ -3,6 +3,7 @@ Compiles the sim library and cythonises the bridge module.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -89,7 +90,7 @@ def _needa_sim(deps, built):
     if data is None: # missing
         return True
     try:
-        cmd, _ = _gcc_cmd()
+        cmd = _gcc_cmd()[0]
     except BuildError:
         cmd = None # yeah nah
     if data["command"] != cmd:
@@ -296,14 +297,14 @@ def _gcc_cmd(extra_args=()):
     # Any directive other than none results in no sim lib.
     builds_lib = sum(given_directives.values()) == 0
 
-    return cmd, builds_lib
+    return cmd, builds_lib, out
 
 def _build_sim(deps, gcc_extra_args=()):
-    cmd, builds_lib = _gcc_cmd(gcc_extra_args)
+    cmd, builds_lib, out = _gcc_cmd(gcc_extra_args)
     print(f">> {" ".join(cmd)}\n")
 
     # Ensure output dir.
-    paths.BIN_SIM.mkdir(parents=True, exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     # Make the godfile source code, which just #include's every source file and
     # is the only translation unit we ever use. The benefits of this compared to
@@ -320,7 +321,7 @@ def _build_sim(deps, gcc_extra_args=()):
     srcs = [p for p in deps if p.suffix == ".c"]
     srcs = sorted(srcs) # just arbitrary but consistent ordering.
     if not srcs:
-        print("error: must have at-least one source sim (.c) file\n")
+        print("error: must have at least one source sim (.c) file\n")
         raise BuildError()
     def to_include(p):
         path = p.relative_to(paths.SIM).as_posix()
@@ -329,7 +330,8 @@ def _build_sim(deps, gcc_extra_args=()):
     godfile = "".join(to_include(p) for p in srcs)
 
 
-    _save_sim(cmd, deps, gcc_extra_args) # stash me.
+    if builds_lib:
+        _save_sim(cmd, deps, gcc_extra_args) # stash me.
 
     # Execute gcc (with working dir in the source files (required)).
     proc = subprocess.Popen(
@@ -387,7 +389,7 @@ def _build_bridge(deps):
         pyxs = [str(p) for p in relled.values() if p.suffix == ".pyx"]
         pyxs = sorted(pyxs) # arbitrary but consistent ordering.
         if not pyxs:
-            print("error: must have at-least one source bridge (.pyx) file\n")
+            print("error: must have at least one source bridge (.pyx) file\n")
             raise BuildError()
 
         with paths.pushd(paths.BIN_BRIDGE):
@@ -437,6 +439,10 @@ class BuildError(RuntimeError):
 
 
 def build(gcc_extra_args=(), must=True):
+    # Hack to enable console colours (on windows).
+    os.system("")
+
+
     # Recompute dependancies and previous build products.
     sim_deps = paths.sim_deps()
     bridge_deps = paths.bridge_deps()
@@ -452,12 +458,13 @@ def build(gcc_extra_args=(), must=True):
         if not must and not _needa_sim(sim_deps, sim_built):
             print("Using previously built sim library.") # no \n
         else:
-            print("Rebuilding sim library...\n")
+            print("Building sim library...\n")
             if not _build_sim(sim_deps, gcc_extra_args):
                 # may have been given args which dont build the actual library.
-                print("that's all folks.")
+                print("nevermind that's all folks.")
+                print("  (non-build directive was given to gcc)")
                 return
-            print("Rebuilt sim library.\n")
+            print("Built sim library.\n")
     except BuildError:
         # dont leak half-baked goods.
         try:

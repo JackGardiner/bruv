@@ -19,6 +19,10 @@ def shortstr(path):
     return repr(path.as_posix())
 
 
+def isopen(file):
+    return file is not None and not file.closed
+
+
 def subfiles(directory, ext="", recursive=True, as_str=False, as_rel=False):
     directory = Path(directory)
     pattern = "**/"*bool(recursive) + "*" + ext
@@ -106,6 +110,62 @@ class pushd:
         os.chdir(self._old_dir)
 
 
+class splice_stdout:
+    """
+    Splices stdout to (optionally) be redirected to file.
+    """
+
+    def __init__(self, path, view=True, save=False):
+        self.path = path
+        self.view = view
+        self.save = save
+        self._fview = None
+        self._fsave = None
+        self._old_stdout = None
+        self._buffer = ""
+
+    def __enter__(self):
+        self._fview = None
+        self._fsave = None
+        self._old_stdout = sys.stdout
+        if self.view:
+            self._fview = sys.stdout
+        if self.save:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._fsave = open(self.path, "w", encoding="utf-8")
+        sys.stdout = self
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if isopen(self._fsave) and self._buffer:
+                self._fsave.write(self._buffer)
+                self._buffer = ""
+        finally:
+            if isopen(self._fsave):
+                self._fsave.close()
+            sys.stdout = self._old_stdout
+            self._old_stdout = None
+            self._fsave = None
+            self._fview = None
+
+    def write(self, text):
+        if isopen(self._fview):
+            self._fview.write(text)
+        if isopen(self._fsave):
+            lines = (self._buffer + text).split("\n")
+            lines = [l.split("\r")[-1] for l in lines]
+            self._fsave.write("".join(l + "\n" for l in lines[:-1]))
+            self._buffer = lines[-1]
+
+    def flush(self):
+        if isopen(self._fview):
+            self._fview.flush()
+        if isopen(self._fsave):
+            self._fsave.flush()
+
+
+
 GCC = "gcc"
 # if gcc isnt on path, you may edit this to correctly point to the executable.
 
@@ -119,10 +179,13 @@ BRIDGE = BRUV / "bridge"
 BIN = ROOT / "bin"
 BIN_SIM = BIN / "sim"
 BIN_BRIDGE = BIN / "bridge"
+BIN_APPROXIMATOR = BIN / "approximator"
 
-SIM_PREPRO = BIN_SIM / "sim.i"
-SIM_DISAS  = BIN_SIM / "sim.s"
-SIM_OBJ    = BIN_SIM / "sim.o"
+OUT = ROOT / "out"
+
+SIM_PREPRO = OUT / "sim.i"
+SIM_DISAS  = OUT / "sim.s"
+SIM_OBJ    = OUT / "sim.o"
 
 SIM_LIB_NAME = "sim"
 if sys.platform == "win32":
@@ -134,11 +197,14 @@ elif sys.platform == "darwin":
 else:
     SIM_LIB = BIN_SIM / f"lib{SIM_LIB_NAME}.so"
     SIM_STUBS = None
+SIM_CACHE = BIN_SIM / "cache.json"
 
 BRIDGE_MODULE_NAME = "bridge_cythonised"
-
-SIM_CACHE = BIN_SIM / "cache.json"
 BRIDGE_CACHE = BIN_BRIDGE / "cache.json"
+
+APPROXIMATOR_OUTPUT = OUT / "approximator.txt"
+APPROXIMATOR_FIGS = OUT / "approximator_figs"
+
 
 PATHS_PY = BRUV / "paths.py"
 BUILD_PY = BRUV / "build.py"
