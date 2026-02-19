@@ -3,19 +3,95 @@
 
 
 // =========================================================================== //
+// = GUARANTEES ============================================================== //
+// =========================================================================== //
+
+#if defined(__CHAR_UNSIGNED__) && __CHAR_UNSIGNED__
+  // Char must be signed because it's nice to be able to assume signed/unsigned
+  // and because of a bug in the gcc simd implementation (which doesn't matter
+  // anymore but it doesn't exactly fill you with hope).
+  #error `char` must be signed.
+#endif
+
+static_assert(__CHAR_BIT__ == 8);
+// maaaaaaan
+
+static_assert(sizeof(i8) == 1);
+static_assert(sizeof(i16) == 2);
+static_assert(sizeof(i32) == 4);
+static_assert(sizeof(i64) == 8);
+
+static_assert(sizeof(u8) == 1);
+static_assert(sizeof(u16) == 2);
+static_assert(sizeof(u32) == 4);
+static_assert(sizeof(u64) == 8);
+
+static_assert(sizeof(f32) == 4);
+static_assert(sizeof(f64) == 8);
+
+static_assert(sizeof(void*) == 8);
+static_assert(sizeof(void(*)(void)) == 8);
+
+// no guarantees about `[unsigned] long`.
+
+
+#define br_assert_align_is_size(T) static_assert(alignof(T) == sizeof(T))
+
+br_assert_align_is_size(i8);
+br_assert_align_is_size(i16);
+br_assert_align_is_size(i32);
+br_assert_align_is_size(i64);
+
+br_assert_align_is_size(u8);
+br_assert_align_is_size(u16);
+br_assert_align_is_size(u32);
+br_assert_align_is_size(u64);
+
+br_assert_align_is_size(f32);
+br_assert_align_is_size(f64);
+
+br_assert_align_is_size(void*);
+br_assert_align_is_size(void(*)(void));
+
+#undef br_assert_align_is_size
+
+
+// Check two's complement.
+static_assert(-1 == ~0);
+
+#if !(defined(__FLT_IS_IEC_60559__) && __FLT_IS_IEC_60559__)
+  #error must have IEEE-754 binary32 as float.
+#endif
+
+#if !(defined(__DBL_IS_IEC_60559__) && __DBL_IS_IEC_60559__)
+  #error must have IEEE-754 binary64 as double.
+#endif
+
+
+
+// =========================================================================== //
 // = IMPL ==================================================================== //
 // =========================================================================== //
 
 
 // VECTOR HELPERS //
 
+#define isvec_(T...) __builtin_types_compatible_p(T, vec2) \
+                  || __builtin_types_compatible_p(T, vec4)
+#define isvec2_(T...) __builtin_types_compatible_p(T, vec2)
 #if BR_COMPILING
-  #define isvec3_(T...) sametype2(T, vec3)
-  #define isvec4_(T...) sametype2(T, vec4)
+  #define isvec3_(T...) __builtin_has_attribute(T, VEC3_ATTR)
+  #define isvec4_(T...) __builtin_types_compatible_p(T, vec4) \
+                     && !__builtin_has_attribute(T, VEC3_ATTR)
+  #define all_or_none_vec3_2_(A, B) __builtin_has_attribute(A, VEC3_ATTR) \
+                                 == __builtin_has_attribute(B, VEC3_ATTR)
 #else
   #define isvec3_(T...) 0 /* pick something constexpr? */
   #define isvec4_(T...) __builtin_types_compatible_p(T, vec4)
+  #define all_or_none_vec3_2_(A, B) 1 /* something */
 #endif
+#define all_or_none_vec3_(A, B) all_or_none_vec3_2(A, B)
+
 
 #define vec2_2(x, y) (vec2){ (x), (y) }
 #define vec2_1(x)    (vec2){ (x), (x) }
@@ -25,47 +101,82 @@
 
 #define vec4_4(x, y, z, w) (vec4){ (x), (y), (z), (w) }
 #define vec4_1(x)          (vec4){ (x), (x), (x), (x) }
+#define vec4_2(xyz, w) generic(0                                        \
+        , int: (vec4){ (xyz)[0], (xyz)[1], (xyz)[2], (w) }              \
+        , default:                                                      \
+            (const char*[isvec3(xyz)]){"FIRST ARGUMENT MUST BE A vec3"} \
+    )
 
-#define fp_selectx_(f_f32, f_f64, f_vec2, f_vec3, f_vec4, xs...)    \
-    ( generic(                                                      \
-        objof(char(*)[1                                             \
-                    | 0x02*(!sametype(xs))                          \
-                    | 0x04*sametype2(f32, FIRST(xs))                \
-                    | 0x08*sametype2(f64, FIRST(xs))                \
-                    | 0x10*isvec2(FIRST(xs))                        \
-                    | 0x20*isvec3(FIRST(xs))                        \
-                    | 0x40*isvec4(FIRST(xs))                        \
-        ])                                                          \
-        IF(anyva(f_f32),  , char(*)[1 | 0x04]: f_f32 )              \
-        IF(anyva(f_f64),  , char(*)[1 | 0x08]: f_f64 )              \
-        IF(anyva(f_vec2), , char(*)[1 | 0x10]: f_vec2 )             \
-        IF(anyva(f_vec3), , char(*)[1 | 0x20]: f_vec3 )             \
-        IF(anyva(f_vec4), , char(*)[1 | 0x40]: f_vec4 )             \
-    ) )
+#if BR_COMPILING
+#define distinguish_vec3_(T) choose_expr(       \
+        __builtin_has_attribute(T, VEC3_ATTR)   \
+        , objof(genuinely_vec3)                 \
+        , objof(T)                              \
+    )
+#else
+#define distinguish_vec3_(T) objof(T)
+#endif
 
 
 
 // LIMITS //
 
-inline u32 fp_bits_f32_(f32 f) {
-    u32 u;
-    memcpy(&u, &f, sizeof(u));
-    return u;
+#define isnan_(x) generic(x \
+        ,  f32: id_i32      \
+        ,  f64: id_i32      \
+        , vec2: id_i32      \
+        , vec4: id_i32      \
+    ) (!eq2(x, x))
+#define isallnan_(x) generic(x  \
+        ,  f32: id_i32          \
+        ,  f64: id_i32          \
+        , vec2: id_i32          \
+        , vec4: id_i32          \
+    ) (!anyeq(x, x))
+
+#define isinf_(x...) anyeq(inf(x), abs(x))
+#define isallinf_(x...) eq2(inf(x), abs(x))
+
+
+inline i32 fp_bits_f32_(f32 f) {
+    i32 i;
+    memcpy(&i, &f, sizeof(i));
+    return i;
 }
-inline u64 fp_bits_f64_(f64 f) {
-    u64 u;
-    memcpy(&u, &f, sizeof(u));
-    return u;
+inline i64 fp_bits_f64_(f64 f) {
+    i64 i;
+    memcpy(&i, &f, sizeof(i));
+    return i;
+}
+inline i32x2 fp_bits_vec2_(vec2 f) {
+    i32x2 i;
+    memcpy(&i, &f, sizeof(i));
+    return i;
+}
+inline i32x4 fp_bits_vec4_(vec4 f) {
+    i32x4 i;
+    memcpy(&i, &f, sizeof(i));
+    return i;
 }
 
-inline f32 fp_from_bits_f32_(u32 u) {
+inline f32 fp_from_bits_i32_(i32 i) {
     f32 f;
-    memcpy(&f, &u, sizeof(f));
+    memcpy(&f, &i, sizeof(f));
     return f;
 }
-inline f64 fp_from_bits_f64_(u64 u) {
+inline f64 fp_from_bits_i64_(i64 i) {
     f64 f;
-    memcpy(&f, &u, sizeof(f));
+    memcpy(&f, &i, sizeof(f));
+    return f;
+}
+inline vec2 fp_from_bits_i32x2_(i32x2 i) {
+    vec2 f;
+    memcpy(&f, &i, sizeof(f));
+    return f;
+}
+inline vec4 fp_from_bits_i32x4_(i32x4 i) {
+    vec4 f;
+    memcpy(&f, &i, sizeof(f));
     return f;
 }
 
@@ -79,11 +190,11 @@ void* objof_evaled_(void);
 #define sametype_(A, B) && sametype2(A, B)
 
 #if BR_COMPILING
-  #define sametype2_(A, B) __builtin_types_compatible_p(A, B)    \
+  #define sametype2_(A, B) __builtin_types_compatible_p(A, B)   \
         && __builtin_has_attribute(A, VEC3_ATTR) ==             \
             __builtin_has_attribute(B, VEC3_ATTR)
 #else
-  #define sametype2_(A, B) __builtin_types_compatible_p(A, B)    \
+  #define sametype2_(A, B) __builtin_types_compatible_p(A, B)   \
         && ( 1 /* just some constexpr ig? */ )
 #endif
 
@@ -93,162 +204,333 @@ void* objof_evaled_(void);
 
 #define eq_(a, b) && eq2_((a), (b))
 
-#define eq2_(a, b) choose_expr(!sametype2(a, b)                             \
-        , (const char*[sametype2(a, b)]){"ARGUMENTS ARE NOT THE SAME TYPE"} \
-        , choose_expr(isvec(a)                                              \
-            , generic(objof(char(*)[1                                       \
-                                | 0x2*isvec3(a)                             \
-                                | 0x4*isvec4(a)                             \
-                ])                                                          \
-                , char(*)[1 | 0]: eq_vec2_                                  \
-                , char(*)[1 | 0x2]: eq_vec3_                                \
-                , char(*)[1 | 0x4]: eq_vec4_                                \
-            ) (a, b)                                                        \
-            , a == b                                                        \
-        )                                                                   \
+#define eq2_(a, b) generic(0                                \
+        , int: generic(distinguish_vec3(a + b)              \
+            ,            i32: eq2_i32_                      \
+            ,            i64: eq2_i64_                      \
+            ,            u32: eq2_u32_                      \
+            ,            u64: eq2_u64_                      \
+            ,            f32: eq2_f32_                      \
+            ,            f64: eq2_f64_                      \
+            ,           vec2: eq2_vec2_                     \
+            , genuinely_vec3: eq2_vec3_                     \
+            ,           vec4: eq2_vec4_                     \
+        ) (a, b)                                            \
+        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
-inline i32 eq_vec2_(vec2 a, vec2 b) {
-    i32x2 c = (a == b);
-    return !!(c[0] & c[1]);
+inline i32 eq2_i32_(i32 a, i32 b) { return a == b; }
+inline i32 eq2_i64_(i64 a, i64 b) { return a == b; }
+inline i32 eq2_u32_(u32 a, u32 b) { return a == b; }
+inline i32 eq2_u64_(u64 a, u64 b) { return a == b; }
+inline i32 eq2_f32_(f32 a, f32 b) { return a == b; }
+inline i32 eq2_f64_(f64 a, f64 b) { return a == b; }
+inline i32 eq2_vec2_(vec2 a, vec2 b) {
+    i32x2 comp = (a == b);
+    return !!(comp[0] & comp[1]);
 }
-inline i32 eq_vec4_(vec4 a, vec4 b) {
+inline i32 eq2_vec4_(vec4 a, vec4 b) {
+    i32x4 comp = (a == b);
     // bloody rangle it to use movemask.
-    i32x4 c = (a == b);
-    vec4 C;
-    memcpy(&C, &c, sizeof(C));
-    return __builtin_ia32_movmskps(C) == (i32)lobits(4);
+    i32 movmsk = __builtin_ia32_movmskps(fp_from_bits(comp));
+    return movmsk == 0xF;
 }
-inline i32 eq_vec3_(vec3 a, vec3 b) {
+inline i32 eq2_vec3_(vec3 a, vec3 b) {
     // do 4-element compare but ignore last element.
-    i32x4 c = (a == b);
-    vec4 C;
-    memcpy(&C, &c, sizeof(C));
-    return (__builtin_ia32_movmskps(C) & (i32)lobits(3)) == (i32)lobits(3);
+    i32x4 comp = (a == b);
+    i32 movmsk = __builtin_ia32_movmskps(fp_from_bits(comp));
+    return (movmsk & 0x7) == 0x7;
 }
 
-#define anyeq_(a, b) choose_expr(!sametype2(a, b)                           \
-        , (const char*[sametype2(a, b)]){"ARGUMENTS ARE NOT THE SAME TYPE"} \
-        , choose_expr(isvec(a)                                              \
-            , generic(objof(char(*)[1                                       \
-                                | 0x2*isvec3(a)                             \
-                                | 0x4*isvec4(a)                             \
-                ])                                                          \
-                , char(*)[1 | 0]: anyeq_vec2_                               \
-                , char(*)[1 | 0x2]: anyeq_vec3_                             \
-                , char(*)[1 | 0x4]: anyeq_vec4_                             \
-            ) (a, b)                                                        \
-            , a == b                                                        \
-        )                                                                   \
+#define anyeq_(a, b) generic(0                              \
+        , int: generic(distinguish_vec3(a + b)              \
+            ,            i32: anyeq_i32_                    \
+            ,            i64: anyeq_i64_                    \
+            ,            u32: anyeq_u32_                    \
+            ,            u64: anyeq_u64_                    \
+            ,            f32: anyeq_f32_                    \
+            ,            f64: anyeq_f64_                    \
+            ,           vec2: anyeq_vec2_                   \
+            , genuinely_vec3: anyeq_vec3_                   \
+            ,           vec4: anyeq_vec4_                   \
+        ) (a, b)                                            \
+        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
+inline i32 anyeq_i32_(i32 a, i32 b) { return a == b; }
+inline i32 anyeq_i64_(i64 a, i64 b) { return a == b; }
+inline i32 anyeq_u32_(u32 a, u32 b) { return a == b; }
+inline i32 anyeq_u64_(u64 a, u64 b) { return a == b; }
+inline i32 anyeq_f32_(f32 a, f32 b) { return a == b; }
+inline i32 anyeq_f64_(f64 a, f64 b) { return a == b; }
 inline i32 anyeq_vec2_(vec2 a, vec2 b) {
-    i32x2 c = (a == b);
-    return !!(c[0] | c[1]);
+    i32x2 comp = (a == b);
+    return !!(comp[0] | comp[1]);
 }
 inline i32 anyeq_vec4_(vec4 a, vec4 b) {
-    i32x4 c = (a == b);
-    vec4 C;
-    memcpy(&C, &c, sizeof(C));
-    return __builtin_ia32_movmskps(C) != 0;
+    i32x4 comp = (a == b);
+    i32 movmsk = __builtin_ia32_movmskps(fp_from_bits(comp));
+    return movmsk != 0;
 }
 inline i32 anyeq_vec3_(vec3 a, vec3 b) {
-    i32x4 c = (a == b);
-    vec4 C;
-    memcpy(&C, &c, sizeof(C));
-    return (__builtin_ia32_movmskps(C) & (i32)lobits(3)) != 0;
+    i32x4 comp = (a == b);
+    i32 movmsk = __builtin_ia32_movmskps(fp_from_bits(comp));
+    return (movmsk & 0x7) != 0;
+}
+
+
+#define ifnan_(x, dflt) generic(0                               \
+        , int: isnan(x) ? dflt : x                              \
+        , default: (const char*[all_or_none_vec3_2(x, dflt)])   \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}         \
+    )
+
+#define ifnanelem_(x, dflt) generic(0                           \
+        , int: generic(distinguish_vec3(x + dflt)               \
+            ,            f32: ifnanelem_f32_                    \
+            ,            f64: ifnanelem_f64_                    \
+            ,           vec2: ifnanelem_vec2_                   \
+            , genuinely_vec3: ifnanelem_vec3_                   \
+            ,           vec4: ifnanelem_vec4_                   \
+        ) (x, dflt)                                             \
+        , default: (const char*[all_or_none_vec3_2(x, dflt)])   \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}         \
+    )
+inline f32 ifnanelem_f32_(f32 x, f32 dflt) {
+    return (x == x) ? x : dflt;
+}
+inline f64 ifnanelem_f64_(f64 x, f64 dflt) {
+    return (x == x) ? x : dflt;
+}
+inline vec2 ifnanelem_vec2_(vec2 x, vec2 dflt) {
+    i32x2 comp = (x == x);
+    i32x2 ret = (fp_bits(x) & comp) | (fp_bits(dflt) & ~comp);
+    return fp_from_bits(ret);
+}
+inline vec4 ifnanelem_vec4_(vec4 x, vec4 dflt) {
+    i32x4 comp = (x == x);
+    i32x4 ret = (fp_bits(x) & comp) | (fp_bits(dflt) & ~comp);
+    return fp_from_bits(ret);
+}
+inline vec3 ifnanelem_vec3_(vec3 x, vec3 dflt) {
+    return ifnanelem_vec4_(x, dflt);
 }
 
 
 #define oneof_eq_(x, val) || eq2(x, (val))
 
 
-#define abs_(x) choose_expr(isvec(x)                \
-        , generic(objof(char(*)[1                   \
-                              | 0x2*isvec3(x)       \
-                              | 0x4*isvec4(x)       \
-            ])                                      \
-            , char(*)[1 | 0]: abs_vec2_             \
-            , char(*)[1 | 0x2]: abs_vec3_           \
-            , char(*)[1 | 0x4]: abs_vec4_           \
-        ) (x)                                       \
-        , choose_expr(isvec(x), 0, x < 0) ? -x : x  \
-    )
-inline vec2 abs_vec2_(vec2 x) {
+#define iabs_(x) generic(distinguish_vec3(x)    \
+        ,             i8: iabs_i8_              \
+        ,            i16: iabs_i16_             \
+        ,            i32: iabs_i32_             \
+        ,            i64: iabs_i64_             \
+        ,             u8: iabs_u8_              \
+        ,            u16: iabs_u16_             \
+        ,            u32: iabs_u32_             \
+        ,            u64: iabs_u64_             \
+        ,            f32: iabs_f32_             \
+        ,            f64: iabs_f64_             \
+        ,           vec2: iabs_vec2_            \
+        , genuinely_vec3: iabs_vec3_            \
+        ,           vec4: iabs_vec4_            \
+    ) (x)
+inline i8  iabs_i8_ (i8 x)  { return (x < 0) ? -x : x; }
+inline i16 iabs_i16_(i16 x) { return (x < 0) ? -x : x; }
+inline i32 iabs_i32_(i32 x) { return (x < 0) ? -x : x; }
+inline i64 iabs_i64_(i64 x) { return (x < 0) ? -x : x; }
+inline u8  iabs_u8_ (u8 x)  { return x; }
+inline u16 iabs_u16_(u16 x) { return x; }
+inline u32 iabs_u32_(u32 x) { return x; }
+inline u64 iabs_u64_(u64 x) { return x; }
+inline f32 iabs_f32_(f32 x) { return __builtin_fabsf(x); }
+inline f64 iabs_f64_(f64 x) { return __builtin_fabs(x); }
+inline vec2 iabs_vec2_(vec2 x) {
     return (vec2){ __builtin_fabsf(x[0])
                  , __builtin_fabsf(x[1]) };
 }
-inline vec4 abs_vec4_(vec4 x) {
+inline vec4 iabs_vec4_(vec4 x) {
     // the asm of this is hot.
     return (vec4){ __builtin_fabsf(x[0])
                  , __builtin_fabsf(x[1])
                  , __builtin_fabsf(x[2])
                  , __builtin_fabsf(x[3]) };
 }
-inline vec3 abs_vec3_(vec3 x) {
+inline vec3 iabs_vec3_(vec3 x) {
     // full builtins is faster than anything ignoring elem 4.
-    return abs_vec4_(x);
+    return iabs_vec4_(x);
 }
 
+#define abs_(x) generic(distinguish_vec3(x)    \
+        ,             i8: abs_i8_              \
+        ,            i16: abs_i16_             \
+        ,            i32: abs_i32_             \
+        ,            i64: abs_i64_             \
+        ,             u8: iabs_u8_             \
+        ,            u16: iabs_u16_            \
+        ,            u32: iabs_u32_            \
+        ,            u64: iabs_u64_            \
+        ,            f32: iabs_f32_            \
+        ,            f64: iabs_f64_            \
+        ,           vec2: iabs_vec2_           \
+        , genuinely_vec3: iabs_vec3_           \
+        ,           vec4: iabs_vec4_           \
+    ) (x)
+inline u8  abs_i8_ (i8 x)  { return (u8) ((x < 0) ? -x : x); }
+inline u16 abs_i16_(i16 x) { return (u16)((x < 0) ? -x : x); }
+inline u32 abs_i32_(i32 x) { return (u32)((x < 0) ? -x : x); }
+inline u64 abs_i64_(i64 x) { return (u64)((x < 0) ? -x : x); }
+// Cheeky rant as to why ^ these work:
+// The issue is:
+//  u64 u = iabs(intmin(i32));
+//  assert(u != (u64)0x80000000U /* |i32 min| */);
+// The incorrect result is obtained because `intmin(i32)` remains unchanged and
+// is then cast to `u64`. If it was cast to `u32` in between, the result would be
+// correct because of the properties of 2's complement and the integers being the
+// same width. That is, it "just so happens" that:
+//  (u32)intmin(i32) == -(i64)intmin(i32) /* == |i32 min| */
+// So, adding the type-fitting unsigned conversion solves the issue.
 
-#define min_(a, b) choose_expr(!sametype2(a, b)                             \
-        , (const char*[sametype2(a, b)]){"ARGUMENTS ARE NOT THE SAME TYPE"} \
-        , choose_expr(isvec(a)                                              \
-            , generic(objof(char(*)[1                                       \
-                                | 0x2*isvec3(a)                             \
-                                | 0x4*isvec4(a)                             \
-                ])                                                          \
-                , char(*)[1 | 0]: min_vec2_                                 \
-                , char(*)[1 | 0x2]: min_vec3_                               \
-                , char(*)[1 | 0x4]: min_vec4_                               \
-            ) (a, b)                                                        \
-            , (    choose_expr(isvec(a), 0, a < b)                          \
-                && choose_expr(isvec(a), 0, a == a)                         \
-            ) ? a : b                                                       \
-        )                                                                   \
+
+#define min_(a, b) generic(0                                \
+        , int: generic(distinguish_vec3(a + b)              \
+            ,            i32: min_i32_                      \
+            ,            i64: min_i64_                      \
+            ,            u32: min_u32_                      \
+            ,            u64: min_u64_                      \
+            ,            f32: min_f32_                      \
+            ,            f64: min_f64_                      \
+            ,           vec2: min_vec2_                     \
+            , genuinely_vec3: min_vec3_                     \
+            ,           vec4: min_vec4_                     \
+        ) (a, b)                                            \
+        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
+inline i32 min_i32_(i32 a, i32 b) { return (a < b) ? a : b; }
+inline i64 min_i64_(i64 a, i64 b) { return (a < b) ? a : b; }
+inline u32 min_u32_(u32 a, u32 b) { return (a < b) ? a : b; }
+inline u64 min_u64_(u64 a, u64 b) { return (a < b) ? a : b; }
+inline f32 min_f32_(f32 a, f32 b) { return (a < b || b != b) ? a : b; }
+inline f64 min_f64_(f64 a, f64 b) { return (a < b || b != b) ? a : b; }
 inline vec2 min_vec2_(vec2 a, vec2 b) {
-    return (vec2){ a[0] < b[0] && a[0] == a[0] ? a[0] : b[0]
-                 , a[1] < b[1] && a[1] == a[1] ? a[1] : b[1] };
+    i32x2 comp = (a < b) | (b != b);
+    i32x2 ret = (fp_bits(a) & comp) | (fp_bits(b) & ~comp);
+    return fp_from_bits(ret);
 }
 inline vec4 min_vec4_(vec4 a, vec4 b) {
-    return (vec3){ a[0] < b[0] && a[0] == a[0] ? a[0] : b[0]
-                 , a[1] < b[1] && a[1] == a[1] ? a[1] : b[1]
-                 , a[2] < b[2] && a[2] == a[2] ? a[2] : b[2]
-                 , a[3] < b[3] && a[3] == a[3] ? a[3] : b[3] };
+    i32x4 comp = (a < b) | (b != b);
+    i32x4 ret = (fp_bits(a) & comp) | (fp_bits(b) & ~comp);
+    return fp_from_bits(ret);
 }
 inline vec3 min_vec3_(vec3 a, vec3 b) {
     // full builtins is faster than anything ignoring elem 4.
     return min_vec4_(a, b);
 }
 
-#define max_(a, b) choose_expr(!sametype2(a, b)                             \
-        , (const char*[sametype2(a, b)]){"ARGUMENTS ARE NOT THE SAME TYPE"} \
-        , choose_expr(isvec(a)                                              \
-            , generic(objof(char(*)[1                                       \
-                                | 0x2*isvec3(a)                             \
-                                | 0x4*isvec4(a)                             \
-                ])                                                          \
-                , char(*)[1 | 0]: max_vec2_                                 \
-                , char(*)[1 | 0x2]: max_vec3_                               \
-                , char(*)[1 | 0x4]: max_vec4_                               \
-            ) (a, b)                                                        \
-            , (    choose_expr(isvec(a), 0, a > b)                          \
-                && choose_expr(isvec(a), 0, a == a)                         \
-            ) ? a : b                                                       \
-        )                                                                   \
+#define max_(a, b) generic(0                                \
+        , int: generic(distinguish_vec3(a + b)              \
+            ,            i32: max_i32_                      \
+            ,            i64: max_i64_                      \
+            ,            u32: max_u32_                      \
+            ,            u64: max_u64_                      \
+            ,            f32: max_f32_                      \
+            ,            f64: max_f64_                      \
+            ,           vec2: max_vec2_                     \
+            , genuinely_vec3: max_vec3_                     \
+            ,           vec4: max_vec4_                     \
+        ) (a, b)                                            \
+        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
+inline i32 max_i32_(i32 a, i32 b) { return (a > b) ? a : b; }
+inline i64 max_i64_(i64 a, i64 b) { return (a > b) ? a : b; }
+inline u32 max_u32_(u32 a, u32 b) { return (a > b) ? a : b; }
+inline u64 max_u64_(u64 a, u64 b) { return (a > b) ? a : b; }
+inline f32 max_f32_(f32 a, f32 b) { return (a > b || b != b) ? a : b; }
+inline f64 max_f64_(f64 a, f64 b) { return (a > b || b != b) ? a : b; }
 inline vec2 max_vec2_(vec2 a, vec2 b) {
-    return (vec2){ a[0] > b[0] && a[0] == a[0] ? a[0] : b[0]
-                 , a[1] > b[1] && a[1] == a[1] ? a[1] : b[1] };
+    i32x2 comp = (a > b) | (b != b);
+    i32x2 ret = (fp_bits(a) & comp) | (fp_bits(b) & ~comp);
+    return fp_from_bits(ret);
 }
 inline vec4 max_vec4_(vec4 a, vec4 b) {
-    return (vec3){ a[0] > b[0] && a[0] == a[0] ? a[0] : b[0]
-                 , a[1] > b[1] && a[1] == a[1] ? a[1] : b[1]
-                 , a[2] > b[2] && a[2] == a[2] ? a[2] : b[2]
-                 , a[3] > b[3] && a[3] == a[3] ? a[3] : b[3] };
+    i32x4 comp = (a > b) | (b != b);
+    i32x4 ret = (fp_bits(a) & comp) | (fp_bits(b) & ~comp);
+    return fp_from_bits(ret);
 }
 inline vec3 max_vec3_(vec3 a, vec3 b) {
     // full builtins is faster than anything ignoring elem 4.
     return max_vec4_(a, b);
+}
+
+
+#define minelem_(x) generic(distinguish_vec3(x + 0) \
+            ,            i32: minelem_i32_          \
+            ,            i64: minelem_i64_          \
+            ,            u32: minelem_u32_          \
+            ,            u64: minelem_u64_          \
+            ,            f32: minelem_f32_          \
+            ,            f64: minelem_f64_          \
+            ,           vec2: minelem_vec2_         \
+            , genuinely_vec3: minelem_vec3_         \
+            ,           vec4: minelem_vec4_         \
+    ) (x)
+inline i32 minelem_i32_(i32 x) { return x; }
+inline i64 minelem_i64_(i64 x) { return x; }
+inline u32 minelem_u32_(u32 x) { return x; }
+inline u64 minelem_u64_(u64 x) { return x; }
+inline f32 minelem_f32_(f32 x) { return x; }
+inline f64 minelem_f64_(f64 x) { return x; }
+inline f32 minelem_vec2_(vec2 x) {
+    return (x[0] < x[1] || x[1] != x[1]) ? x[0] : x[1];
+}
+inline f32 minelem_vec4_(vec4 x) {
+    f32 r = x[0];
+    r = (r < x[1] || x[1] != x[1]) ? r : x[1];
+    r = (r < x[2] || x[2] != x[2]) ? r : x[2];
+    r = (r < x[3] || x[3] != x[3]) ? r : x[3];
+    return r;
+}
+inline f32 minelem_vec3_(vec3 x) {
+    f32 r = x[0];
+    r = (r < x[1] || x[1] != x[1]) ? r : x[1];
+    r = (r < x[2] || x[2] != x[2]) ? r : x[2];
+    return r;
+}
+
+#define maxelem_(x) generic(distinguish_vec3(x + 0) \
+            ,            i32: maxelem_i32_          \
+            ,            i64: maxelem_i64_          \
+            ,            u32: maxelem_u32_          \
+            ,            u64: maxelem_u64_          \
+            ,            f32: maxelem_f32_          \
+            ,            f64: maxelem_f64_          \
+            ,           vec2: maxelem_vec2_         \
+            , genuinely_vec3: maxelem_vec3_         \
+            ,           vec4: maxelem_vec4_         \
+    ) (x)
+inline i32 maxelem_i32_(i32 x) { return x; }
+inline i64 maxelem_i64_(i64 x) { return x; }
+inline u32 maxelem_u32_(u32 x) { return x; }
+inline u64 maxelem_u64_(u64 x) { return x; }
+inline f32 maxelem_f32_(f32 x) { return x; }
+inline f64 maxelem_f64_(f64 x) { return x; }
+inline f32 maxelem_vec2_(vec2 x) {
+    return (x[0] > x[1] || x[1] != x[1]) ? x[0] : x[1];
+}
+inline f32 maxelem_vec4_(vec4 x) {
+    f32 r = x[0];
+    r = (r > x[1] || x[1] != x[1]) ? r : x[1];
+    r = (r > x[2] || x[2] != x[2]) ? r : x[2];
+    r = (r > x[3] || x[3] != x[3]) ? r : x[3];
+    return r;
+}
+inline f32 maxelem_vec3_(vec3 x) {
+    f32 r = x[0];
+    r = (r > x[1] || x[1] != x[1]) ? r : x[1];
+    r = (r > x[2] || x[2] != x[2]) ? r : x[2];
+    return r;
 }
 
 
@@ -785,72 +1067,4 @@ inline vec3 max_vec3_(vec3 a, vec3 b) {
             )                                                                   \
             , typeof_unqual_nonarray_(objof(T))                                 \
         )
-#endif
-
-
-
-
-// =========================================================================== //
-// = GUARANTEES ============================================================== //
-// =========================================================================== //
-
-#if defined(__CHAR_UNSIGNED__) && __CHAR_UNSIGNED__
-  // Char must be signed because it's nice to be able to assume signed/unsigned
-  // and because of a bug in the gcc simd implementation (which doesn't matter
-  // anymore but it doesn't exactly fill you with hope).
-  #error `char` must be signed.
-#endif
-
-static_assert(__CHAR_BIT__ == 8);
-// maaaaaaan
-
-static_assert(sizeof(i8) == 1);
-static_assert(sizeof(i16) == 2);
-static_assert(sizeof(i32) == 4);
-static_assert(sizeof(i64) == 8);
-
-static_assert(sizeof(u8) == 1);
-static_assert(sizeof(u16) == 2);
-static_assert(sizeof(u32) == 4);
-static_assert(sizeof(u64) == 8);
-
-static_assert(sizeof(f32) == 4);
-static_assert(sizeof(f64) == 8);
-
-static_assert(sizeof(void*) == 8);
-static_assert(sizeof(void(*)(void)) == 8);
-
-// no guarantees about `[unsigned] long`.
-
-
-#define br_assert_align_is_size(T) static_assert(alignof(T) == sizeof(T))
-
-br_assert_align_is_size(i8);
-br_assert_align_is_size(i16);
-br_assert_align_is_size(i32);
-br_assert_align_is_size(i64);
-
-br_assert_align_is_size(u8);
-br_assert_align_is_size(u16);
-br_assert_align_is_size(u32);
-br_assert_align_is_size(u64);
-
-br_assert_align_is_size(f32);
-br_assert_align_is_size(f64);
-
-br_assert_align_is_size(void*);
-br_assert_align_is_size(void(*)(void));
-
-#undef br_assert_align_is_size
-
-
-// Check two's complement.
-static_assert(-1 == ~0);
-
-#if !(defined(__FLT_IS_IEC_60559__) && __FLT_IS_IEC_60559__)
-  #error must have IEEE-754 binary32 as float.
-#endif
-
-#if !(defined(__DBL_IS_IEC_60559__) && __DBL_IS_IEC_60559__)
-  #error must have IEEE-754 binary64 as double.
 #endif

@@ -60,6 +60,7 @@ typedef double  f64;  // 64-bit floating-point number (IEEE-754).
 
 // All pointers are 64-bit, and may be cast to `u64` (or `i64`).
 
+
 // 8B aligned ordered collection of two `f32`s.
 typedef f32 vec2 __attribute((__vector_size__(8)));
 // 16B aligned ordered collection of four `f32`s.
@@ -98,7 +99,7 @@ typedef i32 i32x4 __attribute((__vector_size__(16)));
 // i literally just cant be bother to type it out.
 #define rstr restrict
 
-// Alias `_Generic` as `generic`. I can't be bothered explained _Generic (i lack
+// Alias `_Generic` as `generic`. I can't be bothered to explain _Generic (i lack
 // the capability).
 // - Just remember each possibility must be a complete expression, it's not
 //      evaluated like a macro.
@@ -107,7 +108,7 @@ typedef i32 i32x4 __attribute((__vector_size__(16)));
 // coming soon in C23 (releasing 2024).
 #define static_assert(x...) _Static_assert((x), "just read the code smile")
 
-// Compile-time ternary expression
+// Compile-time ternary expression.
 #define choose_expr(cond, if_, else_) \
         ( __builtin_choose_expr((cond), (if_), (else_)) )
 
@@ -119,43 +120,21 @@ typedef i32 i32x4 __attribute((__vector_size__(16)));
 
 // Returns 1 if the given type or expression is a floating point vector, 0
 // otherwise.
-#define isvec(T...) ( __builtin_types_compatible_p(typeof(T), vec2) \
-        || __builtin_types_compatible_p(typeof(T), vec4) )
+#define isvec(T...) ( isvec_(typeof(T)) )
 
 // =`sametype(T, vec2)`
-#define isvec2(T...) ( sametype2(typeof(T), vec2) )
+#define isvec2(T...) ( isvec2_(typeof(T)) )
 // =`sametype(T, vec3)` (when compiling, in code preview not quite but dw).
 #define isvec3(T...) ( isvec3_(typeof(T)) )
 // =`sametype(T, vec4)` (when compiling, in code preview not quite but dw).
 #define isvec4(T...) ( isvec4_(typeof(T)) )
 
 
-// Constructs a `vec2` from the given arguments. If given only 1 argument, a
-// vector with every element set to that is created.
-// - Accepts 1 or 2 arguments (1 argument is equivalent to the same argument
-//      repeated 2x).
-#define vec2(xs...) ( GLUE2(vec2_, countva(xs)) (xs) )
-
-// Constructs a `vec3` from the given arguments. If given only 1 argument, a
-// vector with every element set to that is created.
-// - Accepts 1 or 3 arguments (1 argument is equivalent to the same argument
-//      repeated 3x).
-// - The fourth/ignored element of the vec3 is initialised to 1.
-#define vec3(xs...) ( GLUE2(vec3_, countva(xs)) (xs) )
-
-// Constructs a `vec2` from the given arguments. If given only 1 argument, a
-// vector with every element set to that is created.
-// - Accepts 1 or 4 arguments (1 argument is equivalent to the same argument
-//      repeated 4x).
-#define vec4(xs...) ( GLUE2(vec4_, countva(xs)) (xs) )
-
-// Note the cheeky vector constructors shadow the type name themselves, but will
-// only overwrite when invoked with brackets.... so like maybe on function
-// pointer prototypes? in that case use these helpful aliases:
-
-typedef vec2 also_vec2;
-typedef vec3 also_vec3;
-typedef vec4 also_vec4;
+// Returns 1 if all `Ts` are vec3, and 1 if all are not vec3, 0 for any mix.
+#define all_or_none_vec3(Ts...) ( 1 FOREACH(all_or_none_vec3_, FIRST(Ts), Ts) )
+// Two-argument version of `all_or_none_vec3` (slightly more performant/doesn't
+// depend on `FOREACH`).
+#define all_or_none_vec3_2(A, B) ( all_or_none_vec3_2_(typeof(A), typeof(B)) )
 
 
 // Helper type, an object of which may be returned by `distinguish_vec3`.
@@ -165,51 +144,38 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // case returns an object of type `genuinely_vec3`. This may be used as the
 // switch-expr of `generic`s to allow for explicit cases for `vec3` vs `vec4`
 // (using case labels of `genuinely_vec3: ..., vec4: ...`).
-#define distinguish_vec3(T...) ( choose_expr(sametype(T, vec3)  \
-        , objof(genuinely_vec3)                                 \
-        , objof(T)                                              \
-    ) )
+#define distinguish_vec3(T...) ( distinguish_vec3_(typeof(T)) )
 
 
-// Expands to the token corresponding to the type of `xs` (note all elements of
-// `xs` must be the same type).
-// - Any of the tokens may be omitted to exclude that case.
-// - All of `xs` must be floating point expressions or types, of the same type.
-#define fp_selectx(f_f32, f_f64, f_vec2, f_vec3, f_vec4, xs...) \
-    ( fp_selectx_(f_f32, f_f64, f_vec2, f_vec3, f_vec4, xs) )
+// Constructs a `vec2` from the given arguments. If given only one argument, a
+// vector with every element set to that is created.
+// - Accepts 1 or 2 arguments (1 argument is equivalent to the same argument
+//      repeated 2x).
+#define vec2(xs...) ( GLUE2(vec2_, countva(xs)) (xs) )
 
-// Wrapper around `fp_selectx` for tokens `<f>_<type>_` for all floating point
-// types.
-#define fp_select(f, xs...) ( fp_selectx(   \
-        GLUE2(f, _f32_),                    \
-        GLUE2(f, _f64_),                    \
-        GLUE2(f, _vec2_),                   \
-        GLUE2(f, _vec3_),                   \
-        GLUE2(f, _vec4_),                   \
-        xs                                  \
-    ) )
+// Constructs a `vec3` from the given arguments. If given only one argument, a
+// vector with every element set to that is created.
+// - Accepts 1 or 3 arguments (1 argument is equivalent to the same argument
+//      repeated 3x).
+// - The fourth/ignored element of the vec3 is initialised to 1.
+#define vec3(xs...) ( GLUE2(vec3_, countva(xs)) (xs) )
 
-// Wrapper around `fp_selectx` for tokens `<f>_<type>_` for all non-vector
-// floating point types.
-#define fp_select_non_vec(f, xs...) ( fp_selectx(   \
-        GLUE2(f, _f32_),                            \
-        GLUE2(f, _f64_),                            \
-        /* no case for vec2 */,                     \
-        /* no case for vec3 */,                     \
-        /* no case for vec4 */,                     \
-        xs                                          \
-    ) )
+// Constructs a `vec4` from the given arguments. If given only one argument, a
+// vector with every element set to that is created. If given two arguments,
+// requires the first to be a vec3 and the second to be a single, the result is
+// then the first three elements from the vec3 and the last element as the
+// single.
+// - Accepts 1, 2, or 4 arguments. 1 argument is equivalent to the same argument
+//      repeated 4x. 2 arguments is the concatenation of a vec3 and a single.
+#define vec4(xs...) ( GLUE2(vec4_, countva(xs)) (xs) )
 
-// Wrapper around `fp_selectx` for tokens `<f>_<type>_` for all vector floating
-// point types.
-#define fp_select_only_vec(f, xs...) ( fp_selectx(  \
-        /* no case for f32 */,                      \
-        /* no case for f64 */,                      \
-        GLUE2(f, _vec2_),                           \
-        GLUE2(f, _vec3_),                           \
-        GLUE2(f, _vec4_),                           \
-        xs                                          \
-    ) )
+// Note the cheeky vector constructors shadow the type name themselves, but will
+// only overwrite when invoked with brackets.... so like maybe on function
+// pointer prototypes? in that case use these helpful aliases:
+
+typedef vec2 also_vec2;
+typedef vec3 also_vec3;
+typedef vec4 also_vec4;
 
 
 
@@ -318,49 +284,61 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 //          set just above the most significant bit of the mantissa.
 
 
-// Expands to positive infinity in the given type.
-// - `T` must be a floating point expression or type.
-#define inf(T...) ( fp_selectx(fINF, INF, v2INF, v3INF, v4INF, objof(T)) )
-#define INF   ( __builtin_inff() )       // f64 inf
-#define fINF  ( __builtin_inf() )        // f32 inf
-#define v2INF ( vec2(__builtin_inff()) ) // vec2 inf
-#define v3INF ( vec3(__builtin_inff()) ) // vec3 inf
-#define v4INF ( vec4(__builtin_inff()) ) // vec4 inf
+// Some constants:
 
-// Returns 1 if `x` is infinite, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any inf element causes a 1 return.
-#define isinf(x...) ( anyeq(abs(x), inf(x)) )
+#define NAN   ( __builtin_nan("") )        // f64 NaN
+#define fNAN  ( __builtin_nanf("") )       // f32 NaN
+#define v2NAN ( vec2(__builtin_nanf("")) ) // vec2 NaN
+#define v3NAN ( vec3(__builtin_nanf("")) ) // vec3 NaN
+#define v4NAN ( vec4(__builtin_nanf("")) ) // vec4 NaN
 
-// Returns 1 if all elements in `x` are infinite, 0 otherwise.
-// - `x` must be a floating point vector expression.
-#define isallinf(x...) ( eq(abs(x), inf(x)) )
+#define INF   ( __builtin_inf() )
+#define fINF  ( __builtin_inff() )
+#define v2INF ( vec2(__builtin_inff()) )
+#define v3INF ( vec3(__builtin_inff()) )
+#define v4INF ( vec4(__builtin_inff()) )
 
-// Returns 1 if `x` is not an infinite value, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any inf element causes a 0 return.
-#define notinf(x...) ( !isinf(x) )
+#define v2ZERO (vec2(0.f))
+#define v3ZERO (vec3(0.f))
+#define v4ZERO (vec4(0.f))
+
+#define v2ONE (vec2(1.f))
+#define v3ONE (vec3(1.f))
+#define v4ONE (vec4(1.f))
+
+#define v2X (vec2(1.f, 0.f))
+#define v2Y (vec2(0.f, 1.f))
+
+#define v3X (vec3(1.f, 0.f, 0.f))
+#define v3Y (vec3(0.f, 1.f, 0.f))
+#define v3Z (vec3(0.f, 0.f, 1.f))
+
+#define v4X (vec4(1.f, 0.f, 0.f, 0.f))
+#define v4Y (vec4(0.f, 1.f, 0.f, 0.f))
+#define v4Z (vec4(0.f, 0.f, 1.f, 0.f))
+#define v4W (vec4(0.f, 0.f, 0.f, 1.f))
 
 
 // Expands to a quiet NaN in the given type.
 // - `T` must be a floating point expression or type.
 // - Do not use this with `==` to test for nans (nan always compare unequal), use
 //      `isnan` or `nonnan`.
-#define nan(T...) ( fp_selectx(fNAN, NAN, v2NAN, v3NAN, v4NAN, objof(T)) )
-#define NAN   ( __builtin_nanf("") )       // f64 NaN
-#define fNAN  ( __builtin_nan("") )        // f32 NaN
-#define v2NAN ( vec2(__builtin_nanf("")) ) // vec2 NaN
-#define v3NAN ( vec3(__builtin_nanf("")) ) // vec3 NaN
-#define v4NAN ( vec4(__builtin_nanf("")) ) // vec4 NaN
+#define nan(T...) ( generic(distinguish_vec3(T) \
+        ,            f64: NAN                   \
+        ,            f32: fNAN                  \
+        ,           vec2: v2NAN                 \
+        , genuinely_vec3: v3NAN                 \
+        ,           vec4: v4NAN                 \
+    ) )
 
 // Returns 1 if `x` is NaN, 0 otherwise.
 // - `x` must be a floating point expression.
 // - For vector types, any nan element causes a 1 return.
-#define isnan(x...) ( !eq2(x, x) )
+#define isnan(x...) ( isnan_((x)) )
 
 // Returns 1 if all elements in `x` are NaN, 0 otherwise.
 // - `x` must be a floating point vector expression.
-#define isallnan(x...) ( !anyeq(x, x) )
+#define isallnan(x...) ( isallnan_((x)) )
 
 // Returns 1 if `x` is not NaN, 0 otherwise.
 // - `x` must be a floating point expression.
@@ -368,57 +346,116 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 #define notnan(x...) ( !isnan(x) )
 
 
+// Expands to positive infinity in the given type.
+// - `T` must be a floating point expression or type.
+#define inf(T...) ( generic(distinguish_vec3(T) \
+        ,            f64: INF                   \
+        ,            f32: fINF                  \
+        ,           vec2: v2INF                 \
+        , genuinely_vec3: v3INF                 \
+        ,           vec4: v4INF                 \
+    ) )
+
+// Returns 1 if `x` is infinite, 0 otherwise.
+// - `x` must be a floating point expression.
+// - For vector types, any inf element causes a 1 return.
+#define isinf(x...) ( isinf_((x)) )
+
+// Returns 1 if all elements in `x` are infinite, 0 otherwise.
+// - `x` must be a floating point vector expression.
+#define isallinf(x...) ( isallinf_((x)) )
+
+// Returns 1 if `x` is not an infinite value, 0 otherwise.
+// - `x` must be a floating point expression.
+// - For vector types, any inf element causes a 0 return.
+#define notinf(x...) ( !isinf(x) )
+
+
 // Returns 1 if `x` is not infinite and not NaN, 0 otherwise.
+// - `x` must be a floating point expression.
 // - For vector types, any non-good element causes a 0 return.
 #define isgood(x...) ( notinf(x) && notnan(x) )
 
 
-// Returns the bits of `f`, as a unsigned integer of the same size.
-// - `f` must be an `f32` or `f64` expression.
+// Returns the bits of `f`, as a integer of the same size.
+// - `f` must be a floating point expression.
 // - The memory of `f` is reinterpreted, no conversion takes place.
-#define fp_bits(f...) ( fp_select_non_vec(fp_bits, f)(f) )
+// - Returns one of the following types:
+//      f64 -> i64
+//      f32 -> i32
+//      vec2 -> i32x2
+//      vec3/4 -> i32x4
+#define fp_bits(f...) ( generic((f) \
+        ,  f64: fp_bits_f64_        \
+        ,  f32: fp_bits_f32_        \
+        , vec2: fp_bits_vec2_       \
+        , vec4: fp_bits_vec4_       \
+    ) (f) )
 
-// Returns the floating point that has the same size and bits as `u`.
-// - `u` must be a `u32` or `u64` expression.
-// - The memory of `u` is reinterpreted, no conversion takes place.
-#define fp_from_bits(u...) ( fp_select_non_vec(fp_from_bits, u)(u) )
+// Returns the floating point that has the same size and bits as `i`.
+// - `i` must be an `i64`, `i32`, `i32x2`, or `i32x4` expression.
+// - The memory of `i` is reinterpreted, no conversion takes place.
+// - Returns one of the following types:
+//      i64 -> f64
+//      i32 -> f32
+//      i32x2 -> vec2
+//      i32x4 -> vec4 (may be considered vec3)
+#define fp_from_bits(i...) ( generic((i)    \
+        ,   i64: fp_from_bits_i64_          \
+        ,   i32: fp_from_bits_i32_          \
+        , i32x2: fp_from_bits_i32x2_        \
+        , i32x4: fp_from_bits_i32x4_        \
+    ) (i) )
 
 
 // Expands to the greatest magnitude representable by a normal floating point
 // of the given type.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_norm_max(T...) \
-    ( fp_selectx_non_vec(3.40282347e38f, 1.7976931348623157e308, T) )
+#define fp_norm_max(T...) ( generic(objof(T)    \
+        , f32: 3.40282347e38f                   \
+        , f64: 1.7976931348623157e308           \
+    ) )
 
 // Expands to the smallest magnitude representable by a normal floating point
 // of the given type.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_norm_min(T...) \
-    ( fp_selectx_non_vec(1.17549435e-38f, 2.2250738585072014e-308, T) )
+#define fp_norm_min(T...) ( generic(objof(T)    \
+        , f32: 1.17549435e-38f                  \
+        , f64: 2.2250738585072014e-308          \
+    ) )
 
 // Expands to the greatest magnitude representable by a subnormal floating point
 // of the given type.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_subnorm_max(T...) \
-    ( fp_selectx_non_vec(1.17549421e-38f, 2.2250738585072009e-308, T))
+#define fp_subnorm_max(T...) ( generic(objof(T) \
+        , f32: 1.17549421e-38f                  \
+        , f64: 2.2250738585072009e-308          \
+    ) )
 
 // Expands to the smallest magnitude representable by a subnormal floating point
 // of the given type.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_subnorm_min(T...) \
-    ( fp_selectx_non_vec(1.40129846e-45f, 4.9406564584124654e-324, T) )
+#define fp_subnorm_min(T...) ( generic(objof(T) \
+        , f32: 1.40129846e-45f                  \
+        , f64: 4.9406564584124654e-324          \
+    ) )
 
 
 // Expands to an unsigned integer of the same size as `typeof(T)` with only the
 // "exponent" bits set. This can be used to mask the exponent, however beware
 // that does not sit in the lo bits and will still be biased.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_exp_mask(T...) \
-    ( fp_selectx_non_vec((u32)0x7F800000U, (u64)0x7FF0000000000000U, T) )
+#define fp_exp_mask(T...) ( generic(objof(T)    \
+        , f32: (u32)0x7F800000U                 \
+        , f64: (u64)0x7FF0000000000000U         \
+    ) )
 
 // Expands to the total number of bits in the exponent of `typeof(T)`.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_exp_len(T...) ( fp_selectx_non_vec(8, 11, T) )
+#define fp_exp_len(T...) ( generic(objof(T) \
+        , f32: 8                            \
+        , f64: 11                           \
+    ) )
 
 // Expands to the value used to bias the exponent of `typeof(T)` before it is put
 // into bits. For example, to store the the exponent `-2` you would place the low
@@ -426,7 +463,10 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // bits. Then to retrieve the genuine exponents from its bits, you would use
 // `bits - fp_exp_bias(T)`.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_exp_bias(T...) ( fp_selectx_non_vec(127, 1023, T) )
+#define fp_exp_bias(T...) ( generic(objof(T)    \
+        , f32: 127                              \
+        , f64: 1023                             \
+    ) )
 
 
 // Expands to an unsigned integer of the same size as `typeof(T)` with only the
@@ -434,12 +474,17 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // it may be desirable to set the `fp_mant_implied` bit (if the exponent is non-
 // zero).
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_mant_mask(T...) \
-    ( fp_selectx_non_vec((u32)0x007FFFFFU, (u64)0x000FFFFFFFFFFFFFU, T) )
+#define fp_mant_mask(T...) ( generic(objof(T)   \
+        , f32: (u32)0x007FFFFFU                 \
+        , f64: (u64)0x000FFFFFFFFFFFFFU         \
+    ) )
 
 // Expands to the total number of bits in the mantissa of `typeof(T)`.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_mant_len(T...) ( fp_selectx_non_vec(23, 52, T) )
+#define fp_mant_len(T...) (generic(objof(T) \
+        , f32: 23                           \
+        , f64: 52                           \
+    ) )
 
 // Expands to an unsigned integer of the same size as `typeof(T)` with only the
 // implied mantissa bit set. This bit is "implied" to be set in the mantissa of
@@ -447,8 +492,10 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // least significant bit of the exponent. To get the genuine mantissa of a
 // number, get the mantissa bits and use `bits | fp_mant_implied(T)`.
 // - `T` must be an `f32` or `f64` expression or type.
-#define fp_mant_implied(T...) \
-    ( fp_selectx_non_vec((u32)0x00800000U, (u64)0x0010000000000000U, T) )
+#define fp_mant_implied(T...) ( generic(objof(T)    \
+        , f32: (u32)0x00800000U                     \
+        , f64: (u64)0x0010000000000000U             \
+    ) )
 
 
 
@@ -470,15 +517,15 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 
 // Returns 1 if `typeof(A)` and `typeof(B)` are the same unqualified type, 0
-// otherwise. Additionally, has logic to correctly distinguish `vec3` and `vec4`.
+// otherwise. Additionally, has logic to correctly distinguish `vec3` from
+// `vec4`, despite them technically being the "same" type.
 // - To compare types without ignoring qualifiers, make both types pointed to.
 // - "Unqualified" means without modifiers such as const, volatile, and restrict,
 //      however it will also strip array sizes (i.e. `i32[2]` is the "same" as
 //      `i32[1]` and `i32[]` and etc.).
 // - `A` and `B` must be expressions or types.
-// - Correctly distinguishes `vec3` and `vec4`.
+// - Correctly distinguishes `vec3` from `vec4`.
 #define sametype(Ts...) ( 1 FOREACH(sametype_, FIRST(Ts), Ts) )
-
 // Two-argument version of `sametype` (slightly more performant/doesn't depend on
 // `FOREACH`).
 #define sametype2(A, B) ( sametype2_(typeof(A), typeof(B)) )
@@ -500,7 +547,7 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // - `member` must refer to a member of `typeof(T)`, consisting of:
 //        identifier
 //      | member "." identifier
-//      | member "[" expr "]".
+//      | member "[" expr "]"
 #define offsetof(T, member) ( (i64)__builtin_offsetof(typeof(T), member) )
 
 // Returns the byte-offset of the first byte after the given `member` within the
@@ -510,7 +557,7 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // - `member` must refer to a member of `typeof(T)`, consisting of:
 //        identifier
 //      | member "." identifier
-//      | member "[" expr "]".
+//      | member "[" expr "]"
 #define offsetofend(T, member) ( offsetof(T, member) + sizeof(objof(T).member) )
 
 
@@ -530,23 +577,30 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // Returns 1 if all elements in the given expressions are element-wise equal, 0
 // otherwise. This is needed since the builtin vector comparison operators act
 // element-wise.
-// - All of `xs` must be floating point expressions of the same type.
 #define eq(xs...) ( 1 FOREACH(eq_, FIRST(xs), xs) )
-
-// Returns 1 if any elements in `a` and `b` are element-wise equal, 0 otherwise.
-// This is needed since the builtin vector comparison operators act element-wise.
-// - `a` and `b` must be floating point expressions of the same type.
-#define anyeq(a, b) ( anyeq_((a), (b)) )
-
 // Two-argument version of `eq` (slightly more performant/doesn't depend on
 // `FOREACH`).
 #define eq2(a, b) ( eq2_((a), (b)) )
 
+// Returns 1 if any elements in `a` and `b` are element-wise equal, 0 otherwise.
+// This is needed since the builtin vector comparison operators act element-wise.
+#define anyeq(a, b) ( anyeq_((a), (b)) )
+
 // =`!eq(a, b)`
-#define neq(a, b) ( !eq2(a, b) )
+#define neq(a, b) ( !(eq2_((a), (b))) )
 
 // =`!anyeq(a, b)`
-#define allneq(a, b) ( !anyeq(a, b) )
+#define allneq(a, b) ( !(anyeq_((a), (b))) )
+
+
+// Returns `dflt` is `x` is NaN, `x` otherwise.
+// - `x` must be a floating point expression.
+#define ifnan(x, dflt) ( ifnan_((x), (dflt)) )
+
+// Returns a vector of pair-wise `ifnan`s for each element of `x` and `dflt`.
+// Accepts non-vector floating points, but acts identically to `ifnan`.
+// - `x` and `dflt` must be floating point expressions of the same type.
+#define ifnanelem(x, dflt) ( ifnanelem_((x), (dflt)) )
 
 
 // Returns 1 if every bit in `mask` is one (set) in `x`, 0 otherwise.
@@ -587,8 +641,18 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 
 // Returns the absolute value of the given number. For vector types, this is
-// element-wise.
-#define abs(x...) ( abs_(x) )
+// element-wise. For integer types, returns the result as an unsigned integer.
+// This unsigned promotion ensures that the return result will always compare >=0
+// (e.g. `-intmin(i32)` is <0 when left as `i32`, but is the correct result in
+// `u32`).
+// - Returns the same type, except promoting signed integers to unsigned.
+#define abs(x...) ( abs_((x)) )
+// Identical to `abs` except doesn't promote signed integers to unsigned.
+// - Note in the case where `x` is a signed integer and equal to `intmin(x)`, the
+//      result will not change value (i.e. it will still be negative). Use
+//      `abs(x)`, which returns unsigned, to avoid this issue.
+// - Returns the exact same type.
+#define iabs(x...) ( iabs_((x)) )
 
 
 // Returns the minimum of the given numbers (or the only non-nan). For vector
@@ -598,6 +662,15 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // Returns the maximum of the given numbers (or the only non-nan). For vector
 // types, this is element-wise.
 #define max(a, b) ( max_((a), (b)) )
+
+
+// Returns the minimum element (ignoring nans) in the given floating point
+// vector. Accepts non-vectors, but acts as identity.
+#define minelem(x...) ( minelem_((x)) )
+
+// Returns the maximum element (ignoring nans) in the given floating point
+// vector. Accepts non-vectors, but acts as identity.
+#define maxelem(x...) ( maxelem_((x)) )
 
 
 
@@ -691,6 +764,33 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 
 // ========================== //
+//         IDENTITIES         //
+// ========================== //
+
+inline i8  id_i8 (i8  x) { return x; }
+inline i16 id_i16(i16 x) { return x; }
+inline i32 id_i32(i32 x) { return x; }
+inline i64 id_i64(i64 x) { return x; }
+
+inline u8  id_u8 (u8  x) { return x; }
+inline u16 id_u16(u16 x) { return x; }
+inline u32 id_u32(u32 x) { return x; }
+inline u64 id_u64(u64 x) { return x; }
+
+inline f32 id_f32(f32 x) { return x; }
+inline f64 id_f64(f64 x) { return x; }
+
+inline char id_char(char x) { return x; }
+
+inline const void* id_ptr(const void* x) { return x; }
+
+inline vec2 id_vec2(vec2 x) { return x; }
+inline vec3 id_vec3(vec3 x) { return x; }
+inline vec4 id_vec4(vec4 x) { return x; }
+
+
+
+// ========================== //
 //           MACROS           //
 // ========================== //
 
@@ -700,7 +800,6 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 // Glues every argument given, via `a##b##c##...`.
 #define GLUE(xs...) REDUCE(INVOKE, GLUE2, xs)
-
 // Glues the two given symbols, via `a##b`.
 #define GLUE2(a, b) GLUE2_(a, b)
 
