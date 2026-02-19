@@ -130,11 +130,11 @@ typedef i32 i32x4 __attribute((__vector_size__(16)));
 #define isvec4(T...) ( isvec4_(typeof(T)) )
 
 
-// Returns 1 if all `Ts` are vec3, and 1 if all are not vec3, 0 for any mix.
-#define all_or_none_vec3(Ts...) ( 1 FOREACH(all_or_none_vec3_, FIRST(Ts), Ts) )
-// Two-argument version of `all_or_none_vec3` (slightly more performant/doesn't
-// depend on `FOREACH`).
-#define all_or_none_vec3_2(A, B) ( all_or_none_vec3_2_(typeof(A), typeof(B)) )
+// Returns 1 if all `Ts` are vec3, 0 otherwise.
+#define all_vec3(Ts...) ( 1 FOREACH(INVOKE, all_vec3_, Ts) )
+
+// Returns 1 if all `Ts` are not vec3, 0 otherwise.
+#define none_vec3(Ts...) ( 1 FOREACH(INVOKE, none_vec3_, Ts) )
 
 
 // Helper type, an object of which may be returned by `distinguish_vec3`.
@@ -149,15 +149,21 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 
 // Constructs a `vec2` from the given arguments. If given only one argument, a
 // vector with every element set to that is created.
-// - Accepts 1 or 2 arguments (1 argument is equivalent to the same argument
-//      repeated 2x).
+// - Overloaded:
+//      vec2(vec2 xy) -> (xy[0], xy[1])
+//      vec2(f32 x, f32 y) -> (x, y)
+//      vec2(f32 x) -> (x, x)
 #define vec2(xs...) ( GLUE2(vec2_, countva(xs)) (xs) )
 
 // Constructs a `vec3` from the given arguments. If given only one argument, a
-// vector with every element set to that is created.
-// - Accepts 1 or 3 arguments (1 argument is equivalent to the same argument
-//      repeated 3x).
-// - The fourth/ignored element of the vec3 is initialised to 1.
+// vector with every element set to that is created, unless that argument is a
+// vec4, in which case the first three elements of it are used.
+// - The fourth/ignored element of the vec3 is initialised to 1.0.
+// - Overloaded:
+//      vec3(vec3 xyz) -> (xyz[0], xyz[1], xyz[2])
+//      vec3(f32 x, f32 y, f32 z) -> (x, y, z)
+//      vec3(f32 x) -> (x, x, x)
+//      vec3(vec4 v) -> (v[0], v[1], v[2])
 #define vec3(xs...) ( GLUE2(vec3_, countva(xs)) (xs) )
 
 // Constructs a `vec4` from the given arguments. If given only one argument, a
@@ -165,9 +171,28 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // requires the first to be a vec3 and the second to be a single, the result is
 // then the first three elements from the vec3 and the last element as the
 // single.
-// - Accepts 1, 2, or 4 arguments. 1 argument is equivalent to the same argument
-//      repeated 4x. 2 arguments is the concatenation of a vec3 and a single.
+// - Overloaded:
+//      vec4(vec4 xyzw) -> (xyzw[0], xyzw[1], xyzw[2], xyzw[3])
+//      vec4(f32 x, f32 y, f32 z, f32 w) -> (x, y, z, w)
+//      vec4(f32 x) -> (x, x, x, x)
+//      vec4(vec3 xyz, f32 w) -> (xyz[0], xyz[1], xyz[2], w)
 #define vec4(xs...) ( GLUE2(vec4_, countva(xs)) (xs) )
+
+inline vec2 vec2_copy(vec2 xy);
+inline vec3 vec3_copy(vec3 xyz);
+inline vec4 vec4_copy(vec4 xyzw);
+
+inline vec2 vec2_from_elems(f32 x, f32 y);
+inline vec3 vec3_from_elems(f32 x, f32 y, f32 z);
+inline vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w);
+
+inline vec2 vec2_from_rep(f32 x);
+inline vec3 vec3_from_rep(f32 x);
+inline vec4 vec4_from_rep(f32 x);
+
+inline vec3 vec3_from_vec4(vec4 x);
+inline vec4 vec4_from_vec3(vec3 xyz, f32 w);
+
 
 // Note the cheeky vector constructors shadow the type name themselves, but will
 // only overwrite when invoked with brackets.... so like maybe on function

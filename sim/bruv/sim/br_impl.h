@@ -83,28 +83,68 @@ static_assert(-1 == ~0);
   #define isvec3_(T...) __builtin_has_attribute(T, VEC3_ATTR)
   #define isvec4_(T...) __builtin_types_compatible_p(T, vec4) \
                      && !__builtin_has_attribute(T, VEC3_ATTR)
-  #define all_or_none_vec3_2_(A, B) __builtin_has_attribute(A, VEC3_ATTR) \
-                                 == __builtin_has_attribute(B, VEC3_ATTR)
 #else
   #define isvec3_(T...) 0 /* pick something constexpr? */
   #define isvec4_(T...) __builtin_types_compatible_p(T, vec4)
-  #define all_or_none_vec3_2_(A, B) 1 /* something */
 #endif
-#define all_or_none_vec3_(A, B) all_or_none_vec3_2(A, B)
+
+#define all_vec3_(T) && isvec3(T)
+#define none_vec3_(T) && !isvec3(T)
 
 
-#define vec2_2(x, y) (vec2){ (x), (y) }
-#define vec2_1(x)    (vec2){ (x), (x) }
+inline vec2 vec2_copy(vec2 xy) { return xy; }
+inline vec3 vec3_copy(vec3 xyz) { xyz[3] = 1.f; return xyz; }
+inline vec4 vec4_copy(vec4 xyzw) { return xyzw; }
 
-#define vec3_3(x, y, z) (vec3){ (x), (y), (z), (1.f) }
-#define vec3_1(x)       (vec3){ (x), (x), (x), (1.f) }
+inline vec2 vec2_from_elems(f32 x, f32 y) {
+    return (vec2){ x, y };
+}
+inline vec3 vec3_from_elems(f32 x, f32 y, f32 z) {
+    return (vec3){ x, y, z, 1.f };
+}
+inline vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w) {
+    return (vec4){ x, y, z, w };
+}
 
-#define vec4_4(x, y, z, w) (vec4){ (x), (y), (z), (w) }
-#define vec4_1(x)          (vec4){ (x), (x), (x), (x) }
-#define vec4_2(xyz, w) generic(0                                        \
-        , int: (vec4){ (xyz)[0], (xyz)[1], (xyz)[2], (w) }              \
-        , default:                                                      \
-            (const char*[isvec3(xyz)]){"FIRST ARGUMENT MUST BE A vec3"} \
+inline vec2 vec2_from_rep(f32 x) { return (vec2){ x, x }; }
+inline vec3 vec3_from_rep(f32 x) { return (vec3){ x, x, x, 1.0 }; }
+inline vec4 vec4_from_rep(f32 x) { return (vec4){ x, x, x, x }; }
+
+inline vec3 vec3_from_vec4(vec4 x) {
+    x[3] = 1.0;
+    return x;
+}
+inline vec4 vec4_from_vec3(vec3 xyz, f32 w) {
+    xyz[3] = w;
+    return xyz;
+}
+
+#define vec2_2(x, y) vec2_from_elems((x), (y))
+#define vec3_3(x, y, z) vec3_from_elems((x), (y), (z))
+#define vec4_4(x, y, z, w) vec4_from_elems((x), (y), (z), (w))
+
+#define vec2_1(x) generic((x)       \
+        ,    vec2: vec2_copy        \
+        , default: vec2_from_rep    \
+    ) ((x))
+#define vec3_1(x) generic(distinguish_vec3(x)   \
+        , genuinely_vec3: vec3_copy             \
+        ,           vec4: vec3_from_vec4        \
+        ,        default: vec3_from_rep         \
+    ) ((x))
+#define vec4_1(x) generic(0                                         \
+        , int: generic((x)                                          \
+            ,    vec4: vec4_copy                                    \
+            , default: vec4_from_rep                                \
+        ) ((x))                                                     \
+        , default: (const char*[!isvec3(x)])                        \
+            {"vec4 CONSTRUCTOR WITH vec3 EXPECTS TWO ARGUMENTS"}    \
+    )
+
+#define vec4_2(xyz, w) generic(0                \
+        , int: vec4_from_vec3((xyz), (w))       \
+        , default: (const char*[isvec3(xyz)])   \
+            {"FIRST ARGUMENT MUST BE A vec3"}   \
     )
 
 #if BR_COMPILING
@@ -216,7 +256,7 @@ void* objof_evaled_(void);
             , genuinely_vec3: eq2_vec3_                     \
             ,           vec4: eq2_vec4_                     \
         ) (a, b)                                            \
-        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+        , default: (const char*[isvec3(a) == isvec3(b)])    \
             {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 inline i32 eq2_i32_(i32 a, i32 b) { return a == b; }
@@ -254,7 +294,7 @@ inline i32 eq2_vec3_(vec3 a, vec3 b) {
             , genuinely_vec3: anyeq_vec3_                   \
             ,           vec4: anyeq_vec4_                   \
         ) (a, b)                                            \
-        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+        , default: (const char*[isvec3(a) == isvec3(b)])    \
             {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 inline i32 anyeq_i32_(i32 a, i32 b) { return a == b; }
@@ -279,22 +319,22 @@ inline i32 anyeq_vec3_(vec3 a, vec3 b) {
 }
 
 
-#define ifnan_(x, dflt) generic(0                               \
-        , int: isnan(x) ? dflt : x                              \
-        , default: (const char*[all_or_none_vec3_2(x, dflt)])   \
-            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}         \
+#define ifnan_(x, dflt) generic(0                           \
+        , int: isnan(x) ? dflt : x                          \
+        , default: (const char*[isvec3(x) == isvec3(dflt)]) \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 
-#define ifnanelem_(x, dflt) generic(0                           \
-        , int: generic(distinguish_vec3(x + dflt)               \
-            ,            f32: ifnanelem_f32_                    \
-            ,            f64: ifnanelem_f64_                    \
-            ,           vec2: ifnanelem_vec2_                   \
-            , genuinely_vec3: ifnanelem_vec3_                   \
-            ,           vec4: ifnanelem_vec4_                   \
-        ) (x, dflt)                                             \
-        , default: (const char*[all_or_none_vec3_2(x, dflt)])   \
-            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}         \
+#define ifnanelem_(x, dflt) generic(0                       \
+        , int: generic(distinguish_vec3(x + dflt)           \
+            ,            f32: ifnanelem_f32_                \
+            ,            f64: ifnanelem_f64_                \
+            ,           vec2: ifnanelem_vec2_               \
+            , genuinely_vec3: ifnanelem_vec3_               \
+            ,           vec4: ifnanelem_vec4_               \
+        ) (x, dflt)                                         \
+        , default: (const char*[isvec3(x) == isvec3(dflt)]) \
+            {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 inline f32 ifnanelem_f32_(f32 x, f32 dflt) {
     return (x == x) ? x : dflt;
@@ -404,7 +444,7 @@ inline u64 abs_i64_(i64 x) { return (u64)((x < 0) ? -x : x); }
             , genuinely_vec3: min_vec3_                     \
             ,           vec4: min_vec4_                     \
         ) (a, b)                                            \
-        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+        , default: (const char*[isvec3(a) == isvec3(b)])    \
             {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 inline i32 min_i32_(i32 a, i32 b) { return (a < b) ? a : b; }
@@ -440,7 +480,7 @@ inline vec3 min_vec3_(vec3 a, vec3 b) {
             , genuinely_vec3: max_vec3_                     \
             ,           vec4: max_vec4_                     \
         ) (a, b)                                            \
-        , default: (const char*[all_or_none_vec3_2(a, b)])  \
+        , default: (const char*[isvec3(a) == isvec3(b)])    \
             {"vec3 IS ONLY COMPATIBLE WITH OTHER vec3"}     \
     )
 inline i32 max_i32_(i32 a, i32 b) { return (a > b) ? a : b; }
