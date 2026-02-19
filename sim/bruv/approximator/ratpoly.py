@@ -9,10 +9,12 @@ import math
 import numpy as np
 import scipy
 
-__all__ = ["IdxGenerator",
-           "Evaluator", "EvaluatorAbsOnly", "EvaluatorRelOnly",
-           "Printer",
-           "Polynomial", "RationalPolynomial"]
+__all__ = [
+    "IdxGenerator",
+    "EvaluatorAbsOnly", "EvaluatorRelOnly", "EvaluatorMax", "EvaluatorBalanced",
+    "Printer",
+    "Polynomial", "RationalPolynomial"
+]
 
 
 @functools.cache
@@ -187,83 +189,63 @@ class IdxGenerator:
 
 
 
+def rel_error(real_values, values):
+    return (values - real_values) / (real_values.max() - real_values.min())
+def abs_error(real_values, values):
+    return values / real_values - 1
+
 class EvaluatorBase:
-    def __init__(self, leave_when_better_than):
+    def __init__(self, leave_when_better_than=None):
         self.leave_when_better_than = leave_when_better_than
 
-    def _call_ret(self, residuals):
-        error = residuals.max()
-        error = float(error)
+    def _get_ret(self, error):
         leave = False
         if self.leave_when_better_than is not None:
             leave = error < self.leave_when_better_than
-        return residuals, error, leave
-
-class Evaluator(EvaluatorBase):
-    def __init__(self, real_values, weight_rel=1, weight_abs=1, weight_max=1,
-            leave_when_better_than=None):
-        super().__init__(leave_when_better_than)
-        self.real_values = real_values
-        self._real_value_span = real_values.max() - real_values.min()
-        self.weight_rel = weight_rel
-        self.weight_abs = weight_abs
-        self.weight_max = weight_max
-
-    def __call__(self, values):
-        relative = (values - self.real_values.ravel()) / self._real_value_span
-        relative = np.abs(relative)
-        absolute = values / self.real_values.ravel() - 1
-        absolute = np.abs(absolute)
-
-        relative *= self.weight_rel
-        absolute *= self.weight_abs
-
-        residuals = self.weight_rel*relative + self.weight_abs*absolute
-        residuals /= self.weight_rel + self.weight_abs
-
-        residuals += self.weight_max * residuals.max()
-        residuals /= self.weight_max + 1.0
-
-        return self._call_ret(residuals)
-
-    def abs_error(self, values):
-        return (values - self.real_values) / self._real_value_span
-    def rel_error(self, values):
-        return values / self.real_values - 1
+        return error, leave
 
 class EvaluatorAbsOnly(EvaluatorBase):
-    def __init__(self, real_values, leave_when_better_than=None):
+    def __init__(self, leave_when_better_than=None):
         super().__init__(leave_when_better_than)
-        self.real_values = real_values.ravel()
-
-    def __call__(self, values):
-        residuals = values / self.real_values - 1
-        residuals = np.abs(residuals)
-        return self._call_ret(residuals)
+    def __call__(self, real_values, values):
+        absolute = np.abs(abs_error(real_values, values))
+        error = float(absolute.max())
+        return self._get_ret(error)
 
 class EvaluatorRelOnly(EvaluatorBase):
-    def __init__(self, real_values, leave_when_better_than=None):
+    def __init__(self, leave_when_better_than=None):
         super().__init__(leave_when_better_than)
-        self.real_values = real_values.ravel()
-        self._real_value_span = real_values.max() - real_values.min()
-        self.leave_when_better_than = leave_when_better_than
+    def __call__(self, real_values, values):
+        relative = np.abs(rel_error(real_values, values))
+        error = float(relative.max())
+        return self._get_ret(error)
 
-    def __call__(self, values):
-        residuals = (values - self.real_values) / self._real_value_span
-        residuals = np.abs(residuals)
-        return self._call_ret(residuals)
-
-class EvaluatorMaxOnly(EvaluatorBase):
-    def __init__(self, real_values, leave_when_better_than=None):
+class EvaluatorMax(EvaluatorBase):
+    def __init__(self, leave_when_better_than=None):
         super().__init__(leave_when_better_than)
-        self.real_values = real_values.ravel()
-        self.leave_when_better_than = leave_when_better_than
+    def __call__(self, real_values, values):
+        absolute = np.abs(abs_error(real_values, values))
+        relative = np.abs(rel_error(real_values, values))
+        error = max(absolute.max(), relative.max())
+        error = float(error)
+        return self._get_ret(error)
 
-    def __call__(self, values):
-        residuals = values / self.real_values - 1
-        residuals = np.abs(residuals)
-        residuals = np.full_like(residuals, residuals.max())
-        return self._call_ret(residuals)
+class EvaluatorBalanced(EvaluatorBase):
+    def __init__(self, leave_when_better_than=None, weight_abs=1.0,
+            weight_rel=1.0):
+        super().__init__(leave_when_better_than)
+        self.weight_abs = weight_abs
+        self.weight_rel = weight_rel
+
+    def __call__(self, real_values, values):
+        absolute = np.abs(abs_error(real_values, values))
+        relative = np.abs(rel_error(real_values, values))
+        max_abs = absolute.max()
+        max_rel = relative.max()
+        error = self.weight_abs * max_abs + self.weight_rel * max_rel
+        error /= self.weight_abs + self.weight_rel
+        error = float(error)
+        return self._get_ret(error)
 
 
 
@@ -301,7 +283,7 @@ class Polynomial:
         if check:
             assert idxs == tuple(sorted(idxs))
             assert all(idx >= 0 for idx in idxs)
-            assert len(coeffs) != len(idxs)
+            assert len(coeffs) == len(idxs)
         self.dims = dims
         self.degree = degreeof(dims, max(idxs))
         self.count = len(idxs)
@@ -344,12 +326,12 @@ class RationalPolynomial:
     """
 
     @classmethod
-    def approximate(cls, values, *coords, idx_generator, evaluator,
+    def approximate(cls, real_values, *coords, idx_generator, evaluator,
             printer=None):
 
         dims = len(coords)
         flatcoords = [x.ravel() for x in coords]
-        values = values.ravel()
+        real_values = real_values.ravel()
 
         if any((x == 0.0).any() for x in flatcoords):
             raise Exception("zero-coord in input")
@@ -379,17 +361,19 @@ class RationalPolynomial:
                 find_best.N = maxdegree
                 find_best.ones = yup_all_ones(maxdegree, *flatcoords)
 
-            def compute(coeffs):
+            def compute(coeffs, residuals):
                 ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
                 values = ratpoly.eval_ones(find_best.ones)
-                return ratpoly, *evaluator(values)
+                if residuals:
+                    return values - real_values
+                else:
+                    return ratpoly, *evaluator(real_values, values)
             # Optimise via least squares, since its significantly more stable
             # than a minimise-max-error optimiser.
-            diff = lambda coeffs: compute(coeffs)[1]
+            diff = lambda coeffs: compute(coeffs, True)
             coeffs = initial_coeffs(pidxs, qidxs)
-            res = scipy.optimize.least_squares(diff, coeffs,
-                    method="lm") # seems like the best method after testing.
-            return compute(res.x)
+            res = scipy.optimize.least_squares(diff, coeffs, method="lm")
+            return compute(res.x, False)
         find_best.N = -1
         find_best.ones = None
 
@@ -399,7 +383,7 @@ class RationalPolynomial:
         for pidxs, qidxs in idx_generator:
             if printer is not None:
                 printer.trying(pidxs, qidxs)
-            ratpoly, _, error, leave = find_best(pidxs, qidxs)
+            ratpoly, error, leave = find_best(pidxs, qidxs)
             if printer is not None:
                 printer.tried(ratpoly, error)
 
@@ -432,6 +416,11 @@ class RationalPolynomial:
         q = np.sum(self.q.coeffs * ones[:, self.q.idxs], axis=-1)
         with np.errstate(divide="ignore"):
             return p / q
+
+    def abs_error(self, real_values, *coords):
+        return abs_error(real_values, self.eval_coords(*coords))
+    def rel_error(self, real_values, *coords):
+        return rel_error(real_values, self.eval_coords(*coords))
 
     def __repr__(self, short=True):
         return f"({self.p.__repr__(short)}) / ({self.q.__repr__(short)})"

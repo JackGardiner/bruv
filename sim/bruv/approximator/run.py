@@ -20,8 +20,8 @@ __all__ = ["run", "main"]
 
 def summary_1D(ratpoly, values, X, *, extra_reqs=()):
     approx = ratpoly.eval_coords(X)
-    abserr = Evaluator(values).abs_error(approx)
-    relerr = Evaluator(values).rel_error(approx)
+    abserr = ratpoly.abs_error(values, X)
+    relerr = ratpoly.rel_error(values, X)
     print(f"    /* max error of: */")
     print(f"    /*    abs {np.abs(abserr).max()*100:.4g}% */")
     print(f"    /*    rel {np.abs(relerr).max()*100:.4g}% */")
@@ -38,8 +38,8 @@ def summary_1D(ratpoly, values, X, *, extra_reqs=()):
 
 def summary_2D(ratpoly, values, X, Y, *, extra_reqs=()):
     approx = ratpoly.eval_coords(X, Y)
-    abserr = Evaluator(values).abs_error(approx)
-    relerr = Evaluator(values).rel_error(approx)
+    abserr = ratpoly.abs_error(values, X, Y)
+    relerr = ratpoly.rel_error(values, X, Y)
     print(f"    /* max error of: */")
     print(f"    /*    abs {np.abs(abserr).max()*100:.4g}% */")
     print(f"    /*    rel {np.abs(relerr).max()*100:.4g}% */")
@@ -77,9 +77,9 @@ def test1d():
 
     ratpoly, _ = RationalPolynomial.approximate(
         values, X,
-        idx_generator=IdxGenerator.infinite(dims=1),
-        # idx_generator=IdxGenerator.just((0, 1), (0, 1, 2)),
-        evaluator=Evaluator(values, leave_when_better_than=0.012),
+        # idx_generator=IdxGenerator.infinite(dims=1),
+        idx_generator=IdxGenerator.just((0, 2), (0, 2, 3)),
+        evaluator=EvaluatorAbsOnly(leave_when_better_than=0.012),
         printer=Printer()
     )
     print("found:", ratpoly)
@@ -89,16 +89,16 @@ def test1d():
 
 def test2d():
     print("approximating e^(xy/20) + ln(x)")
-    X = linspace(100, 1, 3)
-    Y = linspace(100, 10, 20)
+    X = linspace(20, 1, 3)
+    Y = linspace(20, 10, 20)
     X, Y = meshgrid(X, Y)
     values = np.exp(X*Y/20) + np.log(X)
 
     ratpoly, _ = RationalPolynomial.approximate(
         values, X, Y,
         # idx_generator=IdxGenerator.infinite(dims=1, blitz=2.0),
-        idx_generator=IdxGenerator.just((0, 2, 4), (0, 1, 4)),
-        evaluator=Evaluator(values, leave_when_better_than=0.012),
+        idx_generator=IdxGenerator.just((0, 2, 4, 5), (0, 1, 4)),
+        evaluator=EvaluatorAbsOnly(leave_when_better_than=0.03),
         printer=Printer()
     )
     print("found:", ratpoly)
