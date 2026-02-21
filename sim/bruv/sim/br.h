@@ -147,17 +147,14 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 #define distinguish_vec3(T...) ( distinguish_vec3_(typeof(T)) )
 
 
-// Constructs a `vec2` from the given arguments. If given only one argument, a
-// vector with every element set to that is created.
+// Constructs a `vec2` from the given arguments.
 // - Overloaded:
 //      vec2(vec2 xy) -> (xy[0], xy[1])
 //      vec2(f32 x, f32 y) -> (x, y)
 //      vec2(f32 x) -> (x, x)
 #define vec2(xs...) ( GLUE2(vec2_, countva(xs)) (xs) )
 
-// Constructs a `vec3` from the given arguments. If given only one argument, a
-// vector with every element set to that is created, unless that argument is a
-// vec4, in which case the first three elements of it are used.
+// Constructs a `vec3` from the given arguments.
 // - The fourth/ignored element of the vec3 is initialised to 1.0.
 // - Overloaded:
 //      vec3(vec3 xyz) -> (xyz[0], xyz[1], xyz[2])
@@ -166,11 +163,7 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 //      vec3(vec4 v) -> (v[0], v[1], v[2])
 #define vec3(xs...) ( GLUE2(vec3_, countva(xs)) (xs) )
 
-// Constructs a `vec4` from the given arguments. If given only one argument, a
-// vector with every element set to that is created. If given two arguments,
-// requires the first to be a vec3 and the second to be a single, the result is
-// then the first three elements from the vec3 and the last element as the
-// single.
+// Constructs a `vec4` from the given arguments.
 // - Overloaded:
 //      vec4(vec4 xyzw) -> (xyzw[0], xyzw[1], xyzw[2], xyzw[3])
 //      vec4(f32 x, f32 y, f32 z, f32 w) -> (x, y, z, w)

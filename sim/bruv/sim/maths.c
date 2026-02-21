@@ -1388,15 +1388,9 @@ f32 nonhypot_3_f32(f32 a, f32 b, f32 c) { return sqrt(a*a - b*b - c*c); }
 
 f64 lerp_f64(f64 a, f64 b, f64 t) { return a + t*(b - a); }
 f32 lerp_f32(f32 a, f32 b, f32 t) { return a + t*(b - a); }
-vec2 lerp_vec2(vec2 a, vec2 b, vec2 t) { return a + t*(b - a); }
-vec3 lerp_vec3(vec3 a, vec3 b, vec3 t) { return a + t*(b - a); }
-vec4 lerp_vec4(vec4 a, vec4 b, vec4 t) { return a + t*(b - a); }
 
 f64 invlerp_f64(f64 a, f64 b, f64 x) { return (x - a) / (b - a); }
 f32 invlerp_f32(f32 a, f32 b, f32 x) { return (x - a) / (b - a); }
-vec2 invlerp_vec2(vec2 a, vec2 b, vec2 x) { return (x - a) / (b - a); }
-vec3 invlerp_vec3(vec3 a, vec3 b, vec3 x) { return (x - a) / (b - a); }
-vec4 invlerp_vec4(vec4 a, vec4 b, vec4 x) { return (x - a) / (b - a); }
 
 
 
@@ -1449,17 +1443,17 @@ vec4 normalise_nonzero_vec4(vec4 v) {
 }
 
 
-i32 nearzero_f64(f64 v) { return nearto(mag(v), 1.0); }
-i32 nearzero_f32(f32 v) { return nearto(mag(v), 1.f); }
-i32 nearzero_vec2(vec2 v) { return nearto(mag(v), 1.f); }
-i32 nearzero_vec3(vec3 v) { return nearto(mag(v), 1.f); }
-i32 nearzero_vec4(vec4 v) { return nearto(mag(v), 1.f); }
+i32 nearzero_f64(f64 v) { return abs(v) < DFLT_ATOL; }
+i32 nearzero_f32(f32 v) { return abs(v) < DFLT_ATOL; }
+i32 nearzero_vec2(vec2 v) { return abs(mag(v)) < DFLT_ATOL; }
+i32 nearzero_vec3(vec3 v) { return abs(mag(v)) < DFLT_ATOL; }
+i32 nearzero_vec4(vec4 v) { return abs(mag(v)) < DFLT_ATOL; }
 
-i32 nearunit_f64(f64 v) { return nearto(mag(v), 0.0); }
-i32 nearunit_f32(f32 v) { return nearto(mag(v), 0.f); }
-i32 nearunit_vec2(vec2 v) { return nearto(mag(v), 0.f); }
-i32 nearunit_vec3(vec3 v) { return nearto(mag(v), 0.f); }
-i32 nearunit_vec4(vec4 v) { return nearto(mag(v), 0.f); }
+i32 nearunit_f64(f64 v) { return abs(abs(v) - 1.0) < (DFLT_ATOL + DFLT_RTOL); }
+i32 nearunit_f32(f32 v) { return abs(abs(v) - 1.f) < (DFLT_ATOL + DFLT_RTOL); }
+i32 nearunit_vec2(vec2 v) { return abs(mag(v) - 1.f) < (DFLT_ATOL + DFLT_RTOL); }
+i32 nearunit_vec3(vec3 v) { return abs(mag(v) - 1.f) < (DFLT_ATOL + DFLT_RTOL); }
+i32 nearunit_vec4(vec4 v) { return abs(mag(v) - 1.f) < (DFLT_ATOL + DFLT_RTOL); }
 
 
 f64 mag_f64(f64 v) { return abs(v); }
@@ -1617,4 +1611,115 @@ i32 nearvert_vec3(vec3 xyz) {
 }
 i32 nearhoriz_vec3(vec3 xyz) {
     return nearto(argphi(xyz), fPI_2);
+}
+
+
+
+// =========================================================================== //
+// = QUATERNIONS ============================================================= //
+// =========================================================================== //
+
+quat quat_id(void) {
+    return (quat){ 1.f, 0.f, 0.f, 0.f };
+}
+quat quat_copy(quat q) {
+    return (quat){ q[0], q[1], q[2], q[3] };
+}
+quat quat_from_axis_angle(vec3 axis, f32 angle) {
+    f32 half = angle * 0.5f;
+    half = mod(half, TWOPI);
+    f32 coshalf = cos(half);
+    f32 sinhalf = sqrt(1.f - sqed(coshalf));
+    // ^ literally more accurate and faster than our sin lmao.
+    if (half > fPI)
+        sinhalf = -sinhalf;
+    return (quat){ coshalf, sinhalf*axis[0], sinhalf*axis[1], sinhalf*axis[2] };
+}
+
+
+f32 quat_axis_angle(quat q, vec3* axis) {
+    f32 coshalf = q[0];
+    f32 sinhalf = sqrt(1.f - sqed(coshalf));
+    if (nearzero(sinhalf)) {
+        if (axis) *axis = v3Z;
+        return 0.f;
+    }
+    if (axis) *axis = vec3(q[1], q[2], q[3])/sinhalf;
+    if (nearzero(coshalf))
+        return fPI;
+    return 2.f*atan(sinhalf / coshalf);
+}
+
+
+quat quat_normalise(quat q) {
+    return normalise(q);
+}
+
+quat quat_shortest(quat q) {
+    return (q[0] < 0.f) ? -q : q;
+}
+
+
+quat quat_inverse(quat q) {
+    return (quat){ q[0], -q[1], -q[2], -q[3] };
+}
+
+quat quat_compose(quat a, quat b) {
+    return (quat){ b[0]*a[0] - b[1]*a[1] - b[2]*a[2] - b[3]*a[3]
+                 , b[0]*a[1] + b[1]*a[0] + b[2]*a[3] - b[3]*a[2]
+                 , b[0]*a[2] - b[1]*a[3] + b[2]*a[0] + b[3]*a[1]
+                 , b[0]*a[3] + b[1]*a[2] - b[2]*a[1] + b[3]*a[0] };
+}
+
+quat quat_relativeto(quat q, quat ref) {
+    return quat_compose(quat_inverse(ref), q);
+}
+
+quat quat_fromto(vec3 start, vec3 end) {
+    f32 beta = argbeta(start, end);
+
+    // Start is parallel to end:
+    if (nearto(beta, 0.f))
+        return quat_id();
+
+    // Start is opposite to end:
+    if (nearto(beta, fPI)) {
+        // Pick any perp axis.
+        vec3 axis = cross(v3X, start);
+        if (mag2(axis) < 0.001f) // too close for comfort.
+            axis = cross(v3Y, start);
+        axis = normalise(axis);
+        return (quat){ 0.f, axis[0], axis[1], axis[2] };
+    }
+
+    // Otherwise typical.
+    vec3 axis = cross(start, end);
+    return quat_from_axis_angle(axis, beta);
+}
+
+quat quat_slerp(quat a, quat b, f32 t) {
+    f32 cosbeta = dot(a, b);
+
+    // Ensure shortest path.
+    if (cosbeta < 0.f)
+        b = -b;
+
+    // Normal lerp if very close.
+    if (nearto(cosbeta, 1.f))
+        return quat_normalise(a + t*(b - a));
+
+    // Otherwise typical.
+    f32 beta = acos(cosbeta);
+    f32 sinbeta = sin(beta);
+    f32 t0 = sin((1.f - t)*beta) / sinbeta;
+    f32 t1 = sin(      (t)*beta) / sinbeta;
+    return t0*a + t1*b;
+}
+
+
+vec3 quat_apply(quat q, vec3 v) {
+    vec3 qv = vec3(q[1], q[2], q[3]);
+    vec3 t = 2.f * cross(qv, v);
+    vec3 u = cross(qv, t);
+    return v + q[0]*t + u;
 }

@@ -600,7 +600,7 @@ f32 atan2_f32(f32 y, f32 x);
 // Returns `sqrt(sum(sides**2))`. Only accepts 2 or 3 arguments.
 #define hypot(sides...) ( IDENTITY(GLUE2(hypot_, countva(sides)) (sides)) )
 #define hypot_2(a, b) choose_fpscal_2_(hypot_2, a, b)
-#define hypot_3(a, b) choose_fpscal_3_(hypot_3, a, b, c)
+#define hypot_3(a, b, c) choose_fpscal_3_(hypot_3, a, b, c)
 f64 hypot_2_f64(f64 a, f64 b);
 f32 hypot_2_f32(f32 a, f32 b);
 f64 hypot_3_f64(f64 a, f64 b, f64 c);
@@ -620,25 +620,18 @@ f32 nonhypot_3_f32(f32 a, f32 b, f32 c);
 
 // Returns a value which is proportionally `t` of the way from `a` to `b`,
 // `a + t*(b - a)`.
-// - Element-wise for vector types.
-#define lerp(a, b, t) ( math_choose3_(lerp, (a), (b), (t)) )
+#define lerp(a, b, t) ( choose_fpscal_3_(lerp, (a), (b), (t)) )
 f64 lerp_f64(f64 a, f64 b, f64 t);
 f32 lerp_f32(f32 a, f32 b, f32 t);
-vec2 lerp_vec2(vec2 a, vec2 b, vec2 t);
-vec3 lerp_vec3(vec3 a, vec3 b, vec3 t);
-vec4 lerp_vec4(vec4 a, vec4 b, vec4 t);
 // Forwards to lerp with `t = i / (N - 1)`.
-#define lerpidx(a, b, i, N) ( lerp_((a), (b), ((i) / (f32)((N) - 1))) )
+#define lerpidx(a, b, i, N) \
+    ( lerp_((a), (b), ((i) / (typeof((a) + (b)))((N) - 1))) )
 
 // Inverse of `lerp`, returning the `t` value s.t. `x = lerp(a, b, t)`,
 // `(x - a) / (b - a)`.
-// - Element-wise for vector types.
-#define invlerp(a, b, x) ( math_choose3_(invlerp, (a), (b), (x)) )
+#define invlerp(a, b, x) ( choose_fpscal_3_(invlerp, (a), (b), (x)) )
 f64 invlerp_f64(f64 a, f64 b, f64 x);
 f32 invlerp_f32(f32 a, f32 b, f32 x);
-vec2 invlerp_vec2(vec2 a, vec2 b, vec2 x);
-vec3 invlerp_vec3(vec3 a, vec3 b, vec3 x);
-vec4 invlerp_vec4(vec4 a, vec4 b, vec4 x);
 
 
 
@@ -848,8 +841,66 @@ i32 nearhoriz_vec3(vec3 xyz);
 //        QUATERNIONS        //
 // ========================= //
 
-// TODO:
+// Quaternion, consisting of `quat[0] + quat[1] i + quat[2] j + quat[3] k`. Used
+// here to represent arbitrary 3D rotations.
+typedef vec4 quat;
 
+// Constructs a `quat` from the given arguments.
+// - Overloaded:
+//      quat(quat q) -> copy
+//      quat() -> identity (no rotation)
+//      quat(vec3 axis, f32 angle) -> rotation about `axis` by `by` radians.
+#define quat(xs...) ( GLUE2(quat_, countva(xs)) (xs) )
+
+// wait shit this is the same verse i just did this, we shadowed the bloody type
+// name with the constructor.
+typedef quat also_quat;
+
+
+// Quaternion of no rotation.
+quat quat_id(void);
+
+// Identical quaternion.
+quat quat_copy(quat q);
+
+// Represents a rotation about `axis` by `by` radians.
+// - `axis` must be normalised.
+quat quat_from_axis_angle(vec3 axis, f32 angle);
+
+
+// Sets `*axis` to the axis that `q` acts about and returns the angle of its
+// applied rotation. If `q` is no rotation, returns 0 and sets `*axis` to +Z.
+f32 quat_axis_angle(quat q, vec3* axis);
+
+
+// Normalises `q`. All quaternions representing rotations should be normalised,
+// but may numerically drift after many operations, etc.
+quat quat_normalise(quat q);
+
+// Return an equivalent rotation to `q`, possibly taking a shorter-than-half-turn
+// if `q`'s angle was >pi.
+quat quat_shortest(quat q);
+
+
+// Returns a rotation which would reverse `q`.
+quat quat_inverse(quat q);
+
+// Returns a rotation equivalent to first applying `a`, then `b`.
+quat quat_compose(quat a, quat b);
+
+// Returns the rotation that, when applied to `ref`, results in `q`.
+quat quat_relativeto(quat q, quat ref);
+
+// Returns the shortest rotation to point `start` in the direction of `end`.
+// - `start` and `end` must be normalised.
+quat quat_fromto(vec3 start, vec3 end);
+
+// Spherical-linear interpolation from `a` to `b`, using factor `t`.
+quat quat_slerp(quat a, quat b, f32 t);
+
+
+// Applies the rotation of `q` to `v`.
+vec3 quat_apply(quat q, vec3 v);
 
 
 
@@ -1031,3 +1082,18 @@ i32 nearhoriz_vec3(vec3 xyz);
 #define eq_(a, b) && eq2((a), (b))
 
 #define oneof_(x, val) || eq2(x, (val))
+
+#define quat_0() quat_id()
+#define quat_1(q) generic(distinguish_vec3((q)) \
+        , vec4: quat_copy                       \
+    ) ((q))
+
+#if BR_COMPILING
+#define quat_2(axis, angle) generic(distinguish_vec3((axis))    \
+        , genuinely_vec3: quat_from_axis_angle                  \
+    ) ((axis), (angle))
+#else
+#define quat_2(axis, angle) generic((axis)  \
+        , vec4: quat_from_axis_angle        \
+    ) ((axis), (angle))
+#endif
