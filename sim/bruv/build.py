@@ -301,7 +301,7 @@ def _gcc_cmd(extra_args=()):
 
 def _build_sim(deps, gcc_extra_args=()):
     cmd, builds_lib, out = _gcc_cmd(gcc_extra_args)
-    print(f">> {" ".join(cmd)}\n")
+    print(f">> {' '.join(cmd)}\n")
 
     # Ensure output dir.
     out.parent.mkdir(parents=True, exist_ok=True)
