@@ -178,20 +178,20 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 //      vec4(vec3 xyz, f32 w) -> (xyz[0], xyz[1], xyz[2], w)
 #define vec4(xs...) ( GLUE2(vec4_, countva(xs)) (xs) )
 
-inline vec2 vec2_copy(vec2 xy);
-inline vec3 vec3_copy(vec3 xyz);
-inline vec4 vec4_copy(vec4 xyzw);
+vec2 vec2_copy(vec2 xy);
+vec3 vec3_copy(vec3 xyz);
+vec4 vec4_copy(vec4 xyzw);
 
-inline vec2 vec2_from_elems(f32 x, f32 y);
-inline vec3 vec3_from_elems(f32 x, f32 y, f32 z);
-inline vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w);
+vec2 vec2_from_elems(f32 x, f32 y);
+vec3 vec3_from_elems(f32 x, f32 y, f32 z);
+vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w);
 
-inline vec2 vec2_from_rep(f32 x);
-inline vec3 vec3_from_rep(f32 x);
-inline vec4 vec4_from_rep(f32 x);
+vec2 vec2_from_rep(f32 x);
+vec3 vec3_from_rep(f32 x);
+vec4 vec4_from_rep(f32 x);
 
-inline vec3 vec3_from_vec4(vec4 x);
-inline vec4 vec4_from_vec3(vec3 xyz, f32 w);
+vec3 vec3_from_vec4(vec4 x);
+vec4 vec4_from_vec3(vec3 xyz, f32 w);
 
 
 // Note the cheeky vector constructors shadow the type name themselves, but will
@@ -344,6 +344,28 @@ typedef vec4 also_vec4;
 #define v4W (vec4(0.f, 0.f, 0.f, 1.f))
 
 
+// Expands to zero in the given type.
+// - `T` must be a floating point expression or type.
+#define zero(T...) ( generic(distinguish_vec3(T)    \
+        ,            f64: 0.0                       \
+        ,            f32: 0.f                       \
+        ,           vec2: v2ZERO                    \
+        , genuinely_vec3: v3ZERO                    \
+        ,           vec4: v4ZERO                    \
+    ) )
+
+
+// Expands to one in the given type.
+// - `T` must be a floating point expression or type.
+#define one(T...) ( generic(distinguish_vec3(T) \
+        ,            f64: 1.0                   \
+        ,            f32: 1.f                   \
+        ,           vec2: v2ONE                 \
+        , genuinely_vec3: v3ONE                 \
+        ,           vec4: v4ONE                 \
+    ) )
+
+
 // Expands to a quiet NaN in the given type.
 // - `T` must be a floating point expression or type.
 // - Do not use this with `==` to test for nans (nan always compare unequal), use
@@ -356,20 +378,6 @@ typedef vec4 also_vec4;
         ,           vec4: v4NAN                 \
     ) )
 
-// Returns 1 if `x` is NaN, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any nan element causes a 1 return.
-#define isnan(x...) ( isnan_((x)) )
-
-// Returns 1 if all elements in `x` are NaN, 0 otherwise.
-// - `x` must be a floating point vector expression.
-#define isallnan(x...) ( isallnan_((x)) )
-
-// Returns 1 if `x` is not NaN, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any nan element causes a 0 return.
-#define notnan(x...) ( !isnan(x) )
-
 
 // Expands to positive infinity in the given type.
 // - `T` must be a floating point expression or type.
@@ -381,56 +389,46 @@ typedef vec4 also_vec4;
         ,           vec4: v4INF                 \
     ) )
 
-// Returns 1 if `x` is infinite, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any inf element causes a 1 return.
-#define isinf(x...) ( isinf_((x)) )
-
-// Returns 1 if all elements in `x` are infinite, 0 otherwise.
-// - `x` must be a floating point vector expression.
-#define isallinf(x...) ( isallinf_((x)) )
-
-// Returns 1 if `x` is not an infinite value, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any inf element causes a 0 return.
-#define notinf(x...) ( !isinf(x) )
-
-
-// Returns 1 if `x` is not infinite and not NaN, 0 otherwise.
-// - `x` must be a floating point expression.
-// - For vector types, any non-good element causes a 0 return.
-#define isgood(x...) ( notinf(x) && notnan(x) )
-
 
 // Returns the bits of `f`, as a integer of the same size.
 // - `f` must be a floating point expression.
 // - The memory of `f` is reinterpreted, no conversion takes place.
 // - Returns one of the following types:
-//      f64 -> i64
-//      f32 -> i32
+//      f64 -> u64
+//      f32 -> u32
 //      vec2 -> i32x2
 //      vec3/4 -> i32x4
 #define fp_bits(f...) ( generic((f) \
-        ,  f64: fp_bits_f64_        \
-        ,  f32: fp_bits_f32_        \
-        , vec2: fp_bits_vec2_       \
-        , vec4: fp_bits_vec4_       \
+        ,  f64: fp_bits_f64         \
+        ,  f32: fp_bits_f32         \
+        , vec2: fp_bits_vec2        \
+        , vec4: fp_bits_vec4        \
     ) (f) )
+u32 fp_bits_f32(f32 f);
+u64 fp_bits_f64(f64 f);
+i32x2 fp_bits_vec2(vec2 f);
+i32x4 fp_bits_vec3(vec3 f);
+i32x4 fp_bits_vec4(vec4 f);
 
 // Returns the floating point that has the same size and bits as `i`.
 // - `i` must be an `i64`, `i32`, `i32x2`, or `i32x4` expression.
 // - The memory of `i` is reinterpreted, no conversion takes place.
 // - Returns one of the following types:
-//      i64 -> f64
-//      i32 -> f32
+//      u64 -> f64
+//      u32 -> f32
 //      i32x2 -> vec2
 //      i32x4 -> vec4 (may be considered vec3)
 #define fp_from_bits(i...) ( generic((i)    \
-        ,   i64: fp_from_bits_i64_          \
-        ,   i32: fp_from_bits_i32_          \
-        , i32x2: fp_from_bits_i32x2_        \
-        , i32x4: fp_from_bits_i32x4_        \
+        ,   u64: fp_from_bits_f64           \
+        ,   u32: fp_from_bits_f32           \
+        , i32x2: fp_from_bits_vec2          \
+        , i32x4: fp_from_bits_vec4          \
     ) (i) )
+f32 fp_from_bits_f32(u32 i);
+f64 fp_from_bits_f64(u64 i);
+vec2 fp_from_bits_vec2(i32x2 i);
+vec4 fp_from_bits_vec3(i32x4 i);
+vec4 fp_from_bits_vec4(i32x4 i);
 
 
 // Expands to the greatest magnitude representable by a normal floating point
@@ -595,110 +593,6 @@ typedef vec4 also_vec4;
 
 
 
-// ========================== //
-//        NUMBER MANIP        //
-// ========================== //
-
-// Returns 1 if all elements in the given expressions are element-wise equal, 0
-// otherwise. This is needed since the builtin vector comparison operators act
-// element-wise.
-#define eq(xs...) ( 1 FOREACH(eq_, FIRST(xs), xs) )
-// Two-argument version of `eq` (slightly more performant/doesn't depend on
-// `FOREACH`).
-#define eq2(a, b) ( eq2_((a), (b)) )
-
-// Returns 1 if any elements in `a` and `b` are element-wise equal, 0 otherwise.
-// This is needed since the builtin vector comparison operators act element-wise.
-#define anyeq(a, b) ( anyeq_((a), (b)) )
-
-// =`!eq(a, b)`
-#define neq(a, b) ( !(eq2_((a), (b))) )
-
-// =`!anyeq(a, b)`
-#define allneq(a, b) ( !(anyeq_((a), (b))) )
-
-
-// Returns `dflt` is `x` is NaN, `x` otherwise.
-// - `x` must be a floating point expression.
-#define ifnan(x, dflt) ( ifnan_((x), (dflt)) )
-
-// Returns a vector of pair-wise `ifnan`s for each element of `x` and `dflt`.
-// Accepts non-vector floating points, but acts identically to `ifnan`.
-// - `x` and `dflt` must be floating point expressions of the same type.
-#define ifnanelem(x, dflt) ( ifnanelem_((x), (dflt)) )
-
-
-// Returns 1 if every bit in `mask` is one (set) in `x`, 0 otherwise.
-#define isset(x, mask) ( ((x) & (mask)) == (mask) )
-
-// Returns 1 if every bit in `mask` is zero (cleared) in `x`, 0 otherwise.
-#define isclr(x, mask) ( ((x) & (mask)) == 0 )
-
-
-// Returns `n` contiguous bits, starting from the lowest bit. This can be used to
-// mask the low `n` bits.
-// - `n` must be in 0..64.
-// - The type of the return is `u64`.
-// - The value of the return is `(1 << n) - 1` (assuming infinite precision).
-#define lobits(n) ( ((n) == 64) ? (u64)-1 : ((u64)1U << (n)) - 1 )
-
-// Returns a number with only the `n`th bit set. This can be used to mask the
-// `n`th bit.
-// - `n` must be in 0..63.
-// - The type of the return is `u64`.
-// - The value of the return is `(1 << n)` (assuming infinite precision).
-#define nthbit(n) ( (u64)1U << (n) )
-
-// Returns 1 if `x` is a power-of-2 (meaning it has exactly one bit set), 0
-// otherwise.
-// - `x` must be >=0.
-#define ispow2(x) ( (x) != 0 && ((x) & ((x) - 1)) == 0 )
-
-
-// Returns 1 if `x` is within [`lo`, `hi`], inclusive of each, 0 otherwise.
-// - Does not support floating point vectors.
-#define within(x, lo, hi) ((lo) <= (x) && (x) <= (hi))
-
-// Returns 1 if `x` is equal to any of the values in `vals`, 0 otherwise.
-// - If given no arguments, returns 0.
-// - Supports floating point vectors.
-#define oneof(x, vals...) ( 0 FOREACH(oneof_eq_, (x), vals) )
-
-
-// Returns the absolute value of the given number. For vector types, this is
-// element-wise. For integer types, returns the result as an unsigned integer.
-// This unsigned promotion ensures that the return result will always compare >=0
-// (e.g. `-intmin(i32)` is <0 when left as `i32`, but is the correct result in
-// `u32`).
-// - Returns the same type, except promoting signed integers to unsigned.
-#define abs(x...) ( abs_((x)) )
-// Identical to `abs` except doesn't promote signed integers to unsigned.
-// - Note in the case where `x` is a signed integer and equal to `intmin(x)`, the
-//      result will not change value (i.e. it will still be negative). Use
-//      `abs(x)`, which returns unsigned, to avoid this issue.
-// - Returns the exact same type.
-#define iabs(x...) ( iabs_((x)) )
-
-
-// Returns the minimum of the given numbers (or the only non-nan). For vector
-// types, this is element-wise.
-#define min(a, b) ( min_((a), (b)) )
-
-// Returns the maximum of the given numbers (or the only non-nan). For vector
-// types, this is element-wise.
-#define max(a, b) ( max_((a), (b)) )
-
-
-// Returns the minimum element (ignoring nans) in the given floating point
-// vector. Accepts non-vectors, but acts as identity.
-#define minelem(x...) ( minelem_((x)) )
-
-// Returns the maximum element (ignoring nans) in the given floating point
-// vector. Accepts non-vectors, but acts as identity.
-#define maxelem(x...) ( maxelem_((x)) )
-
-
-
 // ========================= //
 //          EXPECTS          //
 // ========================= //
@@ -744,11 +638,11 @@ typedef vec4 also_vec4;
 
 // Returns 1 if all values in `xs` are non-zero, 0 otherwise.
 // - If no arguments are given, returns 1.
-#define all(xs...) ( all_(xs) )
+#define all(xs...) ( 1 FOREACH(INVOKE, all_, xs) )
 
 // Returns 1 if any value in `xs` is non-zero, 0 otherwise.
 // - If no arguments are given, returns 0.
-#define any(xs...) ( any_(xs) )
+#define any(xs...) ( 0 FOREACH(INVOKE, any_, xs) )
 
 // Returns 1 if all values in `xs` are zero, 0 otherwise.
 // - If no arguments are given, returns 1.
@@ -756,7 +650,7 @@ typedef vec4 also_vec4;
 
 // Returns 1 if exactly one of the values in `xs` is non-zero, 0 otherwise.
 // - If no arguments are given, returns 0.
-#define just_one(xs...) ( just_one_(xs) )
+#define just_one(xs...) ( 1 == 0 FOREACH(INVOKE, just_one_, xs) )
 
 
 
@@ -785,6 +679,11 @@ typedef vec4 also_vec4;
 //      (including comments) should still give warnings, but gcc seems to have a
 //      soft spot for that one so. consider yourself lucky.
 #define fallthrough() do { __attribute((__fallthrough__)); } while (0)
+
+
+// Refers to a gcc vector of `count` elements of `T`.
+#define Vector(T, count) \
+    __attribute((__vector_size__(sizeof(typeof(T)) * (count)))) typeof(T)
 
 
 

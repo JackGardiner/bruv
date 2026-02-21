@@ -250,6 +250,15 @@ static void testing(void) {
     // printf("~ %d\n", maxelem("hi"));
     printf("0 %d\n", maxelem(0));
 
+
+    printf("%f\n", 1.0 / 0.0);
+    printf("%f\n", 0.0 / 0.0);
+    printf("%f\n", -1.0 / 0.0);
+
+    printf("maths:\n");
+    printf("%f\n", argbeta(vec3(1,1,1), -v3ONE));
+    printf("%f\n", argphi(vec3(1,1,1)));
+
     printf("END TESTING\n");
 }
 
