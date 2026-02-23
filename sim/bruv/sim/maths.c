@@ -1143,6 +1143,151 @@ vec4 tan_vec4(vec4 x) {
 }
 
 
+void sincos_f64(f64 x, f64* rstr sinx, f64* rstr cosx) {
+    // Combined sin/cos routine.
+
+    if (isnan(x) || isinf(x)) {
+        *sinx = *cosx = NAN;
+        return;
+    }
+
+    //  sin(-x) = -sin(x)
+    //  cos(-x) = cos(x)
+    // so match sin sign with x sign.
+    i32 negsin = signbit(x);
+    if (negsin)
+        x = -x;
+
+    if (unlikely(x > 1e12)) {
+        *sinx = 0.0;
+        *cosx = 1.0;
+        return;
+    }
+
+    i64 q = x * (2.0 / PI); // x / (pi/2) == x * (2/pi)
+    x -= q * (PI / 2.0);
+
+    // Setup a value `y` s.t. `sin(y) = cos(x)`.
+    f64 y = x;
+    i32 negcos = 0;
+
+    switch (q & 3) {
+        case 0: // ^> quadrant.
+            y = PI_2 - y;
+            break;
+        case 1: // ^< quadrant.
+            x = PI_2 - x;
+            negcos = 1;
+            break;
+        case 2: // v< quadrant.
+            y = PI_2 - y;
+            negcos = 1;
+            negsin = !negsin;
+            break;
+        case 3: // v> quadrant.
+            x = PI_2 - x;
+            negsin = !negsin;
+            break;
+    }
+
+
+    // Sin poly in two channels.
+    f64 c1 = +1.00000000000000000;
+    f64 c3 = -0.16666658910800000;
+    f64 c5 = +0.00833305796660000;
+    f64 c7 = -0.00019809319994700;
+    f64 c9 = +0.00000260558007796;
+    Vector(f64, 2) u = { x, y };
+    Vector(f64, 2) u2 = u*u;
+    Vector(f64, 2) sinxcosx = (
+        ((((c9 * u2 + c7) * u2 + c5) * u2 + c3) * u2 + c1) * u
+    );
+
+    *sinx = (x > PI_2 - 0.00012) ? 1.0 : sinxcosx[0];
+    *cosx = (y > PI_2 - 0.00012) ? 1.0 : sinxcosx[1];
+
+    if (negsin)
+        *sinx = -(*sinx);
+    if (negcos)
+        *cosx = -(*cosx);
+}
+void sincos_f32(f32 x, f32* rstr sinx, f32* rstr cosx) {
+    if (isnan(x) || isinf(x)) {
+        *sinx = *cosx = fNAN;
+        return;
+    }
+
+    i32 negsin = signbit(x);
+    if (negsin)
+        x = -x;
+
+    if (unlikely(x > 1e12f)) {
+        *sinx = 0.f;
+        *cosx = 1.f;
+        return;
+    }
+
+    i64 q = x * (2.f / fPI);
+    x -= q * (fPI / 2.f);
+
+    f32 y = x;
+    i32 negcos = 0;
+
+    switch (q & 3) {
+        case 0: // ^> quadrant.
+            y = fPI_2 - y;
+            break;
+        case 1: // ^< quadrant.
+            x = fPI_2 - x;
+            negcos = 1;
+            break;
+        case 2: // v< quadrant.
+            y = fPI_2 - y;
+            negcos = 1;
+            negsin = !negsin;
+            break;
+        case 3: // v> quadrant.
+            x = fPI_2 - x;
+            negsin = !negsin;
+            break;
+    }
+
+    f32 c1 = +1.00000000000000000f;
+    f32 c3 = -0.16666658910800000f;
+    f32 c5 = +0.00833305796660000f;
+    f32 c7 = -0.00019809319994700f;
+    f32 c9 = +0.00000260558007796f;
+    Vector(f32, 2) u = { x, y };
+    Vector(f32, 2) u2 = u*u;
+    Vector(f32, 2) sinxcosx = (
+        ((((c9 * u2 + c7) * u2 + c5) * u2 + c3) * u2 + c1) * u
+    );
+
+    *sinx = (x > fPI_2 - 0.00012f) ? 1.f : sinxcosx[0];
+    *cosx = (y > fPI_2 - 0.00012f) ? 1.f : sinxcosx[1];
+
+    if (negsin)
+        *sinx = -(*sinx);
+    if (negcos)
+        *cosx = -(*cosx);
+}
+void sincos_vec2(vec2 x, vec2* rstr sinx, vec2* rstr cosx) {
+    sincos(x[0], &(*sinx)[0], &(*cosx)[0]);
+    sincos(x[1], &(*sinx)[1], &(*cosx)[1]);
+}
+void sincos_vec3(vec3 x, vec3* rstr sinx, vec3* rstr cosx) {
+    sincos(x[0], &(*sinx)[0], &(*cosx)[0]);
+    sincos(x[1], &(*sinx)[1], &(*cosx)[1]);
+    sincos(x[2], &(*sinx)[2], &(*cosx)[2]);
+}
+void sincos_vec4(vec4 x, vec4* rstr sinx, vec4* rstr cosx) {
+    sincos(x[0], &(*sinx)[0], &(*cosx)[0]);
+    sincos(x[1], &(*sinx)[1], &(*cosx)[1]);
+    sincos(x[2], &(*sinx)[2], &(*cosx)[2]);
+    sincos(x[3], &(*sinx)[3], &(*cosx)[3]);
+}
+
+
 f64 asin_f64(f64 x) {
     // `asin(-x) = -asin(x)` sooo:
     i32 isneg = signbit(x);
@@ -1404,19 +1549,23 @@ f32 dot_vec2(vec2 a, vec2 b) {
     return a[0]*b[0] + a[1]*b[1];
 }
 f32 dot_vec3(vec3 a, vec3 b) {
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+    vec4 c = a*b;
+    return c[0] + c[1] + c[2];
 }
 f32 dot_vec4(vec4 a, vec4 b) {
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+    vec4 c = a*b;
+    return c[0] + c[1] + c[2] + c[3];
 }
 
 f32 cross_vec2(vec2 a, vec2 b) {
     return a[0]*b[1] - a[1]*b[0];
 }
 vec3 cross_vec3(vec3 a, vec3 b) {
-    return vec3( a[1]*b[2] - a[2]*b[1]
-               , a[2]*b[0] - a[0]*b[2]
-               , a[0]*b[1] - a[1]*b[0] );
+    vec4 a0 = __builtin_shuffle(a, (i32x4){ 1, 2, 0, 3 });
+    vec4 b0 = __builtin_shuffle(b, (i32x4){ 1, 2, 0, 3 });
+    vec4 a1 = __builtin_shuffle(a, (i32x4){ 2, 0, 1, 3 });
+    vec4 b1 = __builtin_shuffle(b, (i32x4){ 2, 0, 1, 3 });
+    return a0*b1 - a1*b0;
 }
 
 
@@ -1508,13 +1657,25 @@ f32 argphiy_vec3(vec3 xyz) {
 
 
 vec2 frompol(f32 r, f32 theta) {
-    return vec2(r*cos(theta), r*sin(theta));
+    f32 sintheta;
+    f32 costheta;
+    sincos(theta, &sintheta, &costheta);
+    return vec2(r*costheta, r*sintheta);
 }
 vec3 fromcyl(f32 r, f32 theta, f32 z) {
-    return vec3(r*cos(theta), r*sin(theta), z);
+    f32 sintheta;
+    f32 costheta;
+    sincos(theta, &sintheta, &costheta);
+    return vec3(r*costheta, r*sintheta, z);
 }
 vec3 fromsph(f32 r, f32 theta, f32 phi) {
-    return vec3(r*cos(theta)*sin(phi), r*sin(theta)*sin(phi), r*cos(phi));
+    f32 sintheta;
+    f32 costheta;
+    sincos(theta, &sintheta, &costheta);
+    f32 sinphi;
+    f32 cosphi;
+    sincos(phi, &sinphi, &cosphi);
+    return vec3(r*costheta*sinphi, r*sintheta*sinphi, r*cosphi);
 }
 vec3 fromzr(vec2 zr, f64 theta) {
     return fromcyl(zr[1], theta, zr[0]);
@@ -1531,25 +1692,37 @@ vec3 rejyz(vec2 yz, f32 x) { return vec3(x, yz[0], yz[1]); }
 
 
 vec2 rot2D(vec2 xy, f32 by) {
-    return vec2( xy[0]*cos(by) - xy[1]*sin(by)
-               , xy[0]*sin(by) + xy[1]*cos(by) );
+    f32 sinby;
+    f32 cosby;
+    sincos(by, &sinby, &cosby);
+    return vec2( xy[0]*cosby - xy[1]*sinby
+               , xy[0]*sinby + xy[1]*cosby );
 }
 
 
 vec3 rotxy_vec3(vec3 xyz, f32 by) {
-    return vec3( xyz[0]*cos(by) - xyz[1]*sin(by)
-               , xyz[0]*sin(by) + xyz[1]*cos(by)
+    f32 sinby;
+    f32 cosby;
+    sincos(by, &sinby, &cosby);
+    return vec3( xyz[0]*cosby - xyz[1]*sinby
+               , xyz[0]*sinby + xyz[1]*cosby
                , xyz[2] );
 }
 vec3 rotzx_vec3(vec3 xyz, f32 by) {
-    return vec3( xyz[2]*sin(by) + xyz[0]*cos(by)
+    f32 sinby;
+    f32 cosby;
+    sincos(by, &sinby, &cosby);
+    return vec3( xyz[2]*sinby + xyz[0]*cosby
                , xyz[1]
-               , xyz[2]*cos(by) - xyz[0]*sin(by) );
+               , xyz[2]*cosby - xyz[0]*sinby );
 }
 vec3 rotyz_vec3(vec3 xyz, f32 by) {
+    f32 sinby;
+    f32 cosby;
+    sincos(by, &sinby, &cosby);
     return vec3( xyz[0]
-               , xyz[1]*cos(by) - xyz[2]*sin(by)
-               , xyz[1]*sin(by) + xyz[2]*cos(by) );
+               , xyz[1]*cosby - xyz[2]*sinby
+               , xyz[1]*sinby + xyz[2]*cosby );
 }
 
 
@@ -1620,31 +1793,28 @@ i32 nearhoriz_vec3(vec3 xyz) {
 // =========================================================================== //
 
 quat quat_id(void) {
-    return (quat){ 1.f, 0.f, 0.f, 0.f };
+    return (quat){ 0.f, 0.f, 0.f, 1.f };
 }
 quat quat_copy(quat q) {
     return (quat){ q[0], q[1], q[2], q[3] };
 }
 quat quat_from_axis_angle(vec3 axis, f32 angle) {
     f32 half = angle * 0.5f;
-    half = mod(half, TWOPI);
-    f32 coshalf = cos(half);
-    f32 sinhalf = sqrt(1.f - sqed(coshalf));
-    // ^ literally more accurate and faster than our sin lmao.
-    if (half > fPI)
-        sinhalf = -sinhalf;
-    return (quat){ coshalf, sinhalf*axis[0], sinhalf*axis[1], sinhalf*axis[2] };
+    f32 sinhalf;
+    f32 coshalf;
+    sincos(half, &sinhalf, &coshalf);
+    return vec4(sinhalf*axis, coshalf);
 }
 
 
 f32 quat_axis_angle(quat q, vec3* axis) {
-    f32 coshalf = q[0];
-    f32 sinhalf = sqrt(1.f - sqed(coshalf));
+    f32 coshalf = q[3];
+    f32 sinhalf = mag(vec3(q));
     if (nearzero(sinhalf)) {
         if (axis) *axis = v3Z;
         return 0.f;
     }
-    if (axis) *axis = vec3(q[1], q[2], q[3])/sinhalf;
+    if (axis) *axis = vec3(q)/sinhalf;
     if (nearzero(coshalf))
         return fPI;
     return 2.f*atan(sinhalf / coshalf);
@@ -1656,19 +1826,19 @@ quat quat_normalise(quat q) {
 }
 
 quat quat_shortest(quat q) {
-    return (q[0] < 0.f) ? -q : q;
+    return (q[3] < 0.f) ? -q : q;
 }
 
 
 quat quat_inverse(quat q) {
-    return (quat){ q[0], -q[1], -q[2], -q[3] };
+    return (quat){ -q[0], -q[1], -q[2], q[3] };
 }
 
 quat quat_compose(quat a, quat b) {
-    return (quat){ b[0]*a[0] - b[1]*a[1] - b[2]*a[2] - b[3]*a[3]
-                 , b[0]*a[1] + b[1]*a[0] + b[2]*a[3] - b[3]*a[2]
-                 , b[0]*a[2] - b[1]*a[3] + b[2]*a[0] + b[3]*a[1]
-                 , b[0]*a[3] + b[1]*a[2] - b[2]*a[1] + b[3]*a[0] };
+    return (quat){ a[3]*b[0] + b[3]*a[0] + a[1]*b[2] - a[2]*b[1]
+                 , a[3]*b[1] + b[3]*a[1] + a[2]*b[0] - a[0]*b[2]
+                 , a[3]*b[2] + b[3]*a[2] + a[0]*b[1] - a[1]*b[0]
+                 , a[3]*b[3] - a[0]*b[0] - a[1]*b[1] - a[2]*b[2] };
 }
 
 quat quat_relativeto(quat q, quat ref) {
@@ -1689,7 +1859,7 @@ quat quat_fromto(vec3 start, vec3 end) {
         if (mag2(axis) < 0.001f) // too close for comfort.
             axis = cross(v3Y, start);
         axis = normalise(axis);
-        return (quat){ 0.f, axis[0], axis[1], axis[2] };
+        return vec4(axis, 0.f);
     }
 
     // Otherwise typical.
@@ -1701,25 +1871,32 @@ quat quat_slerp(quat a, quat b, f32 t) {
     f32 cosbeta = dot(a, b);
 
     // Ensure shortest path.
-    if (cosbeta < 0.f)
+    if (cosbeta < 0.f) {
         b = -b;
+        cosbeta = -cosbeta;
+    }
 
-    // Normal lerp if very close.
-    if (nearto(cosbeta, 1.f))
-        return quat_normalise(a + t*(b - a));
-
-    // Otherwise typical.
-    f32 beta = acos(cosbeta);
-    f32 sinbeta = sin(beta);
-    f32 t0 = sin((1.f - t)*beta) / sinbeta;
-    f32 t1 = sin(      (t)*beta) / sinbeta;
-    return t0*a + t1*b;
+    f32 ta;
+    f32 tb;
+    if (cosbeta > 0.9995f) {
+        // Normal lerp if very close.
+        ta = 1 - t;
+        tb = t;
+    } else {
+        // Otherwise slerp.
+        cosbeta = min(max(cosbeta, -1), 1);
+        f32 beta = acos(cosbeta);
+        f32 sinbeta = sqrt(1 - sqed(cosbeta));
+        ta = sin((1 - t)*beta) / sinbeta;
+        tb = sin(    (t)*beta) / sinbeta;
+    }
+    return quat_normalise(ta*a + tb*b);
 }
 
 
 vec3 quat_apply(quat q, vec3 v) {
-    vec3 qv = vec3(q[1], q[2], q[3]);
+    vec3 qv = vec3(q);
     vec3 t = 2.f * cross(qv, v);
     vec3 u = cross(qv, t);
-    return v + q[0]*t + u;
+    return v + q[3]*t + u;
 }

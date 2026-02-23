@@ -30,6 +30,7 @@
 
 #include <setjmp.h>
 #include <stdio.h>
+#include <time.h>
 
 
 
@@ -84,6 +85,14 @@ typedef vec4 vec3 __attribute((VEC3_ATTR));
 
 typedef i32 i32x2 __attribute((__vector_size__(8)));
 typedef i32 i32x4 __attribute((__vector_size__(16)));
+
+
+// Unaligned and aliasing integers:
+
+// u8 inheritly has no alignment and may always alias.
+typedef u16 u16_u __attribute((__aligned__(1), __may_alias__));
+typedef u32 u32_u __attribute((__aligned__(1), __may_alias__));
+typedef u64 u64_u __attribute((__aligned__(1), __may_alias__));
 
 
 
@@ -151,14 +160,16 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // - Overloaded:
 //      vec2(vec2 xy) -> (xy[0], xy[1])
 //      vec2(f32 x, f32 y) -> (x, y)
+//      vec2(f32[2] xy) -> (xy[0], xy[1])
 //      vec2(f32 x) -> (x, x)
 #define vec2(xs...) ( GLUE2(vec2_, countva(xs)) (xs) )
 
 // Constructs a `vec3` from the given arguments.
-// - The fourth/ignored element of the vec3 is initialised to 1.0.
+// - The fourth/ignored element of the vec3 has no guarantees of initialisation.
 // - Overloaded:
 //      vec3(vec3 xyz) -> (xyz[0], xyz[1], xyz[2])
 //      vec3(f32 x, f32 y, f32 z) -> (x, y, z)
+//      vec3(f32[3] xyz) -> (xyz[0], xyz[1], xyz[2])
 //      vec3(f32 x) -> (x, x, x)
 //      vec3(vec4 v) -> (v[0], v[1], v[2])
 #define vec3(xs...) ( GLUE2(vec3_, countva(xs)) (xs) )
@@ -167,6 +178,7 @@ typedef struct genuinely_vec3 { char _; } genuinely_vec3;
 // - Overloaded:
 //      vec4(vec4 xyzw) -> (xyzw[0], xyzw[1], xyzw[2], xyzw[3])
 //      vec4(f32 x, f32 y, f32 z, f32 w) -> (x, y, z, w)
+//      vec4(f32[4] xyzw) -> (xyzw[0], xyzw[1], xyzw[2], xyzw[3])
 //      vec4(f32 x) -> (x, x, x, x)
 //      vec4(vec3 xyz, f32 w) -> (xyz[0], xyz[1], xyz[2], w)
 #define vec4(xs...) ( GLUE2(vec4_, countva(xs)) (xs) )
@@ -182,6 +194,10 @@ vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w);
 vec2 vec2_from_rep(f32 x);
 vec3 vec3_from_rep(f32 x);
 vec4 vec4_from_rep(f32 x);
+
+vec2 vec2_from_array(const f32* xy);
+vec3 vec3_from_array(const f32* xyz);
+vec4 vec4_from_array(const f32* xyzw);
 
 vec3 vec3_from_vec4(vec4 x);
 vec4 vec4_from_vec3(vec3 xyz, f32 w);
@@ -304,37 +320,37 @@ typedef vec4 also_vec4;
 
 // Some constants:
 
-#define NAN   ( __builtin_nan("") )        // f64 NaN
-#define fNAN  ( __builtin_nanf("") )       // f32 NaN
-#define v2NAN ( vec2(__builtin_nanf("")) ) // vec2 NaN
-#define v3NAN ( vec3(__builtin_nanf("")) ) // vec3 NaN
-#define v4NAN ( vec4(__builtin_nanf("")) ) // vec4 NaN
+#define NAN   ( __builtin_nan("") )
+#define fNAN  ( __builtin_nanf("") )
+#define v2NAN ( (vec2){ REPEAT(2, __builtin_nanf(""), ) } )
+#define v3NAN ( (vec3){ REPEAT(4, __builtin_nanf(""), ) } )
+#define v4NAN ( (vec4){ REPEAT(4, __builtin_nanf(""), ) } )
 
 #define INF   ( __builtin_inf() )
 #define fINF  ( __builtin_inff() )
-#define v2INF ( vec2(__builtin_inff()) )
-#define v3INF ( vec3(__builtin_inff()) )
-#define v4INF ( vec4(__builtin_inff()) )
+#define v2INF ( (vec2){ REPEAT(2, __builtin_inff(), ) } )
+#define v3INF ( (vec3){ REPEAT(4, __builtin_inff(), ) } )
+#define v4INF ( (vec4){ REPEAT(4, __builtin_inff(), ) } )
 
-#define v2ZERO (vec2(0.f))
-#define v3ZERO (vec3(0.f))
-#define v4ZERO (vec4(0.f))
+#define v2ZERO ( (vec2){ REPEAT(2, 0.f, ) } )
+#define v3ZERO ( (vec3){ REPEAT(4, 0.f, ) } )
+#define v4ZERO ( (vec4){ REPEAT(4, 0.f, ) } )
 
-#define v2ONE (vec2(1.f))
-#define v3ONE (vec3(1.f))
-#define v4ONE (vec4(1.f))
+#define v2ONE ( (vec2){ REPEAT(2, 1.f, ) } )
+#define v3ONE ( (vec3){ REPEAT(4, 1.f, ) } )
+#define v4ONE ( (vec4){ REPEAT(4, 1.f, ) } )
 
-#define v2X (vec2(1.f, 0.f))
-#define v2Y (vec2(0.f, 1.f))
+#define v2X ( (vec2){ 1.f, 0.f } )
+#define v2Y ( (vec2){ 0.f, 1.f } )
 
-#define v3X (vec3(1.f, 0.f, 0.f))
-#define v3Y (vec3(0.f, 1.f, 0.f))
-#define v3Z (vec3(0.f, 0.f, 1.f))
+#define v3X ( (vec3){ 1.f, 0.f, 0.f, 0.f} )
+#define v3Y ( (vec3){ 0.f, 1.f, 0.f, 0.f} )
+#define v3Z ( (vec3){ 0.f, 0.f, 1.f, 0.f} )
 
-#define v4X (vec4(1.f, 0.f, 0.f, 0.f))
-#define v4Y (vec4(0.f, 1.f, 0.f, 0.f))
-#define v4Z (vec4(0.f, 0.f, 1.f, 0.f))
-#define v4W (vec4(0.f, 0.f, 0.f, 1.f))
+#define v4X ( (vec4){ 1.f, 0.f, 0.f, 0.f } )
+#define v4Y ( (vec4){ 0.f, 1.f, 0.f, 0.f } )
+#define v4Z ( (vec4){ 0.f, 0.f, 1.f, 0.f } )
+#define v4W ( (vec4){ 0.f, 0.f, 0.f, 1.f } )
 
 
 // Expands to zero in the given type.
@@ -459,7 +475,7 @@ vec4 fp_from_bits_vec4(i32x4 i);
 
 // Expands to an unsigned integer of the same size as `typeof(T)` with only the
 // "exponent" bits set. This can be used to mask the exponent, however beware
-// that does not sit in the lo bits and will still be biased.
+// that it does not sit in the lo bits and will still be biased.
 // - `T` must be an `f32` or `f64` expression or type.
 #define fp_exp_mask(T...) ( generic(objof(T)    \
         , f32: (u32)0x7F800000U                 \
@@ -511,6 +527,15 @@ vec4 fp_from_bits_vec4(i32x4 i);
 #define fp_mant_implied(T...) ( generic(objof(T)    \
         , f32: (u32)0x00800000U                     \
         , f64: (u64)0x0010000000000000U             \
+    ) )
+
+
+// Expands to an unsigned integer of the same size as `typeof(T)` with only the
+// sign bit set. This can be used to mask the signbit, however beware that it
+// does not sit in the lo bits.
+#define fp_sign_mask(T...) ( generic(objof(T)   \
+        , f32: (u32)0x80000000U                 \
+        , f64: (u64)0x8000000000000000U         \
     ) )
 
 
@@ -683,6 +708,8 @@ vec4 fp_from_bits_vec4(i32x4 i);
 // ========================== //
 //         IDENTITIES         //
 // ========================== //
+
+inline void id_void(void) { return; }
 
 inline i8  id_i8 (i8  x) { return x; }
 inline i16 id_i16(i16 x) { return x; }

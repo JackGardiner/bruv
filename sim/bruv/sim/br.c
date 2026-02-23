@@ -9,25 +9,34 @@
 // VECTOR HELPERS //
 
 vec2 vec2_copy(vec2 xy) { return xy; }
-vec3 vec3_copy(vec3 xyz) { xyz[3] = 1.f; return xyz; }
+vec3 vec3_copy(vec3 xyz) { return xyz; }
 vec4 vec4_copy(vec4 xyzw) { return xyzw; }
 
 vec2 vec2_from_elems(f32 x, f32 y) {
     return (vec2){ x, y };
 }
 vec3 vec3_from_elems(f32 x, f32 y, f32 z) {
-    return (vec3){ x, y, z, 1.f };
+    return (vec3){ x, y, z, 0.f };
 }
 vec4 vec4_from_elems(f32 x, f32 y, f32 z, f32 w) {
     return (vec4){ x, y, z, w };
 }
 
 vec2 vec2_from_rep(f32 x) { return (vec2){ x, x }; }
-vec3 vec3_from_rep(f32 x) { return (vec3){ x, x, x, 1.f }; }
+vec3 vec3_from_rep(f32 x) { return (vec3){ x, x, x, x }; }
 vec4 vec4_from_rep(f32 x) { return (vec4){ x, x, x, x }; }
 
+vec2 vec2_from_array(const f32* xy) {
+    return (vec2){ xy[0], xy[1] };
+}
+vec3 vec3_from_array(const f32* xyz) {
+    return (vec3){ xyz[0], xyz[1], xyz[2], 0.f };
+}
+vec4 vec4_from_array(const f32* xyzw) {
+    return (vec4){ xyzw[0], xyzw[1], xyzw[2], xyzw[3] };
+}
+
 vec3 vec3_from_vec4(vec4 x) {
-    x[3] = 1.f;
     return x;
 }
 vec4 vec4_from_vec3(vec3 xyz, f32 w) {

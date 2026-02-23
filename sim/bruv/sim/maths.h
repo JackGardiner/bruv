@@ -43,56 +43,56 @@
 #define fCBRT2  (1.2599211f)  // 32b; 2^(1/3)
 #define fCBRT3  (1.4422495f)  // 32b; 3^(1/3)
 
-#define v2PI     (vec2(fPI))     // vec2; pi
-#define v2PI_2   (vec2(fPI_2))   // vec2; pi/2
-#define v2PI_4   (vec2(fPI_4))   // vec2; pi/4
-#define v2TWOPI  (vec2(fTWOPI))  // vec2; 2*pi
-#define v2EUL    (vec2(fEUL))    // vec2; e
-#define v2LN2    (vec2(fLN2))    // vec2; log_e(2)
-#define v2LN10   (vec2(fLN10))   // vec2; log_e(10)
-#define v2LOG2E  (vec2(fLOG2E))  // vec2; log_2(e)
-#define v2LOG10E (vec2(fLOG10E)) // vec2; log_10(e)
-#define v2SQRTH  (vec2(fSQRTH))  // vec2; (1/2)^(1/2)
-#define v2SQRT2  (vec2(fSQRT2))  // vec2; 2^(1/2)
-#define v2SQRT3  (vec2(fSQRT3))  // vec2; 3^(1/2)
-#define v2SQRT4  (vec2(fSQRT4))  // vec2; 4^(1/2)
-#define v2CBRTH  (vec2(fCBRTH))  // vec2; (1/2)^(1/3)
-#define v2CBRT2  (vec2(fCBRT2))  // vec2; 2^(1/3)
-#define v2CBRT3  (vec2(fCBRT3))  // vec2; 3^(1/3)
+#define v2PI     ( (vec2){ REPEAT(2, fPI, ) } )     // vec2; pi
+#define v2PI_2   ( (vec2){ REPEAT(2, fPI_2, ) } )   // vec2; pi/2
+#define v2PI_4   ( (vec2){ REPEAT(2, fPI_4, ) } )   // vec2; pi/4
+#define v2TWOPI  ( (vec2){ REPEAT(2, fTWOPI, ) } )  // vec2; 2*pi
+#define v2EUL    ( (vec2){ REPEAT(2, fEUL, ) } )    // vec2; e
+#define v2LN2    ( (vec2){ REPEAT(2, fLN2, ) } )    // vec2; log_e(2)
+#define v2LN10   ( (vec2){ REPEAT(2, fLN10, ) } )   // vec2; log_e(10)
+#define v2LOG2E  ( (vec2){ REPEAT(2, fLOG2E, ) } )  // vec2; log_2(e)
+#define v2LOG10E ( (vec2){ REPEAT(2, fLOG10E, ) } ) // vec2; log_10(e)
+#define v2SQRTH  ( (vec2){ REPEAT(2, fSQRTH, ) } )  // vec2; (1/2)^(1/2)
+#define v2SQRT2  ( (vec2){ REPEAT(2, fSQRT2, ) } )  // vec2; 2^(1/2)
+#define v2SQRT3  ( (vec2){ REPEAT(2, fSQRT3, ) } )  // vec2; 3^(1/2)
+#define v2SQRT4  ( (vec2){ REPEAT(2, fSQRT4, ) } )  // vec2; 4^(1/2)
+#define v2CBRTH  ( (vec2){ REPEAT(2, fCBRTH, ) } )  // vec2; (1/2)^(1/3)
+#define v2CBRT2  ( (vec2){ REPEAT(2, fCBRT2, ) } )  // vec2; 2^(1/3)
+#define v2CBRT3  ( (vec2){ REPEAT(2, fCBRT3, ) } )  // vec2; 3^(1/3)
 
-#define v3PI     (vec3(fPI))     // vec3; pi
-#define v3PI_2   (vec3(fPI_2))   // vec3; pi/2
-#define v3PI_4   (vec3(fPI_4))   // vec3; pi/4
-#define v3TWOPI  (vec3(fTWOPI))  // vec3; 2*pi
-#define v3EUL    (vec3(fEUL))    // vec3; e
-#define v3LN2    (vec3(fLN2))    // vec3; log_e(2)
-#define v3LN10   (vec3(fLN10))   // vec3; log_e(10)
-#define v3LOG2E  (vec3(fLOG2E))  // vec3; log_2(e)
-#define v3LOG10E (vec3(fLOG10E)) // vec3; log_10(e)
-#define v3SQRTH  (vec3(fSQRTH))  // vec3; (1/2)^(1/2)
-#define v3SQRT2  (vec3(fSQRT2))  // vec3; 2^(1/2)
-#define v3SQRT3  (vec3(fSQRT3))  // vec3; 3^(1/2)
-#define v3SQRT4  (vec3(fSQRT4))  // vec3; 4^(1/2)
-#define v3CBRTH  (vec3(fCBRTH))  // vec3; (1/2)^(1/3)
-#define v3CBRT2  (vec3(fCBRT2))  // vec3; 2^(1/3)
-#define v3CBRT3  (vec3(fCBRT3))  // vec3; 3^(1/3)
+#define v3PI     ( (vec3){ REPEAT(4, fPI, ) } )     // vec3; pi
+#define v3PI_2   ( (vec3){ REPEAT(4, fPI_2, ) } )   // vec3; pi/2
+#define v3PI_4   ( (vec3){ REPEAT(4, fPI_4, ) } )   // vec3; pi/4
+#define v3TWOPI  ( (vec3){ REPEAT(4, fTWOPI, ) } )  // vec3; 2*pi
+#define v3EUL    ( (vec3){ REPEAT(4, fEUL, ) } )    // vec3; e
+#define v3LN2    ( (vec3){ REPEAT(4, fLN2, ) } )    // vec3; log_e(2)
+#define v3LN10   ( (vec3){ REPEAT(4, fLN10, ) } )   // vec3; log_e(10)
+#define v3LOG2E  ( (vec3){ REPEAT(4, fLOG2E, ) } )  // vec3; log_2(e)
+#define v3LOG10E ( (vec3){ REPEAT(4, fLOG10E, ) } ) // vec3; log_10(e)
+#define v3SQRTH  ( (vec3){ REPEAT(4, fSQRTH, ) } )  // vec3; (1/2)^(1/2)
+#define v3SQRT2  ( (vec3){ REPEAT(4, fSQRT2, ) } )  // vec3; 2^(1/2)
+#define v3SQRT3  ( (vec3){ REPEAT(4, fSQRT3, ) } )  // vec3; 3^(1/2)
+#define v3SQRT4  ( (vec3){ REPEAT(4, fSQRT4, ) } )  // vec3; 4^(1/2)
+#define v3CBRTH  ( (vec3){ REPEAT(4, fCBRTH, ) } )  // vec3; (1/2)^(1/3)
+#define v3CBRT2  ( (vec3){ REPEAT(4, fCBRT2, ) } )  // vec3; 2^(1/3)
+#define v3CBRT3  ( (vec3){ REPEAT(4, fCBRT3, ) } )  // vec3; 3^(1/3)
 
-#define v4PI     (vec4(fPI))     // vec4; pi
-#define v4PI_2   (vec4(fPI_2))   // vec4; pi/2
-#define v4PI_4   (vec4(fPI_4))   // vec4; pi/4
-#define v4TWOPI  (vec4(fTWOPI))  // vec4; 2*pi
-#define v4EUL    (vec4(fEUL))    // vec4; e
-#define v4LN2    (vec4(fLN2))    // vec4; log_e(2)
-#define v4LN10   (vec4(fLN10))   // vec4; log_e(10)
-#define v4LOG2E  (vec4(fLOG2E))  // vec4; log_2(e)
-#define v4LOG10E (vec4(fLOG10E)) // vec4; log_10(e)
-#define v4SQRTH  (vec4(fSQRTH))  // vec4; (1/2)^(1/2)
-#define v4SQRT2  (vec4(fSQRT2))  // vec4; 2^(1/2)
-#define v4SQRT3  (vec4(fSQRT3))  // vec4; 3^(1/2)
-#define v4SQRT4  (vec4(fSQRT4))  // vec4; 4^(1/2)
-#define v4CBRTH  (vec4(fCBRTH))  // vec4; (1/2)^(1/3)
-#define v4CBRT2  (vec4(fCBRT2))  // vec4; 2^(1/3)
-#define v4CBRT3  (vec4(fCBRT3))  // vec4; 3^(1/3)
+#define v4PI     ( (vec4){ REPEAT(4, fPI, ) } )     // vec4; pi
+#define v4PI_2   ( (vec4){ REPEAT(4, fPI_2, ) } )   // vec4; pi/2
+#define v4PI_4   ( (vec4){ REPEAT(4, fPI_4, ) } )   // vec4; pi/4
+#define v4TWOPI  ( (vec4){ REPEAT(4, fTWOPI, ) } )  // vec4; 2*pi
+#define v4EUL    ( (vec4){ REPEAT(4, fEUL, ) } )    // vec4; e
+#define v4LN2    ( (vec4){ REPEAT(4, fLN2, ) } )    // vec4; log_e(2)
+#define v4LN10   ( (vec4){ REPEAT(4, fLN10, ) } )   // vec4; log_e(10)
+#define v4LOG2E  ( (vec4){ REPEAT(4, fLOG2E, ) } )  // vec4; log_2(e)
+#define v4LOG10E ( (vec4){ REPEAT(4, fLOG10E, ) } ) // vec4; log_10(e)
+#define v4SQRTH  ( (vec4){ REPEAT(4, fSQRTH, ) } )  // vec4; (1/2)^(1/2)
+#define v4SQRT2  ( (vec4){ REPEAT(4, fSQRT2, ) } )  // vec4; 2^(1/2)
+#define v4SQRT3  ( (vec4){ REPEAT(4, fSQRT3, ) } )  // vec4; 3^(1/2)
+#define v4SQRT4  ( (vec4){ REPEAT(4, fSQRT4, ) } )  // vec4; 4^(1/2)
+#define v4CBRTH  ( (vec4){ REPEAT(4, fCBRTH, ) } )  // vec4; (1/2)^(1/3)
+#define v4CBRT2  ( (vec4){ REPEAT(4, fCBRT2, ) } )  // vec4; 2^(1/3)
+#define v4CBRT3  ( (vec4){ REPEAT(4, fCBRT3, ) } )  // vec4; 3^(1/3)
 
 
 
@@ -125,6 +125,37 @@
 // otherwise.
 // - `x` must be >=0.
 #define ispow2(x) ( (x) != 0 && ((x) & ((x) - 1)) == 0 )
+
+
+// Returns the bits of `x` after circularly rotating `n` bits up/to the left.
+// - `n` may be zero, negative, and may exceed the number of bits in `x` (with
+//      wrap-around behaviour in those cases).
+#define bit_rotl(x, n) (                                        \
+        ((x) << (               (i32)(n)  & (8*sizeof(x) - 1))) \
+      | ((x) >> ((8*sizeof(x) - (i32)(n)) & (8*sizeof(x) - 1))) \
+    )
+
+// Returns the bits of `x` after circularly rotating `n` bits down/to the right.
+// - `n` may be zero, negative, and may exceed the number of bits in `x` (with
+//      wrap-around behaviour in those cases).
+#define bit_rotr(x, n) (                                        \
+        ((x) >> (               (i32)(n)  & (8*sizeof(x) - 1))) \
+      | ((x) << ((8*sizeof(x) - (i32)(n)) & (8*sizeof(x) - 1))) \
+    )
+
+
+// Returns 1 if `x` is an integer multiple of `alignment`, 0 otherwise.
+// - `x` may be a pointer.
+// - `x` must be >=0.
+// - `alignment` must be a power-of-2.
+#define isaligned(x, alignment) ( isaligned_((x), (alignment)) )
+
+// Returns `x` rounded up to an integer multiple of `alignment`.
+// - `x` may be a pointer.
+// - `x` must be in 0..`intmax(x) - alignment + 1`.
+// - `alignment` must be a power-of-2.
+#define alignto(x, alignment) \
+    ( (typeof((x) + (alignment)))( alignto_((x), (alignment)) ) )
 
 
 
@@ -560,6 +591,22 @@ vec2 tan_vec2(vec2 x);
 vec3 tan_vec3(vec3 x);
 vec4 tan_vec4(vec4 x);
 
+// Calculates both `sin(x)` and `cos(x)`, storing the result in `*sinx` and
+// `*cosx`.
+// - Element-wise for vector types.
+#define sincos(x, sinx, cosx) ( generic(distinguish_vec3(x) \
+        ,            f64: sincos_f64                        \
+        ,            f32: sincos_f32                        \
+        ,           vec2: sincos_vec2                       \
+        , genuinely_vec3: sincos_vec3                       \
+        ,           vec4: sincos_vec4                       \
+    ) ((x), (sinx), (cosx)) )
+void sincos_f64(f64 x, f64* rstr sinx, f64* rstr cosx);
+void sincos_f32(f32 x, f32* rstr sinx, f32* rstr cosx);
+void sincos_vec2(vec2 x, vec2* rstr sinx, vec2* rstr cosx);
+void sincos_vec3(vec3 x, vec3* rstr sinx, vec3* rstr cosx);
+void sincos_vec4(vec4 x, vec4* rstr sinx, vec4* rstr cosx);
+
 
 // Inverse of `sin`, returning `y` s.t. `sin(y) = x`. Not perfectly accurate,
 // maximum error of ~0.00002%.
@@ -841,7 +888,7 @@ i32 nearhoriz_vec3(vec3 xyz);
 //        QUATERNIONS        //
 // ========================= //
 
-// Quaternion, consisting of `quat[0] + quat[1] i + quat[2] j + quat[3] k`. Used
+// Quaternion, consisting of `quat[3] + quat[0] i + quat[1] j + quat[2] k`. Used
 // here to represent arbitrary 3D rotations.
 typedef vec4 quat;
 
@@ -1078,6 +1125,25 @@ vec3 quat_apply(quat q, vec3 v);
 
 
 // IMPLS //
+
+// cast pointers to u64.
+#define align_castme_(x)    \
+    typeof(generic(x        \
+        ,  i8:  (i8)0       \
+        , i16: (i16)0       \
+        , i32: (i32)0       \
+        , i64: (i64)0       \
+        ,  u8:  (u8)0       \
+        , u16: (u16)0       \
+        , u32: (u32)0       \
+        , u64: (u64)0       \
+        , default: (u64)0   \
+    ))
+
+#define isaligned_(x, alignment) ((align_castme_(x))x & (alignment - 1)) == 0
+
+#define alignto_(x, alignment) \
+    ((align_castme_(x))x + alignment - 1) & ~(alignment - (align_castme_(x))1)
 
 #define eq_(a, b) && eq2((a), (b))
 

@@ -96,37 +96,52 @@ static_assert(-1 == ~0);
 #define vec3_3(x, y, z) vec3_from_elems((x), (y), (z))
 #define vec4_4(x, y, z, w) vec4_from_elems((x), (y), (z), (w))
 
-#define vec2_1(x) generic((x)       \
-        ,    vec2: vec2_copy        \
-        , default: vec2_from_rep    \
+#define vec2_1(x) generic(objof(typeof(x)*) \
+        ,       f32(*)[2]: vec2_from_array  \
+        , const f32(*)[2]: vec2_from_array  \
+        , default: generic((x)              \
+            ,     f64: vec2_from_rep        \
+            ,     f32: vec2_from_rep        \
+            ,    vec2: vec2_copy            \
+            , default: id_void              \
+        )                                   \
     ) ((x))
-#define vec3_1(x) generic(distinguish_vec3(x)   \
-        , genuinely_vec3: vec3_copy             \
-        ,           vec4: vec3_from_vec4        \
-        ,        default: vec3_from_rep         \
+#define vec3_1(x) generic(objof(typeof(x)*)     \
+        ,       f32(*)[3]: vec3_from_array      \
+        , const f32(*)[3]: vec3_from_array      \
+        , default: generic(distinguish_vec3(x)  \
+            ,            f64: vec3_from_rep     \
+            ,            f32: vec3_from_rep     \
+            , genuinely_vec3: vec3_copy         \
+            ,           vec4: vec3_from_vec4    \
+            ,        default: id_void           \
+        )                                       \
     ) ((x))
-#define vec4_1(x) generic(0                                         \
-        , int: generic((x)                                          \
-            ,    vec4: vec4_copy                                    \
-            , default: vec4_from_rep                                \
-        ) ((x))                                                     \
-        , default: (const char*[!isvec3(x)])                        \
-            {"vec4 CONSTRUCTOR WITH vec3 EXPECTS TWO ARGUMENTS"}    \
-    )
+#define vec4_1(x) generic(objof(typeof(x)*)     \
+        ,       f32(*)[4]: vec4_from_array      \
+        , const f32(*)[4]: vec4_from_array      \
+        , default: generic(distinguish_vec3(x)  \
+            ,     f64: vec4_from_rep            \
+            ,     f32: vec4_from_rep            \
+            ,    vec4: vec4_copy                \
+            , default: id_void                  \
+        )                                       \
+    ) ((x))
 
-#define vec4_2(xyz, w) generic(0                \
-        , int: vec4_from_vec3((xyz), (w))       \
-        , default: (const char*[isvec3(xyz)])   \
-            {"FIRST ARGUMENT MUST BE A vec3"}   \
-    )
 
 #if BR_COMPILING
+#define vec4_2(xyz, w) generic(distinguish_vec3(xyz)    \
+        , genuinely_vec3: vec4_from_vec3                \
+    ) ((xyz), (w))
 #define distinguish_vec3_(T) choose_expr(       \
         __builtin_has_attribute(T, VEC3_ATTR)   \
         , objof(genuinely_vec3)                 \
         , objof(T)                              \
     )
 #else
+#define vec4_2(xyz, w) generic((xyz)    \
+        , vec4: vec4_from_vec3          \
+    ) ((xyz), (w))
 #define distinguish_vec3_(T) objof(T)
 #endif
 

@@ -26,35 +26,7 @@ c_IH sim_interpretation_hash(void) {
 }
 
 
-#include "maths.h"
-static void testing(void) {
-    printf("TESTING\n");
-
-    #define SVEC2 "(%f, %f)"
-    #define SVEC3 "(%f, %f, %f)"
-    #define SVEC4 "(%f, %f, %f, %f)"
-    #define PVEC2(x...) (f64)(x)[0], (f64)(x)[1]
-    #define PVEC3(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2]
-    #define PVEC4(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2], (f64)(x)[3]
-
-    quat q = quat_from_axis_angle(normalise(v3Y-v3X), fPI_2);
-    quat q1 = quat_from_axis_angle(normalise(v3Y-v3X), fPI_2 + fTWOPI);
-    quat q2 = quat(-normalise(v3Y-v3X), -fPI_2);
-
-    printf(""SVEC4"\n", PVEC4(q));
-    printf(""SVEC4"\n", PVEC4(q1));
-    printf(""SVEC4"\n", PVEC4(q2));
-    vec3 a = vec3(3.f, 5.f, 1.f);
-    printf(""SVEC3"\n", PVEC3(a));
-    printf(""SVEC3"\n", PVEC3(quat_apply(q, a)));
-    printf(""SVEC3"\n", PVEC3(quat_apply(q1, a)));
-    printf(""SVEC3"\n", PVEC3(quat_apply(q2, a)));
-
-    printf("END TESTING\n");
-}
-
-
-
+static void testing(void);
 
 void sim_execute(simState* rstr s) {
     printf("<START>\n");
@@ -64,4 +36,39 @@ void sim_execute(simState* rstr s) {
     s->data[1] = 5;
     printf("<END>\n");
     testing();
+}
+
+
+
+
+
+
+#include "maths.h"
+#include "rand.h"
+
+#define SVEC2 "(%f, %f)"
+#define SVEC3 "(%f, %f, %f)"
+#define SVEC4 "(%f, %f, %f, %f)"
+#define PVEC2(x...) (f64)(x)[0], (f64)(x)[1]
+#define PVEC3(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2]
+#define PVEC4(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2], (f64)(x)[3]
+
+static void testing(void) {
+    printf("TESTING\n");
+
+    printf("sin test:\n");
+    brRand* rand = &(brRand){0};
+    rand_init_init();
+    rand_init(rand);
+    for (i32 _=0; _<100; ++_) {
+        f32 x = rand_0to1(rand);
+        x *= 2*fTWOPI;
+
+        f32 sinx;
+        f32 cosx;
+        sincos(x, &sinx, &cosx);
+        printf("%+g\n", hypot(sinx, cosx) - 1.f);
+    }
+
+    printf("END TESTING\n");
 }
