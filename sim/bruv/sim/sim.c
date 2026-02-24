@@ -45,6 +45,7 @@ void sim_execute(simState* rstr s) {
 
 #include "maths.h"
 #include "rand.h"
+#include "optim.h"
 
 #define SVEC2 "(%f, %f)"
 #define SVEC3 "(%f, %f, %f)"
@@ -53,22 +54,96 @@ void sim_execute(simState* rstr s) {
 #define PVEC3(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2]
 #define PVEC4(x...) (f64)(x)[0], (f64)(x)[1], (f64)(x)[2], (f64)(x)[3]
 
+static f64 function(const f64* rstr params, void* rstr user) {
+    (void)user;
+    f64 x = *params;
+    return 4.0 + x*(1.46787 + x*(2.0));
+    // return 4.0 + x*(1.46787 + x*(-2.0 + x*(5.6 + x*1.2)));
+}
+
+static i64 counter= 0;
+static f64 function2D(const f64* rstr params, void* rstr user) {
+    (void)user;
+    ++counter;
+
+    // f64 x = params[0];
+    // f64 y = params[1];
+    // return sqed(x - 2.0) + sqed(y + 3.0);
+    // return sqed(sqed(x) + y - 11) + sqed(x + sqed(y) - 7);
+    // return sqed(1 - x) + 100*sqed(y - sqed(x));
+    // godDAMN that one is hard to minimise.
+
+    f64 f = 0.0;
+    for (i64 i=0; i<50; ++i) {
+        f += 100.0*sqed(params[i + 1] - sqed(params[i])) + sqed(1 - params[i]);
+        // f += sqed(params[i] - (f64)(i*i - i));
+    }
+    return f;
+}
+
 static void testing(void) {
     printf("TESTING\n");
 
-    printf("sin test:\n");
-    brRand* rand = &(brRand){0};
-    rand_init_init();
-    rand_init(rand);
-    for (i32 _=0; _<100; ++_) {
-        f32 x = rand_0to1(rand);
-        x *= 2*fTWOPI;
+    f64 best_cost;
+    printf("1D test:\n");
+    f64 r = 0.0;
+    f64 m = 1.0;
+    f64 mem;
+    f64 root = opt_run1D(function, NULL, 1, &mem,
+            &r, &m, -10e3, 10e3,
+            1e-5, 1e-9,
+            &best_cost
+        );
+    printf("root: %.18g\n", root);
+    printf("fval: %.18g\n", best_cost);
+    printf("\n");
 
-        f32 sinx;
-        f32 cosx;
-        sincos(x, &sinx, &cosx);
-        printf("%+g\n", hypot(sinx, cosx) - 1.f);
-    }
+    printf("2D test:\n");
+    // f64 x[2] = { -100, -3 };
+    // f64 x[6] = { -100, 400, 100, -5e5, 1, -90 };
+    f64 x[50] = { 0};
+    for (i64 i=0; i<numel(x); ++i)
+        x[i] = -10*i;
+    u8 tmp[OPT_RUN_MEMSIZE(numel(x))];
+    i32 success = opt_run(function2D, NULL, numel(x), tmp,
+            1e-10, 1e-10, x, &best_cost
+        );
+    if (!success)
+        printf("FAILLLLLLLLLEDDDDDDDDDDDDD\n");
+    printf("root: %.18g", x[0]);
+    for (i64 i=1; i<numel(x); ++i)
+        printf(", %.18g", x[i]);
+    printf("\n");
+    printf("fval: %.18g\n", best_cost);
+    printf("fevals: %lld\n", counter);
+
+    printf("AGAIN !!:\n");
+    success = opt_run(function2D, NULL, numel(x), tmp,
+            1e-15, 1e-15, x, &best_cost
+        );
+    if (!success)
+        printf("FAILLLLLLLLLEDDDDDDDDDDDDD\n");
+    printf("root: %.18g", x[0]);
+    for (i64 i=1; i<numel(x); ++i)
+        printf(", %.18g", x[i]);
+    printf("\n");
+    printf("fval: %.18g\n", best_cost);
+    printf("fevals: %lld\n", counter);
+
+
+    printf("AGAIN !!!!!!:\n");
+    success = opt_run(function2D, NULL, numel(x), tmp,
+            0, 0, x, &best_cost
+        );
+    // holy shit it works w zero tol??
+    if (!success)
+        printf("FAILLLLLLLLLEDDDDDDDDDDDDD\n");
+    printf("root: %.18g", x[0]);
+    for (i64 i=1; i<numel(x); ++i)
+        printf(", %.18g", x[i]);
+    printf("\n");
+    printf("fval: %.18g\n", best_cost);
+    printf("fevals: %lld\n", counter);
 
     printf("END TESTING\n");
 }

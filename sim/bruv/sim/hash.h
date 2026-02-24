@@ -2,6 +2,11 @@
 #include "br.h"
 
 
+
+// ========================= //
+//          HASHING          //
+// ========================= //
+
 // A value with essentially random bits which can be used to initialise a hash
 // value when hashing multiple objects. Or it can be used for anything really.
 // - =`2^64 / phi`.

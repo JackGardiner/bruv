@@ -143,7 +143,7 @@ class IdxGenerator:
                     if last / dims > (1 + 1.0/blitz) * length:
                         break
                 for combo in itertools.combinations(range(last), length - 1):
-                    yield combo + (last,), cost
+                    yield list(combo) + [last], cost
 
     @classmethod
     def all_idxs_1D(cls, dims, min_cost, max_cost, blitz=0.0):
@@ -185,7 +185,7 @@ class IdxGenerator:
 
     @classmethod
     def just(cls, pidxs, qidxs):
-        yield pidxs, qidxs
+        yield list(pidxs), list(qidxs)
 
 
 
@@ -281,14 +281,16 @@ class Polynomial:
         coeffs .. coefficient values.
         """
         if check:
-            assert idxs == tuple(sorted(idxs))
+            assert idxs == type(idxs)(sorted(idxs))
             assert all(idx >= 0 for idx in idxs)
             assert len(coeffs) == len(idxs)
+            idxs = list(idxs) # list to make numpy slicing work
+            coeffs = np.array(coeffs)
         self.dims = dims
         self.degree = degreeof(dims, max(idxs))
         self.count = len(idxs)
         self.countall = num_coeffs(dims, self.degree)
-        self.idxs = list(idxs) # list to make numpy slicing work
+        self.idxs = idxs
         self.coeffs = coeffs
 
     def __repr__(self, short=True):
