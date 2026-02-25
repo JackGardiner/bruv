@@ -8,10 +8,10 @@ import sys
 import numpy as np
 
 from .. import paths
+from .. import geez
+from ..geez import new_figure, new_window, no_window
 
-from . import geez
 from .ratpoly import *
-from .geez import new_figure, new_window, no_window
 from .space import *
 
 __all__ = ["run", "main"]

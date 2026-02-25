@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker
 import matplotlib.backends.backend_tkagg
 
-from .. import paths
+from . import paths
 
 __all__ = ["FIGURE_DIRECTORY", "DEFAULT_FIGSIZE",
            "new_figure", "new_window", "no_window",
