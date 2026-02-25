@@ -677,7 +677,7 @@ f64 lerp_f64(f64 a, f64 b, f64 t);
 f32 lerp_f32(f32 a, f32 b, f32 t);
 // Forwards to lerp with `t = i / (N - 1)`.
 #define lerpidx(a, b, i, N) \
-    ( lerp_((a), (b), ((i) / (typeof((a) + (b)))((N) - 1))) )
+    ( lerp((a), (b), ((i) / (typeof((a) + (b)))((N) - 1))) )
 
 // Inverse of `lerp`, returning the `t` value s.t. `x = lerp(a, b, t)`,
 // `(x - a) / (b - a)`.

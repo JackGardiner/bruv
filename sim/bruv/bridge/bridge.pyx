@@ -29,7 +29,7 @@ cdef extern from "bridge.h":
 
 
 from libc.stdlib cimport malloc, free
-from libc.string cimport memcpy
+from libc.string cimport memcpy, memset
 import numpy as np
 cimport numpy as np
 np.import_array()
@@ -151,6 +151,7 @@ cdef class State:
         self._array = <c_eight_bytes*>malloc(interp._length * 8)
         if self._array == NULL:
             raise MemoryError("cooked")
+        memset(self._array, 0, interp._length * 8)
         self._interp = interp
 
 
@@ -205,6 +206,7 @@ cdef class State:
             memcpy(&raw, &asint, 8)
         else:
             # otherwise an array type.
+
             if value is None: # treat as null pointer.
                 raw = <c_eight_bytes>0
             else:
@@ -219,8 +221,18 @@ cdef class State:
                 if dt != edt:
                     raise TypeError(f"incorrect array dtype, expected {edt}, "
                                     f"got {dt}")
-                ptr = np.PyArray_DATA(value)
+                # Copy numpy data to new array (which we own).
+                ptr = malloc(edt.itemsize * value.size)
+                if ptr == NULL:
+                    raise MemoryError()
+                src = np.PyArray_DATA(value)
+                memcpy(ptr, src, edt.itemsize * value.size)
+                # Put this pointer into the state array.
                 memcpy(&raw, &ptr, 8)
+
+            # deallocate the previous array before updating.
+            free(<void*>self._array[idx])
+            self._array[idx] = <c_eight_bytes>0 # justin caseme.
 
         self._set(idx, raw)
 
@@ -269,6 +281,11 @@ cdef class State:
         self._array[idx] = value
 
     def __dealloc__(self):
+        # deallocate all pointers in the state array.
+        for (i, itype, _) in self._interp._mapping.values():
+            if itype == Interpretation.F64 or itype == Interpretation.I64:
+                continue
+            free(<void*>self._array[i])
         # textbook pointer deallocation. right proper stuff.
         free(self._array)
         self._array = NULL
