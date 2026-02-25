@@ -8,6 +8,12 @@ import shutil
 import sys
 from pathlib import Path
 
+# Platform-specific locking
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -108,6 +114,39 @@ class pushd:
         os.chdir(str(self.path))
     def __exit__(self, etype, evalue, etb):
         os.chdir(self._old_dir)
+
+
+class FileLock:
+    def __init__(self, path):
+        self.path = path
+        self._fh = None
+
+    def acquire(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = open(self.path, "a+b")
+        if os.name == "nt":
+            self._fh.seek(0)
+            msvcrt.locking(self._fh.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+
+    def release(self):
+        if self._fh is None:
+            return
+        if not self._fh.closed:
+            if os.name == "nt":
+                self._fh.seek(0)
+                msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+            self._fh.close()
+        self._fh = None
+
+    def __enter__(self):
+        self.acquire()
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
 
 
 class splice_stdout:
