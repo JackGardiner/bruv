@@ -13,6 +13,7 @@ from ..geez import new_figure, new_window, no_window
 
 from .ratpoly import *
 from .space import *
+from .cea import *
 
 __all__ = ["run", "main"]
 
@@ -108,19 +109,18 @@ def test2d():
 
 
 def _run():
-    test1d()
-    print()
-    test2d()
+    print(CEA(3.5, 1.6, 5.2))
 
 
 
 
 
 def run(view=True, save=False):
-    with geez.instance(view, save):
-        # Redirect nested in geez to not capture geez output.
-        with paths.splice_stdout(paths.APPROXIMATOR_OUTPUT, view, save):
-            _run()
+    with CEA.configure("LOx", "IPA"):
+        with geez.instance(view, save):
+            # stoud redirect nested to not capture meta output.
+            with paths.splice_stdout(paths.APPROXIMATOR_OUTPUT, view, save):
+                _run()
 
 
 def main():

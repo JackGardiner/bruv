@@ -1,4 +1,4 @@
 -r requirements.txt
 
 scipy
-matplotlib
+CEA_Wrap
