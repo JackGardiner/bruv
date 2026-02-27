@@ -11,53 +11,56 @@ import scipy
 
 __all__ = [
     "IdxGenerator",
+    "abs_error", "rel_error",
     "EvaluatorAbsOnly", "EvaluatorRelOnly", "EvaluatorMax", "EvaluatorBalanced",
     "Printer",
-    "Polynomial", "RationalPolynomial"
+    "Polynomial", "RationalPolynomial",
+    "LookupTable",
 ]
 
 
 @functools.cache
-def num_coeffs(dims, degree):
+def num_coeffs(ndim, degree):
     """
-    Returns the number of coefficients of a `dims`-dimensional `degree`-degree
+    Returns the number of coefficients of a `ndim`-dimensional `degree`-degree
     polynomial.
     """
-    return math.comb(degree + dims, degree)
+    return math.comb(degree + ndim, degree)
 @functools.cache
-def degreeof(dims, i):
+def degreeof(ndim, i):
     """
     Returns the degree (sum of exponents) of the given index.
     """
-    if dims == 1:
+    if ndim == 1:
         return i
     for k in itertools.count(0):
-        if num_coeffs(dims, k) > i:
+        if num_coeffs(ndim, k) > i:
             return k
 @functools.cache
-def invdegreeof(dims, k):
+def invdegreeof(ndim, k):
     """
     Returns the smallest `i` s.t. `degreeof(i) == k`. Note that there may be many
     such solutions, this returns the smallest.
     """
-    if dims == 1:
+    if ndim == 1:
         return k
     for i in itertools.count(0):
-        if degreeof(dims, i) == k:
+        if degreeof(ndim, i) == k:
             return i
 
 def yup_all_ones(degree, *coords):
     """
     Evaluates:
         1, x, y, x^2, x*y, y^2, ...
-        (for dims=2, may be differently multivariate)
-    For the given x/y/..., and up to the given degree exponent.
+        (for ndim=2, may be differently multivariate)
+    For the given x/y/..., and up to the given degree exponent. Note this ravels
+    the cordinates and returns a 2D array of [coord index, power index].
     """
-    flatcoords = [x.ravel() for x in coords]
-    dims = len(flatcoords)
+    flatcoords = [x.ravel() for x in np.broadcast_arrays(*coords)]
+    ndim = len(flatcoords)
     terms = []
     for sumdeg in range(degree + 1):
-        for exps in itertools.product(range(sumdeg + 1), repeat=dims):
+        for exps in itertools.product(range(sumdeg + 1), repeat=ndim):
             exps = exps[::-1]
             if sum(exps) != sumdeg:
                 continue
@@ -65,15 +68,15 @@ def yup_all_ones(degree, *coords):
             terms.append(term)
     return np.stack(terms).T
 
-def poly_ordering(dims, degree):
+def poly_ordering(ndim, degree):
     """
     Returns a list of strings of the variable for each term:
         ["", "x", "y", "x^2", "xy", "y^2", ...]
-        (for dims=2, may be differently multivariate)
+        (for ndim=2, may be differently multivariate)
     """
-    if dims > 3:
+    if ndim > 3:
         raise ValueError("havent thought that far ahead")
-    coords = "xyz"[:dims]
+    coords = "xyz"[:ndim]
     terms = []
     def tostr(c, e):
         if e == 0:
@@ -82,7 +85,7 @@ def poly_ordering(dims, degree):
             return f"{c}"
         return f"{c}^{e} "
     for sumdeg in range(degree + 1):
-        for exps in itertools.product(range(sumdeg + 1), repeat=dims):
+        for exps in itertools.product(range(sumdeg + 1), repeat=ndim):
             exps = exps[::-1]
             if sum(exps) != sumdeg:
                 continue
@@ -90,12 +93,15 @@ def poly_ordering(dims, degree):
             terms.append(term.strip())
     return terms
 
+def broadcasted_shape(*coords):
+    return np.broadcast_shapes(*[np.asarray(c).shape for c in coords])
+
 
 
 class IdxGenerator:
     _CACHE = {}
     @classmethod
-    def at_cost_1D(cls, dims, cost, blitz=0.0, _cache=True):
+    def at_cost_1D(cls, ndim, cost, blitz=0.0, _cache=True):
         """
         Yields all 1D index tuples with the given cost, ordered by descending
         length and then ascending last index. `blitz` may be used to skip extreme
@@ -104,59 +110,59 @@ class IdxGenerator:
 
         # Cache small costs.
         if _cache and cost < 20:
-            key = (dims, cost, blitz)
+            key = (ndim, cost, blitz)
             if key not in cls._CACHE:
-                it = cls.at_cost_1D(dims, cost, blitz, _cache=False)
+                it = cls.at_cost_1D(ndim, cost, blitz, _cache=False)
                 cls._CACHE[key] = list(it)
             yield from cls._CACHE[key]
             return
 
         # We can vary degree and num of coeffs. define a cost heuristic as:
-        #   dims * degreeof(max(idxs)) + 2 * len(idxs) - 1
-        # since the poly constructs all powers on the way to the highest,
-        # and then each term requires 1 mul and 1 add/sub. (note im not
-        # accounting for repeated squaring i cannot be fucked). the -1 is
-        # just to ensure that the lowest cost tuple of (0,) has a cost of 1.
-        # so, cost is entirely determined by length and greatest value.
-        # want to go longest to shortest.
+        #   ndim * degreeof(max(idxs)) + 2 * len(idxs) - 1
+        # since the poly constructs all powers on the way to the highest, and
+        # then each term requires 1 mul and 1 add/sub. (note im not accounting
+        # for repeated squaring i cannot be fucked). the -1 is just to ensure
+        # that the lowest cost tuple of (0,) has a cost of 1. so, cost is
+        # entirely determined by length and greatest value. want to go longest to
+        # shortest.
         longest = 0
-        while dims * degreeof(dims, longest) + 2*(longest + 1) - 1 <= cost:
+        while ndim * degreeof(ndim, longest) + 2*(longest + 1) - 1 <= cost:
             longest += 1
         for length in range(longest, 0, -1):
             # want to go smallest to greatest.
-            #  dims * degreeof(last) + 2*length - 1 = cost
-            #  dims * degreeof(last) = cost - 2*length + 1
+            #  ndim * degreeof(last) + 2*length - 1 = cost
+            #  ndim * degreeof(last) = cost - 2*length + 1
             # may not be solutions of this cost for this length.
-            if (cost - 2*length + 1) % dims:
+            if (cost - 2*length + 1) % ndim:
                 continue
-            #  degreeof(last) = (cost - 2*length + 1) // dims
-            #  last = invdegreeof((cost - 2*length + 1) // dims)
-            last = invdegreeof(dims, (cost - 2*length + 1) // dims) - 1
-            while dims * degreeof(dims, last + 1) + 2*length - 1 == cost:
+            #  degreeof(last) = (cost - 2*length + 1) // ndim
+            #  last = invdegreeof((cost - 2*length + 1) // ndim)
+            last = invdegreeof(ndim, (cost - 2*length + 1) // ndim) - 1
+            while ndim * degreeof(ndim, last + 1) + 2*length - 1 == cost:
                 last += 1
-                # If blitzing, dont let the powers get too extreme without a
-                # lot of other powers around. We only do this when blitzing
-                # because it means we may miss cheaper solutions, however
-                # those solutions are generally unlikely and by eliminating
-                # them we churn through possiblities much faster.
+                # If blitzing, dont let the powers get too extreme without a lot
+                # of other powers around. We only do this when blitzing because
+                # it means we may miss cheaper solutions, however those solutions
+                # are generally unlikely and by eliminating them we churn through
+                # possiblities much faster.
                 if blitz > 0:
-                    if last / dims > (1 + 1.0/blitz) * length:
+                    if last / ndim > (1 + 1.0/blitz) * length:
                         break
                 for combo in itertools.combinations(range(last), length - 1):
                     yield list(combo) + [last], cost
 
     @classmethod
-    def all_idxs_1D(cls, dims, min_cost, max_cost, blitz=0.0):
+    def all_idxs_1D(cls, ndim, min_cost, max_cost, blitz=0.0):
         """
         Yields all index tuples with a cost in `min_cost`..`max_cost`. `blitz`
         may be used to skip extreme index tuples, where a higher blitz
         corresponds to skipping more and more.
         """
         for cost in range(min_cost, max_cost + 1):
-            yield from cls.at_cost_1D(dims, cost, blitz)
+            yield from cls.at_cost_1D(ndim, cost, blitz)
 
     @classmethod
-    def infinite(cls, dims, blitz=0.0, starting_cost=2):
+    def infinite(cls, ndim, blitz=0.0, starting_cost=2):
         # Iterate through the rat polys in cost order, where the cost of the rat
         # poly is just the sum of each polys cost.
         for cost in itertools.count(starting_cost):
@@ -167,14 +173,14 @@ class IdxGenerator:
             if blitz > 0:
                 min_cost = int(max_cost / (2 + 1.0/blitz))
                 max_cost -= min_cost
-            for pidxs, pcost in cls.all_idxs_1D(dims, min_cost, max_cost, blitz):
-                for qidxs, _ in cls.at_cost_1D(dims, cost - pcost, blitz):
+            for pidxs, pcost in cls.all_idxs_1D(ndim, min_cost, max_cost, blitz):
+                for qidxs, _ in cls.at_cost_1D(ndim, cost - pcost, blitz):
                     # if the numerator and denominator both dont have constants,
                     # x can be factored from both.
                     #  (x + x^2) / x == 1 + x
                     # for higher dimensions, we dont bother checking but the same
                     # factorisation can be applied to find redundant options.
-                    if dims == 1 and pidxs[0] != 0 and qidxs[0] != 0:
+                    if ndim == 1 and pidxs[0] != 0 and qidxs[0] != 0:
                         continue
                     # note that while f(x)/c is the same as scaling all
                     # coefficients, it isnt the same for us since we fix the
@@ -192,7 +198,8 @@ class IdxGenerator:
 def rel_error(real_values, values):
     return (values - real_values) / (real_values.max() - real_values.min())
 def abs_error(real_values, values):
-    return values / real_values - 1
+    with np.errstate(divide="ignore"):
+        return values / real_values - 1
 
 class EvaluatorBase:
     def __init__(self, leave_when_better_than=None):
@@ -273,9 +280,9 @@ class Printer:
 
 
 class Polynomial:
-    def __init__(self, dims, idxs, coeffs, check=True):
+    def __init__(self, ndim, idxs, coeffs, check=True):
         """
-        dims .... integer number of inputs.
+        ndim .... integer number of inputs.
         idxs .... tuple of integers specifying non-zero coeffs into
                   the infinite poly-ordering.
         coeffs .. coefficient values.
@@ -286,21 +293,54 @@ class Polynomial:
             assert len(coeffs) == len(idxs)
             idxs = list(idxs) # list to make numpy slicing work
             coeffs = np.array(coeffs)
-        self.dims = dims
-        self.degree = degreeof(dims, max(idxs))
+        self.ndim = ndim
+        self.degree = degreeof(ndim, idxs[-1])
         self.count = len(idxs)
-        self.countall = num_coeffs(dims, self.degree)
+        self.countall = num_coeffs(ndim, self.degree)
         self.idxs = idxs
         self.coeffs = coeffs
+
+    @classmethod
+    def one(cls, ndim=1):
+        return cls(ndim, [0], [1.0])
+    @classmethod
+    def constant(cls, const, ndim=1):
+        return cls(ndim, [0], [const])
+    @classmethod
+    def linear(cls, m, c, ndim=1, dim=0):
+        return cls(ndim, [0, dim + 1], [c, m])
+    @classmethod
+    def quadratic(cls, a, b, c):
+        return cls(1, [0, 1, 2], [c, b, a])
+
+    def __call__(self, *coords):
+        assert self.ndim == len(coords)
+        ones = yup_all_ones(self.degree, *coords)
+        values = self.eval_ones(ones)
+        return values.reshape(broadcasted_shape(*coords))
+    def eval_ones(self, ones):
+        return np.sum(self.coeffs * ones[:, self.idxs], axis=-1)
+
+    def add(self, other):
+        assert self.ndim == other.ndim
+        coeffs = {i: c for i, c in zip(self.idxs, self.coeffs)}
+        for i, c in zip(other.idxs, other.coeffs):
+            if i in coeffs:
+                coeffs[i] += c
+            else:
+                coeffs[i] = c
+        idxs = list(coeffs.keys())
+        coeffs = np.array(list(coeffs.values()))
+        return Polynomial(self.ndim, idxs, coeffs)
 
     def __repr__(self, short=True):
         allcoeffs = np.zeros(self.countall)
         allcoeffs[self.idxs] = self.coeffs
-        variables = poly_ordering(self.dims, self.countall)
+        variables = poly_ordering(self.ndim, self.countall)
         def mul(c, x):
             if c == 0:
                 return ""
-            if c == 1:
+            if c == 1 and x:
                 return x
             c = f"{c:.5g}" if short else repr(float(c))
             return f"{c} {x}".strip()
@@ -331,7 +371,7 @@ class RationalPolynomial:
     def approximate(cls, real_values, *coords, idx_generator, evaluator,
             printer=None):
 
-        dims = len(coords)
+        ndim = len(coords)
         flatcoords = [x.ravel() for x in coords]
         real_values = real_values.ravel()
 
@@ -349,32 +389,32 @@ class RationalPolynomial:
             pcoeffs = coeffs[:len(pidxs) - 1]
             pcoeffs = np.append(pcoeffs, 1.0)
             qcoeffs = coeffs[len(pidxs) - 1:]
-            p = Polynomial(dims, pidxs, pcoeffs, check=False)
-            q = Polynomial(dims, qidxs, qcoeffs, check=False)
-            return cls(p, q)
+            p = Polynomial(ndim, pidxs, pcoeffs, check=False)
+            q = Polynomial(ndim, qidxs, qcoeffs, check=False)
+            return RationalPolynomial(p, q)
 
         def find_best(pidxs, qidxs):
             maxidx = max(pidxs)
             maxidx = max(maxidx, max(qidxs))
-            maxdegree = degreeof(dims, maxidx)
+            maxdegree = degreeof(ndim, maxidx)
             # dont evaluate super low degree, just bump up.
-            maxdegree = max(maxdegree, 6 // dims)
+            maxdegree = max(maxdegree, 6 // ndim)
             if maxdegree > find_best.N:
                 find_best.N = maxdegree
                 find_best.ones = yup_all_ones(maxdegree, *flatcoords)
 
-            def compute(coeffs, residuals):
+            def compute(coeffs, only_residuals=True):
                 ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
-                values = ratpoly.eval_ones(find_best.ones)
-                if residuals:
+                with np.errstate(divide="ignore"):
+                    values = ratpoly.eval_ones(find_best.ones)
+                if only_residuals:
                     return values - real_values
                 else:
                     return ratpoly, *evaluator(real_values, values)
             # Optimise via least squares, since its significantly more stable
             # than a minimise-max-error optimiser.
-            diff = lambda coeffs: compute(coeffs, True)
             coeffs = initial_coeffs(pidxs, qidxs)
-            res = scipy.optimize.least_squares(diff, coeffs, method="lm")
+            res = scipy.optimize.least_squares(compute, coeffs, method="lm")
             return compute(res.x, False)
         find_best.N = -1
         find_best.ones = None
@@ -389,7 +429,7 @@ class RationalPolynomial:
             if printer is not None:
                 printer.tried(ratpoly, error)
 
-            if error < best_error:
+            if error <= best_error:
                 best_ratpoly = ratpoly
                 best_error = error
             if leave:
@@ -398,31 +438,26 @@ class RationalPolynomial:
         return best_ratpoly, best_error
 
     def __init__(self, p, q):
-        assert p.dims == q.dims
-        self.dims = p.dims
+        assert p.ndim == q.ndim
         self.p = p
         self.q = q
+        self.ndim = p.ndim
+        self.maxdegree = max(p.degree, q.degree)
 
-    def eval_coords(self, *coords, check=True):
-        if check:
-            assert self.dims == len(coords)
-            assert all(c.shape == coords[0].shape for c in coords)
-        flatcoords = [x.ravel() for x in coords]
-        maxdegree = max(self.p.degree, self.q.degree)
-        ones = yup_all_ones(maxdegree, *flatcoords)
-        value = self.eval_ones(ones)
-        value = value.reshape(coords[0].shape)
-        return value
+    def __call__(self, *coords):
+        assert self.ndim == len(coords)
+        ones = yup_all_ones(self.maxdegree, *coords)
+        values = self.eval_ones(ones)
+        return values.reshape(broadcasted_shape(*coords))
     def eval_ones(self, ones):
         p = np.sum(self.p.coeffs * ones[:, self.p.idxs], axis=-1)
         q = np.sum(self.q.coeffs * ones[:, self.q.idxs], axis=-1)
-        with np.errstate(divide="ignore"):
-            return p / q
+        return p / q
 
     def abs_error(self, real_values, *coords):
-        return abs_error(real_values, self.eval_coords(*coords))
+        return abs_error(real_values, self(*coords))
     def rel_error(self, real_values, *coords):
-        return rel_error(real_values, self.eval_coords(*coords))
+        return rel_error(real_values, self(*coords))
 
     def __repr__(self, short=True):
         return f"({self.p.__repr__(short)}) / ({self.q.__repr__(short)})"
@@ -431,7 +466,7 @@ class RationalPolynomial:
         p = self.p
         q = self.q
         allidxs = set(p.idxs) | set(q.idxs)
-        dims = self.dims
+        ndim = self.ndim
         degree = max(p.degree, q.degree)
         ftoa = lambda x: "+"*bool(x>=0.0) + repr(float(x))
         s = ""
@@ -453,7 +488,7 @@ class RationalPolynomial:
         xnames = {}
         i = -1
         for sumdeg in range(degree + 1):
-            for exps in itertools.product(range(sumdeg + 1), repeat=dims):
+            for exps in itertools.product(range(sumdeg + 1), repeat=ndim):
                 exps = exps[::-1]
                 if sum(exps) != sumdeg:
                     continue
@@ -521,3 +556,83 @@ class RationalPolynomial:
         s += f"    f64 Den = {poly(qones, qcs, qxs)};\n"
         s += f"    return Num / Den;"
         return s
+
+
+
+class LookupTable:
+    """
+    Multi-dimensional lookup table, where each dimension is a table lookup of
+    some count, however instead of a purely lerped grid it is pre-biased by a
+    rational polynomial. This bias function should return in 0..1 for the
+    intended input range, and this value will then be lerped across that table
+    dimension (note the 0..1 is not enforced, and factors outside will be
+    extrapolated).
+    """
+
+    class linear_lookup:
+        def __init__(self, xlo, xhi):
+            self.xlo = xlo
+            self.xhi = xhi
+            self.m = 1/(xhi - xlo)
+            self.c = -xlo/(xhi - xlo)
+    def __init__(self, values, *lookups):
+        assert values.ndim >= 1
+        assert values.size >= 1
+        assert all(x >= 2 for x in values.shape)
+        assert len(lookups) == values.ndim
+        lookups = list(lookups)
+        for i, lookup in enumerate(lookups):
+            if isinstance(lookup, LookupTable.linear_lookup):
+                lookups[i] = RationalPolynomial(
+                    Polynomial.linear(lookup.m, lookup.c, values.ndim, i),
+                    Polynomial.one(values.ndim),
+                )
+        assert all(isinstance(x, RationalPolynomial) for x in lookups)
+        assert all(x.ndim == values.ndim for x in lookups)
+        self.values = values
+        self.lookups = lookups
+    @property
+    def size(self):
+        return self.values.size
+    @property
+    def shape(self):
+        return self.values.shape
+    @property
+    def ndim(self):
+        return self.values.ndim
+
+    def __call__(self, *coords):
+        assert self.ndim == len(coords)
+        maxdegree = max(x.maxdegree for x in self.lookups)
+        ones = yup_all_ones(maxdegree, *coords)
+        values = self.eval_ones(ones)
+        return values.reshape(broadcasted_shape(*coords))
+    def eval_ones(self, ones):
+        idxs = np.zeros(shape=(self.ndim, ones.shape[0]), dtype=int)
+        lerps = np.empty(shape=(self.ndim, ones.shape[0]), dtype=float)
+
+        for i, lookup in enumerate(self.lookups):
+            x = lookup.eval_ones(ones)
+            # numpy indexing can suck my nuts
+            N = self.shape[self.ndim - 1 - i]
+            if N > 2:
+                x *= N - 1
+                idxs[i] = np.clip(x.astype(int), 0, N - 2)
+                lerps[i] = x - idxs[i].astype(float)
+            else:
+                assert N == 2
+                lerps[i] = x
+
+        ret = np.zeros(shape=(ones.shape[0],), dtype=float)
+        for bits in itertools.product([0, 1], repeat=self.ndim):
+            idx = []
+            weight = 1
+            for d, bit in enumerate(bits):
+                if bit == 0:
+                    idx.append(idxs[d])
+                    weight *= (1 - lerps[d])
+                else:
+                    idx.append(idxs[d] + 1)
+                    weight *= lerps[d]
+            ret += weight * self.values[tuple(idx[::-1])]
+        return ret

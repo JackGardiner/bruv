@@ -4,23 +4,23 @@ Runs the static approximator, outputting all found approximations.
 
 import argparse
 import sys
+from math import pi
 
 import numpy as np
 
 from .. import paths
 from .. import geez
 from ..geez import new_figure, new_window, no_window
-
+from .cea import *
 from .ratpoly import *
 from .space import *
-from .cea import *
 
 __all__ = ["run", "main"]
 
 
 
 def summary_1D(ratpoly, values, X, *, extra_reqs=()):
-    approx = ratpoly.eval_coords(X)
+    approx = ratpoly(X)
     abserr = ratpoly.abs_error(values, X)
     relerr = ratpoly.rel_error(values, X)
     print(f"    /* max error of: */")
@@ -38,7 +38,7 @@ def summary_1D(ratpoly, values, X, *, extra_reqs=()):
     axes[1].plot(X, 100*relerr, label="rel error")
 
 def summary_2D(ratpoly, values, X, Y, *, extra_reqs=()):
-    approx = ratpoly.eval_coords(X, Y)
+    approx = ratpoly(X, Y)
     abserr = ratpoly.abs_error(values, X, Y)
     relerr = ratpoly.rel_error(values, X, Y)
     print(f"    /* max error of: */")
@@ -55,19 +55,47 @@ def summary_2D(ratpoly, values, X, Y, *, extra_reqs=()):
     cont = axes[0, 0].contourf(X, Y, values, levels=100, cmap="viridis")
     fig.colorbar(cont, ax=axes[0, 0])
     axes[0, 0].set_title("actual function")
-    axes[0, 0].set_grid("none", "none")
+    axes[0, 0].set_grid("none")
     cont = axes[0, 1].contourf(X, Y, approx, levels=100, cmap="viridis")
     fig.colorbar(cont, ax=axes[0, 1])
     axes[0, 1].set_title("approximation")
-    axes[0, 1].set_grid("none", "none")
+    axes[0, 1].set_grid("none")
     cont = axes[1, 0].contourf(X, Y, 100*abserr, levels=100, cmap="viridis")
     fig.colorbar(cont, ax=axes[1, 0])
     axes[1, 0].set_title("abs error")
-    axes[1, 0].set_grid("none", "none")
+    axes[1, 0].set_grid("none")
     cont = axes[1, 1].contourf(X, Y, 100*relerr, levels=100, cmap="viridis")
     fig.colorbar(cont, ax=axes[1, 1])
     axes[1, 1].set_title("rel error")
-    axes[1, 1].set_grid("none", "none")
+    axes[1, 1].set_grid("none")
+
+def compare_2D(xlo, xhi, ylo, yhi, f, g):
+    X = linspace(100, xlo, xhi)
+    Y = linspace(100, ylo, yhi)
+    X, Y = meshgrid(X, Y)
+    values = f(X, Y)
+    approx = g(X, Y)
+
+    abserr = abs_error(values, approx)
+    relerr = rel_error(values, approx)
+
+    fig, axes = new_figure(rows=2, cols=2)
+    cont = axes[0, 0].contourf(X, Y, values, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[0, 0])
+    axes[0, 0].set_title("actual function")
+    axes[0, 0].set_grid("none")
+    cont = axes[0, 1].contourf(X, Y, approx, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[0, 1])
+    axes[0, 1].set_title("approximation")
+    axes[0, 1].set_grid("none")
+    cont = axes[1, 0].contourf(X, Y, 100*abserr, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[1, 0])
+    axes[1, 0].set_title("abs error")
+    axes[1, 0].set_grid("none")
+    cont = axes[1, 1].contourf(X, Y, 100*relerr, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[1, 1])
+    axes[1, 1].set_title("rel error")
+    axes[1, 1].set_grid("none")
 
 
 
@@ -100,7 +128,7 @@ def test2d():
         # idx_generator=IdxGenerator.infinite(dims=1, blitz=2.0),
         idx_generator=IdxGenerator.just((0, 2, 4, 5), (0, 1, 4)),
         evaluator=EvaluatorAbsOnly(leave_when_better_than=0.03),
-        printer=Printer()
+        printer=Printer(),
     )
     print("found:", ratpoly)
     summary_2D(ratpoly, values, X, Y)
@@ -109,7 +137,68 @@ def test2d():
 
 
 def _run():
-    print(CEA(3.5, 1.6, 5.2))
+    f = lambda x, y: 1 + (x - 2)**2 + (y + 3)**2
+    xlo = 1.0
+    xhi = 4.0
+    ylo = -5.0
+    yhi = -1.0
+
+    xN = 20
+    yN = 50
+
+    print("ND Lookup:")
+    X = linspace(xN, xlo, xhi)
+    Y = linspace(yN, ylo, yhi)
+    X, Y = meshgrid(X, Y)
+    values = f(X, Y)
+    ndlut = LookupTable(values,
+        LookupTable.linear_lookup(xlo, xhi),
+        LookupTable.linear_lookup(ylo, yhi),
+    )
+    compare_2D(xlo, xhi, ylo, yhi, f, ndlut)
+
+
+    print("ND lookup min/max biased to be exact")
+    xlookup = RationalPolynomial(
+        Polynomial(2, [0, 1, 3], [(5.0 - 1)/4, -4.0/4, 1.0/4]),
+        Polynomial.one(2),
+    )
+    ylookup = RationalPolynomial(
+        Polynomial(2, [0, 2, 5], [9.0/4, 6.0/4, 1.0/4]),
+        Polynomial.one(2),
+    )
+    values = np.array([
+        [1.0 + 0.0, 5.0 + 0.0],
+        [1.0 + 4.0, 5.0 + 4.0],
+    ])
+    print(xlookup)
+    print(ylookup)
+    print(values)
+    ndlut = LookupTable(values, xlookup, ylookup)
+    compare_2D(xlo, xhi, ylo, yhi, f, ndlut)
+
+
+
+    print("ND lookup start/end biased to be exact")
+    # YO we can add a tiny inc to y to not have equal start and end points.
+    xlookup = RationalPolynomial(
+        Polynomial(2, [0, 1, 3], [(5.0 - 2)/3, -4.0/3, 1.0/3]),
+        Polynomial.one(2),
+    )
+    ylookup = RationalPolynomial(
+        Polynomial(2, [0, 2, 5], [(9.0 - 3.995)/0.004, 6.0/0.004, 1.0/0.004]),
+        Polynomial.one(2),
+    )
+    X = linspace(2, xlo, xhi)
+    Y = linspace(2, ylo, yhi)
+    X, Y = meshgrid(X, Y)
+    values = f(X, Y) + 0.001*Y # tiny inc
+    print(xlookup)
+    print(ylookup)
+    print(values)
+    ndlut = LookupTable(values, xlookup, ylookup)
+    compare_2D(xlo, xhi, ylo, yhi, f, ndlut)
+
 
 
 

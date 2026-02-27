@@ -174,8 +174,8 @@ class CEA:
 
     def _keyof(self, P, ofr, eps):
         P = round(float(P), 4)
-        ofr = round(float(ofr), 3)
-        eps = round(float(eps), 3)
+        ofr = round(float(ofr), 4)
+        eps = round(float(eps), 4)
         return P, ofr, eps
 
     def __call__(self, P, ofr, eps):
@@ -192,7 +192,6 @@ class CEA:
             self._problem.set_pressure(P * 10) # mpa -> bar
             self._problem.set_o_f(ofr)
             self._problem.set_ae_at(eps)
-            print("running problem", P, ofr, eps)
             cea = self._problem.run()
             self._cache[key] = CEA_Result.from_cea(cea)
             self._changed = True
