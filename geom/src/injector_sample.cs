@@ -244,6 +244,18 @@ public class InjectorSample : TPIAP.Pea {
         }
 
 
+        Vec3 pos_IPA = at1.pos - at.pos;
+        Vec3 pos_LOx = at0.pos + uZ3*(L_BSPPEIGTH - r_BSPPEIGTH) - at.pos;
+        print("important sample things:");
+        print($"box height: {Lz_side}");
+        print($"outer r: {interior.shelled(th_outer).outer_r}");
+        print($"big flat w-w: {2f*flat_off}");
+        print($"IPA flat w-w: {spanner_IPA}");
+        print($"LOx flat w-w: {spanner_LOx}");
+        print($"pos-z LOx: {pos_LOx.Z}");
+        print($"pos-x IPA: {pos_IPA.X}");
+        print($"pos-z IPA: {pos_IPA.Z}");
+
         return vox;
     }
 
