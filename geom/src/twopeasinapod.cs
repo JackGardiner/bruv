@@ -50,15 +50,14 @@ public static class TwoPeasInAPod {
 
 
     public static void entrypoint(int make, bool shutdown_on_exit,
-            in Sectioner? sectioner) {
+            in Sectioner sectioner) {
         try {
             // Setup geez.
             Geez.set_background_colour(dark: true);
             Geez.dflt_colour = new("#AB331A"); // copperish.
             Geez.dflt_metallic = 0.35f;
             Geez.dflt_roughness = 0.8f;
-            if (sectioner != null)
-                Geez.dflt_sectioner = sectioner;
+            Geez.dflt_sectioner = sectioner;
             Geez.initialise();
 
             execute(make);
