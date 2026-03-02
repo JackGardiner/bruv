@@ -609,6 +609,10 @@ public static class Polygon {
             Lz += ifnan(extend_by, 0f);
         else
             Lz -= ifnan(extend_by, 0f);
+        if (Lz < 0f) {
+            z += Lz;
+            Lz = -Lz;
+        }
         for (int j=0; j<2; ++j) {
             if (j > 0)
                 z += Lz;
