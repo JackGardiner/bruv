@@ -333,8 +333,8 @@ public static partial class Br {
     public static float log2(float a) => MathF.Log2(a);
     public static float log10(float a) => MathF.Log10(a);
 
-    public static float squared(float a) => a*a;
-    public static float cubed(float a) => a*a*a;
+    public static float sqed(float a) => a*a;
+    public static float cbed(float a) => a*a*a;
     public static float sqrt(float a) => MathF.Sqrt(a);
     public static float cbrt(float a) => MathF.Cbrt(a);
 

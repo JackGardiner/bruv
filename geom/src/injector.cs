@@ -180,7 +180,7 @@ public class InjectorElement {
         for (int iter=0; iter<MAX_ITERS; ++iter) {
 
             // 1. Calculate current flow coefficient mu based on current Rn.
-            mu_il2 = (mdot_1 + mdot_2)/PI/squared(Ir_nz2)/sqrt(2f*rho_2*DP_2);
+            mu_il2 = (mdot_1 + mdot_2)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
 
             // 2. Find A based on mu (from Fig 34).
             A_2 = GraphLookup.get_A_from_mu_il(mu_il2, C_2);
@@ -216,8 +216,8 @@ public class InjectorElement {
         /* Inner nozzle vertical offset: */
 
         float K_m = mdot_1/mdot_2;
-        float cspf_1 = 1f - squared(rmbar_1); // coefficient of stage passage
-        float cspf_2 = 1f - squared(rmbar_2); //   fullness.
+        float cspf_1 = 1f - sqed(rmbar_1); // coefficient of stage passage
+        float cspf_2 = 1f - sqed(rmbar_2); //   fullness.
         float mixing_length = SQRT2 * tau_i
                             * (
                                 K_m/(K_m + 1f)*mu_il2/cspf_2*sqrt(DP_2/rho_2)
@@ -789,13 +789,10 @@ public class Injector : TPIAP.Pea {
 
     public required PartMating pm { get; init; }
 
-    public float Ir_chnl = NAN;
-    public float Or_chnl = NAN;
-    protected void initialise_chnl() {
-        Ir_chnl = pm.Mr_chnl - 0.5f*pm.min_wi_chnl;
-        Or_chnl = pm.Mr_chnl + 0.5f*pm.min_wi_chnl;
-    }
+    public required float height { get; init; }
 
+    public float Ir_chnl => pm.Mr_chnl - 0.5f*pm.min_wi_chnl;
+    public float Or_chnl => pm.Mr_chnl + 0.5f*pm.min_wi_chnl;
 
     public required int[] no_injg { get; init; }
     public required float[] r_injg { get; init; }
@@ -804,7 +801,6 @@ public class Injector : TPIAP.Pea {
     protected void initialise_inj() {
         points_inj = Polygon.circle(no_injg, r_injg, theta0_injg);
     }
-
 
     public required float D_fc { get; init; }
     public required int[] no_fcg { get; init; }
@@ -815,18 +811,50 @@ public class Injector : TPIAP.Pea {
         points_fc = Polygon.circle(no_fcg, r_fcg, theta0_fcg);
     }
 
-
     public required float th_plate { get; init; }
 
     public required float phi_mw { get; init; }
     public required float th_dmw { get; init; }
     public required float th_omw { get; init; }
 
+    public required string boltsize_mount { get; init; }
+    public Tapping tap_mount { get {
+        Tapping tap = new(boltsize_mount, printable);
+        tap.threaded_depth = tap.major_diameter*2f;
+        tap.extra_depth = 3f; // why not.
+        return tap;
+    } }
+
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
         element.initialise(pm, numel(points_inj));
     }
 
+    public required string portsize_igniter { get; init; }
+    public required string portsize_LOxinlet { get; init; }
+    public required string portsize_LOxPT { get; init; }
+    public required string portsize_IPAPT { get; init; }
+    public required string portsize_CCPT { get; init; }
+    public required float th_igniter { get; init; }
+    public required float th_LOxinlet { get; init; }
+    public required float th_LOxPT { get; init; }
+    public required float th_IPAPT { get; init; }
+    public required float th_CCPT { get; init; }
+    public required float D_igniterh { get; init; }
+    public required float D_LOxinleth { get; init; }
+    public required float D_LOxPTh { get; init; }
+    public required float D_IPAPTh { get; init; }
+    public required float D_CCPTh { get; init; }
+    public required float th_igniterh { get; init; }
+    public required float th_LOxinleth { get; init; }
+    public required float th_LOxPTh { get; init; }
+    public required float th_IPAPTh { get; init; }
+    public required float th_CCPTh { get; init; }
+    public Tapping tap_igniter => new(portsize_igniter, printable);
+    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable);
+    public Tapping tap_LOxPT => new(portsize_LOxPT, printable);
+    public Tapping tap_IPAPT => new(portsize_IPAPT, printable);
+    public Tapping tap_CCPT => new(portsize_CCPT, printable);
 
 
     protected Voxels voxels_plate() {
@@ -944,10 +972,10 @@ public class Injector : TPIAP.Pea {
         neg_LOx = vol.A;
         neg_LOx.BoolSubtract(vol.B);
         neg_LOx.BoolAdd(new Rod(
-            new(0.1f*uZ3 /* overlap */),
-            -2f*EXTRA + 0.1f,
+            new(),
+            -2f*EXTRA,
             vol.A.r0
-        ));
+        ).extended(VOXEL_SIZE, Extend.UP));
         neg_IPA = neg_LOx.voxDuplicate();
         neg_IPA.BoolSubtract(pos);
 
@@ -1018,36 +1046,30 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected void voxels_asi(Geez.Cycle key_asi, out Voxels pos,
+    protected void voxels_igniter(Geez.Cycle key_igniter, out Voxels pos,
             out Voxels neg) {
 
-        // TODO: fix asi magic numbers
-        float Lz = 54f;
-        // create augmented spark igniter through-port
-        GPort port = new GPort("1/4in", 6.35f); // 1/4in OD for SS insert?
-        // TODO: ^
-
-        // fluid volume.
-        neg = port.filled(new(Lz*uZ3), out _);
+        // Fluid volume.
+        neg = tap_igniter.hole(new(height*uZ3));
         neg.BoolAdd(new Rod(
             new(th_plate*uZ3),
-            Lz - th_plate,
-            port.downstream_radius
+            height - th_plate,
+            D_igniterh/2f
         ).extended(EXTRA, Extend.UP));
         neg.BoolAdd(new Rod(
             new(th_plate*uZ3),
             -th_plate,
-            port.downstream_radius - 1f
+            D_igniterh/2f - 1f // 1mm ledge for tube to sit on.
         ).extended(EXTRA, Extend.UPDOWN));
 
-        // walling.
-        pos = port.shelled(new(Lz*uZ3), 4f, out _);
+        // Filled pipe.
+        pos = tap_igniter.supporting(new(height*uZ3), th_igniter);
         pos.BoolAdd(new Rod(
             new(),
-            Lz,
-            port.downstream_radius
-        ).shelled(4f));
-        key_asi.voxels(pos);
+            height,
+            D_igniterh/2f + th_igniterh
+        ));
+        key_igniter.voxels(pos);
     }
 
 
@@ -1124,6 +1146,10 @@ public class Injector : TPIAP.Pea {
 
 
     protected Voxels voxels_orings() {
+        // No oring groove are printed, all are post machined.
+        if (printable)
+            return new();
+
         Voxels vox = new Rod(
             new(),
             pm.Lz_Ioring,
@@ -1193,9 +1219,9 @@ public class Injector : TPIAP.Pea {
             }
 
             Frame bot = Frame.cyl_axial(rejxy(p, z0)); // x=+radial
-            Frame top = bot.transz(54f - bot.pos.Z, false); // TODO:
+            Frame top = bot.transz(height - bot.pos.Z, false);
 
-            float strut_area = squared(2f*(pm.D_bolt/2f) + 4f);
+            float strut_area = sqed(2f*(pm.D_bolt/2f) + 4f);
             float strut_radius = 1.2f*sqrt(strut_area/PI);
 
             int N = DIVISIONS / 5;
@@ -1236,8 +1262,8 @@ public class Injector : TPIAP.Pea {
             Mesh m = Polygon.mesh_swept(new FramesSequence(frames), vertices);
             vox.BoolAdd(new(m));
 
-            // Bolt hole ish.
-            vox.BoolSubtract(new Rod(top, -10f, 3f));
+            // Bolt hole.
+            vox.BoolSubtract(tap_mount.hole(top));
 
             key.voxels(vox);
         }
@@ -1265,28 +1291,16 @@ public class Injector : TPIAP.Pea {
             in Voxels neg_LOx, in Voxels neg_IPA, out Voxels pos,
             out Voxels neg) {
 
-        // determine vertical height of ports:  for now use placeholder
-        float height = 54f; // TODO: magic nom
-        float D_pt = 2f; // PT though-hole diameter.
-
         // fucking c sharp cannot access out var from local function.
         Voxels _pos = new();
         Voxels _neg = new();
 
-        void portme(GPort port, Frame at, float th, in Voxels? sub=null) {
-            Voxels this_pos = port.shelled(at, th, out _);
-            this_pos.BoolAdd(new Rod(at, -height, port.downstream_radius + th));
-            Voxels this_neg = port.filled(at, out _);
-            this_neg.BoolAdd(new Rod(
-                at,
-                EXTRA,
-                port.pilot_bore_radius
-            ).extended(0.5f, Extend.DOWN));
-            this_neg.BoolAdd(new Rod(
-                at,
-                -height - EXTRA,
-                port.downstream_radius
-            ));
+        void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
+                in Voxels? sub=null) {
+            Voxels this_pos = tap.supporting(at, th);
+            Voxels this_neg = tap.hole(at);
+            this_pos.BoolAdd(new Rod(at, -height, D_h/2f + th_h));
+            this_neg.BoolAdd(new Rod(at, -height, D_h/2f));
             if (sub != null) {
                 this_pos.BoolSubtract(sub);
                 this_neg.BoolSubtract(sub);
@@ -1296,25 +1310,21 @@ public class Injector : TPIAP.Pea {
             key.voxels(_pos);
         }
 
-        GPort port_LOx_inlet = new("1/2in", 21.1f);
-        GPort port_LOx_pt    = new("1/4in", D_pt);
-        GPort port_IPA_pt    = new("1/4in", D_pt);
-        GPort port_cc_pt     = new("1/4in", D_pt);
+        float r_LOxinlet = mani_vol.peak.Y * 1.1f;
+        float r_LOxPT    = mani_vol.peak.Y;
+        float r_IPAPT    = mani_vol.peak.Y;
+        float r_CCPT     = mani_vol.peak.Y;
 
-        float r_LOx_inlet = mani_vol.peak.Y;
-        float r_LOx_pt    = mani_vol.peak.Y;
-        float r_IPA_pt    = mani_vol.peak.Y;
-        float r_cc_pt     = mani_vol.peak.Y;
+        Frame at_LOxinlet = new(new Vec3(-r_LOxinlet, 0f, height));
+        Frame at_LOxPT    = new(new Vec3(+r_LOxPT,    0f, height));
+        Frame at_IPAPT    = new(new Vec3(0f,    +r_IPAPT, height));
+        Frame at_CCPT     = new(new Vec3(0f,     -r_CCPT, height));
 
-        Frame at_LOx_inlet = new(new Vec3(-r_LOx_inlet, 0f, height));
-        Frame at_LOx_pt    = new(new Vec3(+r_LOx_pt,    0f, height));
-        Frame at_IPA_pt    = new(new Vec3(0f,    +r_IPA_pt, height));
-        Frame at_cc_pt     = new(new Vec3(0f,     -r_cc_pt, height));
-
-        portme(port_LOx_inlet, at_LOx_inlet, 4f, neg_LOx);
-        portme(port_LOx_pt,    at_LOx_pt,    4f, neg_LOx);
-        portme(port_IPA_pt,    at_IPA_pt,    4f, neg_IPA);
-        portme(port_cc_pt,     at_cc_pt,     4f);
+        portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
+                neg_LOx);
+        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh, neg_LOx);
+        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh, neg_IPA);
+        portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh);
 
         pos = _pos;
         neg = _neg;
@@ -1345,7 +1355,7 @@ public class Injector : TPIAP.Pea {
         float overall_Lr = pm.r_bolt
                          + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
-        float overall_Lz = 54f; // approx total height
+        float overall_Lz = height;
         float overall_Mz = overall_Lz/2f;
         BBox3 overall_bbox = new(
             new Vec3(-overall_Lr, -overall_Lr, overall_Mz - overall_Lz/2f),
@@ -1406,7 +1416,7 @@ public class Injector : TPIAP.Pea {
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
         Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
         Geez.Cycle key_maniwalls = new(colour: COLOUR_PINK);
-        Geez.Cycle key_asi = new(colour: COLOUR_WHITE);
+        Geez.Cycle key_igniter = new(colour: COLOUR_WHITE);
         Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
@@ -1423,8 +1433,9 @@ public class Injector : TPIAP.Pea {
                 out ManiVol mani_vol, out Voxels neg_LOx, out Voxels neg_IPA);
         step("created manifold walls.");
 
-        voxels_asi(key_asi, out Voxels? pos_asi, out Voxels? neg_asi);
-        step("created asi port.");
+        voxels_igniter(key_igniter, out Voxels? pos_igniter,
+                out Voxels? neg_igniter);
+        step("created igniter port.");
 
         Voxels? bolts = voxels_bolts();
         substep("created bolts.");
@@ -1446,8 +1457,8 @@ public class Injector : TPIAP.Pea {
         substep("added elements.");
         add(ref maniwalls, key_maniwalls);
         substep("added manifold walls.");
-        add(ref pos_asi, key_asi);
-        substep("added asi.");
+        add(ref pos_igniter, key_igniter);
+        substep("added igniter.");
         add(ref flange, key_flange);
         substep("added flange.");
         add(ref gussets, key_gussets);
@@ -1463,10 +1474,10 @@ public class Injector : TPIAP.Pea {
         substep("subtracted bolts.");
         sub(ref orings);
         substep("subtracted O-rings.");
-        sub(ref neg_asi);
-        substep("subtracted asi.");
+        sub(ref neg_igniter);
+        substep("subtracted igniter void.");
         sub(ref neg_ports);
-        substep("subtracted ports.");
+        substep("subtracted port voids.");
 
         step("removed voids.");
 
@@ -1524,15 +1535,17 @@ public class Injector : TPIAP.Pea {
     public void anything() {}
 
 
-    public string name => "injector_stu";
+    public string name => "injector";
 
 
     public bool minimise_mem     = false;
+    public bool printable        = false;
     public bool take_screenshots = false;
     public void set_modifiers(int mods) {
-        _ = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        _                = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        printable        = popbits(ref mods, TPIAP.PRINTABLE);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
-        _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
+        _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods == 0)
             return;
         throw new Exception("yeah nah dunno what it is");
@@ -1544,7 +1557,6 @@ public class Injector : TPIAP.Pea {
 
 
     public void initialise() {
-        initialise_chnl();
         initialise_inj();
         initialise_fc();
         initialise_elements();

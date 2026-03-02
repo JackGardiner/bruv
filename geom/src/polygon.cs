@@ -167,7 +167,17 @@ public static class Polygon {
         float den = cross(Da, Db);
         assert(!nearzero(den));
         float t = cross(b0 - a0, Db) / den;
-        outside = within(t, 0f, 1f);
+        outside = !within(t, 0f, 1f);
+        return a0 + t*Da;
+    }
+
+    public static Vec3 plane_line_intersection(Vec3 a0, Vec3 a1, Vec3 p, Vec3 n,
+            out bool outside) {
+        Vec3 Da = a1 - a0;
+        float den = dot(n, Da);
+        assert(!nearzero(den));
+        float t = dot(p - a0, n) / den;
+        outside = !within(t, 0f, 1f);
         return a0 + t*Da;
     }
 
@@ -589,11 +599,16 @@ public static class Polygon {
         List<Vec3> V = new();
         float z = at_middle ? -Lz/2f : 0f;
         assert(isnan(extend_by) == (extend_dir == Extend.NONE));
-        if (isset((int)extend_dir, (int)Extend.DOWN))
+        if (isset((int)extend_dir, (int)Extend.DOWN) && (Lz > 0f))
             z -= extend_by;
-        if (extend_dir == Extend.UPDOWN)
+        if (isset((int)extend_dir, (int)Extend.UP) && (Lz < 0f))
+            z += extend_by;
+        if (isset((int)extend_dir, (int)Extend.UPDOWN))
             extend_by *= 2f;
-        Lz += ifnan(extend_by, 0f);
+        if (Lz > 0f)
+            Lz += ifnan(extend_by, 0f);
+        else
+            Lz -= ifnan(extend_by, 0f);
         for (int j=0; j<2; ++j) {
             if (j > 0)
                 z += Lz;

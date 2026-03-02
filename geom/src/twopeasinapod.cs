@@ -29,10 +29,11 @@ public static class TwoPeasInAPod {
     public const int LOOKSIE_CUTAWAY = 0x20;
     /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
     public const int MINIMISE_MEM     = 0x01 << BITC_ACTION;
-    public const int FILLETLESS       = 0x02 << BITC_ACTION;
-    public const int TAKE_SCREENSHOTS = 0x04 << BITC_ACTION;
-    public const int LOOKIN_FANCY     = 0x08 << BITC_ACTION;
-    public const int BRANDINGLESS     = 0x10 << BITC_ACTION;
+    public const int PRINTABLE        = 0x02 << BITC_ACTION;
+    public const int FILLETLESS       = 0x04 << BITC_ACTION;
+    public const int TAKE_SCREENSHOTS = 0x08 << BITC_ACTION;
+    public const int LOOKIN_FANCY     = 0x10 << BITC_ACTION;
+    public const int BRANDINGLESS     = 0x20 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
     public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
@@ -44,7 +45,7 @@ public static class TwoPeasInAPod {
     public const int DUMMY = 0;
     public const int BITC_ACTION = 6;
     public const int MASK_ACTION = (1 << BITC_ACTION) - 1;
-    public const int BITC_MODIFIER = 5;
+    public const int BITC_MODIFIER = 6;
     public const int MASK_MODIFIER = ((1 << BITC_MODIFIER) - 1) << BITC_ACTION;
     public const int MASK_PEA = ~(MASK_ACTION | MASK_MODIFIER);
 

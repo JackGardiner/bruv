@@ -18,7 +18,10 @@ public class InjectorSample : TPIAP.Pea {
         => throw new NotImplementedException();
     public void drawings(in Voxels part)
         => throw new NotImplementedException();
+
+    public bool printable = false;
     public void set_modifiers(int mods) {
+        printable = popbits(ref mods, TPIAP.PRINTABLE);
         _ = popbits(ref mods, TPIAP.MINIMISE_MEM);
         _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods != 0)
@@ -33,7 +36,6 @@ public class InjectorSample : TPIAP.Pea {
     public required float th_dmw { get; init; }
 
     public static float EXTEND_BASE_BY = 3f;
-    public static bool MAKE_PRINTABLE = true;
 
     public int N => numel(element);
     public void initialise() {
@@ -51,7 +53,8 @@ public class InjectorSample : TPIAP.Pea {
 
 
     public static Voxels make(Frame at, InjectorElement element, float th_plate,
-            float th_dmw, ImageSignedDist img, bool datum_on_opposite) {
+            float th_dmw, ImageSignedDist img, bool datum_on_opposite,
+            bool printable) {
 
         const float EXTRA = 30f;
         const float th_outer = 3f;
@@ -60,7 +63,7 @@ public class InjectorSample : TPIAP.Pea {
         element.voxels(
                 at.rotxy(-PI_2 - 2/3f*PI/element.no_il2), th_plate, th_dmw,
                 out Voxels? pos, out Voxels? neg,
-                please_put_the_inner_injector_on_the_build_plate: MAKE_PRINTABLE
+                please_put_the_inner_injector_on_the_build_plate: printable
             );
         // injector element = pos - neg.
 
@@ -234,7 +237,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* Nozzle extension. */
-        if (MAKE_PRINTABLE) {
+        if (printable) {
             vox.BoolAdd(new Rod(
                 at,
                 3*VOXEL_SIZE,
@@ -286,7 +289,7 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-          #if false
+          #if true
             return new(i*50*uX3 + EXTEND_BASE_BY*uZ3);
           #else
             // or try to stack nicely:
@@ -327,7 +330,8 @@ public class InjectorSample : TPIAP.Pea {
                 th_plate,
                 th_dmw,
                 img,
-                i % 2 == 0
+                i % 2 == 0,
+                printable
             );
             Geez.voxels(vox);
             all.BoolAdd(vox);

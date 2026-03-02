@@ -26,10 +26,7 @@ public class Chamber : TPIAP.Pea {
 
     public required float AEAT { get; init; }
     public required float R_tht { get; init; }
-    public float R_exit = NAN;
-    protected void initialise_exit() {
-        R_exit = sqrt(AEAT) * R_tht;
-    }
+    public float R_exit => sqrt(AEAT) * R_tht;
 
     public required float NLF { get; init; }
     public required float phi_conv { get; init; }
@@ -115,8 +112,8 @@ public class Chamber : TPIAP.Pea {
         for (int i=0; i<N; ++i)
             theta_chnl_lookup[i] += Dtheta;
 
-        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(squared(R_exit + th_iw + th_chnl)
-                                            - squared(R_exit + th_iw));
+        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(sqed(R_exit + th_iw + th_chnl)
+                                            - sqed(R_exit + th_iw));
     }
 
     public required float th_imani { get; init; }
@@ -127,19 +124,20 @@ public class Chamber : TPIAP.Pea {
     public required float wi_fixt { get; init; }
     public required float phi_fixt { get; init; }
 
+    public required string portsize_inlet { get; init; }
     public required float theta_inlet { get; init; }
-    public required float L_inlet { get; init; }
-    public required float D_inlet { get; init; }
     public required float th_inlet { get; init; }
-    public required float phi_inlet { get; init; }
     public required float FR_inlet { get; init; }
+    public required float phi_inlet { get; init; }
+    public Tapping tap_inlet => new(portsize_inlet, printable);
 
-    public required float theta_tc { get; init; }
     public required int no_tc { get; init; }
-    public required float D_tc { get; init; }
+    public required string portsize_tc { get; init; }
+    public required float theta_tc { get; init; }
     public required float th_tc { get; init; }
     public required float phi_tc { get; init; }
-    public required float L_tc { get; init; }
+    public required float D_tc { get; init; }
+    public Tapping tap_tc => new(portsize_tc, printable);
 
 
     protected int DIVISIONS => max(200, (int)(200f / VOXEL_SIZE));
@@ -885,7 +883,7 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected const float min_A_neg_mani = 18f; // mm^2
+    protected const float min_A_neg_mani = 23f; // mm^2
     protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
@@ -1013,7 +1011,7 @@ public class Chamber : TPIAP.Pea {
 
         // Place the inlet some way up the lower edge. Note the last coordinate
         // stores the axial angle.
-        inlet = rejxy((2f*b + 3f*c)/5f, phi_inlet + PI);
+        inlet = rejxy((b + c)/2f, phi_inlet + PI);
 
         // Output the lower edge projected length to hugely aid the numerical
         // search for matching area.
@@ -1082,22 +1080,30 @@ public class Chamber : TPIAP.Pea {
         float zextra = 1.5f;
         vox.BoolAdd(new Rod(
             inlet,
-            L_inlet,
-            D_inlet/2f
-        ).extended(zextra, Extend.DOWN)
-         .extended(EXTRA, Extend.UP));
+            FR_inlet + EXTRA,
+            tap_inlet.minor_radius
+        ).extended(zextra, Extend.DOWN));
         key.cycle(Geez.voxels(vox));
 
         if (!filletless) {
             Voxels mask = new Rod(
-                inlet.transz(-zextra),
-                zextra + 1.1f*FR_inlet,
-                D_inlet/2f + 1.1f*FR_inlet
-            );
+                inlet,
+                1.1f*FR_inlet,
+                tap_inlet.minor_radius + 1.1f*FR_inlet
+            ).extended(zextra, Extend.DOWN);
             using (Lifted l = new(vox, mask))
                 Fillet.concave(l.vox, FR_inlet, inplace: true);
             key.cycle(Geez.voxels(vox));
         }
+
+        vox.BoolSubtract(new Bar(
+            inlet.transz(FR_inlet),
+            FR_inlet + 2*EXTRA,
+            SQRT2*tap_inlet.minor_diameter + EXTRA)
+        );
+        Frame inlet_out = inlet.transz(tap_inlet.threaded_depth + 0.8f*FR_inlet);
+        vox.BoolAdd(tap_inlet.hole(inlet_out));
+        key.cycle(Geez.voxels(vox));
 
         return vox;
     }
@@ -1148,23 +1154,23 @@ public class Chamber : TPIAP.Pea {
         }
 
         float zextra = 2.5f;
-        float Lr = D_inlet/2f + th_inlet;
 
-        Frame inlet_end = inlet.transz(L_inlet).flipzx().rotxy(PI_2);
+        Rod inlet_rod = new Rod(
+            inlet,
+            tap_inlet.threaded_depth + 0.8f*FR_inlet,
+            tap_inlet.major_radius + th_inlet
+        ).extended(zextra, Extend.DOWN);
+        Frame inlet_end = inlet_rod.bbase.transz(inlet_rod.Lz)
+                                         .flipzx()
+                                         .rotxy(PI_2);
 
-        float phi = PI_2 + phi_inlet;
-        float ell = (magxy(inlet_end.pos) - R_tht)/cos(phi);
-        vox.BoolAdd(new Rod(
-            inlet_end,
-            L_inlet,
-            Lr
-        ).extended(zextra, Extend.UP));
+        vox.BoolAdd(inlet_rod);
 
         if (!filletless) {
             Voxels mask = new Rod(
                 inlet,
-                1.4f*FR_inlet,
-                D_inlet/2f + 1.4f*FR_inlet
+                1.1f*FR_inlet,
+                inlet_rod.outer_r + 1.1f*FR_inlet
             ).extended(zextra, Extend.DOWN);
             using (Lifted l = new(vox, mask))
                 Fillet.concave(l.vox, FR_inlet, inplace: true);
@@ -1172,15 +1178,17 @@ public class Chamber : TPIAP.Pea {
 
         vox.BoolAdd(new Bar(
             inlet_end.rotxy(-PI_4),
-            L_inlet,
-            Lr
+            inlet_rod.Lz,
+            inlet_rod.outer_r
         ).extended(zextra, Extend.UP)
          .at_edge(Bar.X0_Y0));
+        float phi = PI_2 + phi_inlet;
+        float ell = (magxy(inlet_end.pos) - R_tht)/cos(phi);
         vox.BoolAdd(new Bar(
             inlet_end,
             ell,
             4.5f,
-            L_inlet + zextra
+            inlet_rod.Lz
         ).at_face(Bar.X0));
 
         return vox;
@@ -1239,33 +1247,29 @@ public class Chamber : TPIAP.Pea {
         List<Vec3> points = points_tc();
         neg = new();
         pos = new();
-        float neg_Lr = 0.5f*D_tc;
-        float pos_Lr = 0.5f*D_tc + th_tc;
+
         foreach (Vec3 p in points) {
             Frame frame = Frame.cyl_radial(p);
-            float Lz = cnt_radius_at(p.Z, th_iw + 0.5f*th_chnl + L_tc, true)
-                     - magxy(p);
+            float Dz = cnt_radius_at(p.Z,
+                    th_iw + th_chnl + th_ow + 5f + tap_tc.straight_depth, true);
+            Dz -= magxy(p);
 
-            Voxels this_neg = new Rod(
+            Voxels this_neg = tap_tc.hole(frame.transz(Dz));
+            this_neg.BoolAdd(new Rod(
                 frame,
-                Lz,
-                neg_Lr
-            ).extended(EXTRA, Extend.UP);
-            this_neg.BoolSubtract(Cone.phied(
-                frame.transz(th_chnl/2f + th_ow),
-                PI_4,
-                Lz // has extra builtin.
-            ).shelled(2f*neg_Lr)
-             .upto_tip());
+                Dz,
+                D_tc/2f
+            ).extended(EXTRA, Extend.UP));
 
+            float pos_Lr = tap_tc.major_radius + th_tc;
             Voxels this_pos = new Rod(
                 frame,
-                Lz,
+                Dz,
                 pos_Lr
             ).extended(2*EXTRA, Extend.DOWN);
             this_pos.BoolAdd(new Bar(
                 frame.rotxy(PI_4),
-                Lz,
+                Dz,
                 pos_Lr
             ).extended(2*EXTRA, Extend.DOWN)
              .at_edge(Bar.X0_Y0));
@@ -1274,12 +1278,12 @@ public class Chamber : TPIAP.Pea {
                 frame,
                 th_tc,
                 100f,
-                Lz
+                Dz
             ).extended(2*EXTRA, Extend.DOWN)
              .at_face(Bar.Y0);
             this_pos.BoolAdd(web);
             this_pos.IntersectImplicit(new Space(
-                frame.translate(new Vec3(0f, -pos_Lr*SQRT2 + web.Lx/2f, Lz))
+                frame.translate(new Vec3(0f, -pos_Lr*SQRT2 + web.Lx/2f, Dz))
                      .rotyz(phi_tc),
                 -INF,
                 0f
@@ -1313,10 +1317,10 @@ public class Chamber : TPIAP.Pea {
 
             List<Vec2> tracezr = new();
             float rlo = pm.R_cc + th_iw + th_chnl + th_ow - r;
-            float zhi = squared((Lr - rlo)/Lr/2f)*10f;
+            float zhi = sqed((Lr - rlo)/Lr/2f)*10f;
             int N = DIVISIONS/16;
             for (int j=0; j<N; ++j) {
-                float x = squared(j/(float)(N - 1))*(zhi + 2f*EXTRA);
+                float x = sqed(j/(float)(N - 1))*(zhi + 2f*EXTRA);
                 float y = Lr - Lr*2f*sqrt(x/10f);
                 tracezr.Add(new(x, y));
             }
@@ -1818,12 +1822,26 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Vec3 v = uZ3;
-        Geez.dir(v);
-        Vec3 a = rotzx(v, PI_4);
-        Geez.dir(a, colour: COLOUR_BLUE);
-        a = rotyz(a, PI_4);
-        Geez.dir(a, colour: COLOUR_GREEN);
+        Tapping tap = new("G1/4");
+        Frame frame = new();
+        frame = frame.rotzx(PI_2 + PI_4);
+        Geez.voxels(tap.hole(frame), COLOUR_RED);
+        Geez.voxels(new Tapping("G1/4", false).hole(frame), COLOUR_BLUE);
+        Geez.voxels(tap.supporting(frame, 2f));
+        // Frame frame = new();
+        // frame = frame.rotzx(PI_4);
+        // Geez.frame(new(), mark_pos: false);
+        // Geez.frame(frame, mark_pos: false);
+        // Geez.point(frame * ZERO3, r: 0.2f, COLOUR_WHITE);
+        // Vec3 a = frame * uX3*SQRTH;
+        // Vec3 b = frame * uY3;
+        // Vec3 c = frame * uZ3;
+        // Geez.bar(new(frame.rotxy(PI_4), 4, SQRT2));
+        // Geez.point(a, r: 0.2f, COLOUR_RED);
+        // Geez.point(b, r: 0.2f, COLOUR_GREEN);
+        // Vec3 d = Polygon.plane_line_intersection(b, b + c, a, uX3, out _);
+        // Geez.point(d, r: 0.2f, COLOUR_PINK);
+        // print(todeg(argphi(d - a)));
     }
 
 
@@ -1831,15 +1849,17 @@ public class Chamber : TPIAP.Pea {
 
 
     public bool minimise_mem     = false;
+    public bool printable        = false;
     public bool filletless       = false;
     public bool take_screenshots = false;
     public bool brandingless     = false;
     public void set_modifiers(int mods) {
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        printable        = popbits(ref mods, TPIAP.PRINTABLE);
         filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         brandingless     = popbits(ref mods, TPIAP.BRANDINGLESS);
-        _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
+        _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         assert(mods == 0, $"unrecognised modifiers: 0x{mods:X}");
     }
 
@@ -1847,7 +1867,6 @@ public class Chamber : TPIAP.Pea {
     // not part of tpiap.pea but invoked when tpiap constructors the chamber
     // object.
     public void initialise() {
-        initialise_exit();
         initialise_cnt();
         initialise_chnl();
 
