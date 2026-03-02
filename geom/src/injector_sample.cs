@@ -57,7 +57,7 @@ public class InjectorSample : TPIAP.Pea {
             bool printable) {
 
         const float EXTRA = 30f;
-        const float th_outer = 3f;
+        const float th_outer = 5f;
 
         // position inlets s.t. port isnt straight on one.
         element.voxels(
@@ -166,11 +166,13 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* PORTS */
-        float r_BSPPEIGTH = 8.2f/2f; // tap drill size (undersize)
+        Tapping tap = new Tapping("Rc1/8", printable){
+            threaded_depth = 8.5f
+        };
         float L_BSPPEIGTH = 15f;
-        float r_port = r_BSPPEIGTH + 5f;
-        float spanner_IPA = 17f;
-        float spanner_LOx = 17f;
+        float r_port = tap.major_radius + 5f;
+        float spanner_IPA = 18f;
+        float spanner_LOx = 18f;
 
         // side port pad
         Voxels pad = new Bar(
@@ -186,34 +188,34 @@ public class InjectorSample : TPIAP.Pea {
         // side port
         Frame at1 = new Frame.Cyl(at).radial(
             new(interior.r + L_BSPPEIGTH, 0f, r_port)
-        ).flipzx();
-        Voxels port_IPA = new Bar(
-            at1.rotxy(PI_4),
-            magxy(at / at1.pos),
-            2f * r_BSPPEIGTH*SQRTH // size diag to tap size.
         );
+        Voxels port_IPA = tap.hole(at1);
+        port_IPA.BoolAdd(new Bar(
+            at1.rotxy(PI_4),
+            -magxy(at / at1.pos),
+            tap.bore_diameter*SQRTH
+        ));
         port_IPA.BoolSubtract(interior);
         vox.BoolSubtract(port_IPA);
 
         // top port
         Frame at0 = top_cone.inner_tip!.flipzx();
-        // we get r_BSPPEIGTH length for free by trimming cone.
-        Voxels port_LOx = new Rod(at0, L_BSPPEIGTH - r_BSPPEIGTH, r_port)
-                .extended(0.1f + r_port, Extend.DOWN);
-        port_LOx.BoolSubtract(top_cone.positive.transz(th_outer*SQRT2));
+        // we get bore radius length for free by trimming cone.
+        at0 = at0.transz(L_BSPPEIGTH - tap.bore_radius);
+        Voxels port_LOx = new Rod(at0, -L_BSPPEIGTH - R + 4f, r_port);
+        port_LOx.BoolSubtract(Cone.phied(top_cone.inner_tip, PI_4, 200f));
         // flats.
         Bar lox_flat = new Bar(
             at0,
             EXTRA,
             EXTRA,
-            L_BSPPEIGTH
+            -L_BSPPEIGTH
         ).extended(EXTRA, Extend.UPDOWN); // big fucking box (dujj).
         port_LOx.BoolSubtract(lox_flat.transy(+spanner_LOx/2f).at_face(Bar.Y1));
         port_LOx.BoolSubtract(lox_flat.transy(-spanner_LOx/2f).at_face(Bar.Y0));
         vox.BoolAdd(port_LOx);
-        vox.BoolSubtract(new Rod(at0, L_BSPPEIGTH - r_BSPPEIGTH, r_BSPPEIGTH)
-                .extended(0.1f + r_BSPPEIGTH, Extend.DOWN)
-                .extended(EXTRA, Extend.UP));
+        vox.BoolSubtract(tap.hole(at0));
+        vox.BoolSubtract(new Rod(at0, -L_BSPPEIGTH - 0.2f, tap.bore_radius));
 
 
         // Worlds cheekiest label.
@@ -248,7 +250,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         Vec3 pos_IPA = at1.pos - at.pos;
-        Vec3 pos_LOx = at0.pos + uZ3*(L_BSPPEIGTH - r_BSPPEIGTH) - at.pos;
+        Vec3 pos_LOx = at0.pos - at.pos;
         print("important sample things:");
         print($"box height: {Lz_side}");
         print($"outer r: {interior.shelled(th_outer).outer_r}");
@@ -256,7 +258,7 @@ public class InjectorSample : TPIAP.Pea {
         print($"IPA flat w-w: {spanner_IPA}");
         print($"LOx flat w-w: {spanner_LOx}");
         print($"pos-z LOx: {pos_LOx.Z}");
-        print($"pos-x IPA: {pos_IPA.X}");
+        print($"pos-r IPA: {pos_IPA.X}");
         print($"pos-z IPA: {pos_IPA.Z}");
 
         return vox;

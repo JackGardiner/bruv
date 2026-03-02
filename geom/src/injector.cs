@@ -818,12 +818,8 @@ public class Injector : TPIAP.Pea {
     public required float th_omw { get; init; }
 
     public required string boltsize_mount { get; init; }
-    public Tapping tap_mount { get {
-        Tapping tap = new(boltsize_mount, printable);
-        tap.threaded_depth = tap.major_diameter*2f;
-        tap.extra_depth = 3f; // why not.
-        return tap;
-    } }
+    public Tapping tap_mount => new(boltsize_mount, printable)
+            { extra_depth = 3f };
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
@@ -850,11 +846,16 @@ public class Injector : TPIAP.Pea {
     public required float th_LOxPTh { get; init; }
     public required float th_IPAPTh { get; init; }
     public required float th_CCPTh { get; init; }
-    public Tapping tap_igniter => new(portsize_igniter, printable);
-    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable);
-    public Tapping tap_LOxPT => new(portsize_LOxPT, printable);
-    public Tapping tap_IPAPT => new(portsize_IPAPT, printable);
-    public Tapping tap_CCPT => new(portsize_CCPT, printable);
+    public Tapping tap_igniter => new(portsize_igniter, printable)
+            { extra_depth = 4f };
+    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable)
+            { extra_depth = 4f };
+    public Tapping tap_LOxPT => new(portsize_LOxPT, printable)
+            { extra_depth = 4f };
+    public Tapping tap_IPAPT => new(portsize_IPAPT, printable)
+            { extra_depth = 4f };
+    public Tapping tap_CCPT => new(portsize_CCPT, printable)
+            { extra_depth = 4f };
 
 
     protected Voxels voxels_plate() {

@@ -1822,26 +1822,37 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Tapping tap = new("G1/4");
+        Tapping tap0 = new("G1/2", false);
+        Tapping tap1 = new("Rc1/2", false);
+
         Frame frame = new();
         frame = frame.rotzx(PI_2 + PI_4);
-        Geez.voxels(tap.hole(frame), COLOUR_RED);
-        Geez.voxels(new Tapping("G1/4", false).hole(frame), COLOUR_BLUE);
-        Geez.voxels(tap.supporting(frame, 2f));
-        // Frame frame = new();
-        // frame = frame.rotzx(PI_4);
-        // Geez.frame(new(), mark_pos: false);
-        // Geez.frame(frame, mark_pos: false);
-        // Geez.point(frame * ZERO3, r: 0.2f, COLOUR_WHITE);
-        // Vec3 a = frame * uX3*SQRTH;
-        // Vec3 b = frame * uY3;
-        // Vec3 c = frame * uZ3;
-        // Geez.bar(new(frame.rotxy(PI_4), 4, SQRT2));
-        // Geez.point(a, r: 0.2f, COLOUR_RED);
-        // Geez.point(b, r: 0.2f, COLOUR_GREEN);
-        // Vec3 d = Polygon.plane_line_intersection(b, b + c, a, uX3, out _);
-        // Geez.point(d, r: 0.2f, COLOUR_PINK);
-        // print(todeg(argphi(d - a)));
+        Geez.rod(new(
+            frame,
+            -tap1.threaded_depth,
+            tap1.minor_radius + tap1.minor_thread_truncation
+        ), COLOUR_GREEN);
+        Geez.rod(new(
+            frame,
+            -tap1.straight_depth,
+            tap1.minor_radius
+        ), COLOUR_RED);
+        Geez.rod(new(
+            frame,
+            -tap1.straight_depth,
+            tap1.major_radius
+        ), COLOUR_BLUE);
+        Geez.rod(new(
+            frame.transz(-tap1.threaded_depth + tap1.gauge_depth),
+            0.01f,
+            tap1.major_radius
+        ), COLOUR_PINK);
+
+        Geez.dflt_alpha = 0.4f;
+        Geez.dflt_metallic = 0.0f;
+        Geez.voxels(tap0.hole(frame), COLOUR_RED);
+        Geez.voxels(tap1.hole(frame), COLOUR_BLUE);
+        // Geez.voxels(tap0.supporting(frame, 2f));
     }
 
 

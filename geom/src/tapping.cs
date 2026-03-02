@@ -15,66 +15,104 @@ public class Tapping {
     public float major_diameter { get; }
     public float minor_diameter { get; }
     public float pitch { get; }
-    public float threaded_depth { get; set; }
-    public float extra_depth { get; set; }
-    public float tip_depth_ratio { get; set; }
+    public float taper { get; } // diametral reduction per unit depth.
+    public float gauge_depth { get; } // only relevant when tapered.
+
+    public float threaded_depth { get; set; }  // initialised to typical.
+    public float extra_depth { get; set; }     // initialised to 0.
+    public float tip_depth_ratio { get; set; } // initialised to 1 if printable,
+                                               // otherwise ~0.6.
 
     public float bore_diameter // conservative material removal:
-        => 0.9f*minor_diameter;
+        => 0.9f*minor_diameter + taper_offset(straight_depth);
 
     public float major_radius => 0.5f*major_diameter;
     public float minor_radius => 0.5f*minor_diameter;
     public float bore_radius  => 0.5f*bore_diameter;
 
-    public float straight_depth => threaded_depth + extra_depth + 2*pitch;
+    public float straight_depth => threaded_depth + 1.5f*pitch + extra_depth;
+
+    public float minor_thread_truncation { get; set; } = 0.1f;
+        // Note that 0.1mm is within tolerance for all sizes.
 
     public Tapping(string size, bool printable=true) {
-        Dictionary<string, (float, float, float)> lookup = new([
-            /*       size, ( major diam, minor diam,  pitch ) */
-            new(     "M1", (       1.0f,     0.729f,  0.25f ) ),
-            new(     "M2", (       2.0f,     1.567f,  0.40f ) ),
-            new(     "M3", (       3.0f,     2.459f,  0.50f ) ),
-            new(     "M4", (       4.0f,     3.242f,  0.70f ) ),
-            new(     "M5", (       5.0f,     4.134f,  0.80f ) ),
-            new(     "M6", (       6.0f,     4.917f,  1.00f ) ),
-            new(     "M8", (       8.0f,     6.647f,  1.25f ) ),
-            new(    "M10", (      10.0f,     8.376f,  1.50f ) ),
-            new(    "M12", (      12.0f,    10.106f,  1.75f ) ),
-            new(    "M14", (      14.0f,    11.835f,  2.00f ) ),
-            new(    "M16", (      16.0f,    13.835f,  2.00f ) ),
+        Dictionary<string, List<float>> lookup = new([
+// Cheeky indentation cut.
+/*                                                           req.  */
+/*                                                         length  */
+/*                  major    minor                 gauge   /major  */
+/*         size     diam.    diam.   pitch  taper  depth    diam.  */
+new(      "M1", [    1.0f,  0.729f,  0.25f,    0f,    0f,    2.0f ] ),
+new(      "M2", [    2.0f,  1.567f,  0.40f,    0f,    0f,    2.0f ] ),
+new(      "M3", [    3.0f,  2.459f,  0.50f,    0f,    0f,   1.75f ] ),
+new(      "M4", [    4.0f,  3.242f,  0.70f,    0f,    0f,   1.75f ] ),
+new(      "M5", [    5.0f,  4.134f,  0.80f,    0f,    0f,    1.5f ] ),
+new(      "M6", [    6.0f,  4.917f,  1.00f,    0f,    0f,    1.5f ] ),
+new(      "M8", [    8.0f,  6.647f,  1.25f,    0f,    0f,    1.5f ] ),
+new(     "M10", [   10.0f,  8.376f,  1.50f,    0f,    0f,   1.25f ] ),
+new(     "M12", [   12.0f, 10.106f,  1.75f,    0f,    0f,   1.25f ] ),
+new(     "M14", [   14.0f, 11.835f,  2.00f,    0f,    0f,   1.25f ] ),
+new(     "M16", [   16.0f, 13.835f,  2.00f,    0f,    0f,   1.25f ] ),
 
-            new(  "G1/16", (     7.723f,     6.561f, 0.907f ) ),
-            new(   "G1/8", (     9.728f,     8.566f, 0.907f ) ),
-            new(   "G1/4", (    13.157f,    11.445f, 1.337f ) ),
-            new(   "G3/8", (    16.662f,    14.950f, 1.337f ) ),
-            new(   "G1/2", (    20.955f,    18.631f, 1.814f ) ),
-            new(   "G5/8", (    22.911f,    20.587f, 1.814f ) ),
-            new(   "G3/4", (    26.441f,    24.117f, 1.814f ) ),
-            new(   "G7/8", (    30.201f,    27.877f, 1.814f ) ),
-            new(     "G1", (    33.249f,    30.291f, 2.309f ) ),
-            new( "G1-1/8", (    37.897f,    34.939f, 2.309f ) ),
-            new( "G1-1/4", (    41.910f,    38.952f, 2.309f ) ),
-            new( "G1-1/2", (    47.803f,    44.845f, 2.309f ) ),
+new(   "G1/16", [  7.723f,  6.561f, 0.907f,    0f,    0f,    0.9f ] ),
+new(    "G1/8", [  9.728f,  8.566f, 0.907f,    0f,    0f,    0.9f ] ),
+new(    "G1/4", [ 13.157f, 11.445f, 1.337f,    0f,    0f,    0.9f ] ),
+new(    "G3/8", [ 16.662f, 14.950f, 1.337f,    0f,    0f,    0.9f ] ),
+new(    "G1/2", [ 20.955f, 18.631f, 1.814f,    0f,    0f,    0.8f ] ),
+new(    "G5/8", [ 22.911f, 20.587f, 1.814f,    0f,    0f,    0.8f ] ),
+new(    "G3/4", [ 26.441f, 24.117f, 1.814f,    0f,    0f,    0.8f ] ),
+new(    "G7/8", [ 30.201f, 27.877f, 1.814f,    0f,    0f,    0.8f ] ),
+new(      "G1", [ 33.249f, 30.291f, 2.309f,    0f,    0f,    0.7f ] ),
+new(  "G1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,    0f,    0.7f ] ),
+new(  "G1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,    0f,    0.7f ] ),
+new(  "G1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,    0f,    0.7f ] ),
+
+new(  "Rc1/16", [  7.723f,  6.561f, 0.907f, 1f/16,    4f,    1.1f ] ),
+new(   "Rc1/8", [  9.728f,  8.566f, 0.907f, 1f/16,    4f,    1.0f ] ),
+new(   "Rc1/4", [ 13.157f, 11.445f, 1.337f, 1f/16,    6f,    1.0f ] ),
+new(   "Rc3/8", [ 16.662f, 14.950f, 1.337f, 1f/16,  6.4f,   0.85f ] ),
+new(   "Rc1/2", [ 20.955f, 18.631f, 1.814f, 1f/16,  8.2f,   0.85f ] ),
+new(   "Rc3/4", [ 26.441f, 24.117f, 1.814f, 1f/16,  9.5f,    0.8f ] ),
+new(     "Rc1", [ 33.249f, 30.291f, 2.309f, 1f/16, 10.4f,    0.7f ] ),
+new( "Rc1-1/4", [ 41.910f, 38.952f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
+new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
         ]);
 
         this.size = size;
         this.printable = printable;
 
-        this.major_diameter  = lookup[size].Item1;
-        this.minor_diameter  = lookup[size].Item2;
-        this.pitch           = lookup[size].Item3;
-        // Typical thread engagement: (note this is kinda super wrong for small
-        //                             bolt sizes, eh just manually adjust.)
-        this.threaded_depth = 0.8f*this.major_diameter;
-        this.extra_depth = 0.0f; // for use by caller.
-        // Depth ratio of a 112deg tip:
-        this.tip_depth_ratio = 1f/tan(torad(112f/2));
+        List<float> entry = lookup[size];
+        this.major_diameter  = entry[0];
+        this.minor_diameter  = entry[1];
+        this.pitch           = entry[2];
+        this.taper           = entry[3];
+        this.gauge_depth     = entry[4];
+        float req_length_div_major_diam = entry[5];
+
+        this.threaded_depth = this.major_diameter * req_length_div_major_diam;
+        this.extra_depth = 0.0f;
+                                                // 112deg tip:
+        this.tip_depth_ratio = printable ? 1f : 1f/tan(torad(112f/2));
     }
 
 
+    public float taper_offset(float depth)
+        => 0.5f*(threaded_depth - gauge_depth - depth)*taper;
+
+    public void straight_bounds(out Vec2 A, out Vec2 B) {
+        A = new(0f, minor_radius + minor_thread_truncation);
+        B = new(-straight_depth, A.Y);
+        // Include taper.
+        A.Y += taper_offset(-A.X);
+        B.Y += taper_offset(-B.X);
+    }
+
     public Voxels threads(Frame face_out) {
-        // oh yeah genuine thread visualiser.
+        // oh yeah genuine thread creator.
         // now THIS is picogk.
+
+        // Female thread profile from ISO228-1. used also for metric bolts here.
+        // Tapering from ISO7-1.
 
         // Make the divs s.t. the longest spacing between vertices is one voxel.
         int count_per_pitch = (int)(TWOPI * major_radius / VOXEL_SIZE);
@@ -84,62 +122,93 @@ public class Tapping {
         float dcount = count_per_pitch / pitch;
         int count = (int)(dcount * (threaded_depth + 3*pitch));
 
+        // Some thread properties.
+        float pitch_radius = 0.5f*(minor_radius + major_radius);
+        float triangle_height = 0.960491f*pitch;
+        float FR = 0.137329f*pitch;
+
+        float thread_angle = atan(pitch/2f / triangle_height);
+        assert(nearto(thread_angle, torad(27.5f), rtol: 1e-3f));
+
+        float rlo = pitch_radius - 0.5f*triangle_height;
+        float rhi = pitch_radius + 0.5f*triangle_height;
+
+        // Spinning (but not translating) frames to build each thread, one pitch
+        // at a time.
         List<Frame> frames = new(count);
         for (int i=0; i<count; ++i) {
-            float rotation = lerp(0, TWOPI, i, count_per_pitch);
-            float trans = lerp(0f, -pitch, i, count_per_pitch);
-            trans += pitch;
-            frames.Add(face_out.transz(trans).rotxy(rotation).swapzx());
+            float by = lerp(0, TWOPI, i, count_per_pitch);
+            frames.Add(face_out.rotxy(by).swapzx());
         }
 
-        List<Vec2> crosssection = [
-            new(0f,        0f),
-            new(0f,        minor_radius),
-            new(-pitch/2f, major_radius),
-            new(-pitch,    minor_radius),
-            new(-pitch,    0f),
-        ];
-        List<Vec2> points = new(count*numel(crosssection));
+        // Now make the xy crosssections of each individual thread.
+        int count_per_cs = 5;
+        List<Vec2> points = new(count*count_per_cs);
         for (int i=0; i<count; ++i) {
+            // Last few pitches are shrinking as-if cutting bit easing in.
             float j = i - (count - 2.75f*count_per_pitch);
-            if (j < 0f)
-                points.AddRange(crosssection);
-            else {
-                float t = j / (2f*count_per_pitch);
-                t = clamp(t, 0f, 1f);
-                points.AddRange([
-                    new(0f,        0f),
-                    new(0f,        minor_radius),
-                    new(-pitch/2f, lerp(major_radius, minor_radius, t)),
-                    new(-pitch,    minor_radius),
-                    new(-pitch,    0f),
-                ]);
-            }
+            float t = j / (2f*count_per_pitch);
+            t = clamp(t, 0f, 1f);
+
+            float z0 = pitch + lerp(0f, -pitch, i, count_per_pitch);
+            float z1 = z0 - 0.5f*pitch;
+            float z2 = z0 - pitch;
+            float r0 = rlo;
+            float r1 = lerp(rhi, rlo, t);
+            float r2 = rlo;
+            r0 += taper_offset(-z0);
+            r1 += taper_offset(-z1);
+            r2 += taper_offset(-z2);
+
+            points.Add(new(z0, 0f));
+            points.Add(new(z0, r0));
+            points.Add(new(z1, r1));
+            points.Add(new(z2, r2));
+            points.Add(new(z2, 0f));
         }
 
         Mesh m = Polygon.mesh_swept(new FramesSequence(frames), points,
-                closed: false, ringed: false);
+                ringed: false);
         Voxels v = new(m);
-        v.Smoothen(VOXEL_SIZE);
-        v.BoolIntersect(new Bar(face_out, -straight_depth, major_diameter + 2f));
+
+        // Both fix the mesh->voxel (mesh has contacting faces) and fillet the
+        // threads.
+        v.TripleOffset(-FR);
+
+        // Truncate the inner pointy part of the thread.
+        straight_bounds(out Vec2 A, out Vec2 B);
+        v.BoolAdd(new Cone(face_out, B.X - A.X, A.Y, B.Y));
+
+        // Clip the top and bottom to be flat (it was created with extra pitch
+        // lengths) and threads to not extend past major.
+        v.BoolIntersect(new Cone(
+            face_out,
+            -straight_depth,
+            major_radius + taper_offset(0f),
+            major_radius + taper_offset(straight_depth)
+        ));
+
         return v;
     }
 
 
     public Voxels hole(Frame face_out, float extra=2f) {
+        straight_bounds(out Vec2 A, out Vec2 B);
 
         if (!printable) {
-            // Hole will look like the threads with a cone tip.
+            // Hole will look like the threads with a cone tip and a small round
+            // slug at the top.
+            Voxels vox = threads(face_out);
             List<Vec2> zr = [
-                new(extra,           0f),
-                new(extra,           major_radius),
-                new(0f,              major_radius),
-                new(0f,              minor_radius),
-                new(-straight_depth, minor_radius),
-                new(-straight_depth - tip_depth_ratio*minor_radius, 0f),
+                new(A.X + extra, 0f),
+                new(A.X + extra, A.Y + (major_radius - minor_radius) + 0.2f),
+                new(A.X,         A.Y + (major_radius - minor_radius) + 0.2f),
+                A,
+                B,
+                new(B.X - tip_depth_ratio*B.Y, 0f),
             ];
-            Voxels vox = new(Polygon.mesh_revolved(face_out, zr));
-            vox.BoolAdd(threads(face_out));
+            Polygon.cull_adjacent_duplicates(zr);
+            vox.BoolAdd(new(Polygon.mesh_revolved(face_out, zr)));
             return vox;
         }
 
@@ -217,12 +286,14 @@ public class Tapping {
     public Voxels supporting(Frame face_out, float th) {
         assert(th > 0f);
 
-        // Just a thickened fill, but with always 45deg cone.
+        // Simple cylinder into 45deg cone, with `th` being the smallest wall
+        // thickness.
+        float rhi = major_radius + taper_offset(0f);
         List<Vec2> points = [
             new(0f,                              0f),
-            new(0f,                              major_radius + th),
-            new(-straight_depth - th*tan(PI/8f), major_radius + th),
-            new(-straight_depth - major_radius - SQRT2*th, 0f),
+            new(0f,                              rhi + th),
+            new(-straight_depth - th*tan(PI/8f), rhi + th),
+            new(-straight_depth - rhi - SQRT2*th, 0f),
         ];
         Mesh mesh = Polygon.mesh_revolved(face_out, points);
         return new(mesh);
