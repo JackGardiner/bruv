@@ -63,7 +63,7 @@
         "portsize_tc": "G1/16",
         "theta_tc": 1.5707963267948966,
         "th_tc": 2.5,
-        "D_tc": 2.0
+        "D_tc": 1.5
     },
     "injector": {
         "height": 60.0,
@@ -105,17 +105,17 @@
         "portsize_IPAPT": "G1/4",
         "portsize_CCPT": "G1/4",
         "th_igniter": 4.0,
-        "th_LOxinlet": 4.5,
-        "th_LOxPT": 3.5,
-        "th_IPAPT": 3.5,
-        "th_CCPT": 3.5,
+        "th_LOxinlet": 4.0,
+        "th_LOxPT": 3.0,
+        "th_IPAPT": 3.0,
+        "th_CCPT": 3.0,
         "D_igniterh": 6.35,
         "D_LOxinleth": 15.0,
         "D_LOxPTh": 2.0,
         "D_IPAPTh": 2.0,
         "D_CCPTh": 2.0,
         "th_igniterh": 4.0,
-        "th_LOxinleth": 4.5,
+        "th_LOxinleth": 4.0,
         "th_LOxPTh": 1.5,
         "th_IPAPTh": 1.5,
         "th_CCPTh": 1.5

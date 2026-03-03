@@ -283,20 +283,63 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
         return new(mesh);
     }
 
-    public Voxels supporting(Frame face_out, float th) {
+    public Voxels supporting(Frame face_out, float th, bool flats=true,
+            float tip_depth_ratio=NAN, float depth=NAN) {
         assert(th > 0f);
+
+        if (isnan(depth)) {
+            depth = straight_depth;
+            tip_depth_ratio = ifnan(tip_depth_ratio, 1f);
+        } else {
+            tip_depth_ratio = ifnan(tip_depth_ratio, 0f);
+        }
 
         // Simple cylinder into 45deg cone, with `th` being the smallest wall
         // thickness.
         float rhi = major_radius + taper_offset(0f);
         List<Vec2> points = [
-            new(0f,                              0f),
-            new(0f,                              rhi + th),
-            new(-straight_depth - th*tan(PI/8f), rhi + th),
-            new(-straight_depth - rhi - SQRT2*th, 0f),
+            new(0f,                     0f),
+            new(0f,                     rhi + th),
+            new(-depth - th*tan(PI/8f), rhi + th),
+            new(-depth - rhi*tip_depth_ratio - SQRT2*th, 0f),
         ];
         Mesh mesh = Polygon.mesh_revolved(face_out, points);
-        return new(mesh);
+        Voxels vox = new(mesh);
+
+        if (!flats)
+            return vox;
+
+        // Place flats on +-X. Note these are external flats, to not comprimise
+        // strength/minimum thickness.
+        float flat_ang = PI/8f;
+        if (nearvert(face_out.Z))
+            flat_ang = PI/6f; // fatter flats if we can print them.
+        Vec2 flat_edge = (rhi + th) * new Vec2(1f, tan(flat_ang));
+        Vec2 tangent_edge = frompol(rhi + th, 2f*flat_ang);
+        float flat_depth = min(max(8f, rhi + th),
+                depth + th*tan(PI/8f) + rhi + th - mag(flat_edge));
+        List<Vec2> xy = [
+            tangent_edge,
+            flat_edge,
+            flipy(flat_edge),
+            flipy(tangent_edge),
+            -tangent_edge,
+            -flat_edge,
+            flipx(flat_edge),
+            flipx(tangent_edge),
+        ];
+        // Excess extrude and we'll clip to conical.
+        Mesh m = Polygon.mesh_extruded(face_out, -flat_depth*1.5f, xy);
+        Voxels vox_flats = new(m);
+        vox_flats.BoolIntersect(Cone.phied(
+            face_out,
+            PI_4,
+            r0: mag(flat_edge) + flat_depth,
+            r1: 0f
+        ));
+
+        vox.BoolAdd(vox_flats);
+        return vox;
     }
 }
 

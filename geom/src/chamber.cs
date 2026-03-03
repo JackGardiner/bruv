@@ -1154,42 +1154,38 @@ public class Chamber : TPIAP.Pea {
         }
 
         float zextra = 2.5f;
+        float inlet_Lz = tap_inlet.threaded_depth + 0.8f*FR_inlet;
+        float inlet_R = tap_inlet.major_radius + th_inlet;
+        Frame inlet_end = inlet.transz(inlet_Lz);
+        // +z = +normal, +x = +circum
 
-        Rod inlet_rod = new Rod(
-            inlet,
-            tap_inlet.threaded_depth + 0.8f*FR_inlet,
-            tap_inlet.major_radius + th_inlet
-        ).extended(zextra, Extend.DOWN);
-        Frame inlet_end = inlet_rod.bbase.transz(inlet_rod.Lz)
-                                         .flipzx()
-                                         .rotxy(PI_2);
-
-        vox.BoolAdd(inlet_rod);
+        vox.BoolAdd(tap_inlet.supporting(inlet_end, th_inlet,
+                depth: inlet_Lz + zextra));
 
         if (!filletless) {
             Voxels mask = new Rod(
                 inlet,
                 1.1f*FR_inlet,
-                inlet_rod.outer_r + 1.1f*FR_inlet
+                inlet_R + 1.1f*FR_inlet
             ).extended(zextra, Extend.DOWN);
             using (Lifted l = new(vox, mask))
                 Fillet.concave(l.vox, FR_inlet, inplace: true);
         }
 
         vox.BoolAdd(new Bar(
-            inlet_end.rotxy(-PI_4),
-            inlet_rod.Lz,
-            inlet_rod.outer_r
-        ).extended(zextra, Extend.UP)
+            inlet_end.rotxy(PI_4),
+            -inlet_Lz,
+            inlet_R
+        ).extended(zextra, Extend.DOWN)
          .at_edge(Bar.X0_Y0));
         float phi = PI_2 + phi_inlet;
         float ell = (magxy(inlet_end.pos) - R_tht)/cos(phi);
         vox.BoolAdd(new Bar(
             inlet_end,
-            ell,
             4.5f,
-            inlet_rod.Lz
-        ).at_face(Bar.X0));
+            ell,
+            -inlet_Lz
+        ).at_face(Bar.Y0));
 
         return vox;
     }
@@ -1262,11 +1258,14 @@ public class Chamber : TPIAP.Pea {
             ).extended(EXTRA, Extend.UP));
 
             float pos_Lr = tap_tc.major_radius + th_tc;
-            Voxels this_pos = new Rod(
+            // Supporting from tapping to include flats.
+            Voxels this_pos = tap_tc.supporting(frame.transz(Dz), th_tc,
+                    depth: Dz + 2*EXTRA);
+            this_pos.BoolAdd(new Rod(
                 frame,
                 Dz,
                 pos_Lr
-            ).extended(2*EXTRA, Extend.DOWN);
+            ).extended(2*EXTRA, Extend.DOWN));
             this_pos.BoolAdd(new Bar(
                 frame.rotxy(PI_4),
                 Dz,
@@ -1621,7 +1620,7 @@ public class Chamber : TPIAP.Pea {
         substep("clipped top excess.", view_part: true);
 
         sub(ref neg_bolt_clearance, keepme: true);
-        substep("subtracted bolt hole clearance (1).");
+        substep("subtracted bolt hole clearance (1/2).");
 
         if (!filletless) {
             Fillet.both(part, concave_Fr: 3f, convex_Fr: 0.7f, inplace: true);
@@ -1641,7 +1640,7 @@ public class Chamber : TPIAP.Pea {
         sub(ref neg_tc);
         substep("subtracted negative thermocouples.");
         sub(ref neg_bolt_clearance);
-        substep("subtracted bolt hole clearance (2).");
+        substep("subtracted bolt hole clearance (2/2).");
         sub(ref neg_bolt_hole, key_bolts);
         substep("subtracted bolt hole.");
 
@@ -1826,7 +1825,8 @@ public class Chamber : TPIAP.Pea {
         Tapping tap1 = new("Rc1/2", false);
 
         Frame frame = new();
-        frame = frame.rotzx(PI_2 + PI_4);
+        // frame = frame.rotzx(PI_2 + PI_4);
+
         Geez.rod(new(
             frame,
             -tap1.threaded_depth,
@@ -1848,11 +1848,11 @@ public class Chamber : TPIAP.Pea {
             tap1.major_radius
         ), COLOUR_PINK);
 
-        Geez.dflt_alpha = 0.4f;
-        Geez.dflt_metallic = 0.0f;
-        Geez.voxels(tap0.hole(frame), COLOUR_RED);
-        Geez.voxels(tap1.hole(frame), COLOUR_BLUE);
-        // Geez.voxels(tap0.supporting(frame, 2f));
+        // Geez.dflt_alpha = 0.4f;
+        // Geez.dflt_metallic = 0.0f;
+        Geez.voxels(tap1.hole(frame), COLOUR_RED);
+        // Geez.voxels(tap1.hole(frame), COLOUR_BLUE);
+        Geez.voxels(tap1.supporting(frame, 3f));
     }
 
 

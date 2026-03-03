@@ -1064,7 +1064,8 @@ public class Injector : TPIAP.Pea {
         ).extended(EXTRA, Extend.UPDOWN));
 
         // Filled pipe.
-        pos = tap_igniter.supporting(new(height*uZ3), th_igniter);
+        pos = tap_igniter.supporting(new Frame(height*uZ3).rotxy(PI_4),
+                th_igniter);
         pos.BoolAdd(new Rod(
             new(),
             height,
@@ -1316,10 +1317,16 @@ public class Injector : TPIAP.Pea {
         float r_IPAPT    = mani_vol.peak.Y;
         float r_CCPT     = mani_vol.peak.Y;
 
-        Frame at_LOxinlet = new(new Vec3(-r_LOxinlet, 0f, height));
-        Frame at_LOxPT    = new(new Vec3(+r_LOxPT,    0f, height));
-        Frame at_IPAPT    = new(new Vec3(0f,    +r_IPAPT, height));
-        Frame at_CCPT     = new(new Vec3(0f,     -r_CCPT, height));
+        Vec3 pos_LOxinlet = new(-r_LOxinlet, 0f, height);
+        Vec3 pos_LOxPT    = new(+r_LOxPT,    0f, height);
+        Vec3 pos_IPAPT    = new(0f,    +r_IPAPT, height);
+        Vec3 pos_CCPT     = new(0f,     -r_CCPT, height);
+
+        Frame at_LOxinlet = Frame.cyl_axial(pos_LOxinlet).rotxy(PI_2);
+        Frame at_LOxPT    = Frame.cyl_axial(pos_LOxPT)   .rotxy(PI_2);
+        Frame at_IPAPT    = Frame.cyl_axial(pos_IPAPT)   .rotxy(PI_2);
+        Frame at_CCPT     = Frame.cyl_axial(pos_CCPT)    .rotxy(PI_2);
+        // +z = +axial, +x = -circumferential.
 
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
                 neg_LOx);
