@@ -20,15 +20,22 @@ public class InjectorSample : TPIAP.Pea {
         => throw new NotImplementedException();
 
     public bool printable = false;
+    public bool print_resin = false;
     public void set_modifiers(int mods) {
         printable = popbits(ref mods, TPIAP.PRINTABLE);
+        print_resin = popbits(ref mods, TPIAP.PRINT_RESIN);
         _ = popbits(ref mods, TPIAP.MINIMISE_MEM);
         _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods != 0)
             throw new NotImplementedException();
+        if (print_resin) {
+            assert(!printable, "resin prints are assumed to print the final "
+                             + "product.");
+        }
     }
 
     public float extend_base_by => printable ? 3f : 0f;
+    public float th_outer => print_resin ? 4f : 3f;
 
     public required PartMating pm { get; init; }
     public required InjectorElement[] element { get; init; }
@@ -55,7 +62,7 @@ public class InjectorSample : TPIAP.Pea {
             bool datum_on_opposite) {
 
         const float EXTRA = 30f;
-        const float th_outer = 5f;
+        const float th_datum = 3f;
 
         // position inlets s.t. port isnt straight on one.
         element.voxels(
@@ -68,7 +75,7 @@ public class InjectorSample : TPIAP.Pea {
         Rod interior /* kinda, loosy goosy top and bottom (dujj) */ = new(
             at,
             element.max_z - 1f,
-            element.max_r + 2f
+            element.max_r + 3f
         );
 
         float R = interior.r + th_outer;
@@ -115,69 +122,73 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* FLATS */
-
         float flat_length = R/3.5f;
         float flat_off = nonhypot(R, flat_length);
-        Bar bar = new Bar(
-            at,
-            Lz_side,
-            2.1f*flat_length
-        ).extended(EXTRA, Extend.UPDOWN);
-        // vox.BoolSubtract(bar.transx(+flat_off).at_face(Bar.X1));
-        // ^ overriden by port pad.
-        // vox.BoolSubtract(bar.transx(-flat_off).at_face(Bar.X0));
-        // ^ at stag point, lets not thin it.
-        vox.BoolSubtract(bar.transy(+flat_off).at_face(Bar.Y1));
-        vox.BoolSubtract(bar.transy(-flat_off).at_face(Bar.Y0));
+        if (!print_resin) { // no part-wide flats resin.
+            Bar bar = new Bar(
+                at,
+                Lz_side,
+                2.1f*flat_length
+            ).extended(EXTRA, Extend.UPDOWN);
+            // vox.BoolSubtract(bar.transx(+flat_off).at_face(Bar.X1));
+            // ^ overriden by port pad.
+            // vox.BoolSubtract(bar.transx(-flat_off).at_face(Bar.X0));
+            // ^ at stag point, lets not thin it.
+            vox.BoolSubtract(bar.transy(+flat_off).at_face(Bar.Y1));
+            vox.BoolSubtract(bar.transy(-flat_off).at_face(Bar.Y0));
+        }
 
 
         /* DATUM? */
-        const float th_datum = 3f;
-        Vec3 datum_orient = ONE3;
-        if (datum_on_opposite)
-            datum_orient = flipy(datum_orient);
-        Vec3 datum_corner = new(-R, -flat_off, 0f);
-        Voxels datum = new Bar(
-            at.translate(datum_orient * datum_corner/2f),
-            R,
-            flat_off,
-            th_datum
-        ).extended(extend_base_by, Extend.DOWN);
-        datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
-        datum.BoolSubtract(
-            (Voxels)new Bar(
-                at.translate(datum_orient * datum_corner),
-                th_datum,
-                R/3f
-            ).at_edge(datum_on_opposite ? Bar.X1_Y0 : Bar.X1_Y1)
-             .extended(EXTRA, Extend.UPDOWN)
-            -
-            (Voxels)new Rod(
-                at.translate(datum_orient * (datum_corner + uXY3*R/3f)),
-                th_datum,
-                R/3f
-            ).extended(EXTRA, Extend.UPDOWN)
-            /* syntax is sick as fr */
-        );
-        vox.BoolAdd(datum);
+        if (!print_resin) { // no datum on resin.
+            Vec3 datum_orient = ONE3;
+            if (datum_on_opposite)
+                datum_orient = flipy(datum_orient);
+            Vec3 datum_corner = new(-R, -flat_off, 0f);
+            Voxels vox_datum = new Bar(
+                at.translate(datum_orient * datum_corner/2f),
+                R,
+                flat_off,
+                th_datum
+            ).extended(extend_base_by, Extend.DOWN);
+            vox_datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
+            vox_datum.BoolSubtract(
+                (Voxels)new Bar(
+                    at.translate(datum_orient * datum_corner),
+                    th_datum,
+                    R/3f
+                ).at_edge(datum_on_opposite ? Bar.X1_Y0 : Bar.X1_Y1)
+                .extended(EXTRA, Extend.UPDOWN)
+                -
+                (Voxels)new Rod(
+                    at.translate(datum_orient * (datum_corner + uXY3*R/3f)),
+                    th_datum,
+                    R/3f
+                ).extended(EXTRA, Extend.UPDOWN)
+                /* syntax is sick as fr */
+            );
+            vox.BoolAdd(vox_datum);
+        }
 
 
 
         /* PORTS */
-        Tapping tap = new Tapping("Rc1/8", printable){
-            threaded_depth = 8.5f
-        };
-        float L_BSPPEIGTH = 15f;
-        float r_port = tap.major_radius + 5f;
-        float spanner_IPA = 18f;
-        float spanner_LOx = 18f;
+        float L_port = 14f;
+        Tapping tap = new("Rc1/8", printable);
+        // Drill thru in resin.
+        if (print_resin)
+            tap.extra_depth = L_port - tap.straight_depth + 4f;
+
+        float r_port = tap.major_radius + tap.taper_offset(0f) + 5f;
+        // float spanner_IPA = 18f;
+        // float spanner_LOx = 18f;
 
         // side port pad
         Voxels pad = new Bar(
             at,
-            interior.r + L_BSPPEIGTH,
-            spanner_IPA,
-            Lz_side
+            interior.r + L_port,
+            2*r_port,
+            2*r_port
         ).at_face(Bar.X1)
          .extended(extend_base_by, Extend.DOWN);
         pad.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
@@ -185,7 +196,7 @@ public class InjectorSample : TPIAP.Pea {
 
         // side port
         Frame at1 = new Frame.Cyl(at).radial(
-            new(interior.r + L_BSPPEIGTH, 0f, r_port)
+            new(interior.r + L_port, 0f, r_port)
         );
         Voxels port_IPA = tap.hole(at1);
         port_IPA.BoolAdd(new Bar(
@@ -199,33 +210,22 @@ public class InjectorSample : TPIAP.Pea {
         // top port
         Frame at0 = top_cone.inner_tip!.flipzx();
         // we get bore radius length for free by trimming cone.
-        at0 = at0.transz(L_BSPPEIGTH - tap.bore_radius);
-        Voxels port_LOx = new Rod(at0, -L_BSPPEIGTH - R + 4f, r_port);
+        at0 = at0.transz(L_port - tap.bore_radius).rotxy(PI_2);
+        Voxels port_LOx = new Flats(r_port, L_port + R, 0f).boss(at0);
         port_LOx.BoolSubtract(Cone.phied(top_cone.inner_tip, PI_4, 200f));
-        // flats.
-        Bar lox_flat = new Bar(
-            at0,
-            EXTRA,
-            EXTRA,
-            -L_BSPPEIGTH
-        ).extended(EXTRA, Extend.UPDOWN); // big fucking box (dujj).
-        port_LOx.BoolSubtract(lox_flat.transy(+spanner_LOx/2f).at_face(Bar.Y1));
-        port_LOx.BoolSubtract(lox_flat.transy(-spanner_LOx/2f).at_face(Bar.Y0));
         vox.BoolAdd(port_LOx);
         vox.BoolSubtract(tap.hole(at0));
-        vox.BoolSubtract(new Rod(at0, -L_BSPPEIGTH - 0.2f, tap.bore_radius));
+        vox.BoolSubtract(new Rod(at0, -L_port - 0.2f, tap.bore_radius));
 
 
         // Worlds cheekiest label.
         float label_height = 4f;
         float label_th = 0.5f;
         float label_z0 = -0.2f;
-        // float label_x0 = ave(th_outer, L_BSPPEIGTH);
-        // float label_x0 = (2f*th_outer + 3f*L_BSPPEIGTH) / 5f;
-        float label_x0 = L_BSPPEIGTH - 2.5f - label_height/2f;
+        float label_x0 = L_port - 2.5f - label_height/2f;
         Frame label = at;
         label = label.transx(interior.r + label_x0);
-        label = label.transz(Lz_side + label_z0);
+        label = label.transz(2*r_port + label_z0);
         label = label.rotxy(PI_2);
         vox.BoolAdd(img.voxels_on_plane(
             label,
@@ -245,19 +245,6 @@ public class InjectorSample : TPIAP.Pea {
                 element.F1.Y + element.th_nz1
             ).extended(extend_base_by, Extend.DOWN));
         }
-
-
-        Vec3 pos_IPA = at1.pos - at.pos;
-        Vec3 pos_LOx = at0.pos - at.pos;
-        print("important sample things:");
-        print($"box height: {Lz_side}");
-        print($"outer r: {interior.shelled(th_outer).outer_r}");
-        print($"big flat w-w: {2f*flat_off}");
-        print($"IPA flat w-w: {spanner_IPA}");
-        print($"LOx flat w-w: {spanner_LOx}");
-        print($"pos-z LOx: {pos_LOx.Z}");
-        print($"pos-r IPA: {pos_IPA.X}");
-        print($"pos-z IPA: {pos_IPA.Z}");
 
         return vox;
     }
@@ -331,8 +318,9 @@ public class InjectorSample : TPIAP.Pea {
             Geez.voxels(vox);
             all.BoolAdd(vox);
 
-            BBox3 bounds = vox.oCalculateBoundingBox();
-            print($"Bounding size: {bounds.vecSize()}");
+            vox.CalculateProperties(out float vol, out BBox3 bbox);
+            print($"Bounding size: {bbox.vecSize()}");
+            print($"Volume: {vol*1e-3f:F2} mL");
 
             TPIAP.save_mesh_only($"injector-sample-{i}", new(vox));
         }

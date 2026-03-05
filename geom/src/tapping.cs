@@ -201,6 +201,15 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 15.0f,    0.7f ] ),
 
 
     public Voxels hole(Frame face_out, float extra=2f) {
+        assert(major_diameter > 0f);
+        assert(minor_diameter > 0f);
+        assert(pitch > 0f);
+        assert(taper >= 0f);
+        assert(threaded_depth > 0f);
+        assert(extra_depth >= 0f);
+        assert(tip_depth_ratio >= 0f);
+        assert(extra >= 0f);
+
         straight_bounds(out Vec2 A, out Vec2 B);
 
         if (!printable) {
@@ -289,20 +298,33 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 15.0f,    0.7f ] ),
 
         return new(mesh);
     }
-
-    public Voxels supporting(Frame face_out, float th, bool flats=true,
-            float tip_depth_ratio=NAN, float depth=NAN, float flats_depth=NAN) {
-        assert(th > 0f);
-
-        if (isnan(depth)) {
-            depth = straight_depth;
-            tip_depth_ratio = ifnan(tip_depth_ratio, 1f);
-        } else {
-            tip_depth_ratio = ifnan(tip_depth_ratio, 0f);
-        }
-        assert(tip_depth_ratio >= 0f);
+}
 
 
+public class Flats {
+    public float r { get; set; }
+    public float Lz { get; set; }
+    public float net_Lz => Lz + tip_depth_ratio*r;
+
+    public float tip_depth_ratio { get; set; }
+    public float tip_phi {
+        get => PI_2 - atan(tip_depth_ratio);
+        set => tip_depth_ratio = tan(PI_2 - value);
+    }
+
+    public bool flats_yeah_or_nah { get; set; }
+    public float flats_beta { get; set; }
+    public float flats_Lx { get; set; }
+    public float flats_Lz { get; set; }
+
+    public Flats(Tapping tap, float th, float tip_depth_ratio=1f)
+            : this(
+                tap.major_radius + tap.taper_offset(0f) + th,
+                tap.straight_depth + th*tan(PI_4 - 0.5f*atan(tip_depth_ratio)),
+                tip_depth_ratio
+            ) {
+        // Previously, and equivalently:
+        /*
         // Simple cylinder into cone, with `th` being the smallest wall
         // thickness.
         // https://www.desmos.com/calculator/xai3ejik2o
@@ -314,64 +336,90 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 15.0f,    0.7f ] ),
             new(-depth - th*tan(ang/2f), rhi + th),
             new(-depth - rhi*tip_depth_ratio - th/sin(ang), 0f),
         ];
-        float Lz = -points[3].X;
-        Mesh mesh = Polygon.mesh_revolved(face_out, points);
-        Voxels vox = new(mesh);
+        */
+        // Boils down to the difference being:
+        //  tan(ang/2f) + tip_depth_ratio - 1/sin(ang)
+        // Which always =0. :)
+    }
+    public Flats(float r, float Lz, float tip_depth_ratio=1f) {
+        this.r = r;
+        this.Lz = Lz;
+        this.tip_depth_ratio = tip_depth_ratio;
+        this.flats_yeah_or_nah = true;
+        this.flats_beta = NAN; // determine based on input frame.
+        this.flats_Lx = 2f*r; // adds no extra width.
+        this.flats_Lz = max(8f, r);
+    }
 
-        if (!flats)
+    public Voxels boss(Frame face_out) {
+        assert(r > 0f);
+        assert(Lz >= 0f);
+        assert(tip_depth_ratio >= 0f);
+        assert(isnan(this.flats_beta) || this.flats_beta >= 0f);
+        assert(flats_Lx > 0f);
+        assert(flats_Lz > 0f);
+
+        List<Vec2> points = [
+            new(0f, 0f),
+            new(0f, r),
+            new(-Lz, r),
+            new(-net_Lz, 0f),
+        ];
+        Voxels vox = new(Polygon.mesh_revolved(face_out, points));
+
+        if (!flats_yeah_or_nah)
             return vox;
-        flats_depth = ifnan(flats_depth, max(8f, rhi + th));
-        flats_depth = min(flats_depth, Lz);
 
         // Place flats on +-X. Note these are external flats, to not comprimise
         // strength/minimum thickness.
-        float flat_ang = PI/8f;
-        if (nearvert(face_out.Z))
-            flat_ang = PI/6f; // fatter flats if we can print them.
-        Vec2 flat_edge = (rhi + th) * new Vec2(1f, tan(flat_ang));
-        Vec2 tangent_edge = frompol(rhi + th, 2f*flat_ang);
+        float flats_beta = this.flats_beta;
+        if (isnan(flats_beta)) {
+            // Default to max-phi 45deg flats, but lets do fatter flats if we can
+            // print them (aka is vertical).
+            flats_beta = nearvert(face_out.Z) ? PI/3f : PI/4f;
+        }
+        Vec2 corner_edge = flats_Lx/2f * new Vec2(1f, tan(flats_beta/2f));
+        assert(corner_edge.Y <= r);
+        Vec2 flat_U = corner_edge / mag2(corner_edge);
+        Vec2 flat_V = rot90ccw(flat_U);
+        Vec2 tangent_edge = flat_U * r*r
+                          + flat_V * r*sqrt(mag2(corner_edge) - r*r);
 
         List<Vec2> xy = [
             tangent_edge,
-            flat_edge,
-            flipy(flat_edge),
+            corner_edge,
+            flipy(corner_edge),
             flipy(tangent_edge),
             -tangent_edge,
-            -flat_edge,
-            flipx(flat_edge),
+            -corner_edge,
+            flipx(corner_edge),
             flipx(tangent_edge),
         ];
         // Excess extrude and we'll clip to conical.
-        Mesh m = Polygon.mesh_extruded(face_out, -Lz, xy);
-        Voxels vox_flats = new(m);
+        Voxels vox_flats = new(Polygon.mesh_extruded(face_out, -net_Lz, xy));
         // Clip flats to the intended depth w 45deg cone.
-        vox_flats.BoolIntersect(Cone.phied(
-            face_out.transz(-flats_depth),
-            PI_4,
-            Lz: flats_depth,
-            r0: mag(flat_edge)
-        ).upto_tip());
-        // Clip to total supporting boundary, w requested angle.
-        if (ang < PI_2 - 0.001f) {
+        if (flats_Lz < +INF) {
             vox_flats.BoolIntersect(Cone.phied(
-                face_out.transz(-Lz),
-                ang,
-                Lz: Lz,
-                r0: 0f
+                face_out,
+                -PI_4,
+                -flats_Lz - mag(corner_edge)
             ));
+        }
+        // Clip to total supporting boundary, w requested angle.
+        if (tip_depth_ratio > 0.01f) {
+            vox_flats.BoolIntersect(Cone.phied(face_out, -tip_phi, -net_Lz));
         } else {
             // Just flat.
             vox_flats.BoolIntersect(new Rod(
                 face_out,
-                -Lz,
-                major_radius + taper_offset(0f)
-            ));
+                -net_Lz,
+                mag(corner_edge))
+            );
         }
 
         vox.BoolAdd(vox_flats);
         return vox;
     }
 }
-
 
 }

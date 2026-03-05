@@ -1159,8 +1159,10 @@ public class Chamber : TPIAP.Pea {
         Frame inlet_end = inlet.transz(inlet_Lz);
         // +z = +normal, +x = +circum
 
-        vox.BoolAdd(tap_inlet.supporting(inlet_end, th_inlet,
-                depth: inlet_Lz + zextra, flats_depth: INF));
+        vox.BoolAdd(new Flats(tap_inlet, th_inlet){
+            Lz = inlet_Lz + zextra,
+            flats_Lz = INF,
+        }.boss(inlet_end));
 
         if (!filletless) {
             Voxels mask = new Rod(
@@ -1265,8 +1267,9 @@ public class Chamber : TPIAP.Pea {
 
             float pos_Lr = tap_tc.major_radius + th_tc;
             // Supporting from tapping to include flats.
-            Voxels this_pos = tap_tc.supporting(frame.transz(Dz), th_tc,
-                    depth: Dz + 2*EXTRA);
+            Voxels this_pos = new Flats(tap_tc, th_tc){
+                Lz = Dz + 2f*EXTRA,
+            }.boss(frame.transz(Dz));
             this_pos.BoolAdd(new Rod(
                 frame,
                 Dz,
@@ -1835,7 +1838,8 @@ public class Chamber : TPIAP.Pea {
         // frame = frame.rotzx(PI_2 + PI_4);
 
         Geez.tapping(tap, frame);
-        Geez.voxels(tap.hole(frame));
+        Geez.voxels(tap.hole(frame), COLOUR_RED);
+        Geez.voxels(new Flats(tap, 2f).boss(frame));
     }
 
 
