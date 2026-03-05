@@ -28,14 +28,13 @@ public class InjectorSample : TPIAP.Pea {
             throw new NotImplementedException();
     }
 
+    public float extend_base_by => printable ? 3f : 0f;
 
     public required PartMating pm { get; init; }
     public required InjectorElement[] element { get; init; }
     public required int[] no_inj { get; init; }
     public required float th_plate { get; init; }
     public required float th_dmw { get; init; }
-
-    public static float EXTEND_BASE_BY = 3f;
 
     public int N => numel(element);
     public void initialise() {
@@ -52,9 +51,8 @@ public class InjectorSample : TPIAP.Pea {
     }
 
 
-    public static Voxels make(Frame at, InjectorElement element, float th_plate,
-            float th_dmw, ImageSignedDist img, bool datum_on_opposite,
-            bool printable) {
+    public Voxels make(Frame at, InjectorElement element, ImageSignedDist img,
+            bool datum_on_opposite) {
 
         const float EXTRA = 30f;
         const float th_outer = 5f;
@@ -94,7 +92,7 @@ public class InjectorSample : TPIAP.Pea {
                 .extended(EXTRA, Extend.UPDOWN));
 
         Voxels bot = new Rod(at, th_plate, Rmid)
-                .extended(EXTEND_BASE_BY, Extend.DOWN);
+                .extended(extend_base_by, Extend.DOWN);
 
         Voxels dividing = Cone.phied(
             at.transz(element.z0_dmw),
@@ -106,7 +104,7 @@ public class InjectorSample : TPIAP.Pea {
                 .extended(EXTRA, Extend.UPDOWN));
 
         Voxels sides = interior.shelled(th_outer)
-                .extended(EXTEND_BASE_BY, Extend.DOWN);
+                .extended(extend_base_by, Extend.DOWN);
 
         Voxels vox = pos; // no copy.
         vox.BoolAdd(top);
@@ -144,7 +142,7 @@ public class InjectorSample : TPIAP.Pea {
             R,
             flat_off,
             th_datum
-        ).extended(EXTEND_BASE_BY, Extend.DOWN);
+        ).extended(extend_base_by, Extend.DOWN);
         datum.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         datum.BoolSubtract(
             (Voxels)new Bar(
@@ -181,7 +179,7 @@ public class InjectorSample : TPIAP.Pea {
             spanner_IPA,
             Lz_side
         ).at_face(Bar.X1)
-         .extended(EXTEND_BASE_BY, Extend.DOWN);
+         .extended(extend_base_by, Extend.DOWN);
         pad.BoolSubtract(interior.extended(EXTRA, Extend.UPDOWN));
         vox.BoolAdd(pad);
 
@@ -245,7 +243,7 @@ public class InjectorSample : TPIAP.Pea {
                 3*VOXEL_SIZE,
                 element.F1.Y,
                 element.F1.Y + element.th_nz1
-            ).extended(EXTEND_BASE_BY, Extend.DOWN));
+            ).extended(extend_base_by, Extend.DOWN));
         }
 
 
@@ -265,9 +263,9 @@ public class InjectorSample : TPIAP.Pea {
     }
 
     public Voxels? voxels() {
-        Bar buildplate = new(new(), VOXEL_SIZE, 100f);
-        TPIAP.save_mesh_only($"buildplate-100x100", buildplate);
-        Geez.bar(buildplate);
+        Bar buildplate = new(new(), 0.01f, 100f);
+        if (printable)
+            Geez.bar(buildplate);
 
         Vec2[] corrections = [
             new(+2.0f, +3.0f),
@@ -291,9 +289,8 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-          #if true
-            return new(i*50*uX3 + EXTEND_BASE_BY*uZ3);
-          #else
+            if (!printable)
+                return new(i*60*uX3);
             // or try to stack nicely:
             assert(N == 8);
 
@@ -305,14 +302,13 @@ public class InjectorSample : TPIAP.Pea {
             Vec3 point = new(
                 x0 + (i % 2) * buildplate.Lx/5f,
                 y0 + (i % 4) * buildplate.Ly/4f,
-                EXTEND_BASE_BY
+                0f
             );
             point += rejxy(corrections[i]);
             Frame at = new(point);
             if (i % 2 != 0)
                 at = at.rotxy(PI);
             return at;
-          #endif
         }
 
         Voxels all = new();
@@ -329,11 +325,8 @@ public class InjectorSample : TPIAP.Pea {
             Voxels vox = make(
                 at,
                 element[i],
-                th_plate,
-                th_dmw,
                 img,
-                i % 2 == 0,
-                printable
+                i % 2 == 0
             );
             Geez.voxels(vox);
             all.BoolAdd(vox);

@@ -902,8 +902,8 @@ public class Cone : AxialShape<Cone> {
     public override Frame centre { get; }
     public override BBox3 bounds { get; }
     public override float Lz { get; } // >0
-    public float inner_r0 { get; private set; } // >=0
-    public float inner_r1 { get; private set; } // >=0
+    public float inner_r0 { get; private set; }
+    public float inner_r1 { get; private set; }
     public float outer_r0 { get; private set; } // >=0
     public float outer_r1 { get; private set; } // >=0
     // ^ fully defined by those

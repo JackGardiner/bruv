@@ -12,14 +12,15 @@ public class Tapping {
     public string size { get; }
     public bool printable { get; }
 
-    public float major_diameter { get; }
-    public float minor_diameter { get; }
-    public float pitch { get; }
-    public float taper { get; } // diametral reduction per unit depth.
-    public float gauge_depth { get; } // only relevant when tapered.
+    public bool right_handed { get; set; }
+    public float major_diameter { get; set; }
+    public float minor_diameter { get; set; }
+    public float pitch { get; set; }
+    public float taper { get; set; } // diametral reduction per unit depth.
+    public float gauge_depth { get; set; } // only relevant when tapered.
 
     public float threaded_depth { get; set; }  // initialised to typical.
-    public float extra_depth { get; set; }     // initialised to 0.
+    public float extra_depth { get; set; }     // initialised to smth tiny.
     public float tip_depth_ratio { get; set; } // initialised to 1 if printable,
                                                // otherwise ~0.6.
 
@@ -30,7 +31,7 @@ public class Tapping {
     public float minor_radius => 0.5f*minor_diameter;
     public float bore_radius  => 0.5f*bore_diameter;
 
-    public float straight_depth => threaded_depth + 1.5f*pitch + extra_depth;
+    public float straight_depth => threaded_depth + 2f*pitch + extra_depth;
 
     public float minor_thread_truncation { get; set; } = 0.1f;
         // Note that 0.1mm is within tolerance for all sizes.
@@ -67,30 +68,31 @@ new(  "G1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,    0f,    0.7f ] ),
 new(  "G1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,    0f,    0.7f ] ),
 new(  "G1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,    0f,    0.7f ] ),
 
-new(  "Rc1/16", [  7.723f,  6.561f, 0.907f, 1f/16,    4f,    1.1f ] ),
-new(   "Rc1/8", [  9.728f,  8.566f, 0.907f, 1f/16,    4f,    1.0f ] ),
-new(   "Rc1/4", [ 13.157f, 11.445f, 1.337f, 1f/16,    6f,    1.0f ] ),
-new(   "Rc3/8", [ 16.662f, 14.950f, 1.337f, 1f/16,  6.4f,   0.85f ] ),
-new(   "Rc1/2", [ 20.955f, 18.631f, 1.814f, 1f/16,  8.2f,   0.85f ] ),
-new(   "Rc3/4", [ 26.441f, 24.117f, 1.814f, 1f/16,  9.5f,    0.8f ] ),
-new(     "Rc1", [ 33.249f, 30.291f, 2.309f, 1f/16, 10.4f,    0.7f ] ),
-new( "Rc1-1/4", [ 41.910f, 38.952f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
-new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
+new(  "Rc1/16", [  7.723f,  6.561f, 0.907f, 1f/16,  4.9f,    1.1f ] ),
+new(   "Rc1/8", [  9.728f,  8.566f, 0.907f, 1f/16,  4.9f,    1.0f ] ),
+new(   "Rc1/4", [ 13.157f, 11.445f, 1.337f, 1f/16,  7.3f,    1.0f ] ),
+new(   "Rc3/8", [ 16.662f, 14.950f, 1.337f, 1f/16,  7.7f,   0.85f ] ),
+new(   "Rc1/2", [ 20.955f, 18.631f, 1.814f, 1f/16, 10.0f,   0.85f ] ),
+new(   "Rc3/4", [ 26.441f, 24.117f, 1.814f, 1f/16, 11.3f,    0.8f ] ),
+new(     "Rc1", [ 33.249f, 30.291f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
+new( "Rc1-1/4", [ 41.910f, 38.952f, 2.309f, 1f/16, 15.0f,    0.7f ] ),
+new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 15.0f,    0.7f ] ),
         ]);
+        List<float> entry = lookup[size];
 
         this.size = size;
         this.printable = printable;
 
-        List<float> entry = lookup[size];
+        this.right_handed = true; // yeah.
         this.major_diameter  = entry[0];
         this.minor_diameter  = entry[1];
         this.pitch           = entry[2];
         this.taper           = entry[3];
-        this.gauge_depth     = entry[4];
+        this.gauge_depth     = entry[4] * 1.15f; // 15% sf.
         float req_length_div_major_diam = entry[5];
 
         this.threaded_depth = this.major_diameter * req_length_div_major_diam;
-        this.extra_depth = 0.0f;
+        this.extra_depth = this.major_diameter * 0.05f;
                                                 // 112deg tip:
         this.tip_depth_ratio = printable ? 1f : 1f/tan(torad(112f/2));
     }
@@ -120,7 +122,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
         count_per_pitch = max(20, count_per_pitch);
 
         float dcount = count_per_pitch / pitch;
-        int count = (int)(dcount * (threaded_depth + 3*pitch));
+        int count = (int)(dcount * (threaded_depth + 3f*pitch));
 
         // Some thread properties.
         float pitch_radius = 0.5f*(minor_radius + major_radius);
@@ -134,31 +136,37 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
         float rhi = pitch_radius + 0.5f*triangle_height;
 
         // Spinning (but not translating) frames to build each thread, one pitch
-        // at a time.
+        // at a time, each from an xycrossection of a spike.
         List<Frame> frames = new(count);
+        List<Vec2> points = new(5*count);
         for (int i=0; i<count; ++i) {
-            float by = lerp(0, TWOPI, i, count_per_pitch);
+            float z1 = lerp(0.5f*pitch, -threaded_depth - 2.5f*pitch, i, count);
+            float z0 = z1 + 0.5f*pitch;
+            float z2 = z1 - 0.5f*pitch;
+
+            // Frame rotates full every pitch. Initial rotation is unimportant.
+            // WELLLLL it is important that its fucking right handed. bloody
+            // brilliant mate. well done.
+            float by = TWOPI * +z1/pitch;
+            if (!right_handed)
+                by = -by;
             frames.Add(face_out.rotxy(by).swapzx());
-        }
 
-        // Now make the xy crosssections of each individual thread.
-        int count_per_cs = 5;
-        List<Vec2> points = new(count*count_per_cs);
-        for (int i=0; i<count; ++i) {
             // Last few pitches are shrinking as-if cutting bit easing in.
-            float j = i - (count - 2.75f*count_per_pitch);
-            float t = j / (2f*count_per_pitch);
-            t = clamp(t, 0f, 1f);
+            float Dr = minor_radius + minor_thread_truncation - major_radius;
+            float t = (-z1 - threaded_depth) / (2f*pitch);
+            // Highkey tho make it drop off quick to avoid artefacts in mesh.
+            // Specifically, start dropping off quickly when the spike height is
+            // only two voxels.
+            float cutoff = max(0.8f, 1f + 2f*VOXEL_SIZE/Dr);
+            if (t > cutoff)
+                t += 100f*sqed(t - cutoff);
+            t = clamp(t, 0f, 1.1f);
+            float falloff = t*Dr;
 
-            float z0 = pitch + lerp(0f, -pitch, i, count_per_pitch);
-            float z1 = z0 - 0.5f*pitch;
-            float z2 = z0 - pitch;
-            float r0 = rlo;
-            float r1 = lerp(rhi, rlo, t);
-            float r2 = rlo;
-            r0 += taper_offset(-z0);
-            r1 += taper_offset(-z1);
-            r2 += taper_offset(-z2);
+            float r0 = rlo + falloff + taper_offset(-z0);
+            float r1 = rhi + falloff + taper_offset(-z1);
+            float r2 = rlo + falloff + taper_offset(-z2);
 
             points.Add(new(z0, 0f));
             points.Add(new(z0, r0));
@@ -223,7 +231,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
             return new(Polygon.mesh_revolved(face_out, zr));
         }
 
-        // Translate frame into equivalent w X horizontal.
+        // Translate frame into equivalent w X horizontal and Y +vertical.
         face_out = new(face_out.pos, normalise(cross(uZ3, face_out.Z)),
                 face_out.Z);
 
@@ -242,20 +250,19 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
                 face_out * (uZ3*(-straight_depth - tip_depth_ratio*bore_radius)),
             ];
         } else {
-            // Default to "simple" bore rhombus w weird tip. This is the best
-            // case for 45deg, and just use it for all others. It has a shortened
-            // width to ensure no angles greater than 45deg. Purely by vibing it
-            // out, a rhombus ratio of sqrt(2) wider than tall gives a maximum
-            // inclination from vertical of 45deg.
+            // Default to "simple" bore rhombus w weird tip. For the worst-case
+            // of a drill-upwards-45deg-phi hole, no hole will have a leading
+            // edge less than 45deg, and this sqrt2 ratio has a leading edge of
+            // ~55deg which im happy to call a good middle ground.
             points = [
-                face_out * new Vec3(+bore_radius, 0f, extra),
-                face_out * new Vec3(0f, +SQRTH*bore_radius, extra),
-                face_out * new Vec3(-bore_radius, 0f, extra),
-                face_out * new Vec3(0f, -SQRTH*bore_radius, extra),
-                face_out * new Vec3(+bore_radius, 0f, -straight_depth),
-                face_out * new Vec3(0f, +SQRTH*bore_radius, -straight_depth),
-                face_out * new Vec3(-bore_radius, 0f, -straight_depth),
-                face_out * new Vec3(0f, -SQRTH*bore_radius, -straight_depth),
+                face_out * new Vec3(+SQRTH*bore_radius, 0f, extra),
+                face_out * new Vec3(0f, +bore_radius, extra),
+                face_out * new Vec3(-SQRTH*bore_radius, 0f, extra),
+                face_out * new Vec3(0f, -bore_radius, extra),
+                face_out * new Vec3(+SQRTH*bore_radius, 0f, -straight_depth),
+                face_out * new Vec3(0f, +bore_radius, -straight_depth),
+                face_out * new Vec3(-SQRTH*bore_radius, 0f, -straight_depth),
+                face_out * new Vec3(0f, -bore_radius, -straight_depth),
                 face_out * (uZ3*(-straight_depth - tip_depth_ratio*bore_radius)),
             ];
         }
@@ -284,7 +291,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
     }
 
     public Voxels supporting(Frame face_out, float th, bool flats=true,
-            float tip_depth_ratio=NAN, float depth=NAN) {
+            float tip_depth_ratio=NAN, float depth=NAN, float flats_depth=NAN) {
         assert(th > 0f);
 
         if (isnan(depth)) {
@@ -293,21 +300,28 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
         } else {
             tip_depth_ratio = ifnan(tip_depth_ratio, 0f);
         }
+        assert(tip_depth_ratio >= 0f);
 
-        // Simple cylinder into 45deg cone, with `th` being the smallest wall
+
+        // Simple cylinder into cone, with `th` being the smallest wall
         // thickness.
+        // https://www.desmos.com/calculator/xai3ejik2o
+        float ang = PI_2 - atan(tip_depth_ratio); // tip end half-angle.
         float rhi = major_radius + taper_offset(0f);
         List<Vec2> points = [
             new(0f,                     0f),
             new(0f,                     rhi + th),
-            new(-depth - th*tan(PI/8f), rhi + th),
-            new(-depth - rhi*tip_depth_ratio - SQRT2*th, 0f),
+            new(-depth - th*tan(ang/2f), rhi + th),
+            new(-depth - rhi*tip_depth_ratio - th/sin(ang), 0f),
         ];
+        float Lz = -points[3].X;
         Mesh mesh = Polygon.mesh_revolved(face_out, points);
         Voxels vox = new(mesh);
 
         if (!flats)
             return vox;
+        flats_depth = ifnan(flats_depth, max(8f, rhi + th));
+        flats_depth = min(flats_depth, Lz);
 
         // Place flats on +-X. Note these are external flats, to not comprimise
         // strength/minimum thickness.
@@ -316,8 +330,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
             flat_ang = PI/6f; // fatter flats if we can print them.
         Vec2 flat_edge = (rhi + th) * new Vec2(1f, tan(flat_ang));
         Vec2 tangent_edge = frompol(rhi + th, 2f*flat_ang);
-        float flat_depth = min(max(8f, rhi + th),
-                depth + th*tan(PI/8f) + rhi + th - mag(flat_edge));
+
         List<Vec2> xy = [
             tangent_edge,
             flat_edge,
@@ -329,14 +342,31 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16, 12.7f,    0.7f ] ),
             flipx(tangent_edge),
         ];
         // Excess extrude and we'll clip to conical.
-        Mesh m = Polygon.mesh_extruded(face_out, -flat_depth*1.5f, xy);
+        Mesh m = Polygon.mesh_extruded(face_out, -Lz, xy);
         Voxels vox_flats = new(m);
+        // Clip flats to the intended depth w 45deg cone.
         vox_flats.BoolIntersect(Cone.phied(
-            face_out,
+            face_out.transz(-flats_depth),
             PI_4,
-            r0: mag(flat_edge) + flat_depth,
-            r1: 0f
-        ));
+            Lz: flats_depth,
+            r0: mag(flat_edge)
+        ).upto_tip());
+        // Clip to total supporting boundary, w requested angle.
+        if (ang < PI_2 - 0.001f) {
+            vox_flats.BoolIntersect(Cone.phied(
+                face_out.transz(-Lz),
+                ang,
+                Lz: Lz,
+                r0: 0f
+            ));
+        } else {
+            // Just flat.
+            vox_flats.BoolIntersect(new Rod(
+                face_out,
+                -Lz,
+                major_radius + taper_offset(0f)
+            ));
+        }
 
         vox.BoolAdd(vox_flats);
         return vox;

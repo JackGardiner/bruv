@@ -1160,7 +1160,7 @@ public class Chamber : TPIAP.Pea {
         // +z = +normal, +x = +circum
 
         vox.BoolAdd(tap_inlet.supporting(inlet_end, th_inlet,
-                depth: inlet_Lz + zextra));
+                depth: inlet_Lz + zextra, flats_depth: INF));
 
         if (!filletless) {
             Voxels mask = new Rod(
@@ -1256,6 +1256,12 @@ public class Chamber : TPIAP.Pea {
                 Dz,
                 D_tc/2f
             ).extended(EXTRA, Extend.UP));
+            this_neg.BoolAdd(new Bar(
+                frame.rotxy(PI_4),
+                Dz,
+                D_tc/2f
+            ).extended(EXTRA, Extend.UP)
+             .at_edge(Bar.X1_Y1));
 
             float pos_Lr = tap_tc.major_radius + th_tc;
             // Supporting from tapping to include flats.
@@ -1821,38 +1827,15 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Tapping tap0 = new("G1/2", false);
-        Tapping tap1 = new("Rc1/2", false);
+        Tapping tap = new("Rc1/8", false){
+            extra_depth = 0f,
+        };
 
         Frame frame = new();
         // frame = frame.rotzx(PI_2 + PI_4);
 
-        Geez.rod(new(
-            frame,
-            -tap1.threaded_depth,
-            tap1.minor_radius + tap1.minor_thread_truncation
-        ), COLOUR_GREEN);
-        Geez.rod(new(
-            frame,
-            -tap1.straight_depth,
-            tap1.minor_radius
-        ), COLOUR_RED);
-        Geez.rod(new(
-            frame,
-            -tap1.straight_depth,
-            tap1.major_radius
-        ), COLOUR_BLUE);
-        Geez.rod(new(
-            frame.transz(-tap1.threaded_depth + tap1.gauge_depth),
-            0.01f,
-            tap1.major_radius
-        ), COLOUR_PINK);
-
-        // Geez.dflt_alpha = 0.4f;
-        // Geez.dflt_metallic = 0.0f;
-        Geez.voxels(tap1.hole(frame), COLOUR_RED);
-        // Geez.voxels(tap1.hole(frame), COLOUR_BLUE);
-        Geez.voxels(tap1.supporting(frame, 3f));
+        Geez.tapping(tap, frame);
+        Geez.voxels(tap.hole(frame));
     }
 
 

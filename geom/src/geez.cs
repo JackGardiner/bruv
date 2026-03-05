@@ -2503,6 +2503,87 @@ public static class Geez {
     }
 
 
+    private static void _cone_lines(List<PolyLine> lines, in Cone cone,
+            int rings, int columns, Colour col) {
+        assert(cone.isfilled);
+        float r0 = cone.outer_r0;
+        float r1 = cone.outer_r1;
+        float Lz = cone.Lz;
+        Frame frame = cone.bbase;
+
+        if (rings == -1)
+            rings = max(3, (int)(Lz * 2.5f / (TWOPI/columns*max(r0, r1))));
+        assert(rings >= 2 || rings == 0);
+        assert(columns >= 2 || columns == 0);
+
+        PolyLine l;
+
+        // Rings.
+        for (int n=0; n<rings; ++n) {
+            float z = lerp(0f, Lz, n, rings);
+            l = new(col);
+            int N = 100;
+            float r = lerp(r0, r1, n, rings);
+            for (int i=0; i<N; ++i) {
+                float theta = i*TWOPI/(N - 1);
+                l.nAddVertex(frame * fromcyl(r, theta, z));
+            }
+            lines.Add(l);
+        }
+
+        // Columns.
+        for (int n=0; n<columns; ++n) {
+            float theta = n*TWOPI/columns;
+            l = new(col);
+            l.Add([
+                frame * fromcyl(r0, theta, 0f),
+                frame * fromcyl(r1, theta, Lz),
+            ]);
+            lines.Add(l);
+        }
+    }
+
+    public static Key cone(in Cone cone, Colour? colour=null, int rings=-1,
+            int columns=6) {
+        using var __ = Scoped.locked(_geezed);
+        if (lockdown_check(out Key lockedkey))
+            return lockedkey;
+
+        // Same deal w rod smile.
+
+        List<PolyLine> lines = new();
+        Colour col = colour ?? Geez.colour ?? COLOUR_BLUE;
+
+        _cone_lines(lines, cone.positive, rings, columns, col);
+
+        if (cone.isshelled) {
+            assert(false, "havent done it yet :)");
+        } else {
+            // Add crosses on the end.
+            assert((columns%2) == 0);
+            for (int n=0; n<columns/2; ++n) {
+                float theta = n*TWOPI/columns;
+                PolyLine l = new(col);
+                l.Add([
+                    cone.bbase * fromcyl(cone.outer_r0, theta, 0f),
+                    cone.bbase * fromcyl(cone.outer_r0, theta + PI, 0f),
+                ]);
+                lines.Add(l);
+                l = new(col);
+                l.Add([
+                    cone.bbase * fromcyl(cone.outer_r1, theta, cone.Lz),
+                    cone.bbase * fromcyl(cone.outer_r1, theta + PI, cone.Lz),
+                ]);
+                lines.Add(l);
+            }
+        }
+
+        using (dflt_like(metallic: dflt_line_metallic,
+                         roughness: dflt_line_roughness))
+            return _push(lines, []);
+    }
+
+
     private static void _bar_lines(List<PolyLine> lines, in Bar bar,
             Colour col) {
         Vec3[] corners = bar.get_corners();
@@ -2577,6 +2658,50 @@ public static class Geez {
             return _push(lines, []);
     }
 
+
+    public static Key tapping(in Tapping tap, in Frame face_out) {
+        List<Key> keys = [
+            rod(new(
+                face_out.transz(-tap.threaded_depth + tap.gauge_depth),
+                0.01f,
+                tap.major_radius
+            ), COLOUR_PINK, columns: 0),
+            rod(new(
+                face_out.transz(-tap.threaded_depth),
+                0.01f,
+                tap.major_radius + tap.taper_offset(tap.threaded_depth)
+            ), COLOUR_PINK, columns: 0),
+            rod(new(
+                face_out.transz(-tap.threaded_depth + tap.pitch),
+                0.01f,
+                tap.major_radius
+                    + tap.taper_offset(tap.threaded_depth - tap.pitch)
+            ), COLOUR_PINK, columns: 0),
+
+            cone(new(
+                face_out,
+                -tap.straight_depth,
+                tap.minor_radius + tap.taper_offset(0f),
+                tap.minor_radius + tap.taper_offset(tap.straight_depth)
+            ), COLOUR_RED, columns: 8),
+            cone(new(
+                face_out,
+                -tap.straight_depth,
+                tap.major_radius + tap.taper_offset(0f),
+                tap.major_radius + tap.taper_offset(tap.straight_depth)
+            ), COLOUR_BLUE, columns: 8),
+
+            cone(new(
+                face_out,
+                -tap.threaded_depth,
+                tap.minor_radius + tap.minor_thread_truncation
+                    + tap.taper_offset(0f),
+                tap.minor_radius + tap.minor_thread_truncation
+                    + tap.taper_offset(tap.threaded_depth)
+            ), COLOUR_GREEN, columns: 8)
+        ];
+        return group(keys);
+    }
 
 
 
