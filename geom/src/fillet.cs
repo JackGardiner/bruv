@@ -18,14 +18,14 @@ public static class Fillet {
     public static Voxels both(in Voxels vox, float FR, bool inplace=false) {
         return both(vox, FR, FR, inplace);
     }
-    public static Voxels both(in Voxels vox, float concave_Fr, float convex_Fr,
+    public static Voxels both(in Voxels vox, float concave_FR, float convex_FR,
             bool inplace=false) {
         Voxels v = inplace ? vox : vox.voxDuplicate();
-        if (concave_Fr == convex_Fr) {
-            v.TripleOffset(-concave_Fr); // maintain out->in->return order.
+        if (concave_FR == convex_FR) {
+            v.TripleOffset(-concave_FR); // maintain out->in->return order.
         } else {
-            v.DoubleOffset(concave_Fr, -concave_Fr - convex_Fr);
-            v.Offset(convex_Fr);
+            v.DoubleOffset(concave_FR, -concave_FR - convex_FR);
+            v.Offset(convex_FR);
         }
         return v;
     }

@@ -32,5 +32,6 @@ public class PartMating {
     public required float flange_thickness_cc { get; init; }
     public required float flange_thickness_inj { get; init; }
     public required float flange_outer_radius { get; init; }
-    public required float flange_fillet_radius { get; init; }
+    public required float concave_fillet_radius { get; init; }
+    public required float convex_fillet_radius { get; init; }
 }

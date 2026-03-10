@@ -1632,7 +1632,11 @@ public class Chamber : TPIAP.Pea {
         substep("subtracted bolt hole clearance (1/2).");
 
         if (!filletless) {
-            Fillet.both(part, concave_Fr: 3f, convex_Fr: 0.7f, inplace: true);
+            Fillet.both(part,
+                concave_FR: pm.concave_fillet_radius,
+                convex_FR: pm.convex_fillet_radius,
+                inplace: true
+            );
             substep("filleted part.", view_part: true);
         } else {
             substep("skipping part fillet.");

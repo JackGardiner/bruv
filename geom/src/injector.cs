@@ -858,17 +858,15 @@ public class Injector : TPIAP.Pea {
             { extra_depth = 4f };
 
 
-    protected Voxels voxels_plate() {
-        float th_edge = 2.0f;
-        float th_oring = 1.7f;
+    protected void voxels_plate(out Voxels pos, out Voxels neg) {
         float phi_inner = torad(60f);
         List<Vec2> points = [
             new(-EXTRA, 0f),
             new(-EXTRA, Ir_chnl),
-            new(th_edge, Ir_chnl),
-            new(th_plate + th_oring, pm.OR_Ioring + 0.5f),
-            new(th_plate + th_oring, pm.IR_Ioring - 0.5f),
-            new(th_plate, pm.IR_Ioring - 1f - th_oring*tan(phi_inner)),
+            new(th_plate, Ir_chnl),
+            new(pm.Lz_Ioring + th_plate, pm.OR_Ioring + 0.5f),
+            new(pm.Lz_Ioring + th_plate, pm.IR_Ioring - 0.5f),
+            new(th_plate, pm.IR_Ioring - 1f - pm.Lz_Ioring*tan(phi_inner)),
             new(th_plate, 0f),
         ];
 
@@ -877,22 +875,22 @@ public class Injector : TPIAP.Pea {
         Polygon.fillet(points, 3, 3f);
         Polygon.fillet(points, 2, 2f);
 
-        Voxels vox = new(Polygon.mesh_revolved(
+        pos = new(Polygon.mesh_revolved(
             new Frame(),
             points,
             slicecount: DIVISIONS/2
         ));
 
         // Film cooling holes.
+        neg = new();
         foreach (Vec2 p in points_fc) {
-            vox.BoolSubtract(new Rod(
+            neg.BoolAdd(new Rod(
                 new(rejxy(p, 0f)),
-                th_plate,
+                th_plate + pm.Lz_Ioring,
                 D_fc/2f
-            ).extended(2f*EXTRA, Extend.UPDOWN));
+            ).extended(2*VOXEL_SIZE, Extend.UP)
+             .extended(2f*EXTRA, Extend.DOWN));
         }
-
-        return vox;
     }
 
 
@@ -921,147 +919,175 @@ public class Injector : TPIAP.Pea {
             => (r > peak.Y)
              ? A.bbase.pos.Z + lerp(0f, A.Lz, invlerp(A.r0, A.r1, r))
              : B.bbase.pos.Z + lerp(0f, B.Lz, invlerp(B.r0, B.r1, r));
+
+        // Voxel mask for some manifold volume, including:
+        // - entire manifold roof
+        // - LOx void
+        // - dividing wall
+        // - IPA void
+        // Note this is shifted up by a voxel (more or less (is it more or
+        // less?)).
+        public required Voxels volume_entire { get; init; }
+        // Voxel mask for some manifold volume, including:
+        // - dividing wall
+        // - IPA void
+        // - lower manifold roof
+        // Note this is shifted up by a voxel or so.
+        public required Voxels volume_only_lower { get; init; }
     }
 
-    protected Voxels voxels_maniwalls(Geez.Cycle key, out ManiVol vol,
-            out Voxels neg_LOx, out Voxels neg_IPA) {
+    protected Voxels voxels_manifold(Geez.Cycle key, out ManiVol vol) {
         using var __ = key.like();
 
+        // Dividing wall cones offset height.
         float z0_dmw = element.z0_dmw;
 
-        { // create roof + interior volume.
-            float max_r = Or_chnl + 1.8f*th_plate/tan(phi_mw);
-            // https://www.desmos.com/calculator/tusqawwtn5
-            Vec2 peak = new( /* (z,r) */
-                max_r/2f/tan(phi_mw) + z0_dmw/2f,
-                max_r/2f - z0_dmw/2f*tan(phi_mw)
-            );
-            vol = new ManiVol{
-                A = Cone.phied(new(), -phi_mw, peak.X, r0: max_r),
-                B = Cone.phied(new(z0_dmw*uZ3), phi_mw, peak.X - z0_dmw + EXTRA),
-                peak = peak,
-                th = th_omw
-            };
-        }
-
         // For lox/ipa boundary:
-        float Dz = th_dmw/sin(phi_mw);
+        float Dz_dmw = th_dmw/sin(phi_mw);
+        float Dz_omw = th_omw/sin(phi_mw);
 
-        Voxels neg = new();
+
+        // Manifold peak.
+        float max_r = Or_chnl + 1.8f*th_plate/tan(phi_mw);
+        // https://www.desmos.com/calculator/tusqawwtn5
+        Vec2 peak = new( /* (z,r) */
+            max_r/2f/tan(phi_mw) + z0_dmw/2f,
+            max_r/2f - z0_dmw/2f*tan(phi_mw)
+        );
+
+
+        // Manifold bounding cones.
+        Cone A = Cone.phied(new(), -phi_mw, peak.X, r0: max_r);
+        Cone B = Cone.phied(new(z0_dmw*uZ3), phi_mw, peak.X - z0_dmw + EXTRA);
+
+
+        // Sneak the enclosing volumes in here (to be modified in the dividing
+        // wall creation loop).
+        Voxels volume_entire = A.lengthed(EXTRA, 0f).transz(1.5f*VOXEL_SIZE);
+        volume_entire.BoolSubtract(B.transz(1.5f*VOXEL_SIZE));
+        Voxels volume_only_lower = volume_entire.voxDuplicate();
+
+
+        // Make dividing lox-ipa boundary.
         Voxels pos = new();
-
-        List<Geez.Key> keys = new(2*numel(points_inj));
-
-        { // lox-ipa boundary.
-            foreach (Vec2 p in points_inj) {
-                Frame at = new(rejxy(p, z0_dmw));
-                Mesh po = Cone.phied(at, phi_mw, vol.peak.X);
-                Mesh ne = Cone.phied(at.transz(Dz), phi_mw, vol.peak.X);
-                keys.Add(Geez.mesh(po));
-                pos.BoolAdd(new(po));
-                neg.BoolAdd(new(ne));
-            }
+        Voxels neg = new();
+        List<Geez.Key> keys = new(numel(points_inj));
+        foreach (Vec2 p in points_inj) {
+            Frame at = new(rejxy(p, z0_dmw));
+            Mesh this_pos = Cone.phied(at, phi_mw, peak.X);
+            Cone this_neg = Cone.phied(at.transz(Dz_dmw), phi_mw, peak.X);
+            keys.Add(Geez.mesh(this_pos));
+            pos.BoolAdd(new(this_pos));
+            neg.BoolAdd((Voxels)this_neg);
+            volume_only_lower.BoolSubtract(this_neg.transz(1.5f*VOXEL_SIZE));
         }
-
-
-        // Sneak the individual fluid volumes in here.
-        // NOTE:
-        // - neg_LOx INCLUDES the lox/ipa dividing wall AND the ipa volume AND
-        //      the plate.
-        // - neg_IPA INCLUDES the plate.
-        // - AND both are extruded down by 2*EXTRA
-        neg_LOx = vol.A;
-        neg_LOx.BoolSubtract(vol.B);
-        neg_LOx.BoolAdd(new Rod(
-            new(),
-            -2f*EXTRA,
-            vol.A.r0
-        ).extended(VOXEL_SIZE, Extend.UP));
-        neg_IPA = neg_LOx.voxDuplicate();
-        neg_IPA.BoolSubtract(pos);
-
-
-        { // supports.
-            // TODO:
-            float min_r = pm.IR_Ioring - 1.3f;
-            float max_r = pm.OR_Ioring + 1.3f;
-            float length = max_r - min_r;
-            float aspect_ratio = 1.5f;
-            float width = length / aspect_ratio;
-
-            // TODO:
-            int no = 50;
-            float Mr = ave(min_r, max_r);
-            float z = pm.Lz_Ioring + th_plate/3f;
-            List<Vec3> points = Polygon.circle(no, Mr, 0f, z);
-            foreach (Vec3 p in points) {
-                Mesh m = Polygon.mesh_extruded(
-                    Frame.cyl_axial(p), // x = +radial, y = +circumferential
-                    vol.peak.X,
-                    [
-                        // diamond.
-                        new(0f,         -width/2f),
-                        new(-length/2f, 0f),
-                        new(0f,         +width/2f),
-                        new(+length/2f, 0f),
-                    ]
-                );
-                keys.Add(Geez.mesh(m));
-                pos.BoolAdd(new(m));
-            }
-        }
-
         key <<= Geez.group(keys);
 
+        // Create manifold volume object.
+        vol = new ManiVol{
+            A=A,
+            B=B,
+            peak=peak,
+            th=th_omw,
+            volume_entire=volume_entire,
+            volume_only_lower=volume_only_lower,
+        };
 
-        // Intersect with internal volume.
 
-        neg.BoolIntersect(vol.A);
-        neg.BoolSubtract(vol.B);
+        // Make correct cone-walls.
+        pos.BoolSubtract(neg);
 
-        // add safety margin for pos (leaving half of intersection with wall).
+
+        // Intersect with internal volume, w safety margin for pos (leaving half
+        // of intersection with wall).
         pos.BoolIntersect(vol.A.transz(vol.Lz/2f));
         pos.BoolSubtract(vol.B.transz(vol.Lz/2f));
-
-
-        // Add roof.
-        pos.BoolAdd(vol.A.shelled(+vol.th).lengthed(0f, vol.Lz + EXTRA));
-        pos.BoolAdd(vol.B.shelled(-vol.th).lengthed(0f, vol.Lz + EXTRA));
-        // Add bounding wall for channel.
-        pos.BoolAdd(new Rod(
-            new(),
-            vol.z(Or_chnl) + EXTRA,
-            Or_chnl,
-            vol.A.r0 + vol.Lr
-        ).extended(EXTRA, Extend.DOWN));
-        pos.BoolSubtract(vol.B.transz(vol.Lz)
-                .lengthed(0f, 2f*EXTRA));
-        pos.BoolSubtract(vol.A.transz(vol.Lz)
-                .lengthed(2f*EXTRA, 2f*EXTRA)
-                .shelled(4f*EXTRA));
-
-        // Make final.
-        pos.BoolSubtract(neg);
         key.voxels(pos);
+
+
+        // Make big roof.
+        pos.BoolAdd(vol.A.lengthed(0f, vol.Lz + 0.5f).shelled(+vol.th));
+        pos.BoolAdd(vol.B.shelled(-vol.th));
+        pos.BoolSubtract(vol.B.transz(vol.Lz));
+        pos.BoolIntersect(vol.A.lengthed(vol.Lz + 0.5f, 0f).transz(vol.Lz));
+        key.voxels(pos);
+
         return pos;
     }
 
 
-    protected void voxels_igniter(Geez.Cycle key_igniter, out Voxels pos,
-            out Voxels neg) {
+    protected Voxels voxels_supports(Geez.Cycle key, in ManiVol vol) {
+        using var __ = key.like();
+
+        Voxels vox = new();
+
+        // TODO:
+        float min_r = pm.IR_Ioring - 1.3f;
+        float max_r = pm.OR_Ioring + 1.3f;
+        float length = max_r - min_r;
+        float aspect_ratio = 1.5f;
+        float width = length / aspect_ratio;
+
+        // TODO:
+        int no = 40;
+        float min_z = pm.Lz_Ioring + th_plate;
+        float max_z = vol.z(min_r);
+        List<Vec3> points = Polygon.circle(no, ave(min_r, max_r), 0f, min_z);
+
+        List<Geez.Key> keys = new();
+        foreach (Vec3 p in points) {
+            List<Vec2> vertices = [
+                // diamond.
+                new(0f,         -width/2f),
+                new(-length/2f, 0f),
+                new(0f,         +width/2f),
+                new(+length/2f, 0f),
+            ];
+            // TODO:
+            Polygon.fillet(vertices, 3, 0.5f, prec: 2f, only_this_vertex: true);
+            Polygon.fillet(vertices, 2, 0.5f, prec: 2f, only_this_vertex: true);
+            Polygon.fillet(vertices, 1, 0.5f, prec: 2f, only_this_vertex: true);
+            Polygon.fillet(vertices, 0, 0.5f, prec: 2f, only_this_vertex: true);
+
+            Mesh m = Polygon.mesh_extruded(
+                Frame.cyl_axial(p), // x = +radial, y = +circumferential
+                max_z - min_z,
+                vertices,
+                extend_by: 0.5f*th_plate,
+                extend_dir: Extend.UPDOWN
+            );
+            keys.Add(Geez.mesh(m));
+            vox.BoolAdd(new(m));
+        }
+
+        // Intersect with internal volume, w safety margin for pos (leaving half
+        // of intersection with wall).
+        vox.BoolIntersect(vol.A.transz(vol.Lz/2f));
+
+        key.voxels(vox);
+        Geez.remove(keys);
+
+        return vox;
+    }
+
+
+    protected void voxels_igniter(Geez.Cycle key, out Voxels pos,
+            out Voxels neg, out Voxels neg_no_tap) {
 
         // Fluid volume.
-        neg = tap_igniter.hole(new(height*uZ3));
-        neg.BoolAdd(new Rod(
+        neg = new Rod(
             new(th_plate*uZ3),
             height - th_plate,
             D_igniterh/2f
-        ).extended(EXTRA, Extend.UP));
+        ).extended(EXTRA, Extend.UP);
         neg.BoolAdd(new Rod(
             new(th_plate*uZ3),
             -th_plate,
             D_igniterh/2f - 1f // 1mm ledge for tube to sit on.
         ).extended(EXTRA, Extend.UPDOWN));
+
+        neg_no_tap = neg.voxDuplicate();
+        neg.BoolAdd(tap_igniter.hole(new(height*uZ3)));
 
         // Filled pipe.
         pos = new Flats(tap_igniter, th_igniter)
@@ -1071,7 +1097,7 @@ public class Injector : TPIAP.Pea {
             height,
             D_igniterh/2f + th_igniterh
         ));
-        key_igniter.voxels(pos);
+        key.voxels(pos);
     }
 
 
@@ -1097,9 +1123,6 @@ public class Injector : TPIAP.Pea {
         }
         key.voxels(vox);
 
-        Fillet.concave(vox, pm.flange_fillet_radius, inplace: true);
-        key.voxels(vox);
-
         vox.BoolSubtract(new Rod(
             new(),
             flange.Lz,
@@ -1117,33 +1140,33 @@ public class Injector : TPIAP.Pea {
         neg = new();
         foreach (Vec2 p in points_inj) {
             element.voxels(new(rejxy(p)), th_plate, th_dmw,
-                    out Voxels po, out Voxels ne);
-            pos.BoolAdd(po);
-            neg.BoolAdd(ne);
+                    out Voxels this_pos, out Voxels this_neg);
+            pos.BoolAdd(this_pos);
+            neg.BoolAdd(this_neg);
             key.voxels(neg);
         }
     }
 
 
-    protected Voxels voxels_bolts() {
-        Voxels vox = new();
+    protected void voxels_bolts(out Voxels hole, out Voxels clearance) {
+        hole = new();
+        clearance = new();
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
             Vec2 p = frompol(pm.r_bolt, theta);
             // for bolt.
-            vox.BoolAdd(new Rod(
+            hole.BoolAdd(new Rod(
                 new(rejxy(p, 0f)),
                 pm.flange_thickness_inj,
                 pm.D_bolt/2f
             ).extended(2f*EXTRA, Extend.UPDOWN));
             // for washer/nut.
-            vox.BoolAdd(new Rod(
+            clearance.BoolAdd(new Rod(
                 new(rejxy(p, pm.flange_thickness_inj)),
-                2f*EXTRA,
+                4f*EXTRA,
                 pm.D_washer/2f
             ));
         }
-        return vox;
     }
 
 
@@ -1168,9 +1191,11 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected Voxels voxels_gussets(Geez.Cycle key, in ManiVol mani_vol) {
+    protected void voxels_gussets(Geez.Cycle key, in ManiVol mani_vol,
+            out Voxels pos, out Voxels neg) {
 
-        Voxels vox = new();
+        pos = new();
+        neg = new();
 
         // Conical outer boundary.
         Cone volC = new(
@@ -1190,18 +1215,18 @@ public class Injector : TPIAP.Pea {
             Frame frame = Frame.cyl_axial(rejxy(p, 0f));
             // x=+radial, y=+circum.
             float Dx = -0.5f*pm.r_bolt + 0.5f*mani_vol.peak.Y;
-            vox.BoolAdd(new Bar(
+            pos.BoolAdd(new Bar(
                 frame.transx(Dx),
                 2f*abs(Dx) + EXTRA,
                 wi,
                 mani_vol.peak.X + mani_vol.Lz
             ).extended(EXTRA, Extend.DOWN));
-            key.voxels(vox);
+            key.voxels(pos);
         }
 
         // Trim down.
-        vox.BoolIntersect(volC);
-        key.voxels(vox);
+        pos.BoolIntersect(volC);
+        key.voxels(pos);
 
         // Add the thrust structure mounts.
         assert(numel(points)%2 == 0);
@@ -1262,54 +1287,54 @@ public class Injector : TPIAP.Pea {
 
             // Rect->circle + base.
             Mesh m = Polygon.mesh_swept(new FramesSequence(frames), vertices);
-            vox.BoolAdd(new(m));
+            pos.BoolAdd(new(m));
 
             // Bolt hole.
-            vox.BoolSubtract(tap_mount.hole(top));
+            neg.BoolAdd(tap_mount.hole(top));
 
-            key.voxels(vox);
+            key.voxels(pos);
         }
 
         // Trim out.
-        vox.BoolSubtract(mani_vol.A.transz(mani_vol.Lz/2f));
-        vox.BoolSubtract(new Rod(
-            mani_vol.A.bbase.transz(mani_vol.Lz/2f + 0.1f),
-            -4f*EXTRA,
-            mani_vol.A.r0
-        ));
-        vox.BoolSubtract(new Rod(
+        pos.BoolSubtract(mani_vol.A.transz(mani_vol.Lz/2f).lengthed(EXTRA, 0f));
+        pos.BoolSubtract(new Rod(
             new(),
             mani_vol.peak.X + mani_vol.Lz + EXTRA,
             mani_vol.peak.Y
         ));
 
-        key.voxels(vox);
-        return vox;
+        key.voxels(pos);
     }
 
 
 
     protected void voxels_ports(Geez.Cycle key, in ManiVol mani_vol,
-            in Voxels neg_LOx, in Voxels neg_IPA, out Voxels pos,
-            out Voxels neg) {
+            out Voxels pos, out Voxels neg, out Voxels neg_no_tap) {
 
         // fucking c sharp cannot access out var from local function.
         Voxels _pos = new();
         Voxels _neg = new();
+        Voxels _neg_no_tap = new();
 
+        List<Geez.Key> keys = new();
         void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
-                in Voxels? sub=null) {
-            Voxels this_pos = new Flats(tap, th).boss(at);
-            Voxels this_neg = tap.hole(at);
-            this_pos.BoolAdd(new Rod(at, -height, D_h/2f + th_h));
-            this_neg.BoolAdd(new Rod(at, -height, D_h/2f));
-            if (sub != null) {
-                this_pos.BoolSubtract(sub);
-                this_neg.BoolSubtract(sub);
+                in Voxels? sub_pos=null, in Voxels? sub_neg=null) {
+            Voxels this_pos = new Rod(at, -height - EXTRA/2f, D_h/2f + th_h);
+            Voxels this_neg_no_tap = new Rod(at, -height - 2f*EXTRA, D_h/2f);
+            Voxels this_neg = this_neg_no_tap.voxDuplicate();
+            this_pos.BoolAdd(new Flats(tap, th).boss(at));
+            this_neg.BoolAdd(tap.hole(at));
+            if (sub_pos != null)
+                this_pos.BoolSubtract(sub_pos);
+            if (sub_neg != null) {
+                this_neg.BoolSubtract(sub_neg);
+                this_neg_no_tap.BoolSubtract(sub_neg);
             }
+            using (key.like())
+                keys.Add(Geez.voxels(this_pos));
             _pos.BoolAdd(this_pos);
             _neg.BoolAdd(this_neg);
-            key.voxels(_pos);
+            _neg_no_tap.BoolAdd(this_neg_no_tap);
         }
 
         float r_LOxinlet = mani_vol.peak.Y * 1.1f;
@@ -1328,14 +1353,29 @@ public class Injector : TPIAP.Pea {
         Frame at_CCPT     = Frame.cyl_axial(pos_CCPT)    .rotxy(PI_2);
         // +z = +axial, +x = -circumferential.
 
+        // Rough bounding for plate voxels.
+        Voxels volume_plate = new Rod(
+            new(),
+            th_plate + pm.Lz_Ioring,
+            mani_vol.A.outer_r0
+        ).extended(3f*EXTRA, Extend.DOWN);
+
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
-                neg_LOx);
-        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh, neg_LOx);
-        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh, neg_IPA);
+                sub_pos: mani_vol.volume_entire,
+                sub_neg: mani_vol.volume_only_lower);
+        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh,
+                sub_pos: mani_vol.volume_entire,
+                sub_neg: mani_vol.volume_only_lower);
+        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh,
+                sub_pos: mani_vol.volume_only_lower,
+                sub_neg: volume_plate);
         portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh);
 
         pos = _pos;
         neg = _neg;
+        neg_no_tap = _neg_no_tap;
+
+        key <<= Geez.group(keys);
     }
 
 
@@ -1423,13 +1463,14 @@ public class Injector : TPIAP.Pea {
 
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
         Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
-        Geez.Cycle key_maniwalls = new(colour: COLOUR_PINK);
+        Geez.Cycle key_manifold = new(colour: COLOUR_PINK);
+        Geez.Cycle key_supports = new(colour: COLOUR_ORANGE);
         Geez.Cycle key_igniter = new(colour: COLOUR_WHITE);
         Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
 
-        Voxels? plate = voxels_plate();
+        voxels_plate(out Voxels? plate, out Voxels? neg_film_cooling);
         key_plate.voxels(plate);
         step("created plate.");
 
@@ -1437,33 +1478,34 @@ public class Injector : TPIAP.Pea {
                 out Voxels? neg_elements);
         step("created injector elements");
 
-        Voxels? maniwalls = voxels_maniwalls(key_maniwalls,
-                out ManiVol mani_vol, out Voxels neg_LOx, out Voxels neg_IPA);
-        step("created manifold walls.");
+        Voxels? manifold = voxels_manifold(key_manifold, out ManiVol mani_vol);
+        substep("created manifold walls.");
+
+        Voxels? supports = voxels_supports(key_supports, mani_vol);
+        substep("created manifold supports.");
+
+        step("created manifold.");
 
         voxels_igniter(key_igniter, out Voxels? pos_igniter,
-                out Voxels? neg_igniter);
+                out Voxels? neg_igniter, out Voxels? neg_igniter_no_tap);
         step("created igniter port.");
 
-        Voxels? bolts = voxels_bolts();
+        voxels_bolts(out Voxels? neg_bolt_hole, out Voxels? neg_bolt_clearance);
         substep("created bolts.");
-        Voxels? orings = voxels_orings();
+        Voxels? neg_orings = voxels_orings();
         substep("created O-rings.");
         Voxels? flange = voxels_flange(key_flange);
         step("created flange.");
 
-        Voxels? gussets = voxels_gussets(key_gussets, mani_vol);
+        voxels_gussets(key_gussets, mani_vol, out Voxels? gussets,
+                out Voxels? neg_mounting);
         step("created gussets.");
 
-        voxels_ports(key_ports, mani_vol, neg_LOx, neg_IPA,
-                out Voxels? pos_ports, out Voxels? neg_ports);
+        voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
+                out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
         step("created ports.");
 
-        add(ref plate, key_plate);
-        substep("added plate.");
-        add(ref pos_elements);
-        substep("added elements.");
-        add(ref maniwalls, key_maniwalls);
+        add(ref manifold, key_manifold);
         substep("added manifold walls.");
         add(ref pos_igniter, key_igniter);
         substep("added igniter.");
@@ -1474,24 +1516,62 @@ public class Injector : TPIAP.Pea {
         add(ref pos_ports, key_ports);
         substep("added ports.");
 
-        step("added material.");
+        step("added upper material.");
 
+        sub(ref neg_bolt_clearance, keepme: true);
+        substep("subtracted mating bolt clearance (1/2).");
+
+        sub(ref neg_igniter_no_tap);
+        substep("subtracted igniter hole.");
+
+        sub(ref neg_ports_no_tap);
+        substep("subtracted port holes.");
+
+        Fillet.both(part,
+            concave_FR: pm.concave_fillet_radius,
+            convex_FR: pm.convex_fillet_radius,
+            inplace: true
+        );
+        step("filleted part.", view_part: true);
+
+        add(ref plate, key_plate);
+        substep("added base plate.");
+        add(ref supports, key_supports);
+        substep("added supports.");
+        // Fillet supports for strength. Unfortunately its just for the best to
+        // be part-wide.
+        Fillet.concave(part, 0.8f, inplace: true); // TODO:
+        substep("filleted supports.", view_part: true);
+
+        step("added lower material.");
+
+        add(ref pos_elements);
+        substep("added injector elements.");
         sub(ref neg_elements, key_elements);
-        substep("subtracted elements.");
-        sub(ref bolts);
-        substep("subtracted bolts.");
-        sub(ref orings);
+        substep("subtracted injector elements.");
+
+        step("merged injector elements");
+
+        sub(ref neg_film_cooling);
+        substep("subtracted film cooling holes.");
+        sub(ref neg_bolt_hole);
+        substep("subtracted mating bolt hole.");
+        sub(ref neg_bolt_clearance);
+        substep("subtracted mating bolt clearance (2/2).");
+        sub(ref neg_mounting);
+        substep("subtracted mounting bolts.");
+        sub(ref neg_orings);
         substep("subtracted O-rings.");
         sub(ref neg_igniter);
-        substep("subtracted igniter void.");
+        substep("subtracted igniter void (2/2).");
         sub(ref neg_ports);
-        substep("subtracted port voids.");
+        substep("subtracted port voids (2/2).");
 
         step("removed voids.");
 
         part.BoolSubtract(new Rod(
             new(),
-            -2f*EXTRA,
+            -3f*EXTRA,
             overall_Lr + EXTRA
         ));
         substep("clipped bottom.", view_part: true);

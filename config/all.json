@@ -27,7 +27,8 @@
         "flange_thickness_cc": 7.0,
         "flange_thickness_inj": 7.0,
         "flange_outer_radius": 78.0,
-        "flange_fillet_radius": 3.0
+        "concave_fillet_radius": 3.0,
+        "convex_fillet_radius": 0.7
     },
     "chamber": {
         "L_cc": 100.0,
@@ -106,9 +107,9 @@
         "portsize_CCPT": "G1/4",
         "th_igniter": 4.0,
         "th_LOxinlet": 4.0,
-        "th_LOxPT": 3.0,
-        "th_IPAPT": 3.0,
-        "th_CCPT": 3.0,
+        "th_LOxPT": 3.5,
+        "th_IPAPT": 3.5,
+        "th_CCPT": 3.5,
         "D_igniterh": 6.35,
         "D_LOxinleth": 15.0,
         "D_LOxPTh": 2.0,
