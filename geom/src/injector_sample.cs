@@ -37,18 +37,13 @@ public class InjectorSample : TPIAP.Pea {
     public float extend_base_by => printable ? 3f : 0f;
     public float th_outer => print_resin ? 4f : 3f;
 
-    public required PartMating pm { get; init; }
-    public required InjectorElement[] element { get; init; }
-    public required int[] no_inj { get; init; }
-    public required float th_plate { get; init; }
-    public required float th_dmw { get; init; }
+    public required InjectorElement[] elements { get; init; }
+    public int N => numel(elements);
 
-    public int N => numel(element);
     public void initialise() {
-        assert(N == numel(element));
-        assert(N == numel(no_inj));
         for (int i=0; i<N; ++i) {
-            element[i].initialise(pm, no_inj[i]);
+            elements[i].printable = printable;
+            elements[i].initialise();
             File.Move(
                 InjectorElement.REPORT_PATH,
                 fromroot($"exports/injector-sample-{i}-report.txt"),
@@ -65,11 +60,8 @@ public class InjectorSample : TPIAP.Pea {
         const float th_datum = 3f;
 
         // position inlets s.t. port isnt straight on one.
-        element.voxels(
-                at.rotxy(-PI_2 - 2/3f*PI/element.no_il2), th_plate, th_dmw,
-                out Voxels? pos, out Voxels? neg,
-                please_put_the_inner_injector_on_the_build_plate: printable
-            );
+        element.voxels(at.rotxy(-PI_2 - 2/3f*PI/element.no_il2),
+                out Voxels? pos, out Voxels? neg);
         // injector element = pos - neg.
 
         Rod interior /* kinda, loosy goosy top and bottom (dujj) */ = new(
@@ -98,14 +90,14 @@ public class InjectorSample : TPIAP.Pea {
                 .girthed(R)
                 .extended(EXTRA, Extend.UPDOWN));
 
-        Voxels bot = new Rod(at, th_plate, Rmid)
+        Voxels bot = new Rod(at, element.th_plate, Rmid)
                 .extended(extend_base_by, Extend.DOWN);
 
         Voxels dividing = Cone.phied(
             at.transz(element.z0_dmw),
             element.phi,
             r1: R
-        ).shelled(-th_dmw);
+        ).shelled(-element.th_dmw);
         dividing.BoolIntersect(interior
                 .girthed(Rmid)
                 .extended(EXTRA, Extend.UPDOWN));
@@ -311,7 +303,7 @@ public class InjectorSample : TPIAP.Pea {
 
             Voxels vox = make(
                 at,
-                element[i],
+                elements[i],
                 img,
                 i % 2 == 0
             );

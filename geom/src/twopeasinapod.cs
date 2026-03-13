@@ -11,12 +11,13 @@ public static class TwoPeasInAPod {
     public interface Pea {
         string name { get; }
 
+        void initialise();
+        void set_modifiers(int mods);
+
         void anything();
         Voxels? voxels();
         Voxels? cutaway(in Voxels part);
         void drawings(in Voxels part);
-
-        void set_modifiers(int mods);
     }
 
     /* GUIDE: how to create `make` (for smarties) */
@@ -131,87 +132,98 @@ public static class TwoPeasInAPod {
         switch (make & MASK_PEA) {
           case CHAMBER: {
             // Construct the chamber object.
+            config.set("chamber/pm", config.get_map("part_mating"));
             var max_phi = config.get<float>("printer/max_print_angle");
             config.set("chamber/phi_mani", max_phi);
             config.set("chamber/phi_fixt", max_phi);
             config.set("chamber/phi_inlet", -max_phi);
             config.set("chamber/phi_tc", max_phi);
-            config.set("chamber/pm", config.get_map("part_mating"));
-            var cc = config.deserialise<Chamber>("chamber");
-            cc.initialise();
-            pea = cc;
+            pea = config.deserialise<Chamber>("chamber");
           } break;
 
+          /* DUAL CASE */
+          case INJECTOR_SAMPLE:
           case INJECTOR: {
             // Construct the injector object.
+            config.set("injector/pm", config.get_map("part_mating"));
             var max_phi = config.get<float>("printer/max_print_angle");
             config.set("injector/phi_mw", max_phi);
             config.set("injector/element/phi", max_phi);
-            config.set("injector/pm", config.get_map("part_mating"));
-            var inj = config.deserialise<Injector>("injector");
-            inj.initialise();
-            pea = inj;
-          } break;
-
-          case INJECTOR_SAMPLE: {
-            // Construct the injector sample object from the injector input
-            // parameters.
-            var max_phi = config.get<float>("printer/max_print_angle");
             var th_plate = config.get<float>("injector/th_plate");
             var th_dmw = config.get<float>("injector/th_dmw");
+            config.set("injector/element/th_plate", th_plate);
+            config.set("injector/element/th_dmw", th_dmw);
+            var rho_1 = config.get<float>("part_mating/rho_LOx");
+            var rho_2 = config.get<float>("part_mating/rho_IPA");
+            var mu_1 = config.get<float>("part_mating/mu_LOx");
+            var mu_2 = config.get<float>("part_mating/mu_IPA");
+            config.set("injector/element/rho_1", rho_1);
+            config.set("injector/element/rho_2", rho_2);
+            config.set("injector/element/mu_1", mu_1);
+            config.set("injector/element/mu_2", mu_2);
+            var Pr_1 = config.get<float>("part_mating/Pr_LOx");
+            var Pr_2 = config.get<float>("part_mating/Pr_IPA");
+            var mdot_1 = config.get<float>("part_mating/mdot_LOx");
+            var mdot_2 = config.get<float>("part_mating/mdot_IPA");
+            var P_cc = config.get<float>("part_mating/P_cc");
             var no_injg = config.get<List<int>>("injector/no_injg");
-            var element = config.get_map("injector/element");
+            int no_inj = 0;
+            foreach (int this_no in no_injg)
+                no_inj += this_no;
+            config.set("injector/element/DP_1", (Pr_1 - 1f)*P_cc);
+            config.set("injector/element/DP_2", (Pr_2 - 1f)*P_cc);
+            config.set("injector/element/mdot_1", mdot_1 / no_inj);
+            config.set("injector/element/mdot_2", mdot_2 / no_inj);
 
-            element = (JsonMap)element.DeepClone();
-            element["phi"] = max_phi;
+            if ((make & MASK_PEA) == INJECTOR) {
+                pea = config.deserialise<Injector>("injector");
+            } else {
+                assert((make & MASK_PEA) == INJECTOR_SAMPLE);
+                // Copy element over to a new map.
+                config.new_map("sample");
 
-            config.new_map("sample");
-            config.set("sample/pm", config.get_map("part_mating"));
-            config.set("sample/th_plate", th_plate);
-            config.set("sample/th_dmw", th_dmw);
+                var element = config.get_map("injector/element").DeepClone();
+                List<JsonMap> elements = [];
+                void setup(int no_inj=-1, int no_il=-1, float twoalpha_1=NAN,
+                        float Rbar_ch1=NAN, float Rbar_ch2=NAN,
+                        float Lbar_nz2=NAN, float Lbar_ch1=NAN) {
+                    JsonMap e = (JsonMap)element.DeepClone();
 
-            List<JsonMap> elements = [];
-            List<int> no_injs = [];
-            void setup(int no_inj=-1, int no_il=-1, float twoalpha_1=NAN,
-                    float Rbar_ch1=NAN, float Rbar_ch2=NAN,
-                    float Lbar_nz2=NAN, float Lbar_ch1=NAN) {
-                elements.Add((JsonMap)element.DeepClone());
-                no_injs.Add(sum(no_injg.ToArray()));
-
-                if (no_inj != -1)
-                    no_injs[^1] = no_inj;
-                if (no_il != -1) {
-                    elements[^1]["no_il1"] = no_il;
-                    elements[^1]["no_il2"] = no_il;
+                    if (no_inj != -1) {
+                        e["mdot_1"] = mdot_1 / no_inj;
+                        e["mdot_2"] = mdot_2 / no_inj;
+                    }
+                    if (no_il != -1) {
+                        e["no_il1"] = no_il;
+                        e["no_il2"] = no_il;
+                    }
+                    if (nonnan(twoalpha_1))
+                        e["twoalpha_1"] = twoalpha_1;
+                    if (nonnan(Rbar_ch1))
+                        e["Rbar_ch1"] = Rbar_ch1;
+                    if (nonnan(Rbar_ch2))
+                        e["Rbar_ch2"] = Rbar_ch2;
+                    if (nonnan(Lbar_nz2))
+                        e["Lbar_nz2"] = Lbar_nz2;
+                    if (nonnan(Lbar_ch1))
+                        e["Lbar_ch1"] = Lbar_ch1;
+                    elements.Add(e);
                 }
-                if (nonnan(twoalpha_1))
-                    elements[^1]["twoalpha_1"] = twoalpha_1;
-                if (nonnan(Lbar_nz2))
-                    elements[^1]["Lbar_nz2"] = Lbar_nz2;
-                if (nonnan(Lbar_ch1))
-                    elements[^1]["Lbar_ch1"] = Lbar_ch1;
-                if (nonnan(Rbar_ch1))
-                    elements[^1]["Rbar_ch1"] = Rbar_ch1;
-                if (nonnan(Rbar_ch2))
-                    elements[^1]["Rbar_ch2"] = Rbar_ch2;
+
+        /* 0 */ setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+        /* 1 */ setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+        /* 2 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+        /* 3 */ setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+        /* 4 */ setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
+
+        /* 5 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
+        /* 6 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.3f);
+        /* 7 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.4f);
+
+                config.set("sample/elements", elements);
+
+                pea = config.deserialise<InjectorSample>("sample");
             }
-
-    /* 0 */ setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-    /* 1 */ setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-    /* 2 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-    /* 3 */ setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-    /* 4 */ setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-
-    /* 5 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
-    /* 6 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.3f);
-    /* 7 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.4f);
-
-            config.set("sample/element", elements);
-            config.set("sample/no_inj", no_injs);
-
-            var sample = config.deserialise<InjectorSample>("sample");
-            sample.initialise();
-            pea = sample;
           } break;
 
           default:
@@ -219,8 +231,11 @@ public static class TwoPeasInAPod {
                              + $"0x{make & MASK_PEA:X}");
         }
 
-        // Modify the objects.
+        // Set pea modifiers.
         pea.set_modifiers(make & MASK_MODIFIER);
+
+        // Initialise the pea.
+        pea.initialise();
 
         // Anything?
         if (isset(make, ANYTHING))

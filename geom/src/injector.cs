@@ -52,8 +52,23 @@ public class InjectorElement {
     public Vec2 E2 = NAN2;
     public Vec2 F2 = NAN2;
 
+    public bool printable { get; set; } = false;
+
     public required float phi { get; init; }
     /* ^ must be same as LOx/OPA dividing cone */
+
+    public required float th_plate { get; init; }
+    public required float th_dmw { get; init; }
+
+    public required float rho_1 { get; init; }
+    public required float rho_2 { get; init; }
+    public required float mu_1 { get; init; }
+    public required float mu_2 { get; init; }
+
+    public required float DP_1 { get; init; }
+    public required float DP_2 { get; init; }
+    public required float mdot_1 { get; init; }
+    public required float mdot_2 { get; init; }
 
     public required int no_il1 { get; init; }
     public required int no_il2 { get; init; }
@@ -62,11 +77,11 @@ public class InjectorElement {
     public required float th_nz1 { get; init; }
     public required float th_il1 { get; init; }
     public required float th_il2 { get; init; }
-    public required float Pr_inj1 { get; init; }
-    public required float Pr_inj2 { get; init; }
     public required float FR_LOx { get; init; }
     public required float FR_IPA { get; init; }
     public required float FR_small { get; init; }
+    public required float CR_nz1 { get; init; }
+    public required float CR_nz2 { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
@@ -104,55 +119,29 @@ public class InjectorElement {
         => fromroot($"exports/injector-element-report.txt");
 
     private bool inited = false;
-    public void initialise(in PartMating pm, int N) {
+    public void initialise() {
         assert(!inited);
-        assert(phi > 0f);
-        assert(phi <= PI_2);
-        assert(N >= 1);
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
-        float DP_1 = (Pr_inj1 - 1f)*pm.P_cc;
-        float DP_2 = (Pr_inj2 - 1f)*pm.P_cc;
-        assert(DP_1 > 0f);
-        assert(DP_2 > 0f);
-
-
-        /* Arbitrary params: */
-
-        // Reasonable bounds for inlet counts:
-        assert(within(no_il1, 2, 6));
-        assert(within(no_il2, 2, 6));
+        assert(phi > 0f);
+        assert(phi < PI_2);
 
         // Set chamber 2 length to fuck off uge. its clipped at end of this
         // function.
         float Lbar_ch2 = 100f;
 
-        // idk why these are separate variables (in the paper).
-        float C_1 = Rbar_ch1;
-        float C_2 = Rbar_ch2;
-
-
-        /* injection fluid state: */
-
-        float mdot_1 = pm.mdot_LOx / N;
-        float mdot_2 = pm.mdot_IPA / N;
-
-        // TODO: f(T) these bad boy, changes a lot w temp!
-        float nu_1 = 2.56e-6f; // arithmetic mean of airborne ICD (114K)
-        float nu_2 = 2.66e-6f;
-
-        float rho_1 = pm.rho_LOx;
-        float rho_2 = pm.rho_IPA;
+        // idk why a separate variable C was used in the paper but we just gonna
+        // use its definition of Rbar.
 
 
         /* stage 1 (LOx): */
 
         float A_1 = GraphLookup.get_A(twoalpha_1, Lbar_nz1);
-        float mu_il1 = GraphLookup.get_mu_il(A_1, C_1);
+        float Cd_1 = GraphLookup.get_Cd(A_1, Rbar_ch1);
         float rmbar_1 = GraphLookup.get_rmbar(A_1, Rbar_ch1);
 
-        float Ir_nz1 = 0.475f*sqrt(mdot_1/mu_il1/sqrt(rho_1*DP_1));
+        float Ir_nz1 = sqrt(mdot_1/PI/Cd_1/sqrt(2f*rho_1*DP_1));
         float L_nz1 = 2f*Lbar_nz1*Ir_nz1;
 
         float Ir_ch1 = Rbar_ch1*Ir_nz1;
@@ -171,7 +160,7 @@ public class InjectorElement {
 
         // Iteratively solve nozzle dimensions.
         float A_2 = NAN;
-        float mu_il2 = NAN;
+        float Cd_2 = NAN;
         float rmbar_2 = NAN;
 
         const int MAX_ITERS = 100;
@@ -179,16 +168,14 @@ public class InjectorElement {
         float diff = +INF;
         for (int iter=0; iter<MAX_ITERS; ++iter) {
 
-            // 1. Calculate current flow coefficient mu based on current Rn.
-            mu_il2 = (mdot_1 + mdot_2)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
+            // 1. Calculate current Cd based on current Ir.
+            Cd_2 = (mdot_1 + mdot_2)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
 
-            // 2. Find A based on mu (from Fig 34).
-            A_2 = GraphLookup.get_A_from_mu_il(mu_il2, C_2);
+            // 2. Find A based on Cd (from Fig 34).
+            A_2 = GraphLookup.get_A_from_Cd(Cd_2, Rbar_ch2);
 
             // 3. Find dimensionless relative vortex radius (from Fig 35).
             rmbar_2 = GraphLookup.get_rmbar(A_2, Rbar_ch2);
-            // float fluid_inner_radius_2 = rmbar_2 * Ir_nz2;
-            float fluid_inner_radius_2 = rmbar_2;
 
             // Leave if we're under tol (note we recalced 1.2.3.).
             if (diff < TOLERANCE)
@@ -196,11 +183,11 @@ public class InjectorElement {
             assert(iter != MAX_ITERS - 1);
 
             // 4. Calculate NEW physical nozzle radius.
-            float next = min_fluid_inner_radius_2 / fluid_inner_radius_2;
+            float next = min_fluid_inner_radius_2 / rmbar_2;
             diff = abs(next - Ir_nz2);
             Ir_nz2 = next;
 
-            // re-loop to re-calc mu/A/rmbar.
+            // re-loop to re-calc Cd/A/rmbar.
         }
         assert(Ir_nz2 >= min_fluid_inner_radius_2);
 
@@ -220,8 +207,8 @@ public class InjectorElement {
         float cspf_2 = 1f - sqed(rmbar_2); //   fullness.
         float mixing_length = SQRT2 * tau_i
                             * (
-                                K_m/(K_m + 1f)*mu_il2/cspf_2*sqrt(DP_2/rho_2)
-                               + 1f/(K_m + 1f)*mu_il1/cspf_1*sqrt(DP_1/rho_1)
+                                K_m/(K_m + 1f)*Cd_2/cspf_2*sqrt(DP_2/rho_2)
+                               + 1f/(K_m + 1f)*Cd_1/cspf_1*sqrt(DP_1/rho_1)
                             );
 
         // float z0_inj1 = L_nz2 - mixing_length;
@@ -231,8 +218,8 @@ public class InjectorElement {
 
 
         // Requires some turbulence.
-        float Re_il1 = 2f*mdot_1/PI/sqrt(no_il1)/Ir_il1/rho_1/nu_1;
-        float Re_il2 = 2f*mdot_2/PI/sqrt(no_il2)/Ir_il2/rho_2/nu_2;
+        float Re_il1 = 2f*mdot_1/PI/sqrt(no_il1)/Ir_il1/mu_1;
+        float Re_il2 = 2f*mdot_2/PI/sqrt(no_il2)/Ir_il2/mu_2;
         // assert(Re_il1 > 10e3f);
         // assert(Re_il2 > 10e3f);
         // nm we dont meet it :)
@@ -273,7 +260,7 @@ public class InjectorElement {
         assert(E2.X > F2.X, $"E2z={E2.X}, F2z={F2.X}");
         assert(nearzero(F2.X), $"F2z={F2.X}");
 
-        // Now snap inj2 upper setcion to integrate with dividing manifold wall.
+        // Now snap inj2 upper section to integrate with dividing manifold wall.
 
         A2 = D1;
         B2 = Polygon.line_intersection(
@@ -322,30 +309,30 @@ public class InjectorElement {
             $"Injector Element Report",
             $"=======================",
             $"",
-            $"Element count: {N}",
-            $"",
             $"Stage 1 (LOx):",
+            $"  - Pressure difference: {DP_1*1e-5} bar",
+            $"  - Mass flow rate: {mdot_1} kg/s",
             $"  - Nozzle inner radius: {Ir_nz1*1e3f} mm",
             $"  - Nozzle length: {L_nz1*1e3f} mm",
             $"  - Chamber inner radius: {Ir_ch1*1e3f} mm",
             $"  - Chamber length: {L_ch1*1e3f} mm",
+            $"  - Inlet count: {no_il1}",
             $"  - Inlet radius: {Ir_il1*1e3f} mm",
             $"  - Inlet Reynolds number: {Re_il1}",
-            $"  - Pressure difference: {DP_1*1e-5} bar",
-            $"  - Mass flow rate: {mdot_1} kg/s",
             $"  - A_1: {A_1}",
             $"  - rmbar_1: {rmbar_1}",
             $"  - cspf_1: {cspf_1}",
             $"",
             $"Stage 2 (IPA):",
+            $"  - Pressure difference: {DP_2*1e-5} bar",
+            $"  - Mass flow rate: {mdot_2} kg/s",
             $"  - Nozzle inner radius: {Ir_nz2*1e3f} mm",
             $"  - Nozzle length: {L_nz2*1e3f} mm",
             $"  - Chamber inner radius: {Ir_ch2*1e3f} mm",
             $"  - Chamber length: {L_ch2*1e3f} mm",
+            $"  - Inlet count: {no_il2}",
             $"  - Inlet radius: {Ir_il2*1e3f} mm",
             $"  - Inlet Reynolds number: {Re_il2}",
-            $"  - Pressure difference: {DP_2*1e-5} bar",
-            $"  - Mass flow rate: {mdot_2} kg/s",
             $"  - A_2: {A_2}",
             $"  - rmbar_2: {rmbar_2}",
             $"  - cspf_2: {cspf_2}",
@@ -360,9 +347,7 @@ public class InjectorElement {
     }
 
 
-    public void voxels(Frame at, float th_plate, float th_dmw,
-            out Voxels pos, out Voxels neg,
-            bool please_put_the_inner_injector_on_the_build_plate=false) {
+    public void voxels(Frame at, out Voxels pos, out Voxels neg) {
         assert(inited);
 
         // Make volume by revolve.
@@ -390,6 +375,7 @@ public class InjectorElement {
             new(-EXTRA, F1.Y),
             new(-EXTRA, 0f),
         ];
+        Polygon.cull_adjacent_duplicates(neg_points1);
         List<Vec2> pos_points1 = [
             Polygon.corner_thicken(flipy(B1), A1, B1, th_inj1),
             Polygon.corner_thicken(A1, B1, D1, th_inj1),
@@ -429,6 +415,7 @@ public class InjectorElement {
             new(-EXTRA, 0f),
         ];
         neg_points2.Insert(0, neg_points2[0]*uX2);
+        Polygon.cull_adjacent_duplicates(neg_points2);
         List<Vec2> pos_points2 = [
             Polygon.corner_thicken(A2*uX2, A2, B2, th_inj2),
             Polygon.corner_thicken(A2, B2, D2, th_inj2),
@@ -524,12 +511,29 @@ public class InjectorElement {
             F1.Y,
             F1.Y + th_nz1
         );
-        if (please_put_the_inner_injector_on_the_build_plate) {
+        if (printable) {
             // Make the tip a little bigger..
             just_the_tip = just_the_tip.extended(F1.X, Extend.DOWN);
         }
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
+
+
+        // Add nozzle chamfers.
+        if (!printable) {
+            neg.BoolAdd(new Cone(
+                at.transz(F1.X),
+                CR_nz1,
+                F1.Y + CR_nz1,
+                F1.Y
+            ).lengthed(CR_nz1, CR_nz1));
+            neg.BoolAdd(new Cone(
+                at.transz(F2.X),
+                CR_nz2,
+                F2.Y + CR_nz2,
+                F2.Y
+            ).lengthed(CR_nz2, CR_nz2));
+        }
     }
 
 
@@ -620,10 +624,10 @@ public class InjectorElement {
 
         // Flow coefficient (Fig. 34b).
         //             x: A
-        //             y: mu_il
-        //  sampled over: C
-        private static readonly float mu_il_tbl0_C = 1.0f;
-        private static readonly Vec2[] mu_il_tbl0 = {
+        //             y: Cd
+        //  sampled over: Rbar_ch
+        private static readonly float Cd_tbl0_Rbar_ch = 1.0f;
+        private static readonly Vec2[] Cd_tbl0 = {
             new(0.827858f, 0.400318f), new(0.947264f, 0.373270f),
             new(1.026863f, 0.353858f), new(1.146268f, 0.331901f),
             new(1.305473f, 0.309626f), new(1.416915f, 0.291169f),
@@ -636,8 +640,8 @@ public class InjectorElement {
             new(7.299502f, 0.085601f), new(7.689552f, 0.081782f),
             new(8.000000f, 0.079236f)
         };
-        private static readonly float mu_il_tbl1_C = 4.0f;
-        private static readonly Vec2[] mu_il_tbl1 = {
+        private static readonly float Cd_tbl1_Rbar_ch = 4.0f;
+        private static readonly Vec2[] Cd_tbl1 = {
             new(1.082585f, 0.399364f), new(1.194027f, 0.377725f),
             new(1.313432f, 0.354177f), new(1.424875f, 0.336993f),
             new(1.560198f, 0.321400f), new(1.703481f, 0.305807f),
@@ -650,19 +654,19 @@ public class InjectorElement {
             new(6.145271f, 0.135879f), new(6.766166f, 0.127924f),
             new(7.379101f, 0.121559f), new(8.031838f, 0.115195f)
         };
-        public static float get_mu_il(float A, float C) {
-            Vec2 p0 = new(mu_il_tbl0_C, lookup(mu_il_tbl0, A));
-            Vec2 p1 = new(mu_il_tbl1_C, lookup(mu_il_tbl1, A));
-            return sample(p0, p1, C, false);
+        public static float get_Cd(float A, float Rbar_ch) {
+            Vec2 p0 = new(Cd_tbl0_Rbar_ch, lookup(Cd_tbl0, A));
+            Vec2 p1 = new(Cd_tbl1_Rbar_ch, lookup(Cd_tbl1, A));
+            return sample(p0, p1, Rbar_ch, false);
         }
 
 
         // Geometric characteristic parameter (Fig. 34b, transposed).
-        //             x: mu_il
+        //             x: Cd
         //             y: A
-        //  sampled over: C
-        private static readonly float A_from_mu_il_tbl0_C = 1.0f;
-        private static readonly Vec2[] A_from_mu_il_tbl0 = {
+        //  sampled over: Rbar_ch
+        private static readonly float A_from_Cd_tbl0_Rbar_ch = 1.0f;
+        private static readonly Vec2[] A_from_Cd_tbl0 = {
             new(0.079236f, 8.000000f), new(0.081782f, 7.689552f),
             new(0.085601f, 7.299502f), new(0.091329f, 6.726366f),
             new(0.098966f, 6.073631f), new(0.107239f, 5.484577f),
@@ -675,8 +679,8 @@ public class InjectorElement {
             new(0.353858f, 1.026863f), new(0.373270f, 0.947264f),
             new(0.400318f, 0.827858f)
         };
-        private static readonly float A_from_mu_il_tbl1_C = 4.0f;
-        private static readonly Vec2[] A_from_mu_il_tbl1 = {
+        private static readonly float A_from_Cd_tbl1_Rbar_ch = 4.0f;
+        private static readonly Vec2[] A_from_Cd_tbl1 = {
             new(0.115195f, 8.031838f), new(0.121559f, 7.379101f),
             new(0.127924f, 6.766166f), new(0.135879f, 6.145271f),
             new(0.143834f, 5.556216f), new(0.152426f, 5.054724f),
@@ -689,10 +693,10 @@ public class InjectorElement {
             new(0.336993f, 1.424875f), new(0.354177f, 1.313432f),
             new(0.377725f, 1.194027f), new(0.399364f, 1.082585f)
         };
-        public static float get_A_from_mu_il(float mu_il, float C) {
-            Vec2 p0 = new(A_from_mu_il_tbl0_C, lookup(A_from_mu_il_tbl0, mu_il));
-            Vec2 p1 = new(A_from_mu_il_tbl1_C, lookup(A_from_mu_il_tbl1, mu_il));
-            return sample(p0, p1, C, false);
+        public static float get_A_from_Cd(float Cd, float Rbar_ch) {
+            Vec2 p0 = new(A_from_Cd_tbl0_Rbar_ch, lookup(A_from_Cd_tbl0, Cd));
+            Vec2 p1 = new(A_from_Cd_tbl1_Rbar_ch, lookup(A_from_Cd_tbl1, Cd));
+            return sample(p0, p1, Rbar_ch, false);
         }
 
 
@@ -823,7 +827,8 @@ public class Injector : TPIAP.Pea {
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.initialise(pm, numel(points_inj));
+        element.printable = printable;
+        element.initialise();
     }
 
     public required string portsize_igniter { get; init; }
@@ -1136,13 +1141,12 @@ public class Injector : TPIAP.Pea {
 
     protected void voxels_elements(Geez.Cycle key, out Voxels pos,
             out Voxels neg) {
-        pos = new();
         neg = new();
+        pos = new();
         foreach (Vec2 p in points_inj) {
-            element.voxels(new(rejxy(p)), th_plate, th_dmw,
-                    out Voxels this_pos, out Voxels this_neg);
-            pos.BoolAdd(this_pos);
-            neg.BoolAdd(this_neg);
+            element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
+            pos.BoolAdd(po);
+            neg.BoolAdd(ne);
             key.voxels(neg);
         }
     }

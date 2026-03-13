@@ -92,15 +92,20 @@ LENGTHS/ANGLES:
   M_ = middle length (average of inner and outer).
   semi_ = semi-length (half that length).
   FR = fillet radius.
+  CR = chamfer 45deg length (either leg).
 
 ALL OTHER:
   A = area.
   AEAT = nozzle exit area to throat area ratio.
   beta = angle between two line segments.
   boltsize = string metric bolt "Mx".
+  Cd = coefficient of discharge.
   D_ = discrete change in this variable.
+  mdot = mass flow rate.
+  mu = dynamic viscosity.
   NLF = nozzle length as a fraction of the length of a 15deg cone.
   no = number of things.
   portsize = string BSPP "Gx".
   Pr = pressure ratio, upstream / downstream.
   Prinv = pressure ratio, downstream / upstream.
+  rho = mass density.

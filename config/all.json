@@ -17,11 +17,15 @@
         "D_bolt": 6.3,
         "D_washer": 12.5,
 
-        "P_cc": 35e5,
-        "mdot_LOx": 1.2,
-        "mdot_IPA": 0.8,
         "rho_LOx": 1141.0,
         "rho_IPA": 786.0,
+        "mu_LOx": 2.04e-4,
+        "mu_IPA": 2.86e-3,
+        "P_cc": 35e5,
+        "Pr_LOx": 1.25,
+        "Pr_IPA": 1.25,
+        "mdot_LOx": 1.2,
+        "mdot_IPA": 0.8,
 
         "thickness_around_bolt": 6.0,
         "flange_thickness_cc": 7.0,
@@ -93,11 +97,11 @@
             "th_il1": 0.8,
             "th_il2": 0.8,
             "th_nz1": 0.8,
-            "Pr_inj1": 1.25,
-            "Pr_inj2": 1.25,
             "FR_LOx": 2.0,
             "FR_IPA": 4.0,
-            "FR_small": 0.3
+            "FR_small": 0.3,
+            "CR_nz1": 0.25,
+            "CR_nz2": 0.25
         },
 
         "portsize_igniter": "G1/4",

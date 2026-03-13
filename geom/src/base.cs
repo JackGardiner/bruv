@@ -313,10 +313,12 @@ public class Sectioner {
         Space space1 = new(frame1, 0f, +INF);
         Sectioner sectioner = new();
         sectioner.intersect(space0);
-        if (Dtheta > PI)
-            sectioner.union(space1);
-        else
-            sectioner.intersect(space1);
+        if (!nearto(Dtheta, PI)) {
+            if (Dtheta > PI)
+                sectioner.union(space1);
+            else /* Dtheta < PI */
+                sectioner.intersect(space1);
+        }
         return sectioner;
     }
 }
