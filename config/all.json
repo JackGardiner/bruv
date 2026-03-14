@@ -89,6 +89,11 @@
 
         "boltsize_mount": "M6",
 
+        "no_suprt": 40,
+        "Lr_suprt": 5.5,
+        "wi_suprt": 3.5,
+        "FR_suprt": 0.5,
+
         "element": {
             "no_il1": 5,
             "no_il2": 5,

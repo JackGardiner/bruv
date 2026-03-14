@@ -61,6 +61,7 @@ INJECTOR:
   X_nz2 = outer injector element nozzle property.
   X_omw = outer manifold wall property.
   X_plate = base plate propoerty.
+  X_suprt = plate supports property.
 
 
 

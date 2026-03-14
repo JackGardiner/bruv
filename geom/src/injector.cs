@@ -831,6 +831,11 @@ public class Injector : TPIAP.Pea {
         element.initialise();
     }
 
+    public required int no_suprt { get; init; }
+    public required float Lr_suprt { get; init; }
+    public required float wi_suprt { get; init; }
+    public required float FR_suprt { get; init; }
+
     public required string portsize_igniter { get; init; }
     public required string portsize_LOxinlet { get; init; }
     public required string portsize_LOxPT { get; init; }
@@ -1026,33 +1031,26 @@ public class Injector : TPIAP.Pea {
 
         Voxels vox = new();
 
-        // TODO:
-        float min_r = pm.IR_Ioring - 1.3f;
-        float max_r = pm.OR_Ioring + 1.3f;
-        float length = max_r - min_r;
-        float aspect_ratio = 1.5f;
-        float width = length / aspect_ratio;
-
-        // TODO:
-        int no = 40;
-        float min_z = pm.Lz_Ioring + th_plate;
+        float ave_r = ave(pm.IR_Ioring, pm.OR_Ioring);
+        float min_r = ave_r - Lr_suprt/2f;
+        float max_r = ave_r + Lr_suprt/2f;
+        float min_z = th_plate;
         float max_z = vol.z(min_r);
-        List<Vec3> points = Polygon.circle(no, ave(min_r, max_r), 0f, min_z);
+        List<Vec3> points = Polygon.circle(no_suprt, ave_r, 0f, min_z);
 
-        List<Geez.Key> keys = new();
+        List<Geez.Key> keys = new(numel(points));
         foreach (Vec3 p in points) {
             List<Vec2> vertices = [
                 // diamond.
-                new(0f,         -width/2f),
-                new(-length/2f, 0f),
-                new(0f,         +width/2f),
-                new(+length/2f, 0f),
+                new(0f,           -wi_suprt/2f),
+                new(-Lr_suprt/2f, 0f),
+                new(0f,           +wi_suprt/2f),
+                new(+Lr_suprt/2f, 0f),
             ];
-            // TODO:
-            Polygon.fillet(vertices, 3, 0.5f, prec: 2f, only_this_vertex: true);
-            Polygon.fillet(vertices, 2, 0.5f, prec: 2f, only_this_vertex: true);
-            Polygon.fillet(vertices, 1, 0.5f, prec: 2f, only_this_vertex: true);
-            Polygon.fillet(vertices, 0, 0.5f, prec: 2f, only_this_vertex: true);
+            Polygon.fillet(vertices, 3, FR_suprt, prec: 2f);
+            Polygon.fillet(vertices, 2, FR_suprt, prec: 2f);
+            Polygon.fillet(vertices, 1, FR_suprt, prec: 2f);
+            Polygon.fillet(vertices, 0, FR_suprt, prec: 2f);
 
             Mesh m = Polygon.mesh_extruded(
                 Frame.cyl_axial(p), // x = +radial, y = +circumferential
@@ -1143,6 +1141,8 @@ public class Injector : TPIAP.Pea {
             out Voxels neg) {
         neg = new();
         pos = new();
+        if (elementless)
+            return; // no element voxels.
         foreach (Vec2 p in points_inj) {
             element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
             pos.BoolAdd(po);
@@ -1655,12 +1655,14 @@ public class Injector : TPIAP.Pea {
     public bool printable        = false;
     public bool filletless       = false;
     public bool take_screenshots = false;
+    public bool elementless      = false;
     public void set_modifiers(int mods) {
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
         printable        = popbits(ref mods, TPIAP.PRINTABLE);
         filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
+        elementless      = popbits(ref mods, TPIAP.ELEMENTLESS);
         if (mods == 0)
             return;
         throw new Exception("yeah nah dunno what it is");
