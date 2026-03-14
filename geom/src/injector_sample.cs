@@ -134,6 +134,7 @@ public class InjectorSample : TPIAP.Pea {
         /* DATUM? */
         if (!print_resin) { // no datum on resin.
             Vec3 datum_orient = ONE3;
+            float FR_datum = 4f;
             if (datum_on_opposite)
                 datum_orient = flipy(datum_orient);
             Vec3 datum_corner = new(-R, -flat_off, 0f);
@@ -148,14 +149,14 @@ public class InjectorSample : TPIAP.Pea {
                 (Voxels)new Bar(
                     at.translate(datum_orient * datum_corner),
                     th_datum,
-                    R/3f
+                    FR_datum
                 ).at_edge(datum_on_opposite ? Bar.X1_Y0 : Bar.X1_Y1)
                 .extended(EXTRA, Extend.UPDOWN)
                 -
                 (Voxels)new Rod(
-                    at.translate(datum_orient * (datum_corner + uXY3*R/3f)),
+                    at.translate(datum_orient * (datum_corner + uXY3*FR_datum)),
                     th_datum,
-                    R/3f
+                    FR_datum
                 ).extended(EXTRA, Extend.UPDOWN)
                 /* syntax is sick as fr */
             );
