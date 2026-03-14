@@ -1767,7 +1767,7 @@ public static class Geez {
     }
 
     public static IDisposable remember_setup() {
-        Colour bgcol = background_colour;
+        Colour bgcol = Geez.background_colour;
         bool transparent = Geez.transparent;
         bool orbit   = ViewerHack.orbit;
         float zoom   = ViewerHack.future_zoom;
@@ -1777,7 +1777,7 @@ public static class Geez {
         Frame orient = ViewerHack.future_orient;
         float fov    = ViewerHack.future_fov;
         return Scoped.on_leave(() => {
-            background_colour = bgcol;
+            Geez.background_colour = bgcol;
             Geez.transparent = transparent;
             ViewerHack.set_orbit(orbit, false, instant:true, expl: false);
             ViewerHack.set_zoom(zoom,          instant:true, expl: false);
@@ -1790,7 +1790,7 @@ public static class Geez {
 
 
     public class Screenshotta {
-        public ViewAs view_as { get; }
+        public ViewAs view_as { get; set; }
 
         public Screenshotta(in ViewAs view_as) {
             this.view_as = view_as;
@@ -1798,9 +1798,10 @@ public static class Geez {
 
         public void take(string name, bool existok=true) {
             using (remember_setup())
-            using (ViewerHack.locked())
-            using (view_as.now_but_not_forever())
+            using (ViewerHack.locked()) {
+                view_as.now();
                 screenshot(name, existok: existok);
+            }
         }
     }
 
@@ -1821,16 +1822,13 @@ public static class Geez {
         using ManualResetEventSlim done = new();
         ViewerHack.Signal signal = new(done);
 
-        // Ensure the viewer is open.
+        // Firstly, wait for a single valid frame.
         lock (Perv.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
             bool running = Perv.get<bool>(typeof(PicoGK.Library), "bRunning");
             if (!running) {
                 print("ERROR: failed to screenshot because window is closed.");
                 return;
             }
-
-            // Enqueue the actions, ensuring our matrices are set, then ss taken,
-            // then stop blocking this thread.
             var actions = Perv.get<Queue<Viewer.IViewerAction>>(
                 PICOGK_VIEWER,
                 "m_oActions"
@@ -1841,7 +1839,25 @@ public static class Geez {
                 actions.Enqueue(signal);
             }
         }
-        // Wait until ss saved.
+        done.Wait();
+
+        // Theennn wait one more frame to ensure the ss taken in the right
+        // conditions.
+        done.Reset();
+        lock (Perv.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
+            bool running = Perv.get<bool>(typeof(PicoGK.Library), "bRunning");
+            if (!running) {
+                print("ERROR: failed to screenshot because window is closed.");
+                return;
+            }
+            var actions = Perv.get<Queue<Viewer.IViewerAction>>(
+                PICOGK_VIEWER,
+                "m_oActions"
+            );
+            lock (actions) {
+                actions.Enqueue(signal);
+            }
+        }
         done.Wait();
     }
 

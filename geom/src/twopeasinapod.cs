@@ -2,9 +2,11 @@ using static br.Br;
 using br;
 
 using JsonMap = System.Text.Json.Nodes.JsonObject; // object is a stupid name.
+using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
+using BBox3 = PicoGK.BBox3;
 
 public static class TwoPeasInAPod {
 
@@ -506,4 +508,93 @@ public static class TwoPeasInAPod {
         lock (actions)
             actions.Enqueue(new PrintAction(msgs));
     }
+}
+
+
+public class PartMaker : IDisposable {
+    // gripped and ripped from chamber.
+
+    public Voxels voxels { get; set; }
+    public Geez.Cycle key { get; set; }
+    public Geez.Screenshotta? screenshotta { get; set; } // screen shot a
+    protected System.Diagnostics.Stopwatch stopwatch; // cheeky timer.
+
+    public int step_count = 0;
+
+    public string name = "Baby";
+
+    public PartMaker() {
+        voxels = new();
+        key = new();
+        screenshotta = null;
+        stopwatch = new();
+        stopwatch.Start();
+    }
+    public PartMaker(float Lz, float Lr, float Mz)
+        : this(new(new(-Lr, -Lr, Mz - Lz/2f), new(Lr, Lr, Mz + Lz/2f))) {}
+    public PartMaker(BBox3 bounds) : this() {
+        screenshotta = new(
+            new Geez.ViewAs(
+                bounds,
+                theta: torad(135f),
+                phi: torad(105f),
+                bgcol: Geez.BACKGROUND_COLOUR_LIGHT
+            )
+        );
+    }
+
+    public void Dispose() {
+        print($"{name} made in {stopwatch.Elapsed.TotalSeconds:N1}s.");
+        voxels.CalculateProperties(out float vol_mm3, out BBox3 bounds);
+        Vec3 size = bounds.vecSize();
+        print($"- bounds: {size.X:G4}mm x {size.Y:G4}mm x {size.Z:G4}mm");
+        print($"- volume: {vol_mm3*1e-3:G4} mL");
+        print();
+    }
+
+
+    /* concept of "steps", which the construction is broken into. each step is
+       also screenshotted (if requested). */
+
+    public void substep(string msg, bool view_part=false) {
+        if (view_part)
+            key.voxels(voxels);
+        print($"   | {msg}");
+    }
+    public void step(string msg) {
+        ++step_count;
+        if (screenshotta != null)
+            screenshotta.take(step_count.ToString());
+        print($"[{step_count,2}] {msg}");
+    }
+    public void no_step(string msg) {
+        ++step_count;
+        if (screenshotta != null)
+            Geez.wipe_screenshot(step_count.ToString());
+        print($"[--] {msg}");
+    }
+
+
+    /* shorthand for adding/subtracting a component into the part. */
+
+    private void addorsub(bool add, ref Voxels? vox, Geez.Cycle? key,
+            bool keepme, bool view_part) {
+        assert(vox != null);
+        if (add)
+            voxels.BoolAdd(vox!);
+        else
+            voxels.BoolSubtract(vox!);
+        if (view_part && voxels != null)
+            this.key.voxels(voxels);
+        if (key != null)
+            key.clear();
+        if (!keepme)
+            vox = null;
+    }
+    public void add(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
+            bool view_part=true)
+        => addorsub(true, ref vox, key, keepme, view_part);
+    public void sub(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
+            bool view_part=true)
+        => addorsub(false, ref vox, key, keepme, view_part);
 }

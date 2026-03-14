@@ -6,6 +6,7 @@ using Vec2 = System.Numerics.Vector2;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
+using Mesh = PicoGK.Mesh;
 using BBox3 = PicoGK.BBox3;
 
 public class InjectorSample : TPIAP.Pea {
@@ -293,7 +294,7 @@ public class InjectorSample : TPIAP.Pea {
 
         Voxels all = new();
         for (int i=0; i<N; ++i) {
-            print($"Creating injector sample {i}.");
+
             Frame at = get_at(i);
 
             ImageSignedDist img = new(
@@ -302,20 +303,22 @@ public class InjectorSample : TPIAP.Pea {
                 flipy: true
             );
 
-            Voxels vox = make(
+            PartMaker part = new();
+            part.name = $"Injector sample {i}";
+            part.voxels = make(
                 at,
                 elements[i],
                 img,
                 i % 2 == 0
             );
-            Geez.voxels(vox);
-            all.BoolAdd(vox);
+            part.Dispose();
 
-            vox.CalculateProperties(out float vol, out BBox3 bbox);
-            print($"Bounding size: {bbox.vecSize()}");
-            print($"Volume: {vol*1e-3f:F2} mL");
+            all.BoolAdd(part.voxels);
 
-            TPIAP.save_mesh_only($"injector-sample-{i}", new(vox));
+            Mesh mesh = new(part.voxels);
+            Geez.mesh(mesh);
+
+            TPIAP.save_mesh_only($"injector-sample-{i}", mesh);
         }
         return all;
     }

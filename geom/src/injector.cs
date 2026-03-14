@@ -1141,8 +1141,6 @@ public class Injector : TPIAP.Pea {
             out Voxels neg) {
         neg = new();
         pos = new();
-        if (elementless)
-            return; // no element voxels.
         foreach (Vec2 p in points_inj) {
             element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
             pos.BoolAdd(po);
@@ -1394,217 +1392,160 @@ public class Injector : TPIAP.Pea {
 
 
 
-    delegate void _Op(in Voxels vox);
     public Voxels? voxels() {
 
-        // gripped and ripped from chamber.
-
-        /* cheeky timer. */
-        System.Diagnostics.Stopwatch stopwatch = new();
-        stopwatch.Start();
-        using var _ = Scoped.on_leave(() => {
-            print($"Baby made in {stopwatch.Elapsed.TotalSeconds:N1}s.");
-            print();
-        });
-
-
-        /* create the part object and its key. */
-        Voxels part = new();
-        Geez.Cycle key_part = new();
-
-
-        /* create overall bounding box to size screenshots. */
+        // Get overall bounding box to size screenshots.
         float overall_Lr = pm.r_bolt
                          + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
-        float overall_Lz = height;
-        float overall_Mz = overall_Lz/2f;
-        BBox3 overall_bbox = new(
-            new Vec3(-overall_Lr, -overall_Lr, overall_Mz - overall_Lz/2f),
-            new Vec3(+overall_Lr, +overall_Lr, overall_Mz + overall_Lz/2f)
-        );
+        float overall_Lz = height + 3f*EXTRA;
+        float overall_Mz = overall_Lz/2f - EXTRA;
+
+        // Initialise the part manager.
+        using PartMaker part = new(overall_Lz, overall_Lr, overall_Mz);
+        if (!take_screenshots)
+            part.screenshotta = null;
 
 
-        /* screen shot a */
-        Geez.Screenshotta screenshotta = new(
-            new Geez.ViewAs(
-                overall_bbox,
-                theta: torad(135f),
-                phi: torad(105f),
-                bgcol: Geez.BACKGROUND_COLOUR_LIGHT
-            )
-        );
-
-
-        /* concept of "steps", which the construction is broken into. each step
-           is also screenshotted (if requested). */
-        int step_count = 0;
-        void step(string msg, bool view_part=false) {
-            ++step_count;
-            if (view_part)
-                key_part.voxels(part);
-            if (take_screenshots)
-                screenshotta.take(step_count.ToString());
-            print($"[{step_count,2}] {msg}");
-        }
-        void substep(string msg, bool view_part=false) {
-            if (view_part)
-                key_part.voxels(part);
-            print($"   | {msg}");
-        }
-
-        /* shorthand for adding/subtracting a component into the part. */
-        void _op(_Op func, ref Voxels? vox, Geez.Cycle? key, bool keepme,
-                bool view_part) {
-            assert(vox != null);
-            func(vox!);
-            if (view_part)
-                key_part.voxels(part);
-            if (key != null)
-                key.clear();
-            if (!keepme)
-                vox = null;
-        }
-        void add(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
-                bool view_part=true)
-            => _op(part.BoolAdd, ref vox, key, keepme, view_part);
-        void sub(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
-                bool view_part=true)
-            => _op(part.BoolSubtract, ref vox, key, keepme, view_part);
-
-
-        /* perform all the steps of creating the part. */
+        // Create the part.
 
         Geez.Cycle key_plate = new(colour: COLOUR_CYAN);
-        Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
-        Geez.Cycle key_manifold = new(colour: COLOUR_PINK);
-        Geez.Cycle key_supports = new(colour: COLOUR_ORANGE);
-        Geez.Cycle key_igniter = new(colour: COLOUR_WHITE);
-        Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
-        Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
-        Geez.Cycle key_ports = new(colour: COLOUR_RED);
-
         voxels_plate(out Voxels? plate, out Voxels? neg_film_cooling);
         key_plate.voxels(plate);
-        step("created plate.");
+        part.step("created plate.");
 
-        voxels_elements(key_elements, out Voxels? pos_elements,
-                out Voxels? neg_elements);
-        step("created injector elements");
+        Geez.Cycle key_elements = new(colour: COLOUR_GREEN);
+        Voxels? pos_elements;
+        Voxels? neg_elements;
+        if (elementless) {
+            pos_elements = new();
+            neg_elements = new();
+            part.no_step("skipping injector elements (elementless requested)");
+        } else {
+            voxels_elements(key_elements, out pos_elements, out neg_elements);
+            part.step("created injector elements");
+        }
 
+        Geez.Cycle key_manifold = new(colour: COLOUR_PINK);
         Voxels? manifold = voxels_manifold(key_manifold, out ManiVol mani_vol);
-        substep("created manifold walls.");
+        part.substep("created manifold walls.");
 
+        Geez.Cycle key_supports = new(colour: COLOUR_ORANGE);
         Voxels? supports = voxels_supports(key_supports, mani_vol);
-        substep("created manifold supports.");
+        part.substep("created manifold supports.");
 
-        step("created manifold.");
+        part.step("created manifold.");
 
+        Geez.Cycle key_igniter = new(colour: COLOUR_WHITE);
         voxels_igniter(key_igniter, out Voxels? pos_igniter,
                 out Voxels? neg_igniter, out Voxels? neg_igniter_no_tap);
-        step("created igniter port.");
+        part.step("created igniter port.");
 
         voxels_bolts(out Voxels? neg_bolt_hole, out Voxels? neg_bolt_clearance);
-        substep("created bolts.");
-        Voxels? neg_orings = voxels_orings();
-        substep("created O-rings.");
-        Voxels? flange = voxels_flange(key_flange);
-        step("created flange.");
+        part.substep("created bolts.");
 
+        Voxels? neg_orings = voxels_orings();
+        part.substep("created O-rings.");
+
+        Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
+        Voxels? flange = voxels_flange(key_flange);
+        part.step("created flange.");
+
+        Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
         voxels_gussets(key_gussets, mani_vol, out Voxels? gussets,
                 out Voxels? neg_mounting);
-        step("created gussets.");
+        part.step("created gussets.");
 
+        Geez.Cycle key_ports = new(colour: COLOUR_RED);
         voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
                 out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
-        step("created ports.");
+        part.step("created ports.");
 
-        add(ref manifold, key_manifold);
-        substep("added manifold walls.");
-        add(ref pos_igniter, key_igniter);
-        substep("added igniter.");
-        add(ref flange, key_flange);
-        substep("added flange.");
-        add(ref gussets, key_gussets);
-        substep("added gussets.");
-        add(ref pos_ports, key_ports);
-        substep("added ports.");
+        part.add(ref manifold, key_manifold);
+        part.substep("added manifold walls.");
+        part.add(ref pos_igniter, key_igniter);
+        part.substep("added igniter.");
+        part.add(ref flange, key_flange);
+        part.substep("added flange.");
+        part.add(ref gussets, key_gussets);
+        part.substep("added gussets.");
+        part.add(ref pos_ports, key_ports);
+        part.substep("added ports.");
 
-        step("added upper material.");
+        part.step("added upper material.");
 
-        sub(ref neg_bolt_clearance, keepme: true);
-        substep("subtracted mating bolt clearance (1/2).");
+        part.sub(ref neg_bolt_clearance, keepme: true);
+        part.substep("subtracted mating bolt clearance (1/2).");
 
-        sub(ref neg_igniter_no_tap);
-        substep("subtracted igniter hole.");
+        part.sub(ref neg_igniter_no_tap);
+        part.substep("subtracted igniter hole.");
 
-        sub(ref neg_ports_no_tap);
-        substep("subtracted port holes.");
+        part.sub(ref neg_ports_no_tap);
+        part.substep("subtracted port holes.");
 
         if (!filletless) {
-            Fillet.both(part,
+            Fillet.both(part.voxels,
                 concave_FR: pm.concave_fillet_radius,
                 convex_FR: pm.convex_fillet_radius,
                 inplace: true
             );
-            substep("filleted part.", view_part: true);
+            part.substep("filleted part.", view_part: true);
         } else {
-            substep("skipping supports fillet.");
+            part.substep("skipping supports fillet.");
         }
 
-        step("partial clean up");
+        part.step("partial clean up");
 
 
-        add(ref plate, key_plate);
-        substep("added base plate.");
-        add(ref supports, key_supports);
-        substep("added supports.");
+        part.add(ref plate, key_plate);
+        part.substep("added base plate.");
+        part.add(ref supports, key_supports);
+        part.substep("added supports.");
         // Fillet supports for strength. Unfortunately its just for the best to
         // be part-wide.
         if (!filletless) {
-            Fillet.concave(part, 0.8f, inplace: true); // TODO:
-            substep("filleted supports.", view_part: true);
+            Fillet.concave(part.voxels, 1.5f*FR_suprt, inplace: true);
+            part.substep("filleted supports.", view_part: true);
         } else {
-            substep("skipping supports fillet.");
+            part.substep("skipping supports fillet.");
         }
 
-        step("added lower material.");
+        part.step("added lower material.");
 
-        add(ref pos_elements);
-        substep("added injector elements.");
-        sub(ref neg_elements, key_elements);
-        substep("subtracted injector elements.");
+        part.add(ref pos_elements);
+        part.substep("added injector elements.");
+        part.sub(ref neg_elements, key_elements);
+        part.substep("subtracted injector elements.");
 
-        step("merged injector elements");
+        part.step("merged injector elements");
 
-        sub(ref neg_film_cooling);
-        substep("subtracted film cooling holes.");
-        sub(ref neg_bolt_hole);
-        substep("subtracted mating bolt hole.");
-        sub(ref neg_bolt_clearance);
-        substep("subtracted mating bolt clearance (2/2).");
-        sub(ref neg_mounting);
-        substep("subtracted mounting bolts.");
-        sub(ref neg_orings);
-        substep("subtracted O-rings.");
-        sub(ref neg_igniter);
-        substep("subtracted igniter void (2/2).");
-        sub(ref neg_ports);
-        substep("subtracted port voids (2/2).");
+        part.sub(ref neg_film_cooling);
+        part.substep("subtracted film cooling holes.");
+        part.sub(ref neg_bolt_hole);
+        part.substep("subtracted mating bolt hole.");
+        part.sub(ref neg_bolt_clearance);
+        part.substep("subtracted mating bolt clearance (2/2).");
+        part.sub(ref neg_mounting);
+        part.substep("subtracted mounting bolts.");
+        part.sub(ref neg_orings);
+        part.substep("subtracted O-rings.");
+        part.sub(ref neg_igniter);
+        part.substep("subtracted igniter void (2/2).");
+        part.sub(ref neg_ports);
+        part.substep("subtracted port voids (2/2).");
 
-        step("removed voids.");
+        part.step("removed voids.");
 
-        part.BoolSubtract(new Rod(
+        part.voxels.BoolSubtract(new Rod(
             new(),
             -3f*EXTRA,
             overall_Lr + EXTRA
         ));
-        substep("clipped bottom.", view_part: true);
+        part.substep("clipped bottom.", view_part: true);
 
-        step("finished.");
+        part.step("finished.");
 
-
-        return part;
+        return part.voxels;
     }
 
 

@@ -1467,133 +1467,62 @@ public class Chamber : TPIAP.Pea {
 
     /* pea interface: */
 
-    delegate void _Op(in Voxels vox);
     public Voxels? voxels() {
 
-        /* cheeky timer. */
-        System.Diagnostics.Stopwatch stopwatch = new();
-        stopwatch.Start();
-        using var _ = Scoped.on_leave(() => {
-            print($"Baby made in {stopwatch.Elapsed.TotalSeconds:N1}s.");
-            print();
-        });
-
-
-        /* create the part object and its key. */
-        Voxels part = new();
-        Geez.Cycle key_part = new();
-
-
-        /* create overall bounding box to size screenshots. */
+        // Get overall bounding box to size screenshots.
         float overall_Lr = pm.r_bolt
                          + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
         float overall_Lz = cnt_z6 - cnt_z0 + 2f*EXTRA;
-        float overall_Mz = overall_Lz/2f - EXTRA;
-        BBox3 overall_bbox = new(
-            new Vec3(-overall_Lr, -overall_Lr, overall_Mz - overall_Lz/2f),
-            new Vec3(+overall_Lr, +overall_Lr, overall_Mz + overall_Lz/2f)
-        );
-        // Since we're actually viewing a pipe, not a box, scale down a little.
-        // overall_bbox.Grow(-0.2f*overall_Lr);
+        float overall_Mz = overall_Lz/2f;
+
+        // Initialise the part manager.
+        using PartMaker part = new(overall_Lz, overall_Lr, overall_Mz);
+        if (!take_screenshots)
+            part.screenshotta = null;
 
 
-        /* screen shot a */
-        Geez.Screenshotta screenshotta = new(
-            new Geez.ViewAs(
-                overall_bbox,
-                theta: torad(135f),
-                phi: torad(105f),
-                bgcol: Geez.BACKGROUND_COLOUR_LIGHT
-            )
-        );
-
-
-        /* concept of "steps", which the construction is broken into. each step
-           is also screenshotted (if requested). */
-        int step_count = 0;
-        void step(string msg, bool view_part=false) {
-            ++step_count;
-            if (view_part)
-                key_part.voxels(part);
-            if (take_screenshots)
-                screenshotta.take(step_count.ToString());
-            print($"[{step_count,2}] {msg}");
-        }
-        void substep(string msg, bool view_part=false) {
-            if (view_part)
-                key_part.voxels(part);
-            print($"   | {msg}");
-        }
-        void no_step(string msg) {
-            ++step_count;
-            if (take_screenshots)
-                Geez.wipe_screenshot(step_count.ToString());
-            print($"[--] {msg}");
-        }
-
-
-        /* shorthand for adding/subtracting a component into the part. */
-        void _op(_Op func, ref Voxels? vox, Geez.Cycle? key, bool keepme,
-                bool view_part) {
-            assert(vox != null);
-            func(vox!);
-            if (view_part)
-                key_part.voxels(part);
-            if (key != null)
-                key.clear();
-            if (!keepme)
-                vox = null;
-        }
-        void add(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
-                bool view_part=true)
-            => _op(part.BoolAdd, ref vox, key, keepme, view_part);
-        void sub(ref Voxels? vox, Geez.Cycle? key=null, bool keepme=false,
-                bool view_part=true)
-            => _op(part.BoolSubtract, ref vox, key, keepme, view_part);
-
-
-        /* perform all the steps of creating the part. */
+        // Create the part.
 
         Geez.Cycle key_gas = new(colour: COLOUR_RED);
         Voxels? gas = voxels_gas(key_gas);
-        step("created gas cavity.");
+        part.step("created gas cavity.");
 
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
         Voxels? neg_mani = voxels_neg_mani(key_mani, out Frame inlet);
         Voxels? pos_mani = voxels_pos_mani(inlet);
-        step("created manifold.");
+        part.step("created manifold.");
 
         Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
         Voxels? chnl = voxels_chnl(key_chnl);
-        step("created channels.");
+        part.step("created channels.");
 
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
         voxels_tc(key_tc, out Voxels? neg_tc, out Voxels? pos_tc);
-        step("created thermocouples.");
+        part.step("created thermocouples.");
 
         Geez.Cycle key_bolts = new(colour: COLOUR_GREY);
         voxels_neg_bolts(key_bolts, out Voxels? neg_bolt_hole,
                 out Voxels? neg_bolt_clearance);
-        step("created bolt holes.");
+        part.step("created bolt holes.");
 
         Geez.Cycle key_flange = new(colour: COLOUR_YELLOW);
         Voxels? flange = voxels_flange(key_flange);
-        step("created flange.");
+        part.step("created flange.");
 
         Geez.Cycle key_branding = new(colour: COLOUR_CYAN);
         Voxels? branding = brandingless
                          ? null
                          : voxels_branding(key_branding);
         if (branding != null)
-            step("created branding.");
+            part.step("created branding.");
         else if (brandingless)
-            no_step("skipping branding (brandingless requested)");
+            part.no_step("skipping branding (brandingless requested)");
         else
-            no_step("skipping branding (voxel size too large, would fail).");
+            part.no_step("skipping branding (voxel size too large).");
 
-        part = voxels_outer(key_part);
-        substep("contoured outer wall.");
+        part.voxels = voxels_outer(part.key);
+        part.substep("contoured outer wall.");
 
         // Fillet the throat to stop it looking like a discontinuity lmao.
         if (!filletless) {
@@ -1601,81 +1530,81 @@ public class Chamber : TPIAP.Pea {
             Voxels mask = new Donut(
                 new Frame(cnt_z4*uZ3),
                 R_tht + th_iw + th_chnl + th_ow,
-                FR + 3f
+                FR + 8f
             );
-            using (Lifted l = new(part, mask))
+            using (Lifted l = new(part.voxels, mask))
                 Fillet.concave(l.vox, FR, inplace: true);
-            substep("filleted throat.", view_part: true);
+            part.substep("filleted throat.", view_part: true);
         } else {
-            substep("skipping throat fillet.");
+            part.substep("skipping throat fillet.");
         }
 
-        step("created outer wall.");
+        part.step("created outer wall.");
 
-        add(ref pos_mani);
-        substep($"added positive manifold.");
-        add(ref pos_tc, key_tc);
-        substep($"added thermocouples.");
-        add(ref flange, key_flange);
-        substep($"added flange.");
+        part.add(ref pos_mani);
+        part.substep($"added positive manifold.");
+        part.add(ref pos_tc, key_tc);
+        part.substep($"added thermocouples.");
+        part.add(ref flange, key_flange);
+        part.substep($"added flange.");
 
-        step($"added outer componenets.");
+        part.step($"added outer componenets.");
 
-        part.BoolSubtract(new Rod(
+        part.voxels.BoolSubtract(new Rod(
             new Frame(cnt_z6*uZ3),
             2f*EXTRA,
             cnt_r6 + th_iw + th_chnl + th_ow + 2f*EXTRA
         ));
-        substep("clipped top excess.", view_part: true);
+        part.substep("clipped top excess.", view_part: true);
 
-        sub(ref neg_bolt_clearance, keepme: true);
-        substep("subtracted bolt hole clearance (1/2).");
+        part.sub(ref neg_bolt_clearance, keepme: true);
+        part.substep("subtracted bolt hole clearance (1/2).");
 
         if (!filletless) {
-            Fillet.both(part,
+            Fillet.both(part.voxels,
                 concave_FR: pm.concave_fillet_radius,
                 convex_FR: pm.convex_fillet_radius,
                 inplace: true
             );
-            substep("filleted part.", view_part: true);
+            part.substep("filleted part.", view_part: true);
         } else {
-            substep("skipping part fillet.");
+            part.substep("skipping part fillet.");
         }
 
-        step("partial clean up.");
+        part.step("partial clean up.");
 
-        sub(ref gas, key_gas);
-        substep("subtracted gas cavity.");
-        sub(ref chnl, key_chnl);
-        substep("subtracted channels.");
-        sub(ref neg_mani, key_mani);
-        substep("subtracted negative manifold.");
-        sub(ref neg_tc);
-        substep("subtracted negative thermocouples.");
-        sub(ref neg_bolt_clearance);
-        substep("subtracted bolt hole clearance (2/2).");
-        sub(ref neg_bolt_hole, key_bolts);
-        substep("subtracted bolt hole.");
+        part.sub(ref gas, key_gas);
+        part.substep("subtracted gas cavity.");
+        part.sub(ref chnl, key_chnl);
+        part.substep("subtracted channels.");
+        part.sub(ref neg_mani, key_mani);
+        part.substep("subtracted negative manifold.");
+        part.sub(ref neg_tc);
+        part.substep("subtracted negative thermocouples.");
+        part.sub(ref neg_bolt_clearance);
+        part.substep("subtracted bolt hole clearance (2/2).");
+        part.sub(ref neg_bolt_hole, key_bolts);
+        part.substep("subtracted bolt hole.");
 
-        step($"added inner componenets.");
+        part.step($"added inner componenets.");
 
         if (branding != null) {
-            add(ref branding, key_branding);
-            substep("added branding.");
+            part.add(ref branding, key_branding);
+            part.substep("added branding.");
         } else {
-            substep("no branding to add.");
+            part.substep("no branding to add.");
         }
 
-        part.BoolSubtract(new Rod(
+        part.voxels.BoolSubtract(new Rod(
             new Frame(ZERO3, -uZ3),
             2f*EXTRA,
             pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
         ));
-        substep("clipped bottom excess.", view_part: true);
+        part.substep("clipped bottom excess.", view_part: true);
 
-        step("finished.");
+        part.step("finished.");
 
-        return part;
+        return part.voxels;
     }
 
 
@@ -1866,8 +1795,6 @@ public class Chamber : TPIAP.Pea {
     }
 
 
-    // not part of tpiap.pea but invoked when tpiap constructors the chamber
-    // object.
     public void initialise() {
         initialise_cnt();
         initialise_chnl();
