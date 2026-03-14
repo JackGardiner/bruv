@@ -1289,12 +1289,17 @@ public class Injector : TPIAP.Pea {
                 frames.Add(bot.lerp(top, t));
             }
 
+            // Extend up by `EXTRA`.
+            frames.Add(top.transz(EXTRA));
+            vertices.AddRange(vertices[(numel(vertices) - N)..]);
+
             // Rect->circle + base.
             Mesh m = Polygon.mesh_swept(new FramesSequence(frames), vertices);
             pos.BoolAdd(new(m));
 
-            // Bolt hole.
+            // Bolt hole + clean top.
             neg.BoolAdd(tap_mount.hole(top));
+            neg.BoolAdd(new Rod(top, 2f*EXTRA, 2f*strut_radius));
 
             key.voxels(pos);
         }
@@ -1312,7 +1317,7 @@ public class Injector : TPIAP.Pea {
 
 
 
-    protected void voxels_ports(Geez.Cycle key, in ManiVol mani_vol,
+    protected void voxels_ports(Geez.Cycle key, ManiVol mani_vol,
             out Voxels pos, out Voxels neg, out Voxels neg_no_tap) {
 
         // fucking c sharp cannot access out var from local function.
@@ -1323,10 +1328,15 @@ public class Injector : TPIAP.Pea {
         List<Geez.Key> keys = new();
         void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
                 in Voxels? sub_pos=null, in Voxels? sub_neg=null) {
-            Voxels this_pos = new Rod(at, -height - EXTRA/2f, D_h/2f + th_h);
+            Flats flats = new Flats(tap, th);
+            Voxels this_pos = flats.boss(at);
+            this_pos.BoolAdd(new Rod(at, -height, flats.r));
+            this_pos.BoolSubtract(mani_vol.volume_entire);
+
+            this_pos.BoolAdd(new Rod(at, -height - EXTRA/2f, D_h/2f + th_h));
             Voxels this_neg_no_tap = new Rod(at, -height - 2f*EXTRA, D_h/2f);
             Voxels this_neg = this_neg_no_tap.voxDuplicate();
-            this_pos.BoolAdd(new Flats(tap, th).boss(at));
+
             this_neg.BoolAdd(tap.hole(at));
             if (sub_pos != null)
                 this_pos.BoolSubtract(sub_pos);
@@ -1531,12 +1541,19 @@ public class Injector : TPIAP.Pea {
         sub(ref neg_ports_no_tap);
         substep("subtracted port holes.");
 
-        Fillet.both(part,
-            concave_FR: pm.concave_fillet_radius,
-            convex_FR: pm.convex_fillet_radius,
-            inplace: true
-        );
-        step("filleted part.", view_part: true);
+        if (!filletless) {
+            Fillet.both(part,
+                concave_FR: pm.concave_fillet_radius,
+                convex_FR: pm.convex_fillet_radius,
+                inplace: true
+            );
+            substep("filleted part.", view_part: true);
+        } else {
+            substep("skipping supports fillet.");
+        }
+
+        step("partial clean up");
+
 
         add(ref plate, key_plate);
         substep("added base plate.");
@@ -1544,8 +1561,12 @@ public class Injector : TPIAP.Pea {
         substep("added supports.");
         // Fillet supports for strength. Unfortunately its just for the best to
         // be part-wide.
-        Fillet.concave(part, 0.8f, inplace: true); // TODO:
-        substep("filleted supports.", view_part: true);
+        if (!filletless) {
+            Fillet.concave(part, 0.8f, inplace: true); // TODO:
+            substep("filleted supports.", view_part: true);
+        } else {
+            substep("skipping supports fillet.");
+        }
 
         step("added lower material.");
 
@@ -1632,10 +1653,12 @@ public class Injector : TPIAP.Pea {
 
     public bool minimise_mem     = false;
     public bool printable        = false;
+    public bool filletless       = false;
     public bool take_screenshots = false;
     public void set_modifiers(int mods) {
-        _                = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
         printable        = popbits(ref mods, TPIAP.PRINTABLE);
+        filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods == 0)
