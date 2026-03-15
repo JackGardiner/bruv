@@ -57,6 +57,10 @@ public static partial class Br {
     public static int numel<T>(T[] x) => x.Length;
     public static int numel<T>(IReadOnlyCollection<T> x) => x.Count;
 
+    /* slang. */
+    public static bool yeah => true;
+    public static bool nah => false;
+
     /* swap me */
     public static void swap<T>(ref T a, ref T b) {
         (b, a) = (a, b);

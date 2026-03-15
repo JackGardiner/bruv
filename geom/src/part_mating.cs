@@ -6,7 +6,7 @@ public class PartMating {
     public required float R_cc { get; init; }
 
     public required float Mr_chnl { get; init; }
-    public required float min_wi_chnl { get; init; }
+    public required float max_th_chnl { get; init; }
 
     public required float IR_Ioring { get; init; }
     public required float IR_Ooring { get; init; }

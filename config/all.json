@@ -3,7 +3,7 @@
         "R_cc": 50.0,
 
         "Mr_chnl": 60.0,
-        "min_wi_chnl": 2.0,
+        "max_th_chnl": 3.0,
 
         "IR_Ioring": 52.5,
         "OR_Ioring": 55.5,

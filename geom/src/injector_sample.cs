@@ -171,7 +171,7 @@ public class InjectorSample : TPIAP.Pea {
         Tapping tap = new("Rc1/8", printable);
         // Drill thru in resin.
         if (print_resin)
-            tap.extra_depth = L_port - tap.straight_depth + 4f;
+            tap.extra_length = L_port - tap.straight_length + 4f;
 
         float r_port = tap.major_radius + tap.taper_offset(0f) + 5f;
         // float spanner_IPA = 18f;
@@ -192,7 +192,7 @@ public class InjectorSample : TPIAP.Pea {
         Frame at1 = new Frame.Cyl(at).radial(
             new(interior.r + L_port, 0f, r_port)
         );
-        Voxels port_IPA = tap.hole(at1);
+        Voxels port_IPA = tap.at(at1);
         port_IPA.BoolAdd(new Bar(
             at1.rotxy(PI_4),
             -magxy(at / at1.pos),
@@ -208,7 +208,7 @@ public class InjectorSample : TPIAP.Pea {
         Voxels port_LOx = new Flats(r_port, L_port + R, 0f).boss(at0);
         port_LOx.BoolSubtract(Cone.phied(top_cone.inner_tip, PI_4, 200f));
         vox.BoolAdd(port_LOx);
-        vox.BoolSubtract(tap.hole(at0));
+        vox.BoolSubtract(tap.at(at0));
         vox.BoolSubtract(new Rod(at0, -L_port - 0.2f, tap.bore_radius));
 
 

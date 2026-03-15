@@ -160,24 +160,21 @@ public static class Polygon {
     }
 
 
-    public static Vec2 line_intersection(Vec2 a0, Vec2 a1, Vec2 b0, Vec2 b1,
-            out bool outside) {
+    public static Vec2 line_intersection(Vec2 a0, Vec2 a1, Vec2 b0, Vec2 b1) {
         Vec2 Da = a1 - a0;
         Vec2 Db = b1 - b0;
         float den = cross(Da, Db);
         assert(!nearzero(den));
         float t = cross(b0 - a0, Db) / den;
-        outside = !within(t, 0f, 1f);
         return a0 + t*Da;
     }
 
-    public static Vec3 plane_line_intersection(Vec3 a0, Vec3 a1, Vec3 p, Vec3 n,
-            out bool outside) {
+    public static Vec3 plane_line_intersection(Vec3 a0, Vec3 a1, Vec3 p,
+            Vec3 n) {
         Vec3 Da = a1 - a0;
         float den = dot(n, Da);
         assert(!nearzero(den));
         float t = dot(p - a0, n) / den;
-        outside = !within(t, 0f, 1f);
         return a0 + t*Da;
     }
 
@@ -294,7 +291,7 @@ public static class Polygon {
                 // extend segment ab.
                 int i_n2 = (i - 2 + N) % N;
                 assert_idx(i_n2, N);
-                Vec2 new_a = line_intersection(vertices[i_n2], a, b, c, out _);
+                Vec2 new_a = line_intersection(vertices[i_n2], a, b, c);
                 vertices[i_n1] = new_a;
                 vertices.RemoveAt(i);
                 i = i_n1;
@@ -302,7 +299,7 @@ public static class Polygon {
                 // extend segment bc.
                 int i_p2 = (i + 2 + N) % N;
                 assert_idx(i_p2, N);
-                Vec2 new_c = line_intersection(vertices[i_p2], c, b, a, out _);
+                Vec2 new_c = line_intersection(vertices[i_p2], c, b, a);
                 vertices[i_p1] = new_c;
                 vertices.RemoveAt(i);
                 // i unchanged.
@@ -366,7 +363,6 @@ public static class Polygon {
                 points.Add(frompol(r[j], theta0[j] + i*TWOPI/no[j]));
         }
         return points;
-
     }
 
     public static List<Vec3> circle(int no, float r, float theta0, float z)

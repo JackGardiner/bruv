@@ -1101,8 +1101,9 @@ public class Chamber : TPIAP.Pea {
             FR_inlet + 2*EXTRA,
             SQRT2*tap_inlet.minor_diameter + EXTRA)
         );
-        Frame inlet_out = inlet.transz(tap_inlet.threaded_depth + 0.8f*FR_inlet);
-        vox.BoolAdd(tap_inlet.hole(inlet_out));
+        Frame inlet_out = inlet.transz(tap_inlet.threaded_length
+                                     + 0.8f*FR_inlet);
+        vox.BoolAdd(tap_inlet.at(inlet_out));
         key.cycle(Geez.voxels(vox));
 
         return vox;
@@ -1134,8 +1135,7 @@ public class Chamber : TPIAP.Pea {
             points.Add(
                 Polygon.line_intersection(
                     points[^1], points[^1] - ONE2,
-                    points[0], points[0] - uX2,
-                    out _
+                    points[0], points[0] - uX2
                 )
             );
             Polygon.fillet(points, 2, 7f);
@@ -1154,7 +1154,7 @@ public class Chamber : TPIAP.Pea {
         }
 
         float zextra = 2.5f;
-        float inlet_Lz = tap_inlet.threaded_depth + 0.8f*FR_inlet;
+        float inlet_Lz = tap_inlet.threaded_length + 0.8f*FR_inlet;
         float inlet_R = tap_inlet.major_radius + th_inlet;
         Frame inlet_end = inlet.transz(inlet_Lz);
         // +z = +normal, +x = +circum
@@ -1249,10 +1249,10 @@ public class Chamber : TPIAP.Pea {
         foreach (Vec3 p in points) {
             Frame frame = Frame.cyl_radial(p);
             float Dz = cnt_radius_at(p.Z,
-                    th_iw + th_chnl + th_ow + 5f + tap_tc.straight_depth, true);
+                    th_iw + th_chnl + th_ow + 5f + tap_tc.straight_length, true);
             Dz -= magxy(p);
 
-            Voxels this_neg = tap_tc.hole(frame.transz(Dz));
+            Voxels this_neg = tap_tc.at(frame.transz(Dz));
             this_neg.BoolAdd(new Rod(
                 frame,
                 Dz,
@@ -1353,8 +1353,7 @@ public class Chamber : TPIAP.Pea {
             if (A.Y < B.Y) {
                 Vec2 C = Polygon.line_intersection(
                     A, tracexy[^1],
-                    B, tracexy[0],
-                    out _
+                    B, tracexy[0]
                 );
                 tracexy.Add(C);
             } else {
@@ -1517,7 +1516,7 @@ public class Chamber : TPIAP.Pea {
         if (branding != null)
             part.step("created branding.");
         else if (brandingless)
-            part.no_step("skipping branding (brandingless requested)");
+            part.no_step("skipping branding (brandingless requested).");
         else
             part.no_step("skipping branding (voxel size too large).");
 
@@ -1536,7 +1535,7 @@ public class Chamber : TPIAP.Pea {
                 Fillet.concave(l.vox, FR, inplace: true);
             part.substep("filleted throat.", view_part: true);
         } else {
-            part.substep("skipping throat fillet.");
+            part.substep("skipping throat fillet (filletless requested).");
         }
 
         part.step("created outer wall.");
@@ -1568,7 +1567,7 @@ public class Chamber : TPIAP.Pea {
             );
             part.substep("filleted part.", view_part: true);
         } else {
-            part.substep("skipping part fillet.");
+            part.substep("skipping part fillet (filletless requested).");
         }
 
         part.step("partial clean up.");
@@ -1763,16 +1762,21 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Tapping tap = new("Rc1/8", false){
-            extra_depth = 0f,
-        };
+        Tapping tap = new("Rc1/8");
+        Studding stud = new("Rc1/8");
+        tap.right_handed = false;
+        stud.right_handed = false;
 
         Frame frame = new();
-        // frame = frame.rotzx(PI_2 + PI_4);
 
-        Geez.tapping(tap, frame);
-        Geez.voxels(tap.hole(frame), COLOUR_RED);
-        Geez.voxels(new Flats(tap, 2f).boss(frame));
+        Geez.threads(tap, frame);
+        Geez.threads(stud, frame.transz(-tap.threaded_length + tap.gauge_length
+                     + stud.threaded_length - stud.gauge_length));
+        Voxels hole = new Bar(new(), -30f, 30f);
+        hole.BoolSubtract(tap.at(frame, extra: 3f));
+        hole.BoolIntersect(new Bar(new(), -40f, 40f).at_face(Bar.Y1));
+        Geez.voxels(hole, COLOUR_RED);
+        Geez.voxels(stud.at(frame, tap, extra: 3f), COLOUR_BLUE);
     }
 
 
@@ -1819,7 +1823,7 @@ public class Chamber : TPIAP.Pea {
         assert(cnt_rP > cnt_r5, $"rP={cnt_rP}, r5={cnt_r5}");
         assert(cnt_rP < cnt_r6, $"rP={cnt_rP}, r6={cnt_r6}");
 
-        assert(nearto(th_chnl, pm.min_wi_chnl) || th_chnl > pm.min_wi_chnl,
-                $"th_chnl={th_chnl}, min_wi_chnl={pm.min_wi_chnl}");
+        assert(nearto(th_chnl, pm.max_th_chnl) || th_chnl < pm.max_th_chnl,
+                $"th_chnl={th_chnl}, max_th_chnl={pm.max_th_chnl}");
     }
 }

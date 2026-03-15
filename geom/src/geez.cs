@@ -2675,47 +2675,55 @@ public static class Geez {
     }
 
 
-    public static Key tapping(in Tapping tap, in Frame face_out) {
+    public static Key threads(in Threads t, in Frame face_out) {
         List<Key> keys = [
             rod(new(
-                face_out.transz(-tap.threaded_depth + tap.gauge_depth),
+                face_out.transz(-t.threaded_length + t.gauge_length),
                 0.01f,
-                tap.major_radius
+                t.major_radius
             ), COLOUR_PINK, columns: 0),
             rod(new(
-                face_out.transz(-tap.threaded_depth),
+                face_out.transz(-t.threaded_length),
                 0.01f,
-                tap.major_radius + tap.taper_offset(tap.threaded_depth)
+                t.major_radius + t.taper_offset(t.threaded_length)
             ), COLOUR_PINK, columns: 0),
             rod(new(
-                face_out.transz(-tap.threaded_depth + tap.pitch),
+                face_out.transz(-t.threaded_length + t.pitch),
                 0.01f,
-                tap.major_radius
-                    + tap.taper_offset(tap.threaded_depth - tap.pitch)
+                t.major_radius + t.taper_offset(t.threaded_length - t.pitch)
             ), COLOUR_PINK, columns: 0),
 
             cone(new(
-                face_out,
-                -tap.straight_depth,
-                tap.minor_radius + tap.taper_offset(0f),
-                tap.minor_radius + tap.taper_offset(tap.straight_depth)
+                face_out.transz(t.incomplete_upper_length),
+                -t.straight_length,
+                t.minor_radius + t.taper_offset(0f),
+                t.minor_radius + t.taper_offset(t.straight_length)
             ), COLOUR_RED, columns: 8),
             cone(new(
-                face_out,
-                -tap.straight_depth,
-                tap.major_radius + tap.taper_offset(0f),
-                tap.major_radius + tap.taper_offset(tap.straight_depth)
+                face_out.transz(t.incomplete_upper_length),
+                -t.straight_length,
+                t.major_radius + t.taper_offset(0f),
+                t.major_radius + t.taper_offset(t.straight_length)
             ), COLOUR_BLUE, columns: 8),
-
-            cone(new(
-                face_out,
-                -tap.threaded_depth,
-                tap.minor_radius + tap.minor_thread_truncation
-                    + tap.taper_offset(0f),
-                tap.minor_radius + tap.minor_thread_truncation
-                    + tap.taper_offset(tap.threaded_depth)
-            ), COLOUR_GREEN, columns: 8)
         ];
+        if (t.inner_thread_truncation != 0f) {
+            keys.Add(cone(new(
+                face_out,
+                -t.threaded_length,
+                t.minor_radius + t.inner_thread_truncation + t.taper_offset(0f),
+                t.minor_radius + t.inner_thread_truncation
+                    + t.taper_offset(t.threaded_length)
+            ), COLOUR_GREEN, columns: 8));
+        }
+        if (t.outer_thread_truncation != 0f) {
+            keys.Add(cone(new(
+                face_out,
+                -t.threaded_length,
+                t.major_radius - t.outer_thread_truncation + t.taper_offset(0f),
+                t.major_radius - t.outer_thread_truncation
+                    + t.taper_offset(t.threaded_length)
+            ), COLOUR_YELLOW, columns: 8));
+        }
         return group(keys);
     }
 
