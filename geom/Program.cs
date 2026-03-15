@@ -33,7 +33,7 @@ void wrapped_task() {
         // this function returns (and the thread is terminated).
         if (leave_viewer_open) {
             // Cheeky private variable bypass.
-            PervField gimme = new(typeof(PicoGK.Library), "bRunning");
+            PierceField gimme = new(typeof(PicoGK.Library), "bRunning");
             for (;;) {
                 bool running = gimme.maybe_get<bool?>() ?? false;
                 if (!running)
