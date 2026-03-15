@@ -769,8 +769,6 @@ public class Injector : TPIAP.Pea {
 
     public required PartMating pm { get; init; }
 
-    public required float height { get; init; }
-
     public float Ir_chnl => pm.Mr_chnl - 0.5f*pm.max_th_chnl;
     public float Or_chnl => pm.Mr_chnl + 0.5f*pm.max_th_chnl;
 
@@ -799,6 +797,7 @@ public class Injector : TPIAP.Pea {
 
     public required string boltsize_mount { get; init; }
     public required float r_mount { get; init; }
+    public required float z_mount { get; init; }
     public Tapping tap_mount => new(boltsize_mount, printable)
             { extra_length = 3f };
 
@@ -818,6 +817,11 @@ public class Injector : TPIAP.Pea {
     public required string portsize_LOxPT { get; init; }
     public required string portsize_IPAPT { get; init; }
     public required string portsize_CCPT { get; init; }
+    public required float z_igniter { get; init; }
+    public required float z_LOxinlet { get; init; }
+    public required float z_LOxPT { get; init; }
+    public required float z_IPAPT { get; init; }
+    public required float z_CCPT { get; init; }
     public required float th_igniter { get; init; }
     public required float th_LOxinlet { get; init; }
     public required float th_LOxPT { get; init; }
@@ -1056,7 +1060,7 @@ public class Injector : TPIAP.Pea {
         // Fluid volume.
         neg = new Rod(
             new(th_plate*uZ3),
-            height - th_plate,
+            z_igniter - th_plate,
             D_igniterh/2f
         ).extended(EXTRA, Extend.UP);
         neg.BoolAdd(new Rod(
@@ -1066,14 +1070,14 @@ public class Injector : TPIAP.Pea {
         ).extended(EXTRA, Extend.UPDOWN));
 
         neg_no_tap = neg.voxDuplicate();
-        neg.BoolAdd(tap_igniter.at(new(height*uZ3)));
+        neg.BoolAdd(tap_igniter.at(new(z_igniter*uZ3)));
 
         // Filled pipe.
         pos = new Flats(tap_igniter, th_igniter)
-                .boss(new Frame(height*uZ3).rotxy(PI_4));
+                .boss(new Frame(z_igniter*uZ3).rotxy(PI_4));
         pos.BoolAdd(new Rod(
             new(),
-            height,
+            z_igniter,
             D_igniterh/2f + th_igniterh
         ));
         key.voxels(pos);
@@ -1141,7 +1145,7 @@ public class Injector : TPIAP.Pea {
             // for washer/nut.
             clearance.BoolAdd(new Rod(
                 new(rejxy(p, pm.flange_thickness_inj)),
-                height - pm.flange_thickness_inj,
+                z_mount - pm.flange_thickness_inj,
                 pm.D_washer/2f
             ).extended(EXTRA, Extend.UP));
         }
@@ -1213,41 +1217,48 @@ public class Injector : TPIAP.Pea {
 
             Vec2 p = points[i] * (r_mount/mag(points[i]));
 
-            float z0;
-            { // calc z of intersection with cone C and s.t. rect can be flat.
-                float t = invlerp(volC.r0, volC.r1, mag(p) - semiwi);
-                z0 = lerp(0f, volC.Lz, t);
-                z0 += volC.bbase.pos.Z;
-            }
+            // Point on volC at radius mag(p).
+            float bot_z = lerp(
+                dot(uZ3, volC.bbase * (0f*uZ3)),
+                dot(uZ3, volC.bbase * (volC.Lz*uZ3)),
+                invlerp(volC.r0, volC.r1, mag(p))
+            );
+            Frame bot = new(
+                rejxy(p, bot_z),
+                fromsph(1f, arg(p), volC.outer_phi + PI), // +radial
+                fromsph(1f, arg(p), volC.outer_phi + PI_2) // +up
+            );
+            Frame top = new(
+                bot.pos + uZ3*(z_mount - bot.pos.Z),
+                fromcyl(1f, arg(p), 0f),
+                uZ3
+            );
 
-            Frame bot = Frame.cyl_axial(rejxy(p, z0)); // x=+radial
-            Frame top = bot.transz(height - bot.pos.Z, false);
+            // float strut_radius = wi/sqrt(PI)f;
+            // ^ equal-area, but lets actually just do constant width.
+            float strut_radius = semiwi;
 
-            float strut_area = sqed(2f*(pm.D_bolt/2f) + 4f);
-            float strut_radius = 1.2f*sqrt(strut_area/PI);
+            int N = 2*Polygon.full_res_divs(mag(top.pos.Z - bot.pos.Z));
+            int M = Polygon.full_res_divs(TWOPI*strut_radius);
+            M -= M % 4;
 
-            int N = Polygon.full_res_divs(TWOPI*strut_radius);
-            N -= N % 4;
-
-            int M = Polygon.full_res_divs(mag(top.pos - bot.pos));
-
-            List<Vec2> V_rect = [
+            List<Vec2> V0_rect = [
                 new(+semiwi, +semiwi),
                 new(-semiwi, +semiwi),
                 new(-semiwi, -semiwi),
                 new(+semiwi, -semiwi),
             ];
-            V_rect = Polygon.resample(V_rect, N, true);
+            V0_rect = Polygon.resample(V0_rect, M, true);
 
-            List<Vec2> V_circ = Polygon.circle(N, strut_radius, +PI_4);
+            List<Vec2> V0_circ = Polygon.circle(M, strut_radius, +PI_4);
 
             // Start with box.
-            List<Vec2> vertices = [..V_rect];
-            List<Frame> frames = [bot.transz(-z0)];
+            List<Vec2> vertices = new();
+            List<Frame> frames = new();
 
             // Interp between square and circle, with continuous derivative also.
-            for (int j=0; j<M; ++j) {
-                float t = lerp(0f, 1f, j, M);
+            for (int j=0; j<N; ++j) {
+                float t = lerp(0f, 1f, j, N);
                 // smooth https://www.desmos.com/calculator/hf7a0a7upp.
               #if false
                 float n = 1.25f;
@@ -1255,16 +1266,30 @@ public class Injector : TPIAP.Pea {
               #else
                 float s = t*t*(3f - 2f*t);
               #endif
+
+                Frame frame = bot.lerp(top, t);
+
+                // Adjust for slant.
+                Vec2 slant = new(1f/dot(frame.Z, uZ3), 1f);
+                List<Vec2> V_rect = V0_rect.Select((v) => v*slant).ToList();
+                List<Vec2> V_circ = V0_circ.Select((v) => v*slant).ToList();
+
                 vertices.AddRange(Polygon.lerp(V_rect, V_circ, s));
-                frames.Add(bot.lerp(top, t));
+                frames.Add(frame);
             }
 
             // Extend up by `EXTRA`.
             frames.Add(top.transz(EXTRA));
-            vertices.AddRange(vertices[(numel(vertices) - N)..]);
+            vertices.AddRange(vertices[(numel(vertices) - M)..]);
+
+            // Extend in by `EXTRA`.
+            frames.Insert(0, bot.transz(-EXTRA));
+            vertices.InsertRange(0, vertices[..M]);
 
             // Rect->circle + base.
             Mesh m = Polygon.mesh_swept(new FramesSequence(frames), vertices);
+            // Geez.mesh(m, COLOUR_RED);
+            // Thread.Sleep(1000000);
             pos.BoolAdd(new(m));
 
             // Bolt hole + clean top.
@@ -1300,11 +1325,11 @@ public class Injector : TPIAP.Pea {
                 in Voxels? sub_pos=null, in Voxels? sub_neg=null) {
             Flats flats = new Flats(tap, th);
             Voxels this_pos = flats.boss(at);
-            this_pos.BoolAdd(new Rod(at, -height, flats.r));
+            this_pos.BoolAdd(new Rod(at, -at.pos.Z, flats.r));
             this_pos.BoolSubtract(mani_vol.volume_entire);
 
-            this_pos.BoolAdd(new Rod(at, -height - EXTRA, D_h/2f + th_h));
-            Voxels this_neg_no_tap = new Rod(at, -height - EXTRA, D_h/2f);
+            this_pos.BoolAdd(new Rod(at, -at.pos.Z - EXTRA, D_h/2f + th_h));
+            Voxels this_neg_no_tap = new Rod(at, -at.pos.Z - EXTRA, D_h/2f);
             Voxels this_neg = this_neg_no_tap.voxDuplicate();
             this_neg.BoolAdd(tap.at(at));
 
@@ -1326,10 +1351,10 @@ public class Injector : TPIAP.Pea {
         float r_IPAPT    = mani_vol.peak.Y;
         float r_CCPT     = mani_vol.peak.Y;
 
-        Vec3 pos_LOxinlet = new(-r_LOxinlet, 0f, height);
-        Vec3 pos_LOxPT    = new(+r_LOxPT,    0f, height);
-        Vec3 pos_IPAPT    = new(0f,    +r_IPAPT, height);
-        Vec3 pos_CCPT     = new(0f,     -r_CCPT, height);
+        Vec3 pos_LOxinlet = new(-r_LOxinlet, 0f, z_LOxinlet);
+        Vec3 pos_LOxPT    = new(+r_LOxPT,    0f, z_LOxPT);
+        Vec3 pos_IPAPT    = new(0f,    +r_IPAPT, z_IPAPT);
+        Vec3 pos_CCPT     = new(0f,     -r_CCPT, z_CCPT);
 
         Frame at_LOxinlet = Frame.cyl_axial(pos_LOxinlet).rotxy(PI_2);
         Frame at_LOxPT    = Frame.cyl_axial(pos_LOxPT)   .rotxy(PI_2);
@@ -1370,7 +1395,8 @@ public class Injector : TPIAP.Pea {
         float overall_Lr = pm.r_bolt
                          + pm.D_bolt/2f
                          + pm.thickness_around_bolt;
-        float overall_Lz = height + EXTRA;
+        float overall_Lz = max(z_mount, z_igniter, z_LOxinlet, z_LOxPT, z_IPAPT,
+                               z_CCPT) + EXTRA;
         float overall_Mz = overall_Lz/2f - EXTRA/2f;
 
         // Initialise the part manager.

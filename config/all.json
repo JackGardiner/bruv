@@ -71,8 +71,6 @@
         "D_tc": 1.5
     },
     "injector": {
-        "height": 60.0,
-
         "no_injg": [5, 10],
         "r_injg": [21, 40.21],
         "theta0_injg": [0.0, 0.314159],
@@ -88,7 +86,8 @@
         "th_omw": 4.0,
 
         "boltsize_mount": "M6",
-        "r_mount": 56.0,
+        "r_mount": 50.0,
+        "z_mount": 50.0,
 
         "no_suprt": 40,
         "Lr_suprt": 5.5,
@@ -115,6 +114,11 @@
         "portsize_LOxPT": "G1/4",
         "portsize_IPAPT": "G1/4",
         "portsize_CCPT": "G1/4",
+        "z_igniter": 45.0,
+        "z_LOxinlet": 62.0,
+        "z_LOxPT": 60.0,
+        "z_IPAPT": 60.0,
+        "z_CCPT": 60.0,
         "th_igniter": 4.0,
         "th_LOxinlet": 4.0,
         "th_LOxPT": 3.5,
