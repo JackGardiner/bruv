@@ -47,7 +47,7 @@ public static class Geez {
     public static Colour BACKGROUND_COLOUR_DARK => new("#202020");
     public static Colour BACKGROUND_COLOUR_LIGHT => new("#FFFFFF");
     public static Colour background_colour {
-        get => Perv.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
+        get => Pierce.get<Colour>(PICOGK_VIEWER, "m_clrBackground");
         set => PICOGK_VIEWER.SetBackgroundColor(value);
     }
     public static void set_background_colour(bool dark)
@@ -788,7 +788,7 @@ public static class Geez {
 
         public static void initialise() {
             // Initialise picogk to the fixed values.
-            Perv.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
+            Pierce.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
             PICOGK_VIEWER.m_fOrbit     = picogk_theta;
             PICOGK_VIEWER.m_fElevation = picogk_phi;
             PICOGK_VIEWER.AddKeyHandler(new ViewerHack());
@@ -826,7 +826,7 @@ public static class Geez {
 
             zoom = mag(size);
             snap_zoom.retarget(zoom);
-            Perv.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
+            Pierce.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
 
             fov = dflt_fov;
             snap_fov.retarget(fov);
@@ -864,7 +864,7 @@ public static class Geez {
             public int Bottom;
         }
 
-        IntPtr hwnd_ptr_ptr = Perv.get<IntPtr>(PICOGK_VIEWER, "m_hThis");
+        IntPtr hwnd_ptr_ptr = Pierce.get<IntPtr>(PICOGK_VIEWER, "m_hThis");
         IntPtr hwnd_ptr = InteropServices.Marshal.ReadIntPtr(hwnd_ptr_ptr);
         IntPtr hwnd = InteropServices.Marshal.ReadIntPtr(hwnd_ptr, 872);
 
@@ -896,7 +896,8 @@ public static class Geez {
 
         // yoooo for future reference this is a much easier way to get the aspect
         // ratio:
-        Mat4 proj_stat = Perv.get<Mat4>(PICOGK_VIEWER, "m_matProjectionStatic");
+        Mat4 proj_stat = Pierce.get<Mat4>(PICOGK_VIEWER,
+                "m_matProjectionStatic");
         float aspect_ratio = proj_stat[1,1] / proj_stat[0,0];
       #endif
 
@@ -932,9 +933,9 @@ public static class Geez {
             // Peek if we've had any scroll input.
             float Dscroll;
             {
-                float curr_zoom = Perv.get<float>(PICOGK_VIEWER, "m_fZoom");
+                float curr_zoom = Pierce.get<float>(PICOGK_VIEWER, "m_fZoom");
                 // now tuck picogk back into bed. there there.
-                Perv.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
+                Pierce.set(PICOGK_VIEWER, "m_fZoom", picogk_zoom);
                 // Invert picogks scroll->zoom function.
                 Dscroll = 50f * (curr_zoom - picogk_zoom);
             }
@@ -1112,7 +1113,7 @@ public static class Geez {
             // Setup box to trick picogk into thinking its the origin (if it
             // actually gets a chance to generate any matrices lmao).
             BBox3 newbbox = new(-size/2f, size/2f);
-            Perv.set(PICOGK_VIEWER, "m_oBBox", newbbox);
+            Pierce.set(PICOGK_VIEWER, "m_oBBox", newbbox);
 
             // HOLD ON. if we never allow bbox to be non-empty, picogk wont even
             // generate the matrices and we are free to splice our own in. fuck
@@ -1123,11 +1124,11 @@ public static class Geez {
             // im hot dawg.
             if (get_a_word_in_edgewise > 0) {
                 --get_a_word_in_edgewise;
-                Perv.invoke(PICOGK_VIEWER, "RecalculateBoundingBox");
+                Pierce.invoke(PICOGK_VIEWER, "RecalculateBoundingBox");
                 // requestupdate message should/must be next in the queue.
                 return;
             } else {
-                Perv.set(PICOGK_VIEWER, "m_oBBox", new BBox3());
+                Pierce.set(PICOGK_VIEWER, "m_oBBox", new BBox3());
             }
 
 
@@ -1135,8 +1136,8 @@ public static class Geez {
             // matrix that picogk calculates (since its actually able to listen
             // for window size cbs, whereas we must scrape it off the ground as
             // dust).
-            Mat4 proj_static = Perv.get<Mat4>(PICOGK_VIEWER,
-                                              "m_matProjectionStatic");
+            Mat4 proj_static = Pierce.get<Mat4>(PICOGK_VIEWER,
+                                                "m_matProjectionStatic");
             float aspect_x_on_y = (proj_static[0,0] == 0f)
                                 ? 1f
                                 : proj_static[1,1] / proj_static[0,0];
@@ -1271,10 +1272,10 @@ public static class Geez {
             // SEND IT. Note that updating eye is important for lighting
             // purposes, and updating mat is important for the entire purpose?
             // like thats the sole function of ViewerHack. pull it together.
-            Perv.set(PICOGK_VIEWER, "m_matModelViewProjection", objects);
-            Perv.set(PICOGK_VIEWER, "m_vecEye", eye);
-            Perv.set(PICOGK_VIEWER, "m_matStatic", compass);
-            Perv.set(PICOGK_VIEWER, "m_vecEyeStatic", compass_eye);
+            Pierce.set(PICOGK_VIEWER, "m_matModelViewProjection", objects);
+            Pierce.set(PICOGK_VIEWER, "m_vecEye", eye);
+            Pierce.set(PICOGK_VIEWER, "m_matStatic", compass);
+            Pierce.set(PICOGK_VIEWER, "m_vecEyeStatic", compass_eye);
             PICOGK_VIEWER.SetGroupMatrix(
                 _MATERIAL_COMPASS_DASHED,
                 compass_dashed
@@ -1282,7 +1283,7 @@ public static class Geez {
         }
 
         public static void make_shit_happen_in_the_future() {
-            var actions = Perv.get<Queue<Viewer.IViewerAction>>(
+            var actions = Pierce.get<Queue<Viewer.IViewerAction>>(
                 PICOGK_VIEWER,
                 "m_oActions"
             );
@@ -1813,7 +1814,7 @@ public static class Geez {
         if (!existok && File.Exists(path))
             throw new Exception($"screenshot already exists: '{path}'");
 
-        object req_ss = Perv.create_nested_type(
+        object req_ss = Pierce.create_nested_type(
             typeof(Viewer),
             "RequestScreenShotAction",
             path
@@ -1823,13 +1824,13 @@ public static class Geez {
         ViewerHack.Signal signal = new(done);
 
         // Firstly, wait for a single valid frame.
-        lock (Perv.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
-            bool running = Perv.get<bool>(typeof(PicoGK.Library), "bRunning");
+        lock (Pierce.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
+            bool running = Pierce.get<bool>(typeof(PicoGK.Library), "bRunning");
             if (!running) {
                 print("ERROR: failed to screenshot because window is closed.");
                 return;
             }
-            var actions = Perv.get<Queue<Viewer.IViewerAction>>(
+            var actions = Pierce.get<Queue<Viewer.IViewerAction>>(
                 PICOGK_VIEWER,
                 "m_oActions"
             );
@@ -1844,13 +1845,13 @@ public static class Geez {
         // Theennn wait one more frame to ensure the ss taken in the right
         // conditions.
         done.Reset();
-        lock (Perv.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
-            bool running = Perv.get<bool>(typeof(PicoGK.Library), "bRunning");
+        lock (Pierce.get<object>(typeof(PicoGK.Library), "mtxRunOnce")) {
+            bool running = Pierce.get<bool>(typeof(PicoGK.Library), "bRunning");
             if (!running) {
                 print("ERROR: failed to screenshot because window is closed.");
                 return;
             }
-            var actions = Perv.get<Queue<Viewer.IViewerAction>>(
+            var actions = Pierce.get<Queue<Viewer.IViewerAction>>(
                 PICOGK_VIEWER,
                 "m_oActions"
             );
