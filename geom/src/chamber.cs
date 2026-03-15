@@ -628,7 +628,7 @@ public class Chamber : TPIAP.Pea {
             V.Add(new(z, cnt_radius_at(z, max_off, widened)));
         }
         V.Add(new(zhi, 0f));
-        Mesh mesh = Polygon.mesh_revolved(new Frame(), V, slicecount: DIVISIONS);
+        Mesh mesh = Polygon.mesh_revolved(new(), V);
         return new(mesh);
     }
     protected Voxels voxels_cnt_shelled(float min_off, float th, bool widened,
@@ -648,8 +648,7 @@ public class Chamber : TPIAP.Pea {
             float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off, widened)));
         }
-        Mesh mesh = Polygon.mesh_revolved(new Frame(), V, donut: true,
-                                          slicecount: DIVISIONS);
+        Mesh mesh = Polygon.mesh_revolved(new(), V, donut: true);
         return new(mesh);
     }
 

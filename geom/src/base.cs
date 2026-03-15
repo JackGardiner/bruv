@@ -302,21 +302,20 @@ public class Sectioner {
     public static Sectioner pie(float theta0, float theta1) {
         assert(isgood(theta0));
         assert(isgood(theta1));
-        if (theta1 < theta0)
-            swap(ref theta0, ref theta1);
         float Dtheta = theta1 - theta0;
-        if (Dtheta >= TWOPI)
+        if (abs(Dtheta) >= TWOPI)
             return new(); // no cuts.
-        Frame frame0 = new(ZERO3, fromcyl(1f, theta0 + PI_2, 0f));
-        Frame frame1 = new(ZERO3, fromcyl(1f, theta1 - PI_2, 0f));
+        float sign = (theta1 > theta0) ? 1f : -1f;
+        Frame frame0 = new(ZERO3, fromcyl(1f, theta0 + sign*PI_2, 0f));
+        Frame frame1 = new(ZERO3, fromcyl(1f, theta1 - sign*PI_2, 0f));
         Space space0 = new(frame0, 0f, +INF);
         Space space1 = new(frame1, 0f, +INF);
         Sectioner sectioner = new();
         sectioner.intersect(space0);
-        if (!nearto(Dtheta, PI)) {
-            if (Dtheta > PI)
+        if (!nearto(abs(Dtheta), PI)) {
+            if (abs(Dtheta) > PI)
                 sectioner.union(space1);
-            else /* Dtheta < PI */
+            else /* abs(Dtheta) < PI */
                 sectioner.intersect(space1);
         }
         return sectioner;
@@ -1120,12 +1119,7 @@ public class Cone : AxialShape<Cone> {
         }
         Polygon.cull_adjacent_duplicates(vertices);
         assert(numel(vertices) >= 3, "too thin");
-
-        // Make the divs s.t. the longest spacing between vertices is one voxel.
-        int divs = (int)(TWOPI * max(obj.outer_r0, obj.outer_r1) / VOXEL_SIZE);
-        divs = max(20, divs);
-        return Polygon.mesh_revolved(obj.centre, vertices, slicecount: divs,
-                                     donut: donut);
+        return Polygon.mesh_revolved(obj.centre, vertices, donut: donut);
     }
 
     public static implicit operator Voxels(Cone obj)

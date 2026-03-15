@@ -318,6 +318,7 @@ public class InjectorElement {
             $"  - Inlet radius: {Ir_il1*1e3f} mm",
             $"  - Inlet Reynolds number: {Re_il1}",
             $"  - A_1: {A_1}",
+            $"  - Cd_1: {Cd_1}",
             $"  - rmbar_1: {rmbar_1}",
             $"  - cspf_1: {cspf_1}",
             $"",
@@ -332,6 +333,7 @@ public class InjectorElement {
             $"  - Inlet radius: {Ir_il2*1e3f} mm",
             $"  - Inlet Reynolds number: {Re_il2}",
             $"  - A_2: {A_2}",
+            $"  - Cd_2: {Cd_2}",
             $"  - rmbar_2: {rmbar_2}",
             $"  - cspf_2: {cspf_2}",
             $"",
@@ -350,15 +352,10 @@ public class InjectorElement {
 
         // Make volume by revolve.
 
-        // divisions on revolves about z.
-        int N = (int)(TWOPI * max(C1.X, C2.X) / VOXEL_SIZE);
-        N /= 3;
-        N = max(10, N);
-
         // general fillet divisions.
-        int M = N/20;
+        int M = (int)(5 / VOXEL_SIZE);
+        M = max(10, M);
         M -= M % 2; // force even.
-        M = max(M, 4);
 
 
         // Make injector 1.
@@ -421,26 +418,10 @@ public class InjectorElement {
         pos_points2.Insert(0, pos_points2[0]*uX2);
 
 
-        Voxels neg1 = new(Polygon.mesh_revolved(
-            at,
-            neg_points1,
-            slicecount: N
-        ));
-        Voxels pos1 = new(Polygon.mesh_revolved(
-            at,
-            pos_points1,
-            slicecount: N
-        ));
-        Voxels neg2 = new(Polygon.mesh_revolved(
-            at,
-            neg_points2,
-            slicecount: N
-        ));
-        Voxels pos2 = new(Polygon.mesh_revolved(
-            at,
-            pos_points2,
-            slicecount: N
-        ));
+        Voxels neg1 = new(Polygon.mesh_revolved(at, neg_points1));
+        Voxels pos1 = new(Polygon.mesh_revolved(at, pos_points1));
+        Voxels neg2 = new(Polygon.mesh_revolved(at, neg_points2));
+        Voxels pos2 = new(Polygon.mesh_revolved(at, pos_points2));
 
         // dont let it delete inner injector.
         neg2.BoolSubtract(pos1);
@@ -817,6 +798,7 @@ public class Injector : TPIAP.Pea {
     public required float th_omw { get; init; }
 
     public required string boltsize_mount { get; init; }
+    public required float r_mount { get; init; }
     public Tapping tap_mount => new(boltsize_mount, printable)
             { extra_length = 3f };
 
@@ -1195,10 +1177,10 @@ public class Injector : TPIAP.Pea {
 
         float wi = pm.D_washer + 4f;
         float semiwi = wi/2f;
-        float r = pm.r_bolt + 3f;
+        float max_r = pm.r_bolt + pm.D_washer/4f;
 
         // Big blocks for each bolt.
-        Slice<Vec2> points = Polygon.circle(pm.no_bolt, r);
+        Slice<Vec2> points = Polygon.circle(pm.no_bolt, max_r);
         for (int i=0; i<numel(points); ++i) {
             Vec2 p = points[i];
             pos.BoolAdd(new Bar(
@@ -1215,7 +1197,7 @@ public class Injector : TPIAP.Pea {
         Cone volC = new Cone(
             new(pm.flange_thickness_inj*uZ3),
             mani_vol.peak.X + mani_vol.Lz - pm.flange_thickness_inj,
-            r,
+            max_r,
             mani_vol.peak.Y
         ).lengthed(2f*VOXEL_SIZE, 0f);
         pos.BoolIntersect(volC);
@@ -1228,8 +1210,8 @@ public class Injector : TPIAP.Pea {
                 continue;
 
             // vertical loft: rectangle -> circle
-            Vec2 p = points[i];
-            p = (mag(p) - 20f)*normalise(p); // move in 20mm. TODO:
+
+            Vec2 p = points[i] * (r_mount/mag(points[i]));
 
             float z0;
             { // calc z of intersection with cone C and s.t. rect can be flat.
@@ -1244,14 +1226,10 @@ public class Injector : TPIAP.Pea {
             float strut_area = sqed(2f*(pm.D_bolt/2f) + 4f);
             float strut_radius = 1.2f*sqrt(strut_area/PI);
 
-            int N = (int)(TWOPI * strut_radius / VOXEL_SIZE);
-            N /= 2;
-            N = max(12, N);
+            int N = Polygon.full_res_divs(TWOPI*strut_radius);
             N -= N % 4;
 
-            int M = (int)(mag(top.pos - bot.pos) / VOXEL_SIZE);
-            M /= 2;
-            M = max(10, M);
+            int M = Polygon.full_res_divs(mag(top.pos - bot.pos));
 
             List<Vec2> V_rect = [
                 new(+semiwi, +semiwi),
@@ -1593,7 +1571,11 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    public void anything() {}
+    public void anything() {
+        element.voxels(new(), out Voxels pos, out Voxels neg);
+        pos.BoolSubtract(neg);
+        Geez.voxels(pos);
+    }
 
 
     public string name => "injector";
@@ -1618,7 +1600,6 @@ public class Injector : TPIAP.Pea {
         throw new Exception("what is happening right now");
                           // im selling out
     }
-
 
 
     public void initialise() {

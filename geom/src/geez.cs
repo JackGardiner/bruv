@@ -1958,6 +1958,21 @@ public static class Geez {
         foreach (PolyLine line in lines)
             PICOGK_VIEWER.Remove(line);
 
+        // Recalc all bboxes after.
+        List<Key> allkeys = _geezed.Keys.ToList();
+        BBox3 running = new();
+        foreach (Key k in allkeys) {
+            var (l, m, _) = _geezed[k];
+            foreach (var o in l)
+                running.Include(o.oBoundingBox());
+            foreach (var o in m)
+                running.Include(o.oBoundingBox());
+            if (k < key) // must have been added after this key.
+                continue;
+            _geezed[k] = (l, m, new(running.vecMin, running.vecMax));
+        }
+        // Note this maintains insertion order (though not in-operation).
+
         BBox3 bbox = _current_bbox();
         if (!bbox.bIsEmpty()) {
             ViewerHack.set_size(bbox.vecSize());

@@ -311,12 +311,15 @@ public class InjectorSample : TPIAP.Pea {
                 img,
                 i % 2 == 0
             );
-            part.Dispose();
+            part.Dispose(); // printing onlyyy.
 
             all.BoolAdd(part.voxels);
 
             Mesh mesh = new(part.voxels);
-            Geez.mesh(mesh);
+            if ((Geez.sectioner ?? Geez.dflt_sectioner).has_cuts())
+                Geez.voxels(part.voxels);
+            else
+                Geez.mesh(mesh);
 
             TPIAP.save_mesh_only($"injector-sample-{i}", mesh);
         }

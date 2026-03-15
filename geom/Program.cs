@@ -10,8 +10,8 @@ int make = TPIAP.INJECTOR | TPIAP.VOXELS;
 // See TPIAP for construction guide of `make`.
 
 float voxel_size_mm = 0.4f;
-bool leave_viewer_open = true;
-Sectioner sectioner = new();
+bool leave_viewer_open = yeah;
+Sectioner sectioner = Sectioner.pie(0f, PI);
 
 
 
@@ -34,10 +34,11 @@ void wrapped_task() {
         if (leave_viewer_open) {
             // Cheeky private variable bypass.
             PervField gimme = new(typeof(PicoGK.Library), "bRunning");
-            bool running = true;
-            while (running) {
-                running = gimme.maybe_get<bool?>() ?? false;
-                Thread.Sleep(50);
+            for (;;) {
+                bool running = gimme.maybe_get<bool?>() ?? false;
+                if (!running)
+                    break;
+                Thread.Sleep(100);
             }
         }
     } catch (Exception e) {

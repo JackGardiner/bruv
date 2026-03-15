@@ -508,7 +508,7 @@ public class Frame {
         Vec3 O = uY3; // dflt to getting unit X as perp to z.
         if (abs(dot(Z, O)) > 0.99f) // too close to parallel.
             O = uX3;
-        return cross(Z, O);
+        return normalise(cross(Z, O));
     }
 
     public override string ToString() {

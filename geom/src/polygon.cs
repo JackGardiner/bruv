@@ -382,6 +382,16 @@ public static class Polygon {
     }
 
 
+    public static int full_res_divs(float length) {
+        return max(15, (int)(length / VOXEL_SIZE));
+    }
+    public static int full_res_divs(Slice<Vec2> zr, float by=TWOPI) {
+        float max_r = 0f;
+        foreach (Vec2 p in zr)
+            max_r = max(max_r, abs(p.Y));
+        return full_res_divs(min(abs(by), TWOPI) * max_r);
+    }
+
 
     private static int mesh_divided_into(int count, int by) {
         assert(count > 0);
@@ -468,7 +478,7 @@ public static class Polygon {
         } else {
             slicesize = numel(vertices);
             tilecount = (slicecount == -1)
-                      ? max((int)(abs(by)*200/TWOPI), 10)
+                      ? full_res_divs(vertices, by)
                       : slicecount;
             slicecount = 1;
         }

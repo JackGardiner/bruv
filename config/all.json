@@ -88,6 +88,7 @@
         "th_omw": 4.0,
 
         "boltsize_mount": "M6",
+        "r_mount": 56.0,
 
         "no_suprt": 40,
         "Lr_suprt": 5.5,
