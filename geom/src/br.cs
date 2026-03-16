@@ -42,7 +42,7 @@ public static partial class Br {
     public static Colour COLOUR_CYAN   => new("00FFFF");
     public static Colour COLOUR_PINK   => new("FF00FF");
     public static Colour COLOUR_YELLOW => new("FFFF00");
-    public static Colour COLOUR_ORANGE => new("FF7700");
+    public static Colour COLOUR_ORANGE => new("FF5000");
 
     /* paths. */
     public static string PATH_ROOT

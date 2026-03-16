@@ -453,13 +453,13 @@ public class Donut : ShellableShape<Donut> { // torus is too lame. its also the
     public float outer_r { get; } // outer half-thickness. >0
 
     public Donut(in Frame centre, float R, float outer_r)
-        : this(centre, R, 0f, outer_r) {}
+        : this(centre, R, -INF, outer_r) {}
     public Donut(in Frame centre, float R, float inner_r, float outer_r) {
         assert(isgood(R), $"R={R}");
-        assert(isgood(inner_r), $"inner_r={inner_r}");
+        assert(isgood(inner_r) || inner_r == -INF, $"inner_r={inner_r}");
         assert(isgood(outer_r), $"outer_r={outer_r}");
         assert(R >= 0f, $"R={R}");
-        assert(inner_r >= 0f, $"inner_r={inner_r}");
+        assert(inner_r > 0f || inner_r == -INF, $"inner_r={inner_r}");
         assert(outer_r > 0f, $"outer_r={outer_r}");
         assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
         assert(R >= outer_r, $"R={R}, outer_r={outer_r}"); // sorry.

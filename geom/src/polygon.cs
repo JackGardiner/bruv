@@ -383,7 +383,7 @@ public static class Polygon {
 
 
     public static int full_res_divs(float length) {
-        return max(15, (int)(length / VOXEL_SIZE));
+        return max(17 /* prime smile */, (int)(length / VOXEL_SIZE));
     }
     public static int full_res_divs(Slice<Vec2> zr, float by=TWOPI) {
         float max_r = 0f;

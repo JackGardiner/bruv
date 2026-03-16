@@ -268,8 +268,11 @@ public static class TwoPeasInAPod {
         if (isset(make, LOOKSIE) && part.succeeded()) {
             print($"Giving '{pea.name}' a looksie...");
             print();
-            Geez.clear();
-            Geez.voxels(part.voxels()!);
+            Voxels vox = part.voxels()!;
+            using (Geez.locked(false)) {
+                Geez.clear();
+                Geez.voxels(vox);
+            }
             print("press any key when finished viewing to continue...");
             Console.ReadKey(intercept: true);
             print();
@@ -279,8 +282,11 @@ public static class TwoPeasInAPod {
         if (isset(make, LOOKSIE_CUTAWAY) && cutaway.succeeded(part.voxels())) {
             print($"Giving '{pea.name}' a cutawayed looksie...");
             print();
-            Geez.clear();
-            Geez.voxels(cutaway.voxels(part.voxels()!)!);
+            Voxels vox = cutaway.voxels(part.voxels()!)!;
+            using (Geez.locked(false)) {
+                Geez.clear();
+                Geez.voxels(vox);
+            }
             print("press any key when finished viewing to continue...");
             Console.ReadKey(intercept: true);
             print();

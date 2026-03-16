@@ -33,9 +33,9 @@ public static class Geez {
 
 
     public static bool lockdown = false;
-    public static IDisposable locked() {
+    public static IDisposable locked(bool lockme=true) {
         bool prev = lockdown;
-        lockdown = true;
+        lockdown = lockme;
         return Scoped.on_leave(() => lockdown = prev);
     }
     public static IDisposable unlocked() {
