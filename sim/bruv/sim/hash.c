@@ -42,9 +42,8 @@ u64 hash_aug(u64 running, u64 add) {
     // Since we are assuming `running` and `add` are strong hashes, we are simply
     // trying to find a way to combine these hash values in a way that makes the
     // order most-impactful.
-    return running ^ (add + running + (u64)0x5BFE84C76C35F380U);
-    // Randomly generated constant btw (best constant through some metrics over
-    // some trials).
+    running ^= (running << 6) + (running >> 2) + add + (u64)0x9E3779B97F4A7C15U;
+    return running;
 }
 
 u64 hash_blend(u64 a, u64 b) {
