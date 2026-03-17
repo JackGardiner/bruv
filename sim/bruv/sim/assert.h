@@ -7,7 +7,7 @@
 
 // `setjmp` wrapper, sets up assertions to jump to here on failure and returns
 // non-zero if any assertion fails.
-i32 assertion_has_failed(void);
+#define assertion_has_failed() (setjmp(assert_jump_) != 0)
 
 // Returns the message of an assert. Only valid if an assert has failed.
 const char* assertion_message(void);
