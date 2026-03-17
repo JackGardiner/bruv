@@ -793,11 +793,11 @@ vec4 log2_vec4(vec4 x) {
 }
 
 
-f64 pow_f64(f64 x, f64 n) { return exp2(log2(n) * x); }
-f32 pow_f32(f32 x, f32 n) { return exp2(log2(n) * x); }
-vec2 pow_vec2(vec2 x, vec2 n) { return exp2(log2(n) * x); }
-vec3 pow_vec3(vec3 x, vec3 n) { return exp2(log2(n) * x); }
-vec4 pow_vec4(vec4 x, vec4 n) { return exp2(log2(n) * x); }
+f64 pow_f64(f64 x, f64 n) { return exp2(log2(x) * n); }
+f32 pow_f32(f32 x, f32 n) { return exp2(log2(x) * n); }
+vec2 pow_vec2(vec2 x, vec2 n) { return exp2(log2(x) * n); }
+vec3 pow_vec3(vec3 x, vec3 n) { return exp2(log2(x) * n); }
+vec4 pow_vec4(vec4 x, vec4 n) { return exp2(log2(x) * n); }
 
 
 f64 sin_f64(f64 x) {

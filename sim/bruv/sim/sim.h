@@ -16,9 +16,12 @@
     X(phi_div, f64, C_OUTPUT)                   \
     X(phi_exit, f64, C_OUTPUT)                  \
                                                 \
-    X(cnt_out_count, i64, C_INPUT)              \
-    X(cnt_out_z, f64*, C_INPUT | C_OUTPUT_DATA) \
-    X(cnt_out_r, f64*, C_INPUT | C_OUTPUT_DATA) \
+    X(out_count, i64, C_INPUT)                  \
+    X(out_z, f64*, C_INPUT | C_OUTPUT_DATA)     \
+    X(out_r, f64*, C_INPUT | C_OUTPUT_DATA)     \
+    X(out_M, f64*, C_INPUT | C_OUTPUT_DATA)     \
+    X(out_T, f64*, C_INPUT | C_OUTPUT_DATA)     \
+    X(out_P, f64*, C_INPUT | C_OUTPUT_DATA)     \
                                                 \
     X(cnt_r_conv, f64, C_OUTPUT)                \
     X(cnt_z0, f64, C_OUTPUT)                    \

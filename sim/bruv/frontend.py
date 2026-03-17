@@ -26,9 +26,12 @@ def interpretation():
     interp.append("phi_div", interp.F64, OUT)
     interp.append("phi_exit", interp.F64, OUT)
 
-    interp.append("cnt_out_count", interp.I64, IN)
-    interp.append("cnt_out_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("cnt_out_r", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_count", interp.I64, IN)
+    interp.append("out_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_r", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_M", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_P", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("cnt_r_conv", interp.F64, OUT)
     interp.append("cnt_z0", interp.F64, OUT)
@@ -67,19 +70,35 @@ def now_this_is_bruv():
     state["NLF"] = 0.94
     state["phi_conv"] = -np.pi/4
 
-    state["cnt_out_count"] = 1000
-    state["cnt_out_z"] = np.empty(shape=(1000,), dtype=np.float64)
-    state["cnt_out_r"] = np.empty(shape=(1000,), dtype=np.float64)
+    state["out_count"] = 10000
+    state["out_z"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
+    state["out_r"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
+    state["out_M"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
+    state["out_T"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
+    state["out_P"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
 
     ret = state.execute()
-    print("returned:", ret)
+    if ret is not None:
+        print("returned:", ret)
+        return 1
 
-    _, ax = geez.new_figure()
-    ax.set_aspect(1.0)
-    ax.plot(state["cnt_out_z"].view(state["cnt_out_count"]),
-            state["cnt_out_r"].view(state["cnt_out_count"]))
+    z = state["out_z"].view(state["out_count"])
+    r = state["out_r"].view(state["out_count"])
+    M = state["out_M"].view(state["out_count"])
+    T = state["out_T"].view(state["out_count"])
+    P = state["out_P"].view(state["out_count"])
+    _, axes = geez.new_figure(rows=2, cols=2)
+    axes[0,0].set_aspect(1.0)
+    axes[0,0].plot(z*1e3, r*1e3)
+    axes[0,0].set_title("contour [mm]")
+    axes[1,0].plot(z*1e3, M)
+    axes[1,0].set_title("mach number")
+    axes[0,1].plot(z*1e3, T)
+    axes[0,1].set_title("temperature [K]")
+    axes[1,1].plot(z*1e3, P*1e-6)
+    axes[1,1].set_title("pressure [MPa]")
 
-    return ret is not None
+    return 0
 
 
 def run():

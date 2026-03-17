@@ -246,28 +246,125 @@ static f64 cnt_r(simState* s, f64 z) {
 }
 
 
+typedef struct SpecificHeatRatio {
+    f64 y;
+    f64 n; /* (y + 1)/(y - 1)/2 */
+    f64 sup_M_seed_n; /* (1 + y - y^0.2)/3 */
+    f64 sup_M_seed_m; /* y^3 / 64 */
+    f64 sub_M_seed_n; /* 0.55 + 0.7/(y + 2) */
+    f64 sub_M_seed_m; /* 0.8*y + 2 */
+} SpecificHeatRatio;
+static void init_specific_heat_ratio(SpecificHeatRatio* shr, f64 gamma) {
+    assert(within(gamma, 1.0, 8.0), "gamma outside supported range: %g", gamma);
+    shr->y = gamma;
+    shr->n = (gamma + 1.0)/(gamma - 1.0)/2.0;
+    shr->sup_M_seed_n = (1.0 + gamma - pow(gamma, 0.2))/3.0;
+    shr->sup_M_seed_m = cbed(gamma) / 64.0;
+    shr->sub_M_seed_n = 0.55 + 0.7/(gamma + 2.0);
+    shr->sub_M_seed_m = 0.8*gamma + 2.0;
+}
+
+
+
+static f64 isentropic_M_newton_raphson(f64 M, f64 A_on_Astar,
+        const SpecificHeatRatio* shr) {
+    // Find M s.t.:
+    //  A_on_Astar = isentropic_A_on_Astar(M)
+    //  0 = isentropic_A_on_Astar(M) - A_on_Astar
+    //  0 = f(M)
+    const int MAX_ITERS = 20;
+    for (i32 iter=0; iter<MAX_ITERS; ++iter) {
+        f64 term = 2.0/(shr->y + 1.0) + sqed(M)/shr->n/2.0;
+        f64 f = pow(term, shr->n) / M - A_on_Astar;
+        f64 df = pow(term, shr->n - 1.0)
+               * (1.0 - 1.0/sqed(M))
+               * 2.0/(shr->y + 1.0);
+        float DM = -f/df;
+        M += DM;
+        if (abs(DM) < 1e-8)
+            break;
+        assert(iter != MAX_ITERS - 1, "failed to converge");
+    }
+    return M;
+}
+
+static f64 isentropic_sup_M(f64 A_on_Astar, const SpecificHeatRatio* shr) {
+    // Gotta find by inverting the M -> A/Astar relation. I dont believe this has
+    // a simple inverse, so we guess then root find.
+
+    assert(A_on_Astar >= 1.0, "A_on_Astar cannot be <1, got %f", A_on_Astar);
+    if (A_on_Astar <= 1.0 + 1e-8)
+        return 1.0;
+    // Pretty mid initial seed smile.
+    // https://www.desmos.com/calculator/jvhdhh0q4s
+    f64 M = 1.0
+          + 0.7*shr->y*pow(A_on_Astar - 1.0, shr->sup_M_seed_n)
+          + shr->sup_M_seed_m*(A_on_Astar - 1.0);
+    return isentropic_M_newton_raphson(M, A_on_Astar, shr);
+}
+
+static f64 isentropic_sub_M(f64 A_on_Astar, const SpecificHeatRatio* shr) {
+    assert(A_on_Astar >= 1.0, "A_on_Astar cannot be <1, got %f", A_on_Astar);
+    if (A_on_Astar <= 1.0 + 1e-8)
+        return 1.0;
+    // Pretty bloody average seed smillleee.
+    // https://www.desmos.com/calculator/xzohdrgmja
+    f64 M = 1.0
+          / (1.0 + pow(shr->sub_M_seed_m*(A_on_Astar - 1.0), shr->sub_M_seed_n));
+    return isentropic_M_newton_raphson(M, A_on_Astar, shr);
+}
+
+UNUSED static f64 isentropic_A_on_Astar(f64 M, const SpecificHeatRatio* shr) {
+    return pow(2.0/(shr->y + 1.0) + sqed(M)/shr->n/2.0, shr->n) / M;
+}
+
+static f64 isentropic_Pstag_on_P(f64 M, const SpecificHeatRatio* shr) {
+    return pow(1.0 + (shr->y - 1.0)/2.0 * sqed(M), shr->y/(shr->y - 1.0));
+}
+
+static f64 isentropic_Tstag_on_T(f64 M, const SpecificHeatRatio* shr) {
+    return 1.0 + (shr->y - 1.0)/2.0 * sqed(M);
+}
 
 
 
 void sim_execute(simState* rstr s) {
     printf("helloooo c\n");
     cnt_init(s);
-    printf("r @ %.18g = %.18g\n", 200e-3, cnt_r(s, 200e-3));
 
-    assert(s->cnt_out_count > 20, "output contour array is too small (%lld)",
-            s->cnt_out_count);
-    assert(s->cnt_out_z, "output contour array Z is null");
-    assert(s->cnt_out_r, "output contour array R is null");
-    for (i64 i=0; i<s->cnt_out_count; ++i) {
-        f64 z = lerpidx(s->cnt_z0, s->cnt_z6, i, s->cnt_out_count);
+    assert(s->out_count > 20, "output contour array is too small (%lld)",
+            s->out_count);
+    assert(s->out_z, "output contour array Z is null");
+    assert(s->out_r, "output contour array R is null");
+    assert(s->out_T, "output contour array R is null");
+    assert(s->out_P, "output contour array R is null");
+    assert(s->out_M, "output contour array R is null");
+
+    SpecificHeatRatio shr;
+    init_specific_heat_ratio(&shr, 1.4);
+
+    f64 Tstag = 3000.0;
+    f64 Pstag = 35e5;
+
+    for (i64 i=0; i<s->out_count; ++i) {
+        f64 z = lerpidx(s->cnt_z0, s->cnt_z6, i, s->out_count);
         f64 r = cnt_r(s, z);
-        s->cnt_out_z[i] = z;
-        s->cnt_out_r[i] = r;
-        // printf("%.18g, %.18g\n", z, r);
+        f64 A_on_Astar = sqed(r) / sqed(s->R_tht);
+        f64 M = (z < s->cnt_z4)
+              ? isentropic_sub_M(A_on_Astar, &shr)
+              : isentropic_sup_M(A_on_Astar, &shr);
+        f64 T = Tstag / isentropic_Tstag_on_T(M, &shr);
+        f64 P = Pstag / isentropic_Pstag_on_P(M, &shr);
+        s->out_z[i] = z;
+        s->out_r[i] = r;
+        s->out_T[i] = T;
+        s->out_P[i] = P;
+        s->out_M[i] = M;
     }
 
     printf("goodbye c :(\n");
 }
+
 
 c_IH sim_interpretation_hash(void) {
     c_IH h = c_ih_initial();
