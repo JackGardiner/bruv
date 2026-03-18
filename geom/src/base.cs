@@ -1179,6 +1179,33 @@ public class Cone : AxialShape<Cone> {
 }
 
 
+public class Gyroid : FramedShape<Gyroid>, IImplicit {
+    public override Frame centre { get; }
+    public float th { get; } // >0
+    public float period { get; } // >0
+    public float frequency { get; } // =TWOPI/period
+
+    public Gyroid(Frame centre, float th, float period) {
+        assert(th > 0f, $"th={th}");
+        assert(period > 0f, $"period={period}");
+        assert(period > th, $"period={period}, th={th}");
+        this.centre = centre;
+        this.th = th;
+        this.period = period;
+        this.frequency = TWOPI/period;
+    }
+
+    public override Gyroid with_centre(in Frame newcentre)
+        => new(newcentre, th, period);
+
+    public float fSignedDistance(in Vec3 p) {
+        Vec3 q = centre / p;
+        q *= frequency;
+        float v = sin(q.X)*cos(q.Y) + sin(q.Y)*cos(q.Z) + sin(q.Z)*cos(q.X);
+        return abs(v) - 0.5f*th;
+    }
+}
+
 
 
 
