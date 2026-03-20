@@ -87,7 +87,7 @@ def now_this_is_bruv():
     M = state["out_M"].view(state["out_count"])
     T = state["out_T"].view(state["out_count"])
     P = state["out_P"].view(state["out_count"])
-    _, axes = geez.new_figure(rows=2, cols=2)
+    _, axes = geez.new_plots(rows=2, cols=2)
     axes[0,0].set_aspect(1.0)
     axes[0,0].plot(z*1e3, r*1e3)
     axes[0,0].set_title("contour [mm]")

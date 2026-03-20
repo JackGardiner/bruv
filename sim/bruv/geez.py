@@ -17,15 +17,17 @@ import matplotlib.backends.backend_tkagg
 from . import paths
 
 __all__ = ["FIGURE_DIRECTORY", "DEFAULT_FIGSIZE",
-           "new_figure", "new_window", "no_window",
+           "new_figure", "new_plots", "new_window", "no_window",
            "instance"]
 
 
 FIGURE_DIRECTORY = paths.APPROXIMATOR_FIGS
 DEFAULT_FIGSIZE = (8, 6)
 
-new_figure = lambda path=None, rows=1, cols=1, *, overwrite=False, title=None, \
-                    **kwargs: "fig", "axes"
+new_figure = lambda path=None, *, overwrite_ok=False, title=None, **kwargs: "fig"
+
+new_plots = lambda path=None, rows=1, cols=1, *, overwrite_ok=False, \
+                   title=None, plot_kw=None, **kwargs: "fig", "axes"
 # ax.plot = lambda X, Y, *args, label=None, legended=None, inlined_at_x=None, \
 #                  inlined_at_y=None, inlined_offset=0.0, **kwargs: None
 # ax.default_legend_location = str
@@ -44,9 +46,11 @@ new_figure = lambda path=None, rows=1, cols=1, *, overwrite=False, title=None, \
 
 new_window = lambda title=None: "window"
 # window.new_figure = <mimic of new_figure, where each figure is in a new tab>
+# window.new_plots = <mimic of new_plots, where each figure is in a new tab>
 
 no_window = lambda: "no_window" # exists only to maintain api with window.
 # no_window.new_figure = <mimic of new_figure, identically>
+# no_window.new_plots = <mimic of new_plots, identically>
 
 instance = lambda view=True, save=False: "context"
 # with instance():
@@ -327,7 +331,7 @@ def _br_on_window_close(win):
         _root.destroy()
         _root = None
 
-def _new_window(window_title=None):
+def _make_window(window_title=None):
     global _root
     if _root is None:
         _root = tkinter.Tk()
@@ -343,19 +347,9 @@ def _new_window(window_title=None):
     win.br_notebook = None
     return win
 
-def _new_figure(master, path=None, rows=1, cols=1, *, overwrite_ok=False,
-        **kwargs):
+def _make_figure(master, path=None, *, overwrite_ok=False, **kwargs):
     assert path is None or isinstance(path, str)
-    if "figsize" not in kwargs:
-        figsize_x, figsize_y = DEFAULT_FIGSIZE
-        figsize_x *= cols
-        figsize_y *= rows
-        kwargs["figsize"] = (figsize_x, figsize_y)
-    if "subplot_kw" not in kwargs:
-        kwargs["subplot_kw"] = {}
-    assert "axes_class" not in kwargs["subplot_kw"]
-    kwargs["subplot_kw"]["axes_class"] = BrAxes
-    fig, axes = plt.subplots(rows, cols, **kwargs)
+    fig = plt.figure(**kwargs)
     if path:
         path = (FIGURE_DIRECTORY / path).resolve()
         if path in _figures and not overwrite_ok:
@@ -364,16 +358,48 @@ def _new_figure(master, path=None, rows=1, cols=1, *, overwrite_ok=False,
         path = len(_figures)
     _figures[path] = fig
 
-    canvas = matplotlib.backends.backend_tkagg.FigureCanvasTkAgg(
-            fig, master=master)
+    canvas = matplotlib.backends.backend_tkagg.FigureCanvasTkAgg(fig,
+            master=master)
     canvas.draw()
     canvas.get_tk_widget().pack(fill="both", expand=True)
-    toolbar = matplotlib.backends.backend_tkagg.NavigationToolbar2Tk(
-            canvas, master, pack_toolbar=False)
+    toolbar = matplotlib.backends.backend_tkagg.NavigationToolbar2Tk(canvas,
+            master, pack_toolbar=False)
     toolbar.update()
     toolbar.pack(side="top", fill="x")
 
+    return fig
+
+def _make_plots(fig, rows=1, cols=1, **kwargs):
+    if "axes_class" not in kwargs and "projection" not in kwargs:
+        kwargs["axes_class"] = BrAxes
+    axes = []
+    for i in range(1, rows*cols + 1):
+        ax = fig.add_subplot(rows, cols, i, **kwargs)
+        axes.append(ax)
+    axes = np.array(axes).reshape(rows, cols)
+    if rows == 1 and cols == 1:
+        axes = axes[0, 0]
+    elif rows == 1 or cols == 1:
+        axes = axes.flatten()
     return fig, axes
+
+def new_figure(path=None, *, title=None, **kwargs):
+    win = _make_window(title)
+    fig = _make_figure(win, path, **kwargs)
+    win.br_figures.append(fig)
+    return fig
+
+def new_plots(path=None, rows=1, cols=1, *, overwrite_ok=False, title=None,
+        fig_kw=None, **kwargs):
+    if fig_kw is None:
+        fig_kw = dict()
+    if "figsize" not in fig_kw:
+        figsize_x, figsize_y = DEFAULT_FIGSIZE
+        figsize_x *= cols
+        figsize_y *= rows
+        fig_kw["figsize"] = (figsize_x, figsize_y)
+    fig = new_figure(path, overwrite_ok=overwrite_ok, title=title, **fig_kw)
+    return _make_plots(fig, rows, cols, **kwargs)
 
 class _Window:
     def __init__(self, win):
@@ -381,29 +407,40 @@ class _Window:
         notebook.pack(fill="both", expand=True)
         win.br_notebook = notebook
         self._win = win
-
-    def new_figure(self, *args, title=None, **kwargs):
+    def _make_tab(self, title=None):
         if title is None:
             title = f"Tab {len(self._win.br_figures) + 1}"
         tab = tkinter.ttk.Frame(self._win.br_notebook)
         self._win.br_notebook.add(tab, text=title)
-        fig, axes = _new_figure(tab, *args, **kwargs)
+        return tab
+
+    def new_figure(self, *args, title=None, **kwargs):
+        tab = self._make_tab(title)
+        fig = _make_figure(tab, *args, **kwargs)
         self._win.br_figures.append(fig)
-        return fig, axes
+        return fig
 
-
-def new_figure(*args, title=None, **kwargs):
-    win = _new_window(title)
-    fig, axes = _new_figure(win, *args, **kwargs)
-    win.br_figures.append(fig)
-    return fig, axes
-
+    def new_plots(self, *args, overwrite_ok=False, title=None, fig_kw=None,
+            **kwargs):
+        tab = self._make_tab(title)
+        if fig_kw is None:
+            fig_kw = dict()
+        if "figsize" not in fig_kw:
+            figsize_x, figsize_y = DEFAULT_FIGSIZE
+            figsize_x *= cols
+            figsize_y *= rows
+            fig_kw["figsize"] = (figsize_x, figsize_y)
+        fig = _make_figure(tab, overwrite_ok=overwrite_ok, **fig_kw)
+        self._win.br_figures.append(fig)
+        return _make_plots(figs, *args, **kwargs)
 def new_window(title=None):
-    return _Window(_new_window(title))
+    return _Window(_make_window(title))
 
 class _NoWindow:
     def new_figure(self, *args, **kwargs):
         return new_figure(*args, **kwargs)
+    def new_plots(self, *args, **kwargs):
+        return new_plots(*args, **kwargs)
 def no_window():
     return _NoWindow()
 
