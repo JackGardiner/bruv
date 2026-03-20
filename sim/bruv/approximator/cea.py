@@ -87,6 +87,8 @@ class CEA_Result:
             elif name in {"cp", "t_cp", "c_cp"}:
                 data[i] *= 1e3 # kJ/(kg*K) -> J/(kg*K)
         return cls(data)
+    def lerp(self, other, t):
+        return CEA_Result(self.data + t*(other.data - self.data))
     def __getattr__(self, name):
         if name not in type(self).NAMES:
             return super().__getattribute__(name)
@@ -104,6 +106,12 @@ class CEA:
     CEA wrapping object (singleton). Evaluates NASA CEA when a fuel has been
     selected via `with CEA.configure(oxid, fuel):`.
     """
+
+    SPACING_P = 0.01
+    SPACING_ofr = 0.02
+    SPACING_AEAT = 0.02
+    SPACING = np.array([SPACING_P, SPACING_ofr, SPACING_AEAT])
+
     def __init__(self):
         self._problem = None
         self._oxid = None
@@ -172,13 +180,19 @@ class CEA:
             self._fuel = None
             self._cache = {}
 
-    def _keyof(self, P, ofr, eps):
-        P = round(float(P), 4)
-        ofr = round(float(ofr), 4)
-        eps = round(float(eps), 4)
-        return P, ofr, eps
+    def _get(self, idx):
+        key = tuple(idx)
+        if key not in self._cache:
+            P, ofr, AEAT = idx * self.SPACING
+            self._problem.set_pressure(P * 10) # mpa -> bar
+            self._problem.set_o_f(ofr)
+            self._problem.set_ae_at(AEAT)
+            cea = self._problem.run()
+            self._cache[key] = CEA_Result.from_cea(cea)
+            self._changed = True
+        return self._cache[key]
 
-    def __call__(self, P, ofr, eps):
+    def __call__(self, P, ofr, AEAT):
         """
         Returns the CEA_Result of the given state. May only be called when
         configured with an oxidiser and fuel.
@@ -186,26 +200,48 @@ class CEA:
         """
         if self._problem is None:
             raise RuntimeError("CEA is not configured (use .configure)")
-        key = self._keyof(P, ofr, eps)
-        if key not in self._cache:
-            P, ofr, eps = key
-            self._problem.set_pressure(P * 10) # mpa -> bar
-            self._problem.set_o_f(ofr)
-            self._problem.set_ae_at(eps)
-            cea = self._problem.run()
-            self._cache[key] = CEA_Result.from_cea(cea)
-            self._changed = True
-        return self._cache[key]
+        # 3d interpolate.
+
+        # Compute surrounding integer grid indices
+        idx = np.array([P, ofr, AEAT]) / self.SPACING
+        i0 = np.floor(idx).astype(int)
+        i1 = i0 + 1
+        t = idx - i0
+        used = t > 1e-8
+
+        def corner(a, b, c):
+            # Dont evaulate extra corners if not needed.
+            ix = i1[0] if used[0] and a else i0[0]
+            iy = i1[1] if used[1] and b else i0[1]
+            iz = i1[2] if used[2] and c else i0[2]
+            return self._get((ix, iy, iz))
+        c000 = corner(0,0,0)
+        c100 = corner(1,0,0)
+        c010 = corner(0,1,0)
+        c110 = corner(1,1,0)
+        c001 = corner(0,0,1)
+        c101 = corner(1,0,1)
+        c011 = corner(0,1,1)
+        c111 = corner(1,1,1)
+
+        # Trilinear interpolation.
+        c00 = c000.lerp(c100, t[0])
+        c01 = c001.lerp(c101, t[0])
+        c10 = c010.lerp(c110, t[0])
+        c11 = c011.lerp(c111, t[0])
+        c0 = c00.lerp(c10, t[1])
+        c1 = c01.lerp(c11, t[1])
+        return c0.lerp(c1, t[2])
 
     def __getitem__(self, name):
         """
         Returns a numpy vectorised function which gets the given property and
-        accepts `P, ofr, eps` as arguments. May only be called when configured
+        accepts `P, ofr, AEAT` as arguments. May only be called when configured
         with an oxidiser and fuel.
         - Expects P in MPa.
         """
-        def f(P, ofr, eps):
-            return getattr(self(P, ofr, eps), name)
+        def f(P, ofr, AEAT):
+            return getattr(self(P, ofr, AEAT), name)
         f.__name__ = f"cea.{name}"
         return np.vectorize(f)
 
@@ -216,11 +252,15 @@ class CEA:
         with filelock:
             if self._path_cache().is_file():
                 data = np.load(str(self._path_cache()))
+                spacing = data["spacing"]
                 keys = data["keys"]
                 values = data["values"]
-                cache = {self._keyof(*k): CEA_Result(v)
-                         for k, v in zip(keys, values)}
-                self._cache = cache | self._cache
+                if (spacing == self.SPACING).all():
+                    cache = {tuple(k): CEA_Result(v)
+                            for k, v in zip(keys, values)}
+                    self._cache = cache | self._cache
+                else:
+                    print("WARNING: spacing in CEA cache does not match")
         self._changed = False
 
     def save(self):
@@ -234,7 +274,8 @@ class CEA:
             values = list(x.data for x in self._cache.values())
             self._path_cache().parent.mkdir(parents=True, exist_ok=True)
             np.savez(self._path_cache(), allow_pickle=False,
-                keys=np.array(keys, dtype=np.float32),
+                spacing=self.SPACING,
+                keys=np.array(keys, dtype=np.int32),
                 values=np.array(values, dtype=np.float32),
             )
             print("CEA cache saved.   ")
