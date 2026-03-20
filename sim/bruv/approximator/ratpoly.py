@@ -262,10 +262,12 @@ class Printer:
         self.print_all_below = print_all_below
         self._best = float("inf")
         self._line_start = None
+        self._last_length = 0
 
     def trying(self, pidxs, qidxs):
         s = f"{pidxs}, {qidxs}"
-        print(s + " " * (self.padto - len(s)), end="\r")
+        print(s + " " * (self._last_length - len(s)), end="\r")
+        self._last_length = len(s)
         self._line_start = s
 
     def tried(self, ratpoly, error):
@@ -273,7 +275,9 @@ class Printer:
             s = f"{self._line_start} .."
             s += "." * (self.padto - len(s))
             s += f" {100 * error:.4g}%"
-            print(s + " *" * (error <= self._best))
+            s += " *" * (error <= self._best)
+            print(s)
+            self._last_length = 0
         self._best = min(self._best, error)
         self._line_start = None
 
@@ -381,14 +385,16 @@ class RationalPolynomial:
             raise Exception("zero-coord in input?")
 
         def initial_coeffs(pidxs, qidxs):
-            initial = np.zeros(len(pidxs) - 1 + len(qidxs))
-            initial[len(pidxs) - 1] = 1.0 # avoid /0
+            initial = np.zeros(len(pidxs) + len(qidxs) - 1)
             return initial
 
+        def coeffs_from_coeffs(pidxs, qidxs, coeffs):
+            pcoeffs = coeffs[:len(pidxs)]
+            qcoeffs = coeffs[len(pidxs):]
+            qcoeffs = np.append(np.array([1.0]), qcoeffs)
+            return pcoeffs, qcoeffs
         def ratpoly_from_coeffs(pidxs, qidxs, coeffs):
-            pcoeffs = coeffs[:len(pidxs) - 1]
-            pcoeffs = np.append(pcoeffs, 1.0)
-            qcoeffs = coeffs[len(pidxs) - 1:]
+            pcoeffs, qcoeffs = coeffs_from_coeffs(pidxs, qidxs, coeffs)
             p = Polynomial(ndim, pidxs, pcoeffs, check=False)
             q = Polynomial(ndim, qidxs, qcoeffs, check=False)
             return RationalPolynomial(p, q)
@@ -403,21 +409,43 @@ class RationalPolynomial:
                 find_best.N = maxdegree
                 find_best.ones = yup_all_ones(maxdegree, *flatcoords)
 
-            def compute(coeffs, only_residuals=True):
+            def jacobian(coeffs):
+                pcoeffs, qcoeffs = coeffs_from_coeffs(pidxs, qidxs, coeffs)
+                ones = find_best.ones
+                P = ones[:, pidxs] @ pcoeffs
+                Q = ones[:, qidxs] @ qcoeffs
+                N = len(pidxs)
+                M = len(qidxs) - 1
+                J = np.zeros((ones.shape[0], N + M))
+                J[:, :N] = -ones[:, pidxs] / Q[:, None]
+                J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
+                return J
+
+            def residuals(coeffs):
                 ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
                 with np.errstate(divide="ignore"):
                     values = ratpoly.eval_ones(find_best.ones)
-                if only_residuals:
-                    return values - real_values
-                else:
-                    return ratpoly, *evaluator(real_values, values)
+                return real_values - values
+
             # Optimise via least squares, since its significantly more stable
             # than a minimise-max-error optimiser.
             coeffs = initial_coeffs(pidxs, qidxs)
-            res = scipy.optimize.least_squares(compute, coeffs, method="lm")
-            return compute(res.x, False)
+            for _ in range(10):
+                res = scipy.optimize.least_squares(residuals, coeffs,
+                        jac=jacobian, method="lm")
+                coeffs = res.x
+                if res.status > 0:
+                    break
+            ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
+            # Make the top power in the numer have a coeff of 1.
+            factor = ratpoly.p.coeffs[-1]
+            ratpoly.p.coeffs /= factor
+            ratpoly.q.coeffs /= factor
+            values = ratpoly.eval_ones(find_best.ones)
+            return ratpoly, *evaluator(real_values, values)
         find_best.N = -1
         find_best.ones = None
+
 
         best_ratpoly = None
         best_error = float("inf")
@@ -450,9 +478,9 @@ class RationalPolynomial:
         values = self.eval_ones(ones)
         return values.reshape(broadcasted_shape(*coords))
     def eval_ones(self, ones):
-        p = np.sum(self.p.coeffs * ones[:, self.p.idxs], axis=-1)
-        q = np.sum(self.q.coeffs * ones[:, self.q.idxs], axis=-1)
-        return p / q
+        P = ones[:, self.p.idxs] @ self.p.coeffs
+        Q = ones[:, self.q.idxs] @ self.q.coeffs
+        return P / Q
 
     def abs_error(self, real_values, *coords):
         return abs_error(real_values, self(*coords))
