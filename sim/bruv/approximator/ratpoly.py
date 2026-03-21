@@ -10,10 +10,10 @@ import numpy as np
 import scipy
 
 __all__ = [
-    "IdxGenerator",
+    "yup_all_ones", "YupAllOnes",
     "abs_error", "rel_error",
-    "EvaluatorAbsOnly", "EvaluatorRelOnly", "EvaluatorMax", "EvaluatorBalanced",
-    "Printer",
+    "evaluator_abs_only", "evaluator_rel_only", "evaluator_max",
+        "EvaluatorBalanced",
     "Polynomial", "RationalPolynomial",
     "LookupTable",
 ]
@@ -68,6 +68,26 @@ def yup_all_ones(degree, *coords):
             terms.append(term)
     return np.stack(terms).T
 
+class YupAllOnes:
+    def __init__(self, *coords):
+        self.ndim = len(coords)
+        self.coords = [x.ravel() for x in coords]
+        self.ones = None
+        self.maxdegree = -1
+    def get_for_idxs(self, pidxs, qidxs):
+        maxidx = max(pidxs)
+        maxidx = max(maxidx, max(qidxs))
+        degree = degreeof(self.ndim, maxidx)
+        return self.get(degree)
+    def get(self, degree):
+        # dont evaluate super low degree, just bump up.
+        degree = max(degree, 6 // self.ndim)
+        if degree > self.maxdegree:
+            self.ones = yup_all_ones(degree, *self.coords)
+            self.maxdegree = degree
+        return self.ones
+
+
 def poly_ordering(ndim, degree):
     """
     Returns a list of strings of the variable for each term:
@@ -98,188 +118,40 @@ def broadcasted_shape(*coords):
 
 
 
-class IdxGenerator:
-    _CACHE = {}
-    @classmethod
-    def at_cost_1D(cls, ndim, cost, blitz=0.0, _cache=True):
-        """
-        Yields all 1D index tuples with the given cost, ordered by descending
-        length and then ascending last index. `blitz` may be used to skip extreme
-        index tuples, where a higher blitz corresponds to skipping more and more.
-        """
-
-        # Cache small costs.
-        if _cache and cost < 20:
-            key = (ndim, cost, blitz)
-            if key not in cls._CACHE:
-                it = cls.at_cost_1D(ndim, cost, blitz, _cache=False)
-                cls._CACHE[key] = list(it)
-            yield from cls._CACHE[key]
-            return
-
-        # We can vary degree and num of coeffs. define a cost heuristic as:
-        #   ndim * degreeof(max(idxs)) + 2 * len(idxs) - 1
-        # since the poly constructs all powers on the way to the highest, and
-        # then each term requires 1 mul and 1 add/sub. (note im not accounting
-        # for repeated squaring i cannot be fucked). the -1 is just to ensure
-        # that the lowest cost tuple of (0,) has a cost of 1. so, cost is
-        # entirely determined by length and greatest value. want to go longest to
-        # shortest.
-        longest = 0
-        while ndim * degreeof(ndim, longest) + 2*(longest + 1) - 1 <= cost:
-            longest += 1
-        for length in range(longest, 0, -1):
-            # want to go smallest to greatest.
-            #  ndim * degreeof(last) + 2*length - 1 = cost
-            #  ndim * degreeof(last) = cost - 2*length + 1
-            # may not be solutions of this cost for this length.
-            if (cost - 2*length + 1) % ndim:
-                continue
-            #  degreeof(last) = (cost - 2*length + 1) // ndim
-            #  last = invdegreeof((cost - 2*length + 1) // ndim)
-            last = invdegreeof(ndim, (cost - 2*length + 1) // ndim) - 1
-            while ndim * degreeof(ndim, last + 1) + 2*length - 1 == cost:
-                last += 1
-                # If blitzing, dont let the powers get too extreme without a lot
-                # of other powers around. We only do this when blitzing because
-                # it means we may miss cheaper solutions, however those solutions
-                # are generally unlikely and by eliminating them we churn through
-                # possiblities much faster.
-                if blitz > 0:
-                    if last / ndim > (1 + 1.0/blitz) * length:
-                        break
-                for combo in itertools.combinations(range(last), length - 1):
-                    yield list(combo) + [last], cost
-
-    @classmethod
-    def all_idxs_1D(cls, ndim, min_cost, max_cost, blitz=0.0):
-        """
-        Yields all index tuples with a cost in `min_cost`..`max_cost`. `blitz`
-        may be used to skip extreme index tuples, where a higher blitz
-        corresponds to skipping more and more.
-        """
-        for cost in range(min_cost, max_cost + 1):
-            yield from cls.at_cost_1D(ndim, cost, blitz)
-
-    @classmethod
-    def infinite(cls, ndim, blitz=0.0, starting_cost=2):
-        # Iterate through the rat polys in cost order, where the cost of the rat
-        # poly is just the sum of each polys cost.
-        for cost in itertools.count(starting_cost):
-            min_cost = 1
-            max_cost = cost - 1
-            # If blitzing, don't let the numer/denom cost difference get too
-            # extreme (since its more likely to be an accurate approx if not).
-            if blitz > 0:
-                min_cost = int(max_cost / (2 + 1.0/blitz))
-                max_cost -= min_cost
-            for pidxs, pcost in cls.all_idxs_1D(ndim, min_cost, max_cost, blitz):
-                for qidxs, _ in cls.at_cost_1D(ndim, cost - pcost, blitz):
-                    # if the numerator and denominator both dont have constants,
-                    # x can be factored from both.
-                    #  (x + x^2) / x == 1 + x
-                    # for higher dimensions, we dont bother checking but the same
-                    # factorisation can be applied to find redundant options.
-                    if ndim == 1 and pidxs[0] != 0 and qidxs[0] != 0:
-                        continue
-                    # note that while f(x)/c is the same as scaling all
-                    # coefficients, it isnt the same for us since we fix the
-                    # highest index numerator coefficient to 1.
-                    # if qidxs == (0,):
-                    #     continue
-                    yield pidxs, qidxs
-
-    @classmethod
-    def just(cls, pidxs, qidxs):
-        yield list(pidxs), list(qidxs)
-
-
-
 def rel_error(real_values, values):
     return (values - real_values) / (real_values.max() - real_values.min())
 def abs_error(real_values, values):
     with np.errstate(divide="ignore"):
         return values / real_values - 1
 
-class EvaluatorBase:
-    def __init__(self, leave_when_better_than=None):
-        self.leave_when_better_than = leave_when_better_than
+def evaluator_abs_only(real_values, values):
+    error = abs_error(real_values, values)
+    return float(np.abs(error).max())
 
-    def _get_ret(self, error):
-        leave = False
-        if self.leave_when_better_than is not None:
-            leave = error < self.leave_when_better_than
-        return error, leave
+def evaluator_rel_only(real_values, values):
+    error = rel_error(real_values, values)
+    return float(np.abs(error).max())
 
-class EvaluatorAbsOnly(EvaluatorBase):
-    def __init__(self, leave_when_better_than=None):
-        super().__init__(leave_when_better_than)
-    def __call__(self, real_values, values):
-        absolute = np.abs(abs_error(real_values, values))
-        error = float(absolute.max())
-        return self._get_ret(error)
+def evaluator_max(real_values, values):
+    absolute = abs_error(real_values, values)
+    relative = rel_error(real_values, values)
+    error = max(np.abs(absolute).max(), np.abs(relative).max())
+    return float(error)
 
-class EvaluatorRelOnly(EvaluatorBase):
-    def __init__(self, leave_when_better_than=None):
-        super().__init__(leave_when_better_than)
-    def __call__(self, real_values, values):
-        relative = np.abs(rel_error(real_values, values))
-        error = float(relative.max())
-        return self._get_ret(error)
-
-class EvaluatorMax(EvaluatorBase):
-    def __init__(self, leave_when_better_than=None):
-        super().__init__(leave_when_better_than)
-    def __call__(self, real_values, values):
-        absolute = np.abs(abs_error(real_values, values))
-        relative = np.abs(rel_error(real_values, values))
-        error = max(absolute.max(), relative.max())
-        error = float(error)
-        return self._get_ret(error)
-
-class EvaluatorBalanced(EvaluatorBase):
-    def __init__(self, leave_when_better_than=None, weight_abs=1.0,
-            weight_rel=1.0):
-        super().__init__(leave_when_better_than)
+class EvaluatorBalanced:
+    def __init__(self, weight_abs=1.0, weight_rel=1.0):
         self.weight_abs = weight_abs
         self.weight_rel = weight_rel
 
     def __call__(self, real_values, values):
-        absolute = np.abs(abs_error(real_values, values))
-        relative = np.abs(rel_error(real_values, values))
-        max_abs = absolute.max()
-        max_rel = relative.max()
+        absolute = abs_error(real_values, values)
+        relative = rel_error(real_values, values)
+        max_abs = np.abs(absolute).max()
+        max_rel = np.abs(relative).max()
         error = self.weight_abs * max_abs + self.weight_rel * max_rel
         error /= self.weight_abs + self.weight_rel
-        error = float(error)
-        return self._get_ret(error)
+        return float(error)
 
-
-
-class Printer:
-    def __init__(self, print_all_below=0.012, padto=40):
-        self.padto = padto
-        self.print_all_below = print_all_below
-        self._best = float("inf")
-        self._line_start = None
-        self._last_length = 0
-
-    def trying(self, pidxs, qidxs):
-        s = f"{pidxs}, {qidxs}"
-        print(s + " " * (self._last_length - len(s)), end="\r")
-        self._last_length = len(s)
-        self._line_start = s
-
-    def tried(self, ratpoly, error):
-        if error <= max(self._best, self.print_all_below):
-            s = f"{self._line_start} .."
-            s += "." * (self.padto - len(s))
-            s += f" {100 * error:.4g}%"
-            s += " *" * (error <= self._best)
-            print(s)
-            self._last_length = 0
-        self._best = min(self._best, error)
-        self._line_start = None
 
 
 
@@ -371,99 +243,258 @@ class RationalPolynomial:
          q0 + q1 x + q2 x^2 + ... + qm x^m
     """
 
+    _IDXS_CACHE = {}
     @classmethod
-    def approximate(cls, real_values, *coords, idx_generator, evaluator,
-            printer=None):
+    def _at_cost_one(cls, ndim, cost, blitz=0.0, _cache=True):
+        # Yields all 1D index tuples with the given cost, ordered by descending
+        # length and then ascending last index. `blitz` may be used to skip
+        # extreme index tuples, where a higher blitz corresponds to skipping more
+        # and more.
 
-        ndim = len(coords)
-        flatcoords = [x.ravel() for x in coords]
-        real_values = real_values.ravel()
+        # Cache small costs.
+        if _cache and cost < 20:
+            key = (ndim, cost, blitz)
+            if key not in cls._IDXS_CACHE:
+                it = cls._at_cost_one(ndim, cost, blitz, _cache=False)
+                cls._IDXS_CACHE[key] = list(it)
+            yield from cls._IDXS_CACHE[key]
+            return
 
-        if any((x == 0.0).any() for x in flatcoords):
-            raise Exception("zero-coord in input")
-        if any(((x > 0.0) != (x[0] > 0.0)).any() for x in flatcoords):
-            raise Exception("zero-coord in input?")
+        # We can vary degree and num of coeffs. define a cost heuristic as:
+        #   ndim * degreeof(max(idxs)) + 2 * len(idxs) - 1
+        # since the poly constructs all powers on the way to the highest, and
+        # then each term requires 1 mul and 1 add/sub. (note im not accounting
+        # for repeated squaring i cannot be fucked). the -1 is just to ensure
+        # that the lowest cost tuple of (0,) has a cost of 1. so, cost is
+        # entirely determined by length and greatest value. want to go longest to
+        # shortest.
+        longest = 0
+        while ndim * degreeof(ndim, longest) + 2*(longest + 1) - 1 <= cost:
+            longest += 1
+        for length in range(longest, 0, -1):
+            # want to go smallest to greatest.
+            #  ndim * degreeof(last) + 2*length - 1 = cost
+            #  ndim * degreeof(last) = cost - 2*length + 1
+            # may not be solutions of this cost for this length.
+            if (cost - 2*length + 1) % ndim:
+                continue
+            #  degreeof(last) = (cost - 2*length + 1) // ndim
+            #  last = invdegreeof((cost - 2*length + 1) // ndim)
+            last = invdegreeof(ndim, (cost - 2*length + 1) // ndim) - 1
+            while ndim * degreeof(ndim, last + 1) + 2*length - 1 == cost:
+                last += 1
+                # If blitzing, dont let the powers get too extreme without a lot
+                # of other powers around. We only do this when blitzing because
+                # it means we may miss cheaper solutions, however those solutions
+                # are generally unlikely and by eliminating them we churn through
+                # possiblities much faster.
+                if blitz > 0:
+                    if last / ndim > (1 + 1.0/blitz) * length:
+                        break
+                for combo in itertools.combinations(range(last), length - 1):
+                    yield list(combo) + [last], cost
+    @classmethod
+    def _all_idxs_one(cls, ndim, min_cost, max_cost, blitz=0.0):
+        # Yields all index tuples with a cost in `min_cost`..`max_cost`. `blitz`
+        # may be used to skip extreme index tuples, where a higher blitz
+        # corresponds to skipping more and more.
+        for cost in range(min_cost, max_cost + 1):
+            yield from cls._at_cost_one(ndim, cost, blitz)
+    @classmethod
+    def _all_idxs(cls, ndim, blitz=0.0, starting_cost=2):
+        # Iterate through the rat polys in cost order, where the cost of the rat
+        # poly is just the sum of each polys cost.
+        for cost in itertools.count(starting_cost):
+            min_cost = 1
+            max_cost = cost - 1
+            # If blitzing, don't let the numer/denom cost difference get too
+            # extreme (since its more likely to be an accurate approx if not).
+            if blitz > 0:
+                min_cost = int(max_cost / (2 + 1.0/blitz))
+                max_cost -= min_cost
+            for pidxs, pcost in cls._all_idxs_one(ndim, min_cost, max_cost,
+                    blitz):
+                for qidxs, _ in cls._at_cost_one(ndim, cost - pcost, blitz):
+                    # if the numerator and denominator both dont have constants,
+                    # x can be factored from both.
+                    #  (x + x^2) / x == 1 + x
+                    # for higher dimensions, we dont bother checking but the same
+                    # factorisation can be applied to find redundant options.
+                    if ndim == 1 and pidxs[0] != 0 and qidxs[0] != 0:
+                        continue
+                    # note that while f(x)/c is the same as scaling all
+                    # coefficients, it isnt the same for us since we fix the
+                    # highest index numerator coefficient to 1.
+                    # if qidxs == (0,):
+                    #     continue
+                    yield pidxs, qidxs
 
-        def initial_coeffs(pidxs, qidxs):
-            initial = np.zeros(len(pidxs) + len(qidxs) - 1)
-            return initial
 
-        def coeffs_from_coeffs(pidxs, qidxs, coeffs):
+    @classmethod
+    def approximate(cls, pidxs, qidxs, *points):
+        ndim = len(points) - 1
+        assert ndim >= 1
+        assert all(x.ndim == 1 for x in points)
+        coords = points[:-1]
+        real_values = points[-1]
+        ones = YupAllOnes(*coords).get_for_idxs(pidxs, qidxs)
+        return cls.approximate_ones(ndim, pidxs, qidxs, ones, real_values)
+
+    @classmethod
+    def approximate_ones(cls, ndim, pidxs, qidxs, ones, real_values):
+        pidxs = list(pidxs)
+        qidxs = list(qidxs)
+        assert ndim >= 1
+        assert real_values.ndim == 1
+
+        # implicitly set the lowest power coeff in the denom to 1.
+        def initial_coeffs():
+            return np.zeros(len(pidxs) + len(qidxs) - 1)
+        def get_coeffs(coeffs):
             pcoeffs = coeffs[:len(pidxs)]
             qcoeffs = coeffs[len(pidxs):]
-            qcoeffs = np.append(np.array([1.0]), qcoeffs)
+            qcoeffs = np.concatenate(([1.0], qcoeffs))
             return pcoeffs, qcoeffs
-        def ratpoly_from_coeffs(pidxs, qidxs, coeffs):
-            pcoeffs, qcoeffs = coeffs_from_coeffs(pidxs, qidxs, coeffs)
-            p = Polynomial(ndim, pidxs, pcoeffs, check=False)
-            q = Polynomial(ndim, qidxs, qcoeffs, check=False)
-            return RationalPolynomial(p, q)
 
-        def find_best(pidxs, qidxs):
-            maxidx = max(pidxs)
-            maxidx = max(maxidx, max(qidxs))
-            maxdegree = degreeof(ndim, maxidx)
-            # dont evaluate super low degree, just bump up.
-            maxdegree = max(maxdegree, 6 // ndim)
-            if maxdegree > find_best.N:
-                find_best.N = maxdegree
-                find_best.ones = yup_all_ones(maxdegree, *flatcoords)
+        def jacobian(coeffs):
+            pcoeffs, qcoeffs = get_coeffs(coeffs)
+            P = ones[:, pidxs] @ pcoeffs
+            Q = ones[:, qidxs] @ qcoeffs
+            N = len(pidxs)
+            M = len(qidxs) - 1
+            J = np.zeros((ones.shape[0], N + M))
+            J[:, :N] = -ones[:, pidxs] / Q[:, None]
+            J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
+            return J
 
-            def jacobian(coeffs):
-                pcoeffs, qcoeffs = coeffs_from_coeffs(pidxs, qidxs, coeffs)
-                ones = find_best.ones
-                P = ones[:, pidxs] @ pcoeffs
-                Q = ones[:, qidxs] @ qcoeffs
-                N = len(pidxs)
-                M = len(qidxs) - 1
-                J = np.zeros((ones.shape[0], N + M))
-                J[:, :N] = -ones[:, pidxs] / Q[:, None]
-                J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
-                return J
+        def residuals(coeffs):
+            pcoeffs, qcoeffs = get_coeffs(coeffs)
+            P = ones[:, pidxs] @ pcoeffs
+            Q = ones[:, qidxs] @ qcoeffs
+            with np.errstate(divide="ignore"):
+                values = P / Q
+            return real_values - values
 
-            def residuals(coeffs):
-                ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
-                with np.errstate(divide="ignore"):
-                    values = ratpoly.eval_ones(find_best.ones)
-                return real_values - values
-
-            # Optimise via least squares, since its significantly more stable
-            # than a minimise-max-error optimiser.
-            coeffs = initial_coeffs(pidxs, qidxs)
-            for _ in range(10):
-                res = scipy.optimize.least_squares(residuals, coeffs,
-                        jac=jacobian, method="lm")
-                coeffs = res.x
-                if res.status > 0:
-                    break
-            ratpoly = ratpoly_from_coeffs(pidxs, qidxs, coeffs)
-            # Make the top power in the numer have a coeff of 1.
-            factor = ratpoly.p.coeffs[-1]
-            ratpoly.p.coeffs /= factor
-            ratpoly.q.coeffs /= factor
-            values = ratpoly.eval_ones(find_best.ones)
-            return ratpoly, *evaluator(real_values, values)
-        find_best.N = -1
-        find_best.ones = None
-
-
-        best_ratpoly = None
-        best_error = float("inf")
-
-        for pidxs, qidxs in idx_generator:
-            if printer is not None:
-                printer.trying(pidxs, qidxs)
-            ratpoly, error, leave = find_best(pidxs, qidxs)
-            if printer is not None:
-                printer.tried(ratpoly, error)
-
-            if error <= best_error:
-                best_ratpoly = ratpoly
-                best_error = error
-            if leave:
+        # Optimise via least squares, since its significantly more stable than a
+        # minimise-max-error optimiser.
+        coeffs = initial_coeffs()
+        for _ in range(10):
+            res = scipy.optimize.least_squares(residuals, coeffs,
+                    jac=jacobian, method="lm")
+            coeffs = res.x
+            if res.status > 0:
                 break
-        assert best_ratpoly is not None
-        return best_ratpoly, best_error
+        pcoeffs, qcoeffs = get_coeffs(coeffs)
+        # Make the top power in the numer have a coeff of 1.
+        factor = pcoeffs[-1]
+        pcoeffs /= factor
+        qcoeffs /= factor
+        ratpoly = RationalPolynomial(
+            Polynomial(ndim, pidxs, pcoeffs),
+            Polynomial(ndim, qidxs, qcoeffs),
+        )
+        values = ratpoly.eval_ones(ones)
+        return ratpoly, values
+
+    @classmethod
+    def search_forwards(cls, *points, blitz=0.0, starting_cost=2,
+            evaluator=evaluator_abs_only, padto=40, print_all_below=0.01):
+        ndim = len(points) - 1
+        assert ndim >= 1
+        assert all(x.ndim == 1 for x in points)
+        coords = points[:-1]
+        real_values = points[-1]
+        yao = YupAllOnes(*coords)
+        best_error = float("inf")
+        last_length = 0
+        for pidxs, qidxs in cls._all_idxs(ndim, blitz, starting_cost):
+            s = f"{pidxs}, {qidxs}"
+            print(s + " " * (last_length - len(s)), end="\r")
+            last_length = len(s)
+
+            ones = yao.get_for_idxs(pidxs, qidxs)
+            ratpoly, values = cls.approximate_ones(ndim, pidxs, qidxs, ones,
+                    real_values)
+            error = evaluator(real_values, values)
+
+            if error <= max(best_error, print_all_below):
+                s = f"{s} .."
+                s += "." * (padto - len(s))
+                s += f" {100 * error:.4g}%"
+                s += " *" * (error <= best_error)
+                s += " " * (len(s) - last_length)
+                print(s)
+                last_length = 0
+            best_error = min(best_error, error)
+
+    @classmethod
+    def search_backwards(cls, *points, evaluator=evaluator_abs_only, padto=40,
+            max_error=0.01):
+        ndim = len(points) - 1
+        assert ndim >= 1
+        assert all(x.ndim == 1 for x in points)
+        coords = points[:-1]
+        real_values = points[-1]
+        yao = YupAllOnes(*coords)
+        pidxs = list(range(10 * ndim))
+        qidxs = list(range(10 * ndim))
+        cls._search_backwards_branch(pidxs, qidxs, yao, real_values, evaluator,
+                padto, max_error, set())
+
+    @classmethod
+    def _search_backwards_branch(cls, pidxs, qidxs, yao, real_values, evaluator,
+            padto, max_error, done):
+        N = len(pidxs) + len(qidxs)
+        for n in range(1, N - 1):
+            # print(f"-> -{n}")
+            best_error = float("inf")
+            best_idxs = None
+            last_length = 0
+            for idxs in itertools.combinations(range(N), n):
+                pi = [pidxs[i] for i in range(len(pidxs))
+                      if i not in idxs]
+                qi = [qidxs[i] for i in range(len(qidxs))
+                      if (i + len(pidxs)) not in idxs]
+                if not pi or not qi:
+                    continue
+
+                key = tuple(pi + qi)
+                if key in done:
+                    continue
+                done.add(key)
+
+                s = f"{pi}, {qi}"
+                print(s + " " * (last_length - len(s)), end="\r")
+                last_length = len(s)
+
+                ones = yao.get_for_idxs(pi, qi)
+                ratpoly, values = cls.approximate_ones(yao.ndim, pi, qi, ones,
+                        real_values)
+                error = evaluator(real_values, values)
+                if error < best_error:
+                    best_error = error
+                    best_idxs = idxs
+            if best_idxs is None:
+                continue
+
+            # Pick best.
+            pi = [pidxs[i] for i in range(len(pidxs))
+                  if i not in best_idxs]
+            qi = [qidxs[i] for i in range(len(qidxs))
+                  if (i + len(pidxs)) not in best_idxs]
+            s = f"{pi}, {qi} .."
+            s += "." * (padto - len(s))
+            s += f" {100 * best_error:.4g}%"
+            s += " " * (len(s) - last_length)
+            print(s)
+            last_length = 0
+
+            if best_error <= max_error:
+                cls._search_backwards_branch(pi, qi, yao, real_values, evaluator,
+                        padto, max_error, done)
+            else:
+                return
+
 
     def __init__(self, p, q):
         assert p.ndim == q.ndim

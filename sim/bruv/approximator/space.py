@@ -148,8 +148,9 @@ class Surfspace:
         )
 
 
-    def points(self, N):
-        return self._points2D(N) if self.ndim == 2 else self._points1D(N)
+    def points(self, N, **kwargs):
+        return self._points2D(N, **kwargs) if self.ndim == 2 else \
+               self._points1D(N, **kwargs)
 
     def bounds(self):
         b = (self.xlo, self.xhi)
@@ -168,7 +169,27 @@ class Surfspace:
 
         min_dist = np.sqrt(self._surface_area / N / np.pi) * spacing
 
-        points = np.empty(shape=(0, 3))
+        # Add an explicit border.
+        n = int(0.16*N)
+        n -= (n % 4)
+        assert n >= 4
+        side = np.linspace(0.0, 1.0, n//4 + 1)[:-1]
+        points = np.empty(shape=(n, 3))
+        points[:n//4, 0] = side
+        points[:n//4, 1] = 0.0
+        points[n//4:n//2, 0] = 1.0
+        points[n//4:n//2, 1] = side
+        points[n//2:-n//4, 0] = 1.0 - side
+        points[n//2:-n//4, 1] = 1.0
+        points[-n//4:, 0] = 0.0
+        points[-n//4:, 1] = 1.0 - side
+
+        x = points[:, 0] * (self.xhi - self.xlo) + self.xlo
+        y = points[:, 1] * (self.yhi - self.ylo) + self.ylo
+        z = self.f(x, y)
+        w = (z - self.zlo) / (self.zhi - self.zlo)
+        points[:, 2] = w
+
         while points.shape[0] < N:
             s = f"{points.shape[0]:<{len(str(N))}}/{N}"
             print(s, end="\r")

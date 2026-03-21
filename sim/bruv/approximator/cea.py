@@ -107,7 +107,7 @@ class CEA:
     selected via `with CEA.configure(oxid, fuel):`.
     """
 
-    SPACING_P = 0.01
+    SPACING_P = 0.005
     SPACING_ofr = 0.02
     SPACING_AEAT = 0.02
     SPACING = np.array([SPACING_P, SPACING_ofr, SPACING_AEAT])

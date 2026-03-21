@@ -4,6 +4,7 @@ Plotting and data viewing.
 
 import argparse
 import contextlib
+import warnings
 from pathlib import Path
 
 import tkinter
@@ -420,8 +421,8 @@ class _Window:
         self._win.br_figures.append(fig)
         return fig
 
-    def new_plots(self, *args, overwrite_ok=False, title=None, fig_kw=None,
-            **kwargs):
+    def new_plots(self, path=None, rows=1, cols=1, *, overwrite_ok=False,
+            title=None, fig_kw=None, **kwargs):
         tab = self._make_tab(title)
         if fig_kw is None:
             fig_kw = dict()
@@ -430,9 +431,9 @@ class _Window:
             figsize_x *= cols
             figsize_y *= rows
             fig_kw["figsize"] = (figsize_x, figsize_y)
-        fig = _make_figure(tab, overwrite_ok=overwrite_ok, **fig_kw)
+        fig = _make_figure(tab, path, overwrite_ok=overwrite_ok, **fig_kw)
         self._win.br_figures.append(fig)
-        return _make_plots(figs, *args, **kwargs)
+        return _make_plots(fig, rows, cols, **kwargs)
 def new_window(title=None):
     return _Window(_make_window(title))
 

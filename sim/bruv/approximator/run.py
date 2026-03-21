@@ -44,11 +44,11 @@ def summary_2D(ratpoly, values, X, Y, *, extra_reqs=(), trimasker=None):
     Y = Y.ravel()
 
     approx = ratpoly(X, Y)
-    abserr = ratpoly.abs_error(values, X, Y)
-    relerr = ratpoly.rel_error(values, X, Y)
+    abserr = np.abs(ratpoly.abs_error(values, X, Y))
+    relerr = np.abs(ratpoly.rel_error(values, X, Y))
     print(f"    /* max error of: */")
-    print(f"    /*    abs {np.abs(abserr).max()*100:.3g}% */")
-    print(f"    /*    rel {np.abs(relerr).max()*100:.3g}% */")
+    print(f"    /*    abs {abserr.max()*100:.3g}% */")
+    print(f"    /*    rel {relerr.max()*100:.3g}% */")
     print(f"    /* requires: */")
     print(f"    /*    x in [{X.min()}, {X.max()}] */")
     print(f"    /*    y in [{Y.min()}, {Y.max()}] */")
@@ -88,54 +88,77 @@ def test1d():
 
     X, values = surf.points(100)
 
-    X_f = Evenspace(*surf.bounds()).points(1000)
-    values_f = surf.f(X_f)
+    # RationalPolynomial.search_forwards(X, values, print_all_below=0.0)
+    # RationalPolynomial.search_backwards(X, values, max_error=0.01)
 
     ratpoly, _ = RationalPolynomial.approximate(
-        values, X,
-        idx_generator=IdxGenerator.just([0, 2], [0, 2, 3]),
-        evaluator=EvaluatorAbsOnly(leave_when_better_than=0.012),
-        printer=Printer()
+        [0, 2], [0, 2, 3], X, values,
     )
     print("found:", ratpoly)
+    X_f = Evenspace(*surf.bounds()).points(1000)
+    values_f = surf.f(X_f)
     summary_1D(ratpoly, values_f, X_f)
 
 
 def test2d():
     print("approximating e^(xy/10) + ln(x)")
     surf = Surfspace(
-        lambda X, Y: np.exp(X*Y/10) + np.log(X), #+ 10*np.exp(-10*(X - 2)**2),
+        lambda X, Y: np.exp(X*Y/10) + np.log(X),
         1, 3,
         10, 20
     )
 
     X, Y, values = surf.points(100)
-    # X, Y = Evenspace(*surf.bounds()).points(100)
-    # values = surf.f(X, Y)
 
-    X_f, Y_f = Evenspace(*surf.bounds()).points(100**2)
-    values_f = surf.f(X_f, Y_f)
-
-    _, ax = new_plots(projection="3d")
-    ax.scatter(X, Y, values)
+    # RationalPolynomial.search_forwards(X, Y, values,
+    #         blitz=3.0, print_all_below=0.02)
+    # RationalPolynomial.search_backwards(X, Y, values, max_error=0.02)
 
     ratpoly, _ = RationalPolynomial.approximate(
-        values, X, Y,
-        # idx_generator=IdxGenerator.infinite(ndim=2, blitz=2.0),
-        idx_generator=IdxGenerator.just(list(range(20)), list(range(20))),
-        evaluator=EvaluatorAbsOnly(leave_when_better_than=0.05),
-        printer=Printer(),
+        [0, 1, 3, 17], [1, 3, 4, 6, 7, 8, 10, 12], X, Y, values,
     )
     print("found:", ratpoly)
+    X_f, Y_f = Evenspace(*surf.bounds()).points(100**2)
+    values_f = surf.f(X_f, Y_f)
     summary_2D(ratpoly, values_f, X_f, Y_f)
 
 
 
 
+def find_T_cc():
+    f = lambda P, ofr: CEA["c_t"](P, ofr, 1.0)
+
+    surf = Surfspace(f, 0.1, 10.0, 0.8, 8.0, N0=100)
+    P, ofr, T_cc = surf.points(800, spacing=1.0, batch_size=1)
+
+    # _, ax = win.new_plots(projection="3d", title="0.1 0.8")
+    # ax.scatter(P, ofr, T_cc)
+
+    # surf = Surfspace(f, 0.01, 10.0, 0.1, 8.0, N0=100)
+    # P, ofr, T_cc = surf.points(400, spacing=1.0, batch_size=1)
+
+    # _, ax = win.new_plots(projection="3d", title="0.01 0.1")
+    # ax.scatter(P, ofr, T_cc)
+    # return
+
+    # RationalPolynomial.search_backwards(P, ofr, T_cc, max_error=0.02)
+    # RationalPolynomial.search_forwards(P, ofr, T_cc, blitz=4.0, print_all_below=0.01)
+    # return
+
+    ratpoly, _ = RationalPolynomial.approximate(
+        [0, 4, 5, 19], [1, 4, 5, 8, 9, 13, 19], P, ofr, T_cc
+    )
+    print("found:", ratpoly)
+    P_f, ofr_f = Evenspace(*surf.bounds()).points(100**2)
+    T_cc_f = f(P_f, ofr_f)
+    summary_2D(ratpoly, T_cc_f, P_f, ofr_f)
+
+
+
 def _run():
     # test1d()
-    test2d()
-
+    # test2d()
+    find_T_cc()
 
 
 
