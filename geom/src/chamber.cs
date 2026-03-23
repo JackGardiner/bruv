@@ -57,10 +57,9 @@ public class Chamber : TPIAP.Pea {
         z = clamp(z, 0f, 1f);
         z *= numel(theta_chnl_lookup) - 1;
         int i = clamp(ifloor(z), 0, numel(theta_chnl_lookup) - 2);
-        int j = i + 1;
         float t = z - i;
         float A = theta_chnl_lookup[i];
-        float B = theta_chnl_lookup[j];
+        float B = theta_chnl_lookup[i + 1];
         return lerp(A, B, t);
     }
     protected void initialise_chnl() {
@@ -72,45 +71,47 @@ public class Chamber : TPIAP.Pea {
         // Compute theta channel.
 
         float phi = torad(30f); // MAGIC (heart eyes)
+        // TODO: ^
 
-        int N = DIVISIONS;
+        int N = 2*DIVISIONS;
         theta_chnl_lookup = new float[N];
         // distributed between zlo and zhi, clamped outside.
 
         float zlo = theta_chnl_lookup_zlo = cnt_z0;
         float zhi = theta_chnl_lookup_zhi = cnt_z6 - th_chnl - th_omani;
-        float Dz = (zhi - zlo) / (N - 1);
-        float rho = Dz * tan(phi); // radius of difference between points.
 
-        float prev_r = NAN;
-        float prev_theta = NAN;
+        Vec3 prev = NAN3;
         for (int i=0; i<N; ++i) {
             float z = lerp(zlo, zhi, i, N);
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
-            float theta;
+            float theta = 0f;
             if (i > 0) {
-                // TODO: check maximum overhang angle (should just be helix
-                // angle?)
-                // got a 3d triangle to solve.
-                float cosa = (r*r - prev_r*prev_r - rho*rho)
-                           / (2f * prev_r * rho);
-                float a = acos(clamp(cosa, 0f, 1f));
-                Vec2 step = rho * frompol(1, prev_theta + a);
-                Vec2 curr = frompol(prev_r, prev_theta) + step;
-                theta = arg(curr);
-            } else {
-                // kinda required, since theta0_chnl handles any offset.
-                theta = 0f;
+                float prev_theta = argxy(prev);
+                Vec3 generatrix = normalise(fromcyl(r, prev_theta, z) - prev);
+                Vec3 tangent = fromcyl(1f, prev_theta + PI_2, 0f);
+                Vec3 outwards = cross(tangent, generatrix);
+                Vec3 dir = rotate(generatrix, outwards, -phi);
+                Vec3 curr = Polygon.plane_line_intersection(prev, prev + dir,
+                        z*uZ3, uZ3);
+                theta = argxy(curr);
             }
-            prev_r = r;
-            prev_theta = theta;
+            prev = fromcyl(r, theta, z);
             theta_chnl_lookup[i] = theta;
         }
 
+        // ensure no full circles between steps.
+        for (int i=1; i<N; ++i) {
+            float Dtheta = theta_chnl_lookup[i] - theta_chnl_lookup[i - 1];
+            Dtheta = wraprad(Dtheta);
+            theta_chnl_lookup[i] = theta_chnl_lookup[i - 1] + Dtheta;
+        }
+
         // ensure first channel is at stagnation point of manifold.
-        float Dtheta = theta_inlet + PI - theta_chnl(zhi);
-        for (int i=0; i<N; ++i)
-            theta_chnl_lookup[i] += Dtheta;
+        {
+            float Dtheta = theta_inlet + PI - theta_chnl_lookup[N - 1];
+            for (int i=0; i<N; ++i)
+                theta_chnl_lookup[i] += Dtheta;
+        }
 
         A_chnl_exit = Ltheta_chnl/TWOPI * PI*(sqed(R_exit + th_iw + th_chnl)
                                             - sqed(R_exit + th_iw));
@@ -882,7 +883,7 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected const float min_A_neg_mani = 23f; // mm^2
+    protected const float min_A_neg_mani = 35f; // mm^2
     protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
@@ -1192,49 +1193,42 @@ public class Chamber : TPIAP.Pea {
     }
 
     protected List<Vec3> points_tc() {
-        float min_z = cnt_z0;
-        float max_z = cnt_z6;
-        float dif = (max_z - min_z)/(no_tc + 2);
-        min_z += dif * 1.3f;
-        max_z -= dif * 0.7f;
-        List<Vec3> line = new();
-        for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(min_z, max_z, i, DIVISIONS);
+        int N = 2*DIVISIONS;
+
+        float min_z = pm.R_cc;
+        float max_z = cnt_z6 - th_chnl - th_omani;
+        max_z -= (max_z - min_z) / (no_tc - 1) / 3;
+
+        List<Vec3> line = new(N);
+        for (int i=0; i<N; ++i) {
+            float z = lerp(min_z, max_z, i, N);
             float theta = theta_chnl(z);
             float r = cnt_radius_at(z, th_iw + 0.5f*th_chnl, true);
             line.Add(fromcyl(r, theta, z));
         }
 
-        List<float> dists = new(numel(line)){ 0f };
-        float sumlen = 0f;
-        for (int i=1; i<numel(line); ++i) {
-            sumlen += mag(line[i] - line[i - 1]);
-            dists.Add(sumlen);
-        }
+        List<float> dists = new(N){ 0f };
+        for (int i=1; i<N; ++i)
+            dists.Add(dists[i - 1] + mag(line[i] - line[i - 1]));
 
         List<Vec3> points = new(no_tc);
         for (int i=0; i<no_tc; ++i) {
-            float target = lerp(0f, sumlen, i, no_tc);
+            float target = lerp(dists[0], dists[N - 1], i, no_tc);
             int lo = 0;
             int hi = numel(dists) - 1;
-            int idx = 0;
-            while (lo <= hi) {
+            while (lo + 1 < hi) {
                 int mid = (lo + hi) / 2;
                 if (dists[mid] <= target) {
-                    idx = mid; // maybe found.
-                    lo = mid + 1;
+                    lo = mid;
                 } else {
-                    hi = mid - 1;
+                    hi = mid;
                 }
             }
-            if (idx >= numel(dists) - 1) {
-                points.Add(line[numel(dists) - 1]);
-                continue;
-            }
-            float d0 = dists[idx];
-            float d1 = dists[idx + 1];
-            float t = invlerp(d0, d1, target);
-            Vec3 p = lerp(line[idx], line[idx + 1], t);
+            float d0 = dists[lo];
+            float d1 = dists[hi];
+            Vec3 p0 = line[lo];
+            Vec3 p1 = line[hi];
+            Vec3 p = lerp(p0, p1, invlerp(d0, d1, target));
             points.Add(p);
         }
         return points;
