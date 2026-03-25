@@ -450,7 +450,12 @@ public class InjectorElement {
         Voxels mask_LOx = Cone.phied(
             at.transz(z0_dmw + th_dmw/sin(phi)/2f),
             phi,
-            r1: B2.Y + th_inj2 + FR_LOx + th_dmw/cos(phi) + 1f
+            r1: max(
+                B2.Y + th_inj2 + FR_LOx + th_dmw/cos(phi) + 1f,
+                1f/tan(phi) * (
+                    A1.X - z0_dmw + th_dmw/sin(phi)/2f + th_inj1 + 1f
+                )
+            )
         );
         Voxels mask_IPA = new Rod(
             at,

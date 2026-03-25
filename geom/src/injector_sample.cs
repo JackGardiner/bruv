@@ -7,7 +7,6 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
-using BBox3 = PicoGK.BBox3;
 
 public class InjectorSample : TPIAP.Pea {
 
@@ -36,7 +35,7 @@ public class InjectorSample : TPIAP.Pea {
     }
 
     public float extend_base_by => printable ? 3f : 0f;
-    public float th_outer => print_resin ? 4f : 3f;
+    public float th_outer => print_resin ? 5f : 3f;
 
     public required InjectorElement[] elements { get; init; }
     public int N => numel(elements);
@@ -172,10 +171,9 @@ public class InjectorSample : TPIAP.Pea {
         // Drill thru in resin.
         if (print_resin)
             tap.extra_length = L_port - tap.straight_length + 4f;
+        tap.tip_length_ratio = 0f;
 
-        float r_port = tap.major_radius + tap.taper_offset(0f) + 5f;
-        // float spanner_IPA = 18f;
-        // float spanner_LOx = 18f;
+        float r_port = tap.major_radius + tap.taper_offset(0f) + 5.5f;
 
         // side port pad
         Voxels pad = new Bar(
