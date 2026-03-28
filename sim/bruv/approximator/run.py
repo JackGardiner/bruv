@@ -115,15 +115,17 @@ def test2d():
         10, 20
     )
 
-    X, Y, values = surf.points(100)
+    X, Y, values = surf.points(200)
 
     # RationalPolynomial.search_forwards(X, Y, values,
     #         blitz=3.0, print_all_below=0.02)
     # RationalPolynomial.search_backwards(X, Y, values, max_error=0.02)
 
-    ratpoly, _ = RationalPolynomial.approximate(
+    RationalPolynomialSum.search_forwards(X, Y, values, blitz=3.0, starting_cost=20)
+    ratpoly, app = RationalPolynomial.multiapproximate(
         [0, 1, 3, 17], [1, 3, 4, 6, 7, 8, 10, 12], X, Y, values,
     )
+    print(evaluator_abs_only(values, app))
     print("found:", ratpoly)
     summary_2D(ratpoly, surf)
 
@@ -131,7 +133,7 @@ def test2d():
 
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
-        points=200, spacing=1.25, max_error=0.025, blitz=2.0):
+        points=200, spacing=1.25, max_error=0.02, blitz=2.0):
     def wrapped(what=""):
         print(f"approximating {our_name}")
         f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
@@ -143,6 +145,9 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
         )
 
         evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
+
+        RationalPolynomialSum.search_forwards(P, ofr, V, blitz=blitz,
+                evaluator=evaluator)
 
         if what == "peep":
             peep_2D(surf, P, ofr, V)
@@ -161,76 +166,24 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
     return wrapped
 
 
-find_T_cc = cea_approximation("T_cc", "c_t",
+find_T_cc = cea_approximation("T_cc", "c_t", blitz=3.0,
         pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7])
 find_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
         # pidxs=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         # qidxs=[0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14])
         pidxs=[0, 1, 2, 3, 4, 5],
         qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14])
-find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True,
+find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=3.0,
         # pidxs=[0, 5], qidxs=[0, 5, 8, 9])
         pidxs=[0, 2, 4, 5], qidxs=[1, 5])
 
 
-def tmp():
-    print(f"approximating gamma_tht")
-    f = lambda P, ofr: CEA["t_gamma"](P, ofr, 1.0)
-
-    surf = Surfspace(f, 1.0, 5.0, 0.7, 3.0, N0=200)
-    P, ofr, V = surf.points(200, spacing=1.25)
-
-    LookupTable.search_forwards(f, P, ofr, V, only_table=[1],
-            evaluator=evaluator_rel_only)
-
 def _run():
-    find_T_cc(what="approximate")
-    find_gamma_tht(what="approximate")
-    find_Mw_tht(what="approximate")
 
-    # tmp()
-    return
-
-    f = lambda X, Y: np.exp(X*Y/10) + np.log(X) + np.exp(-10*(X - 2)**2)
-    surf = Surfspace(f, 1.0, 3.0, 2.0, 4.0)
-    x, y, values = surf.points(1000)
-    shape = (2, 2)
-    idxs = [([0, 1, 2, 3, 4, 5], [0, 1, 2]), ([0, 1, 2], [0, 1, 2])]
-
-    # peep_2D(surf, x, y, values)
-
-    ones = yup_all_ones(2, x, y)
-    lut = LookupTable.approximate(shape, idxs, ones, f)
-    print(lut)
-
-    X = np.linspace(1.0, 3.0, 200)
-    Y = np.linspace(2.0, 4.0, 200)
-    X, Y = np.meshgrid(X, Y)
-
-    values = f(X, Y)
-    approx = lut(X, Y)
-    abserr = np.abs(abs_error(values, approx))
-    relerr = np.abs(rel_error(values, approx))
-
-    fig, axes = new_plots(rows=2, cols=2)
-    cont = axes[0,0].contourf(X, Y, values, levels=100, cmap="viridis")
-    fig.colorbar(cont, ax=axes[0, 0])
-    axes[0,0].set_title("actual function")
-    axes[0,0].set_grid("none")
-    cont = axes[0,1].contourf(X, Y, approx, levels=100, cmap="viridis")
-    fig.colorbar(cont, ax=axes[0, 1])
-    axes[0,1].set_title("approximation")
-    axes[0,1].set_grid("none")
-    cont = axes[1,0].contourf(X, Y, 100*abserr, levels=100, cmap="viridis")
-    fig.colorbar(cont, ax=axes[1, 0])
-    axes[1,0].set_title("abs error")
-    axes[1,0].set_grid("none")
-    cont = axes[1,1].contourf(X, Y, 100*relerr, levels=100, cmap="viridis")
-    fig.colorbar(cont, ax=axes[1, 1])
-    axes[1,1].set_title("rel error")
-    axes[1,1].set_grid("none")
-
-
+    find_T_cc(what="backwards")
+    # [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14], [0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14]
+    find_gamma_tht(what="backwards")
+    find_Mw_tht(what="fowards")
 
 
 

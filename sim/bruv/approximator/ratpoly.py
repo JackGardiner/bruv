@@ -14,7 +14,7 @@ __all__ = [
     "abs_error", "rel_error",
     "evaluator_abs_only", "evaluator_rel_only", "evaluator_max",
         "EvaluatorBalanced",
-    "Polynomial", "RationalPolynomial",
+    "Polynomial", "RationalPolynomial", "RationalPolynomialSum",
     "LookupTable",
 ]
 
@@ -47,6 +47,14 @@ def invdegreeof(ndim, k):
     for i in itertools.count(0):
         if degreeof(ndim, i) == k:
             return i
+
+def compositions(n, k):
+    if k == 1:
+        yield (n,)
+        return
+    for i in range(n + 1):
+        for rest in compositions(n - i, k - 1):
+            yield (i,) + rest
 
 def yup_all_ones(degree, *coords):
     """
@@ -522,11 +530,6 @@ class RationalPolynomial:
         Q = ones[:, self.q.idxs] @ self.q.coeffs
         return P / Q
 
-    def abs_error(self, real_values, *coords):
-        return abs_error(real_values, self(*coords))
-    def rel_error(self, real_values, *coords):
-        return rel_error(real_values, self(*coords))
-
     def __repr__(self, short=True):
         return f"({self.p.__repr__(short)}) / ({self.q.__repr__(short)})"
 
@@ -624,6 +627,232 @@ class RationalPolynomial:
         s += f"    f64 Den = {poly(qones, qcs, qxs)};\n"
         s += f"    return Num / Den;"
         return s
+
+
+
+class RationalPolynomialSum:
+
+    @classmethod
+    def approximate(cls, idxs, *points):
+        L = len(idxs)
+        ndim = len(points) - 1
+        assert ndim >= 1
+        assert all(x.ndim == 1 for x in points)
+        coords = points[:-1]
+        real_values = points[-1]
+        maxidx = 0
+        for pidxs, qidxs in idxs:
+            maxidx = max(maxidx, max(pidxs))
+            maxidx = max(maxidx, max(qidxs))
+        maxdegree = degreeof(ndim, maxidx)
+        ones = YupAllOnes(*coords).get(maxdegree)
+        return cls.multiapproximate_ones(ndim, idxs, ones, real_values)
+
+    @classmethod
+    def approximate_ones(cls, ndim, idxs, ones, real_values):
+        L = len(idxs)
+        assert ndim >= 1
+        assert real_values.ndim == 1
+        assert L >= 1
+        offs = np.empty((L, 2), dtype=int)
+        lens = np.empty((L, 2), dtype=int)
+        running = 0
+        for term, (pidxs, qidxs) in enumerate(idxs):
+            offs[term, 0] = running
+            lens[term, 0] = len(pidxs)
+            running += lens[term, 0]
+            offs[term, 1] = running
+            lens[term, 1] = len(qidxs) - 1 # implicit leading zero.
+            running += lens[term, 1]
+
+
+        # implicitly set the lowest power coeff in the denom to 1.
+        def initial_state():
+            return np.zeros(np.sum(lens))
+        def get_coeffs(state):
+            coeffs = []
+            for term in range(L):
+                poff = offs[term, 0]
+                qoff = offs[term, 1]
+                plen = lens[term, 0]
+                qlen = lens[term, 1]
+                pcoeffs = state[poff:poff + plen]
+                qcoeffs = state[qoff:qoff + qlen]
+                qcoeffs = np.concatenate(([1.0], qcoeffs))
+                coeffs.append((pcoeffs, qcoeffs))
+            return coeffs
+
+        def jacobian(state):
+            coeffs = get_coeffs(state)
+            P = np.zeros(ones.shape[:1])
+            Q = np.zeros(ones.shape[:1])
+            for (pidxs, qidxs), (pcoeffs, qcoeffs) in zip(idxs, coeffs):
+                P += ones[:, pidxs] @ pcoeffs
+                Q += ones[:, qidxs] @ qcoeffs
+            J = np.empty((ones.shape[0], np.sum(lens)))
+            for term, (pidxs, qidxs) in enumerate(idxs):
+                poff = offs[term, 0]
+                qoff = offs[term, 1]
+                plen = lens[term, 0]
+                qlen = lens[term, 1]
+                Jp = -ones[:, pidxs] / Q[:, None]
+                Jq = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
+                J[:, poff:poff + plen] = Jp
+                J[:, qoff:qoff + qlen] = Jq
+            return J
+
+        def residuals(state):
+            values = np.zeros((ones.shape[0],))
+            coeffs = get_coeffs(state)
+            for (pidxs, qidxs), (pcoeffs, qcoeffs) in zip(idxs, coeffs):
+                P = ones[:, pidxs] @ pcoeffs
+                Q = ones[:, qidxs] @ qcoeffs
+                with np.errstate(divide="ignore"):
+                    values += P / Q
+            return real_values - values
+
+        state = initial_state()
+        for _ in range(10):
+            res = scipy.optimize.least_squares(residuals, state, jac=jacobian,
+                    method="lm")
+            state = res.x
+            if res.status > 0:
+                break
+        coeffs = get_coeffs(state)
+        ratpolys = []
+        values = np.zeros(ones.shape[0])
+        for (pidxs, qidxs), (pcoeffs, qcoeffs) in zip(idxs, coeffs):
+            # Make the top power in the numer have a coeff of 1.
+            factor = pcoeffs[-1]
+            if abs(factor) > 1e-8:
+                pcoeffs /= factor
+                qcoeffs /= factor
+            ratpoly = RationalPolynomial(
+                Polynomial(ndim, pidxs, pcoeffs),
+                Polynomial(ndim, qidxs, qcoeffs),
+            )
+            values += ratpoly.eval_ones(ones)
+            ratpolys.append(ratpoly)
+        return RationalPolynomialSum(ratpolys), values
+
+    @classmethod
+    def search_forwards(cls, *points, blitz=0.0, starting_cost=1,
+            evaluator=evaluator_abs_only, padto=60, print_all_below=0.01):
+        ndim = len(points) - 1
+        assert ndim >= 1
+        assert all(x.ndim == 1 for x in points)
+        coords = points[:-1]
+        real_values = points[-1]
+        yao = YupAllOnes(*coords)
+
+        def get_tokens(cost):
+            cost += 1
+            yield from RationalPolynomial._all_idxs(ndim, blitz, cost, cost)
+        def allidxs(total_cost):
+            # Collect all tokens grouped by cost.
+            cost_to_tokens = {}
+            for cost in range(1, total_cost + 1):
+                tokens = list(get_tokens(cost))
+                if tokens:
+                    cost_to_tokens[cost] = tokens
+
+            # Flatten into list.
+            items = []
+            for cost, tokens in cost_to_tokens.items():
+                for token in tokens:
+                    items.append((cost, token))
+            # Sort for deterministic output.
+            items.sort()
+
+            # Backtrack to find all combinations.
+            penalty = 2.0 # one addition and div.
+            minc = int(total_cost * blitz * 0.5 / (blitz + 1.0))
+            maxc = total_cost - minc
+            def backtrack(start, remaining, current):
+                if remaining == 0:
+                    yield list(current)
+                    return
+                if remaining < 0:
+                    return
+
+                for i in range(start, len(items)):
+                    cost, token = items[i]
+                    # Apply penalty for extra terms.
+                    extra = penalty if current else 0
+                    this = cost + extra
+                    # Skip if cost too large
+                    if this > remaining:
+                        break
+                    if this > maxc:
+                        break
+                    if this < minc:
+                        continue
+                    current.append(token)
+                    yield from backtrack(i + 1, remaining - this, current)
+                    current.pop()
+            return backtrack(0, total_cost, [])
+
+        best_error = float("inf")
+        last_length = 0
+        for total_cost in itertools.count(starting_cost):
+            for idxs in allidxs(total_cost):
+                s = f"{idxs[0][0]}, {idxs[0][1]}"
+                for pidxs, qidxs in idxs[1:]:
+                    s += f" + {pidxs}, {qidxs}"
+                print(s + " " * (last_length - len(s)), end="\r")
+                last_length = len(s)
+
+                maxidx = 0
+                for pidxs, qidxs in idxs:
+                    maxidx = max(maxidx, pidxs[-1])
+                    maxidx = max(maxidx, qidxs[-1])
+                maxdegree = degreeof(ndim, maxidx)
+                ones = yao.get(maxdegree)
+                rps, values = cls.approximate_ones(ndim, idxs, ones, real_values)
+                error = evaluator(real_values, values)
+
+                if error <= max(best_error, print_all_below):
+                    s = f"{s} .."
+                    s += "." * (padto - len(s))
+                    s += f" {100 * error:.4g}%"
+                    s += " *" * (error <= best_error)
+                    s += " " * (len(s) - last_length)
+                    print(s)
+                    last_length = 0
+                best_error = min(best_error, error)
+
+    def __init__(self, rps):
+        assert len(rps) > 0
+        assert all(rps[0].ndim == rp.ndim for rp in rps)
+        self.rps = rps
+        self.ndim = rps[0].ndim
+        self.maxdegree = max(rp.maxdegree for rp in rps)
+
+    def __call__(self, *coords):
+        return np.sum(tuple(rp(*coords) for rp in self.rps), axis=0)
+    def eval_ones(self, ones):
+        return np.sum(tuple(rp.eval_ones(ones) for rp in self.rps), axis=0)
+
+    def __repr__(self, short=True):
+        s = ""
+        for rp in self.rps:
+            if s:
+                s += " + "
+            s += rp.__repr__(short)
+        return s
+
+    def code(self):
+        s = "    f64 value = 0.0;\n"
+        for rp in self.rps:
+            s += "{\n"
+            for line in rp.code():
+                line = line.replace("return ", "value += ")
+                s += f"    {line}"
+            s += "}\n"
+        s += "    return value;"
+        return s
+
+
 
 
 
@@ -743,13 +972,6 @@ class LookupTable:
         yao = YupAllOnes(*coords)
         ndim = len(coords)
 
-        def compositions(n, k):
-            if k == 1:
-                yield (n,)
-                return
-            for i in range(n + 1):
-                for rest in compositions(n - i, k - 1):
-                    yield (i,) + rest
         def lengths_at_cost(c):
             # https://www.desmos.com/calculator/tq3ub2frqr
             g = lambda x: int(np.ceil(0.5*(pow(1.5, x + 0.7095113) + x)))
