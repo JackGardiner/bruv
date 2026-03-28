@@ -195,7 +195,7 @@ class Polynomial:
         values = self.eval_ones(ones)
         return values.reshape(broadcasted_shape(*coords))
     def eval_ones(self, ones):
-        return np.sum(self.coeffs * ones[:, self.idxs], axis=-1)
+        return ones[:, self.idxs] @ self.coeffs
 
     def add(self, other):
         assert self.ndim == other.ndim
@@ -301,10 +301,10 @@ class RationalPolynomial:
         for cost in range(min_cost, max_cost + 1):
             yield from cls._at_cost_one(ndim, cost, blitz)
     @classmethod
-    def _all_idxs(cls, ndim, blitz=0.0, starting_cost=2):
+    def _all_idxs(cls, ndim, blitz=0.0, starting_cost=2, ending_cost=100000000):
         # Iterate through the rat polys in cost order, where the cost of the rat
         # poly is just the sum of each polys cost.
-        for cost in itertools.count(starting_cost):
+        for cost in range(starting_cost, ending_cost + 1):
             min_cost = 1
             max_cost = cost - 1
             # If blitzing, don't let the numer/denom cost difference get too
@@ -348,16 +348,16 @@ class RationalPolynomial:
         assert real_values.ndim == 1
 
         # implicitly set the lowest power coeff in the denom to 1.
-        def initial_coeffs():
+        def initial_state():
             return np.zeros(len(pidxs) + len(qidxs) - 1)
-        def get_coeffs(coeffs):
-            pcoeffs = coeffs[:len(pidxs)]
-            qcoeffs = coeffs[len(pidxs):]
+        def get_coeffs(state):
+            pcoeffs = state[:len(pidxs)]
+            qcoeffs = state[len(pidxs):]
             qcoeffs = np.concatenate(([1.0], qcoeffs))
             return pcoeffs, qcoeffs
 
-        def jacobian(coeffs):
-            pcoeffs, qcoeffs = get_coeffs(coeffs)
+        def jacobian(state):
+            pcoeffs, qcoeffs = get_coeffs(state)
             P = ones[:, pidxs] @ pcoeffs
             Q = ones[:, qidxs] @ qcoeffs
             N = len(pidxs)
@@ -367,8 +367,8 @@ class RationalPolynomial:
             J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
             return J
 
-        def residuals(coeffs):
-            pcoeffs, qcoeffs = get_coeffs(coeffs)
+        def residuals(state):
+            pcoeffs, qcoeffs = get_coeffs(state)
             P = ones[:, pidxs] @ pcoeffs
             Q = ones[:, qidxs] @ qcoeffs
             with np.errstate(divide="ignore"):
@@ -377,18 +377,19 @@ class RationalPolynomial:
 
         # Optimise via least squares, since its significantly more stable than a
         # minimise-max-error optimiser.
-        coeffs = initial_coeffs()
+        state = initial_state()
         for _ in range(10):
-            res = scipy.optimize.least_squares(residuals, coeffs,
+            res = scipy.optimize.least_squares(residuals, state,
                     jac=jacobian, method="lm")
-            coeffs = res.x
+            state = res.x
             if res.status > 0:
                 break
-        pcoeffs, qcoeffs = get_coeffs(coeffs)
+        pcoeffs, qcoeffs = get_coeffs(state)
         # Make the top power in the numer have a coeff of 1.
         factor = pcoeffs[-1]
-        pcoeffs /= factor
-        qcoeffs /= factor
+        if abs(factor) > 1e-8:
+            pcoeffs /= factor
+            qcoeffs /= factor
         ratpoly = RationalPolynomial(
             Polynomial(ndim, pidxs, pcoeffs),
             Polynomial(ndim, qidxs, qcoeffs),
@@ -436,17 +437,20 @@ class RationalPolynomial:
         coords = points[:-1]
         real_values = points[-1]
         yao = YupAllOnes(*coords)
-        pidxs = list(range(10 * ndim))
-        qidxs = list(range(10 * ndim))
-        cls._search_backwards_branch(pidxs, qidxs, yao, real_values, evaluator,
-                padto, max_error, set())
+        done = set()
+        for total_degree in itertools.count(2):
+            leave = total_degree//4
+            for pdegree in range(1 + leave, total_degree - leave):
+                pidxs = list(range(pdegree))
+                qidxs = list(range(total_degree - pdegree))
+                cls._search_backwards_branch(pidxs, qidxs, yao, real_values,
+                        evaluator, padto, max_error, done)
 
     @classmethod
     def _search_backwards_branch(cls, pidxs, qidxs, yao, real_values, evaluator,
             padto, max_error, done):
         N = len(pidxs) + len(qidxs)
-        for n in range(1, N - 1):
-            # print(f"-> -{n}")
+        for n in range((N - 1) // 6):
             best_error = float("inf")
             best_idxs = None
             last_length = 0
@@ -475,21 +479,26 @@ class RationalPolynomial:
                     best_error = error
                     best_idxs = idxs
             if best_idxs is None:
-                continue
+                return
 
             # Pick best.
             pi = [pidxs[i] for i in range(len(pidxs))
                   if i not in best_idxs]
             qi = [qidxs[i] for i in range(len(qidxs))
                   if (i + len(pidxs)) not in best_idxs]
-            s = f"{pi}, {qi} .."
-            s += "." * (padto - len(s))
-            s += f" {100 * best_error:.4g}%"
-            s += " " * (len(s) - last_length)
-            print(s)
-            last_length = 0
 
             if best_error <= max_error:
+                s = f"{pi}, {qi} .."
+                s += "." * (padto - len(s))
+                s += f" {100 * best_error:.4g}%"
+                s += " " * (len(s) - last_length)
+                print(s)
+                last_length = 0
+            else:
+                print(" " * last_length, end="\r")
+                last_length = 0
+
+            if best_error <= max_error * 1.1:
                 cls._search_backwards_branch(pi, qi, yao, real_values, evaluator,
                         padto, max_error, done)
             else:
@@ -628,37 +637,219 @@ class LookupTable:
     extrapolated).
     """
 
+    @classmethod
+    def approximate_ones(cls, shape, idxs, ones, real_values, f):
+        ndim = len(shape)
+        assert ndim == len(idxs)
+        assert real_values.ndim == 1
+        coords = [ones[:, 1 + dim] for dim in range(ndim)]
+        bounds = [(c.min(), c.max()) for c in coords]
+        N = np.prod(shape)
+        offs = np.empty((ndim, 2), dtype=int)
+        lens = np.empty((ndim, 2), dtype=int)
+        running = N
+        maxdegree = 0
+        for dim, (pidxs, qidxs) in enumerate(idxs):
+            offs[dim, 0] = running
+            lens[dim, 0] = len(pidxs)
+            running += lens[dim, 0]
+            maxdegree = max(maxdegree, max(pidxs))
+            offs[dim, 1] = running
+            lens[dim, 1] = len(qidxs) - 1 # implicit leading zero.
+            running += lens[dim, 1]
+            maxdegree = max(maxdegree, max(qidxs))
+
+        def initial_state():
+            state = np.zeros(N + np.sum(lens))
+
+            lin_coords = [np.linspace(xmin, xmax, 20) for xmin, xmax in bounds]
+            lin_coords = np.meshgrid(*lin_coords)
+            lin_ones = yup_all_ones(maxdegree, *lin_coords)
+            for dim, (pidxs, qidxs) in enumerate(idxs):
+                # fit it to a line from 0-1 in the right dim.
+                xmin, xmax = bounds[dim]
+                lin = lin_coords[dim]
+                lin = ((lin - xmin) / (xmax - xmin)).ravel()
+                ratpoly, _ = RationalPolynomial.approximate_ones(ndim, pidxs,
+                        qidxs, lin_ones, lin)
+                poff = offs[dim, 0]
+                qoff = offs[dim, 1]
+                plen = lens[dim, 0]
+                qlen = lens[dim, 1]
+                # Normalise to an implicit 1+denom
+                factor = ratpoly.q.coeffs[0]
+                if abs(factor) > 1e-8:
+                    state[poff:poff + plen] = ratpoly.p.coeffs / factor
+                    state[qoff:qoff + qlen] = ratpoly.q.coeffs[1:] / factor
+            lins = []
+            for dim, (xmin, xmax) in enumerate(bounds):
+                lin = np.linspace(xmin, xmax, shape[dim])
+                shapeto = [1] * ndim
+                shapeto[dim] = shape[dim]
+                lin = lin.reshape(shapeto)
+                lin = np.broadcast_to(lin, shape)
+                lins.append(lin.ravel())
+            state[:N] = f(*lins)
+            return state
+
+        def get_table(state):
+            return state[:N].reshape(shape).astype(np.float32)
+        def get_coeffs(state):
+            coeffs = []
+            for dim in range(ndim):
+                poff = offs[dim, 0]
+                qoff = offs[dim, 1]
+                plen = lens[dim, 0]
+                qlen = lens[dim, 1]
+                pcoeffs = state[poff:poff + plen]
+                qcoeffs = state[qoff:qoff + qlen]
+                qcoeffs = np.concatenate(([1.0], qcoeffs))
+                coeffs.append((pcoeffs, qcoeffs))
+            return coeffs
+
+        def get_obj(state):
+            table = get_table(state)
+            coeffs = get_coeffs(state)
+            lookups = []
+            for (pidxs, qidxs), (pcoeffs, qcoeffs) in zip(idxs, coeffs):
+                lookups.append(RationalPolynomial(
+                    Polynomial(ndim, pidxs, pcoeffs),
+                    Polynomial(ndim, qidxs, qcoeffs),
+                ))
+            return LookupTable(table, *lookups)
+
+        def residuals(state):
+            obj = get_obj(state)
+            values = obj.eval_ones(ones)
+            return real_values - values
+
+        # Optimise via least squares, since its significantly more stable than a
+        # minimise-max-error optimiser.
+        state = initial_state()
+        for _ in range(10):
+            res = scipy.optimize.least_squares(residuals, state, method="lm")
+            state = res.x
+            if res.status > 0:
+                break
+        lut = get_obj(state)
+        values = lut.eval_ones(ones)
+        return lut, values
+
+    @classmethod
+    def search_forwards(cls, f, *points, evaluator=evaluator_abs_only, padto=60,
+            print_all_below=0.01, only_table=(), only_ratpoly=()):
+        coords = points[:-1]
+        real_values = points[-1]
+        yao = YupAllOnes(*coords)
+        ndim = len(coords)
+
+        def compositions(n, k):
+            if k == 1:
+                yield (n,)
+                return
+            for i in range(n + 1):
+                for rest in compositions(n - i, k - 1):
+                    yield (i,) + rest
+        def lengths_at_cost(c):
+            # https://www.desmos.com/calculator/tq3ub2frqr
+            g = lambda x: int(np.ceil(0.5*(pow(1.5, x + 0.7095113) + x)))
+            yield from range(g(c - 1), g(c) + 1)
+        def generate_state(mode, costs, shape=(), idxs=()):
+            c = 2 + costs[0]
+            if mode[0]: # use lookuptable
+                idxs += (([0, 1], [0]),)
+                alllens = lengths_at_cost(c)
+                if len(mode) > 1:
+                    for length in alllens:
+                        yield from generate_state(mode[1:], costs[1:],
+                                shape + (length,), idxs)
+                else:
+                    for length in alllens:
+                        yield shape + (length,), idxs
+            else:
+                shape += (2,)
+                allidxs = RationalPolynomial._all_idxs(ndim,
+                        starting_cost=c + 2, ending_cost=c + 2)
+                if len(mode) > 1:
+                    for idx in allidxs:
+                        yield from generate_state(mode[1:], costs[1:], shape,
+                                idxs + (idx,))
+                else:
+                    for idx in allidxs:
+                        yield shape, (idxs + (idx,))
+
+        def all_states():
+            for total_cost in itertools.count(0):
+                for mode in itertools.product([False, True], repeat=ndim):
+                    if any(not mode[dim] for dim in only_table):
+                        continue
+                    if any(mode[dim] for dim in only_ratpoly):
+                        continue
+                    for costs in compositions(total_cost, ndim):
+                        for state in generate_state(mode, costs):
+                            yield state
+
+        best_error = float("inf")
+        last_length = 0
+        for state in all_states():
+            s = f"{state}"
+            print(s + " " * (last_length - len(s)), end="\r")
+            last_length = len(s)
+
+            maxidx = 0
+            for pidxs, qidxs in state[1]:
+                maxidx = max(maxidx, max(pidxs))
+                maxidx = max(maxidx, max(qidxs))
+            maxdegree = degreeof(ndim, maxidx)
+            ones = yao.get(maxdegree)
+
+            lut, values = cls.approximate_ones(state[0], state[1], ones,
+                    real_values, f)
+            error = evaluator(real_values, values)
+
+            if error <= max(best_error, print_all_below):
+                s = f"{s} .."
+                s += "." * (padto - len(s))
+                s += f" {100 * error:.4g}%"
+                s += " *" * (error <= best_error)
+                s += " " * (len(s) - last_length)
+                print(s)
+                last_length = 0
+            best_error = min(best_error, error)
+
+
     class linear_lookup:
         def __init__(self, xlo, xhi):
             self.xlo = xlo
             self.xhi = xhi
             self.m = 1/(xhi - xlo)
             self.c = -xlo/(xhi - xlo)
-    def __init__(self, values, *lookups):
-        assert values.ndim >= 1
-        assert values.size >= 1
-        assert all(x >= 2 for x in values.shape)
-        assert len(lookups) == values.ndim
+    def __init__(self, table, *lookups):
+        assert table.ndim >= 1
+        assert table.size >= 1
+        assert all(x >= 2 for x in table.shape)
+        assert table.dtype == np.float32
+        assert len(lookups) == table.ndim
         lookups = list(lookups)
         for i, lookup in enumerate(lookups):
             if isinstance(lookup, LookupTable.linear_lookup):
                 lookups[i] = RationalPolynomial(
-                    Polynomial.linear(lookup.m, lookup.c, values.ndim, i),
-                    Polynomial.one(values.ndim),
+                    Polynomial.linear(lookup.m, lookup.c, table.ndim, i),
+                    Polynomial.one(table.ndim),
                 )
         assert all(isinstance(x, RationalPolynomial) for x in lookups)
-        assert all(x.ndim == values.ndim for x in lookups)
-        self.values = values
+        assert all(x.ndim == table.ndim for x in lookups)
+        self.table = table
         self.lookups = lookups
     @property
     def size(self):
-        return self.values.size
+        return self.table.size
     @property
     def shape(self):
-        return self.values.shape
+        return self.table.shape
     @property
     def ndim(self):
-        return self.values.ndim
+        return self.table.ndim
 
     def __call__(self, *coords):
         assert self.ndim == len(coords)
@@ -672,8 +863,7 @@ class LookupTable:
 
         for i, lookup in enumerate(self.lookups):
             x = lookup.eval_ones(ones)
-            # numpy indexing can suck my nuts
-            N = self.shape[self.ndim - 1 - i]
+            N = self.shape[i]
             if N > 2:
                 x *= N - 1
                 idxs[i] = np.clip(x.astype(int), 0, N - 2)
@@ -693,5 +883,12 @@ class LookupTable:
                 else:
                     idx.append(idxs[d] + 1)
                     weight *= lerps[d]
-            ret += weight * self.values[tuple(idx[::-1])]
+            ret += weight * self.table[tuple(idx)]
         return ret
+
+    def __repr__(self):
+        s = f"LookupTable [shape={self.shape}]\n"
+        s += str(self.table)
+        for i, lookup in enumerate(self.lookups):
+            s += f"\nlookup dim {i}: {lookup}"
+        return s

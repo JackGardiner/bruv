@@ -205,10 +205,10 @@ class Surfspace:
                 # Ensure its not close to existing points.
                 diff = points[np.newaxis, :, :] - batch[:, np.newaxis, :]
                 # diff is (batch points, existing points, coord)
-                dx, dy, dz = diff[:, :, 0], diff[:, :, 1], diff[:, :, 2]
-                # scale by gradient.
-                grad = np.sqrt(dx**2 + dy**2) / (np.abs(dz) + 1e-8)
                 dist_sq = np.sum(diff**2, axis=-1)
+                # scale by gradient.
+                dx, dy, dz = diff[:, :, 0], diff[:, :, 1], diff[:, :, 2]
+                grad = np.sqrt(dx**2 + dy**2) / (np.abs(dz) + 1e-8)
                 dist_sq *= 1.0 + 1.0/(np.sqrt(grad) + 1e-8)
                 mask = np.min(dist_sq, axis=-1) >= min_dist**2
                 batch = batch[mask]

@@ -38,10 +38,9 @@ def summary_1D(ratpoly, values, X, *, extra_reqs=()):
     axes[1].plot(X, 100*abserr, label="abs error")
     axes[1].plot(X, 100*relerr, label="rel error")
 
-def summary_2D(ratpoly, values, X, Y, *, extra_reqs=(), trimasker=None):
-    values = values.ravel()
-    X = X.ravel()
-    Y = Y.ravel()
+def summary_2D(ratpoly, surf, *, extra_reqs=(), trimasker=None):
+    X, Y = Evenspace(*surf.bounds()).points(400**2)
+    values = surf.f(X, Y)
 
     approx = ratpoly(X, Y)
     abserr = np.abs(ratpoly.abs_error(values, X, Y))
@@ -82,6 +81,14 @@ def summary_2D(ratpoly, values, X, Y, *, extra_reqs=(), trimasker=None):
     axes[1,1].set_grid("none")
 
 
+def peep_2D(surf, *points):
+    _, ax = new_plots(projection="3d")
+    X, Y = Evenspace(*surf.bounds()).points(200**2, flatten=False)
+    # ax.plot_surface(X, Y, surf.f(X, Y), cmap="viridis")
+    ax.scatter(*points)
+
+
+
 def test1d():
     print("approximating e^x")
     surf = Surfspace(np.exp, 1, 4)
@@ -118,47 +125,110 @@ def test2d():
         [0, 1, 3, 17], [1, 3, 4, 6, 7, 8, 10, 12], X, Y, values,
     )
     print("found:", ratpoly)
-    X_f, Y_f = Evenspace(*surf.bounds()).points(100**2)
-    values_f = surf.f(X_f, Y_f)
-    summary_2D(ratpoly, values_f, X_f, Y_f)
+    summary_2D(ratpoly, surf)
 
 
 
 
-def find_T_cc():
-    f = lambda P, ofr: CEA["c_t"](P, ofr, 1.0)
+def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
+        points=200, spacing=1.25, max_error=0.025, blitz=2.0):
+    def wrapped(what=""):
+        print(f"approximating {our_name}")
+        f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
 
-    surf = Surfspace(f, 0.1, 10.0, 0.8, 8.0, N0=100)
-    P, ofr, T_cc = surf.points(800, spacing=1.0, batch_size=1)
+        surf = Surfspace(f, 1.0, 5.0, 0.5, 3.0, N0=200)
+        P, ofr, V = surf.points(
+            1000 if what=="approximate" else points,
+            spacing=spacing
+        )
 
-    # _, ax = win.new_plots(projection="3d", title="0.1 0.8")
-    # ax.scatter(P, ofr, T_cc)
+        evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
 
-    # surf = Surfspace(f, 0.01, 10.0, 0.1, 8.0, N0=100)
-    # P, ofr, T_cc = surf.points(400, spacing=1.0, batch_size=1)
-
-    # _, ax = win.new_plots(projection="3d", title="0.01 0.1")
-    # ax.scatter(P, ofr, T_cc)
-    # return
-
-    # RationalPolynomial.search_backwards(P, ofr, T_cc, max_error=0.02)
-    # RationalPolynomial.search_forwards(P, ofr, T_cc, blitz=4.0, print_all_below=0.01)
-    # return
-
-    ratpoly, _ = RationalPolynomial.approximate(
-        [0, 4, 5, 19], [1, 4, 5, 8, 9, 13, 19], P, ofr, T_cc
-    )
-    print("found:", ratpoly)
-    P_f, ofr_f = Evenspace(*surf.bounds()).points(100**2)
-    T_cc_f = f(P_f, ofr_f)
-    summary_2D(ratpoly, T_cc_f, P_f, ofr_f)
+        if what == "peep":
+            peep_2D(surf, P, ofr, V)
+        elif what == "backwards":
+            RationalPolynomial.search_backwards(P, ofr, V, max_error=max_error,
+                    evaluator=evaluator)
+        elif what == "forwards":
+            RationalPolynomial.search_forwards(P, ofr, V, blitz=blitz,
+                    evaluator=evaluator)
+        elif what == "approximate":
+            ratpoly, _ = RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
+            print("found:", ratpoly)
+            summary_2D(ratpoly, surf)
+        else:
+            assert False
+    return wrapped
 
 
+find_T_cc = cea_approximation("T_cc", "c_t",
+        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7])
+find_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
+        # pidxs=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        # qidxs=[0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14])
+        pidxs=[0, 1, 2, 3, 4, 5],
+        qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14])
+find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True,
+        # pidxs=[0, 5], qidxs=[0, 5, 8, 9])
+        pidxs=[0, 2, 4, 5], qidxs=[1, 5])
+
+
+def tmp():
+    print(f"approximating gamma_tht")
+    f = lambda P, ofr: CEA["t_gamma"](P, ofr, 1.0)
+
+    surf = Surfspace(f, 1.0, 5.0, 0.7, 3.0, N0=200)
+    P, ofr, V = surf.points(200, spacing=1.25)
+
+    LookupTable.search_forwards(f, P, ofr, V, only_table=[1],
+            evaluator=evaluator_rel_only)
 
 def _run():
-    # test1d()
-    # test2d()
-    find_T_cc()
+    find_T_cc(what="approximate")
+    find_gamma_tht(what="approximate")
+    find_Mw_tht(what="approximate")
+
+    # tmp()
+    return
+
+    f = lambda X, Y: np.exp(X*Y/10) + np.log(X) + np.exp(-10*(X - 2)**2)
+    surf = Surfspace(f, 1.0, 3.0, 2.0, 4.0)
+    x, y, values = surf.points(1000)
+    shape = (2, 2)
+    idxs = [([0, 1, 2, 3, 4, 5], [0, 1, 2]), ([0, 1, 2], [0, 1, 2])]
+
+    # peep_2D(surf, x, y, values)
+
+    ones = yup_all_ones(2, x, y)
+    lut = LookupTable.approximate(shape, idxs, ones, f)
+    print(lut)
+
+    X = np.linspace(1.0, 3.0, 200)
+    Y = np.linspace(2.0, 4.0, 200)
+    X, Y = np.meshgrid(X, Y)
+
+    values = f(X, Y)
+    approx = lut(X, Y)
+    abserr = np.abs(abs_error(values, approx))
+    relerr = np.abs(rel_error(values, approx))
+
+    fig, axes = new_plots(rows=2, cols=2)
+    cont = axes[0,0].contourf(X, Y, values, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[0, 0])
+    axes[0,0].set_title("actual function")
+    axes[0,0].set_grid("none")
+    cont = axes[0,1].contourf(X, Y, approx, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[0, 1])
+    axes[0,1].set_title("approximation")
+    axes[0,1].set_grid("none")
+    cont = axes[1,0].contourf(X, Y, 100*abserr, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[1, 0])
+    axes[1,0].set_title("abs error")
+    axes[1,0].set_grid("none")
+    cont = axes[1,1].contourf(X, Y, 100*relerr, levels=100, cmap="viridis")
+    fig.colorbar(cont, ax=axes[1, 1])
+    axes[1,1].set_title("rel error")
+    axes[1,1].set_grid("none")
 
 
 
