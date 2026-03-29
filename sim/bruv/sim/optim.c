@@ -29,6 +29,19 @@ void opt_bracket1D(opt_cost_f cost, void* rstr user, i64 count, void* rstr tmp,
     f64 fa = get_1D_cost(phia);
     f64 fb = get_1D_cost(phib);
 
+    // ooo might be flat.
+    if (nearto(fa, fb)) {
+        // Check some other point (not exact midpoint as a justin caseme).
+        f64 phic = phia + (phib - phia)/PHI;
+        f64 fc = get_1D_cost(phic);
+        // Its flat :(
+        if (nearto(fc, fa) && nearto(fc, fb)) {
+            *philo = phi0;
+            *phihi = phi0;
+            return;
+        }
+    }
+
     // Ensure a->b is downhill.
     if (fb > fa) {
         phistep = -phistep;
@@ -341,4 +354,38 @@ i32 opt_run(opt_cost_f cost, void* rstr user, i64 count, void* rstr tmp,
     }
     // failed :(
     return 0;
+}
+
+
+
+// =========================================================================== //
+// = LEAPS & BOUNDS ========================================================== //
+// =========================================================================== //
+
+// https://www.desmos.com/calculator/suklzv879l
+
+f64 bound_both(f64 param, f64 lower, f64 upper) {
+    f64 term = 2.0*LOG2E*(lower + upper - 2.0*param) / (upper - lower);
+    return lower + (upper - lower) / (exp2(term) + 1.0);
+}
+f64 bound_lower(f64 param, f64 lower) {
+    return lower + log2(exp2(param - lower) + 1.0);
+}
+f64 bound_upper(f64 param, f64 upper) {
+    return upper - log2(exp2(upper - param) + 1.0);
+}
+
+f64 unbound_both(f64 value, f64 lower, f64 upper) {
+    assert(within(value, lower, upper), "value=%g, lower=%g, upper=%g", value,
+            lower, upper);
+    f64 term = (upper - lower) / (value - lower) - 1.0;
+    return 0.5*(lower + upper - (upper - lower)/2.0/LOG2E * log2(term));
+}
+f64 unbound_lower(f64 value, f64 lower) {
+    assert(value > lower, "value=%g, lower=%g", value, lower);
+    return lower + log2(exp2(value - lower) - 1.0);
+}
+f64 unbound_upper(f64 value, f64 upper) {
+    assert(value < upper, "value=%g, upper=%g", value, upper);
+    return upper - log2(exp2(upper - value) - 1.0);
 }

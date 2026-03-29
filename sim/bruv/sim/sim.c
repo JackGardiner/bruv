@@ -6,31 +6,67 @@
 #include "cea.h"
 #include "contour.h"
 #include "relations.h"
+#include "optim.h"
 
 
 
+// Simulate the engine from inputs.
+static void sim_ulate(simState* rstr s, i32 full_output);
+enum { NO_FULL_OUTPUT = 0, GIVE_FULL_OUTPUT = 1 };
+
+// Optimise the engine from the given seed inputs.
+static void sim_optimise(simState* rstr s);
 
 void sim_execute(simState* rstr s) {
-    printf("helloooo c\n");
+    // Optimise if requested.
+    if (s->optimise)
+        sim_optimise(s);
+
+    // Simulate and write all outputs.
+    sim_ulate(s, GIVE_FULL_OUTPUT);
+}
 
 
-    assert(s->out_count > 20, "output contour array is too small (%lld)",
-            s->out_count);
-    assert(s->out_z, "output array 'out_z' is null");
-    assert(s->out_r, "output array 'out_r' is null");
-    assert(s->out_T, "output array 'out_T' is null");
-    assert(s->out_P, "output array 'out_P' is null");
-    assert(s->out_M, "output array 'out_M' is null");
+c_IH sim_interpretation_hash(void) {
+    c_IH h = c_ih_initial();
+    #define X(name, type, flags)                                \
+        h = c_ih_append(h, #name, flags | generic(objof(type)   \
+            , f64:  C_F64                                       \
+            , i64:  C_I64                                       \
+            , f32*: C_PTR_F32                                   \
+            , f64*: C_PTR_F64                                   \
+            , i8*:  C_PTR_I8                                    \
+            , i16*: C_PTR_I16                                   \
+            , i32*: C_PTR_I32                                   \
+            , i64*: C_PTR_I64                                   \
+            , u8*:  C_PTR_U8                                    \
+            , u16*: C_PTR_U16                                   \
+            , u32*: C_PTR_U32                                   \
+            , u64*: C_PTR_U64                                   \
+        ));
+    SIM_INTERPRETATION
+    #undef X
+    return h;
+}
 
+
+
+// =========================================================================== //
+// = SIMULATION ============================================================== //
+// =========================================================================== //
+
+static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Combustion */
 
-    assert(s->dm_ox > 0.0, "invalid input: dm_ox=%g", s->dm_ox);
-    assert(s->dm_fu > 0.0, "invalid input: dm_fu=%g", s->dm_fu);
+    assert(s->ofr > 0.0, "invalid input: ofr=%g", s->ofr);
+    assert(s->dm_cc > 0.0, "invalid input: dm_cc=%g", s->dm_cc);
     assert(s->P0_cc > 0.0, "invalid input: P0_cc=%g", s->P0_cc);
     assert(s->P_exit > 0.0, "invalid input: P_exit=%g", s->P_exit);
 
-    s->ofr = s->dm_ox / s->dm_fu;
+    s->dm_fu = s->dm_cc / (s->ofr + 1.0);
+    s->dm_ox = s->dm_cc - s->dm_fu;
+
     s->T0_cc = cea_T_cc(s->P0_cc, s->ofr);
     s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
     s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
@@ -43,24 +79,27 @@ void sim_execute(simState* rstr s) {
     f64 P_tht = s->P0_cc * isentropic_P_on_P0(1.0, shr);
 
     // thrust = mdot * vel  [no pressure work]
-    // note this is a pretty bad V_exit formula, disagrees with cea by ~10%.
-    f64 V_exit = sqrt(2*shr->y/(shr->y - 1.0)
+    // note this is a pretty bad vel_exit formula, disagrees with cea by ~10%.
+    f64 vel_exit = sqrt(2*shr->y/(shr->y - 1.0)
                     * GAS_CONSTANT/s->Mw_tht
                     * T_tht
                     * (1.0 - pow(s->P_exit / P_tht, (shr->y - 1.0)/shr->y)));
-    s->Thrust = (s->dm_ox + s->dm_fu) * V_exit;
+    s->Thrust = s->dm_cc * vel_exit;
     assert(nearto(P_exit, s->P_exit),
             "failed to find perfectly expanded nozzle?");
+
+    s->Isp = s->Thrust / s->dm_cc / STANDARD_GRAVITY;
 
 
     /* Geometry */
 
-    s->A_tht = (s->dm_ox + s->dm_fu) / s->P0_cc
+    s->A_tht = s->dm_cc / s->P0_cc
              * sqrt(s->T0_cc * GAS_CONSTANT / s->Mw_tht / shr->y)
              * pow(0.5*(shr->y + 1.0), shr->n);
 
     s->AEAT = isentropic_A_on_Astar(M_exit, shr);
 
+    assert(s->Lstar > 0.0, "invalid input: Lstar=%g", s->Lstar);
     assert(s->R_cc > 0.0, "invalid input: R_cc=%g", s->R_cc);
     assert(s->A_tht > 0.0, "invalid input: A_tht=%g", s->A_tht);
     assert(s->AEAT > 1.0, "invalid input: AEAT=%g", s->AEAT);
@@ -93,10 +132,21 @@ void sim_execute(simState* rstr s) {
 
     /* Outputs */
 
+    if (!full_output)
+        return;
+
+    assert(s->out_count > 20, "output contour array is too small (%lld)",
+            s->out_count);
+    assert(s->out_z, "output array 'out_z' is null");
+    assert(s->out_r, "output array 'out_r' is null");
+    assert(s->out_T, "output array 'out_T' is null");
+    assert(s->out_P, "output array 'out_P' is null");
+    assert(s->out_M, "output array 'out_M' is null");
+
     for (i64 i=0; i<s->out_count; ++i) {
         f64 z = lerpidx(0.0, cnt->z_exit, i, s->out_count);
         f64 r = cnt_r(cnt, z);
-        f64 A_on_Astar = sqed(r) / sqed(s->R_tht);
+        f64 A_on_Astar = sqed(r) / sqed(cnt->R_tht);
         f64 M = (z < cnt->z_tht)
               ? isentropic_sub_M(A_on_Astar, shr)
               : isentropic_sup_M(A_on_Astar, shr);
@@ -108,30 +158,78 @@ void sim_execute(simState* rstr s) {
         s->out_P[i] = P;
         s->out_M[i] = M;
     }
-
-
-    printf("goodbye c :(\n");
 }
 
 
-c_IH sim_interpretation_hash(void) {
-    c_IH h = c_ih_initial();
-    #define X(name, type, flags)                                \
-        h = c_ih_append(h, #name, flags | generic(objof(type)   \
-            , f64:  C_F64                                       \
-            , i64:  C_I64                                       \
-            , f32*: C_PTR_F32                                   \
-            , f64*: C_PTR_F64                                   \
-            , i8*:  C_PTR_I8                                    \
-            , i16*: C_PTR_I16                                   \
-            , i32*: C_PTR_I32                                   \
-            , i64*: C_PTR_I64                                   \
-            , u8*:  C_PTR_U8                                    \
-            , u16*: C_PTR_U16                                   \
-            , u32*: C_PTR_U32                                   \
-            , u64*: C_PTR_U64                                   \
-        ));
-    SIM_INTERPRETATION
-    #undef X
-    return h;
+
+// =========================================================================== //
+// = OPTIMISATION ============================================================ //
+// =========================================================================== //
+
+typedef struct simParams {
+    f64 ofr;
+    f64 dm_cc;
+} simParams;
+static void sim_params_from(simParams* p, const f64* rstr params) {
+    p->ofr = bound_both(params[0], 1.0, 3.0);
+    p->dm_cc = bound_lower(params[1], 0.0);
+}
+static void sim_params_to(const simParams* p, f64* rstr params) {
+    params[0] = unbound_both(p->ofr, 1.0, 3.0);
+    params[1] = unbound_lower(p->dm_cc, 0.0);
+}
+
+static f64 sim_cost(const f64* rstr params, void* rstr user) {
+    simState* s = user;
+
+    // Extract the given parameters.
+    simParams p;
+    sim_params_from(&p, params);
+    s->ofr = p.ofr;
+    s->dm_cc = p.dm_cc;
+    if (notnan(s->forced_ofr))
+        s->ofr = s->forced_ofr;
+    if (notnan(s->forced_dm_cc))
+        s->dm_cc = s->forced_dm_cc;
+
+    // Simulate and evaluate.
+    sim_ulate(s, NO_FULL_OUTPUT);
+    f64 cost = 0.0;
+    cost += sqed(0.01 * (s->Thrust - s->target_Thrust)); // thrust target.
+    cost -= sqed(0.025 * s->Isp); // higher Isp = goated.
+    return cost;
+}
+
+static void sim_optimise(simState* rstr s) {
+    assert(s->optimise == 1, "invalid input: optimise=%lld", s->optimise);
+    assert(s->target_Thrust > 0.0, "invalid input: target_Thrust=%lld",
+            s->target_Thrust);
+    assert(isnan(s->forced_ofr) || within(s->forced_ofr, 1.0, 3.0),
+            "invalid input: forced_ofr=%lld", s->forced_ofr);
+
+    // Setup the seeding params from the given state.
+    simParams p = {
+        .ofr = s->ofr,
+        .dm_cc = s->dm_cc,
+    };
+    f64 x[sizeof(p) / sizeof(f64)];
+    sim_params_to(&p, x);
+
+    // Grab initial cost for funsies.
+    f64 initial_cost = sim_cost(x, s);
+
+    // Run the minimiser.
+    f64 best_cost;
+    u8 tmp[OPT_RUN_MEMSIZE(numel(x))];
+    i32 res = opt_run(sim_cost, s, numel(x), tmp, 1e-8, 1e-8, x, &best_cost);
+    if (!res) {
+        printf("failed to optimise :((\n");
+    } else {
+        printf("OPTIMISED :D\n");
+        printf("    cost: $%g -> $%g\n", initial_cost, best_cost);
+        printf("     ofr: %g\n", s->ofr);
+        printf("   dm_cc: %g kg/s\n", s->dm_cc);
+        printf("  Thrust: %g N\n", s->Thrust);
+        printf("     Isp: %g s\n", s->Isp);
+    }
 }
