@@ -458,7 +458,7 @@ class RationalPolynomial:
     def _search_backwards_branch(cls, pidxs, qidxs, yao, real_values, evaluator,
             padto, max_error, done):
         N = len(pidxs) + len(qidxs)
-        for n in range((N - 1) // 6):
+        for n in range(N - 1):
             best_error = float("inf")
             best_idxs = None
             last_length = 0
@@ -470,7 +470,7 @@ class RationalPolynomial:
                 if not pi or not qi:
                     continue
 
-                key = tuple(pi + qi)
+                key = tuple(pi + [None] + qi)
                 if key in done:
                     continue
                 done.add(key)

@@ -2,7 +2,7 @@
    c to be rebuilt rather than bridge.pyx. */
 
 #include "../bridge/bridge.h"
-#include "assert.h"
+#include "assertion.h"
 #include "hash.h"
 #include "sim.h"
 

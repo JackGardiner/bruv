@@ -252,6 +252,30 @@ cdef class State:
         return ret.decode("utf-8")
 
 
+    def __repr__(State self):
+        cdef c_eight_bytes raw
+        cdef double asfloat
+        cdef long long asint
+
+        s = f"State array ({len(self._interp._mapping)} elements)\n"
+        maxlen = 0
+        for name in self._interp._mapping.keys():
+            maxlen = max(maxlen, len(str(name)))
+        for name, (i, itype, _) in self._interp._mapping.items():
+            s += f"  {name:>{maxlen}}: "
+            raw = self._array[i]
+            if itype == Interpretation.I64:
+                memcpy(&asint, &raw, 8)
+                s += str(int(asint))
+            elif itype == Interpretation.F64:
+                memcpy(&asfloat, &raw, 8)
+                s += str(float(asfloat))
+            else:
+                ptr = int(raw)
+                s += f"<addr 0x{ptr:016X}>"
+            s += "\n"
+        return s
+
 
     # PRIVATE
 

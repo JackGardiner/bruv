@@ -43,8 +43,8 @@ def summary_2D(ratpoly, surf, *, extra_reqs=(), trimasker=None):
     values = surf.f(X, Y)
 
     approx = ratpoly(X, Y)
-    abserr = np.abs(ratpoly.abs_error(values, X, Y))
-    relerr = np.abs(ratpoly.rel_error(values, X, Y))
+    abserr = np.abs(abs_error(values, approx))
+    relerr = np.abs(rel_error(values, approx))
     print(f"    /* max error of: */")
     print(f"    /*    abs {abserr.max()*100:.3g}% */")
     print(f"    /*    rel {relerr.max()*100:.3g}% */")
@@ -63,19 +63,19 @@ def summary_2D(ratpoly, surf, *, extra_reqs=(), trimasker=None):
         tri.set_mask(~mask)
 
     fig, axes = new_plots(rows=2, cols=2)
-    cont = axes[0,0].tricontourf(tri, values, levels=100, cmap="viridis")
+    cont = axes[0,0].tricontourf(tri, values, levels=300, cmap="viridis")
     fig.colorbar(cont, ax=axes[0, 0])
     axes[0,0].set_title("actual function")
     axes[0,0].set_grid("none")
-    cont = axes[0,1].tricontourf(tri, approx, levels=100, cmap="viridis")
+    cont = axes[0,1].tricontourf(tri, approx, levels=300, cmap="viridis")
     fig.colorbar(cont, ax=axes[0, 1])
     axes[0,1].set_title("approximation")
     axes[0,1].set_grid("none")
-    cont = axes[1,0].tricontourf(tri, 100*abserr, levels=100, cmap="viridis")
+    cont = axes[1,0].tricontourf(tri, 100*abserr, levels=300, cmap="viridis")
     fig.colorbar(cont, ax=axes[1, 0])
     axes[1,0].set_title("abs error")
     axes[1,0].set_grid("none")
-    cont = axes[1,1].tricontourf(tri, 100*relerr, levels=100, cmap="viridis")
+    cont = axes[1,1].tricontourf(tri, 100*relerr, levels=300, cmap="viridis")
     fig.colorbar(cont, ax=axes[1, 1])
     axes[1,1].set_title("rel error")
     axes[1,1].set_grid("none")
@@ -133,21 +133,18 @@ def test2d():
 
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
-        points=200, spacing=1.25, max_error=0.02, blitz=2.0):
+        points=200, spacing=1.25, max_error=0.015, blitz=2.0):
     def wrapped(what=""):
         print(f"approximating {our_name}")
         f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
 
-        surf = Surfspace(f, 1.0, 5.0, 0.5, 3.0, N0=200)
+        surf = Surfspace(f, 1.0, 5.0, 1.0, 3.0, N0=200)
         P, ofr, V = surf.points(
             1000 if what=="approximate" else points,
             spacing=spacing
         )
 
         evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
-
-        RationalPolynomialSum.search_forwards(P, ofr, V, blitz=blitz,
-                evaluator=evaluator)
 
         if what == "peep":
             peep_2D(surf, P, ofr, V)
@@ -166,24 +163,20 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
     return wrapped
 
 
-find_T_cc = cea_approximation("T_cc", "c_t", blitz=3.0,
-        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7])
+find_T_cc = cea_approximation("T_cc", "c_t", blitz=0.0,
+        pidxs=[1, 3, 5], qidxs=[0, 2, 3, 4, 5])
 find_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
-        # pidxs=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        # qidxs=[0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14])
-        pidxs=[0, 1, 2, 3, 4, 5],
-        qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14])
-find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=3.0,
-        # pidxs=[0, 5], qidxs=[0, 5, 8, 9])
-        pidxs=[0, 2, 4, 5], qidxs=[1, 5])
+        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
+find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
+        pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
 
 
 def _run():
+    find_T_cc(what="approximate")
+    find_gamma_tht(what="approximate")
+    find_Mw_tht(what="approximate")
 
-    find_T_cc(what="backwards")
-    # [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14], [0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14]
-    find_gamma_tht(what="backwards")
-    find_Mw_tht(what="fowards")
+    # idea: ratpoly + const. :) adds only 1 op and may hugely improve accur.
 
 
 
