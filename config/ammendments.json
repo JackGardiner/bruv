@@ -7,7 +7,16 @@
         "mdot_IPA": 0.7101464633719627
     },
     "part_mating": {
-        "R_cc": 45.0
+        "R_cc": 45.0,
+        "IR_Ioring": 48.0,
+        "OR_Ioring": 51.0,
+        "Mr_chnl": 55.5,
+        "max_th_chnl": 3.0,
+        "IR_Ooring": 60.0,
+        "OR_Ooring": 63.0,
+        "r_bolt": 71.0,
+        "D_bolt": 6.3,
+        "flange_outer_radius": 73.0
     },
     "chamber": {
         "L_cc": 97.99294305644807,

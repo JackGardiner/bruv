@@ -94,6 +94,44 @@ def get_state(interp):
     return state
 
 def write_ammendments(state):
+
+    def part_mating():
+        # all in mm.
+
+        with open(paths.ROOT / "../config/all.json", "r") as f:
+            pm = json.load(f)["part_mating"]
+
+        data = {}
+        r = 0.0
+        def push_boundary(name, length):
+            nonlocal r
+            r += length
+            data[name] = round(r, 4)
+        def push_inner_outer(name_inner, name_outer, gap):
+            nonlocal r
+            length = pm[name_outer] - pm[name_inner]
+            r += gap
+            data[name_inner] = round(r, 4)
+            r += length
+            data[name_outer] = round(r, 4)
+        def push_middle_length(name_middle, name_length, gap):
+            nonlocal r
+            length = pm[name_length]
+            r += gap
+            data[name_middle] = round(r + 0.5*length, 4)
+            r += length
+            data[name_length] = round(length, 4)
+
+        push_boundary("R_cc", state["R_cc"] * 1e3)
+        push_inner_outer("IR_Ioring", "OR_Ioring", 3.0)
+        push_middle_length("Mr_chnl", "max_th_chnl", 3.0)
+        push_inner_outer("IR_Ooring", "OR_Ooring", 3.0)
+        push_middle_length("r_bolt", "D_bolt", 4.85)
+        push_boundary("flange_outer_radius", -1.15)
+        return data
+
+    # todo: injector filmcooling + element placement?
+
     extra = {
         "operating_conditions": {
             "Thrust": state["Thrust"],
@@ -102,9 +140,7 @@ def write_ammendments(state):
             "mdot_LOx": state["dm_ox"],
             "mdot_IPA": state["dm_fu"],
         },
-        "part_mating": {
-            "R_cc": state["R_cc"] * 1e3,
-        },
+        "part_mating": part_mating(),
         "chamber": {
             "L_cc": state["L_cc"] * 1e3,
             "R_tht": state["R_tht"] * 1e3,
