@@ -203,7 +203,7 @@ public class InjectorSample : TPIAP.Pea {
         Frame at0 = top_cone.inner_tip!.flipzx();
         // we get bore radius length for free by trimming cone.
         at0 = at0.transz(L_port - tap.bore_radius).rotxy(PI_2);
-        Voxels port_LOx = new Flats(r_port, L_port + R, 0f).boss(at0);
+        Voxels port_LOx = new Flats(r_port, L_port + R, 0f).at(at0);
         port_LOx.BoolSubtract(Cone.phied(top_cone.inner_tip, PI_4, 200f));
         vox.BoolAdd(port_LOx);
         vox.BoolSubtract(tap.at(at0));

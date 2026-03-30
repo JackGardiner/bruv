@@ -1162,7 +1162,7 @@ public class Chamber : TPIAP.Pea {
         vox.BoolAdd(new Flats(tap_inlet, th_inlet){
             Lz = inlet_Lz + zextra,
             flats_Lz = INF,
-        }.boss(inlet_end));
+        }.at(inlet_end));
 
         if (!filletless) {
             Voxels mask = new Rod(
@@ -1262,7 +1262,7 @@ public class Chamber : TPIAP.Pea {
             // Supporting from tapping to include flats.
             Voxels this_pos = new Flats(tap_tc, th_tc){
                 Lz = Dz + 2f*EXTRA,
-            }.boss(frame.transz(Dz));
+            }.at(frame.transz(Dz));
             this_pos.BoolAdd(new Rod(
                 frame,
                 Dz,

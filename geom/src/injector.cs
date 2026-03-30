@@ -1079,7 +1079,7 @@ public class Injector : TPIAP.Pea {
 
         // Filled pipe.
         pos = new Flats(tap_igniter, th_igniter)
-                .boss(new Frame(z_igniter*uZ3).rotxy(PI_4));
+                .at(new Frame(z_igniter*uZ3).rotxy(PI_4));
         pos.BoolAdd(new Rod(
             new(),
             z_igniter,
@@ -1357,7 +1357,7 @@ public class Injector : TPIAP.Pea {
         void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
                 in Voxels? sub_pos=null, in Voxels? sub_neg=null) {
             Flats flats = new Flats(tap, th);
-            Voxels this_pos = flats.boss(at);
+            Voxels this_pos = flats.at(at);
             this_pos.BoolAdd(new Rod(at, -at.pos.Z, flats.r));
             this_pos.BoolSubtract(mani_vol.volume_entire);
 

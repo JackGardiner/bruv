@@ -113,7 +113,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
     public void outer_thread_bounds(out Vec2 A, out Vec2 B)
         => tapered_bounds(major_radius - outer_thread_truncation, out A, out B);
 
-    public Voxels threads(Frame face_out, bool female) {
+    public Voxels threads(Frame face_out) {
         // oh yeah genuine thread creator.
         // now THIS is picogk.
 
@@ -238,7 +238,7 @@ public class Tapping : Threads {
             // Hole will look like the threads, with a conical tip, a small
             // chamfer at the leading edge, and a small round slug at the top.
             float CR = 2.0f*thread_depth;
-            Voxels vox = threads(face_out, true);
+            Voxels vox = threads(face_out);
             List<Vec2> zr = [
                 new(A.X + extra, 0f),
                 new(A.X + extra, major_radius + CR + min(0.2f*major_radius, 3f)),
@@ -282,7 +282,8 @@ public class Tapping : Threads {
                 face_out * new Vec3(0f, +bore_radius, -straight_length),
                 face_out * new Vec3(-bore_radius, 0f, -straight_length),
                 face_out * new Vec3(0f, -bore_radius, -straight_length),
-                face_out * (uZ3*(-straight_length - tip_length_ratio*bore_radius)),
+                face_out * (uZ3*(-straight_length
+                                 - tip_length_ratio*bore_radius)),
             ];
         } else {
             // Default to "simple" bore rhombus w weird tip. For the worst-case
@@ -298,7 +299,8 @@ public class Tapping : Threads {
                 face_out * new Vec3(0f, +bore_radius, -straight_length),
                 face_out * new Vec3(-SQRTH*bore_radius, 0f, -straight_length),
                 face_out * new Vec3(0f, -bore_radius, -straight_length),
-                face_out * (uZ3*(-straight_length - tip_length_ratio*bore_radius)),
+                face_out * (uZ3*(-straight_length
+                                 - tip_length_ratio*bore_radius)),
             ];
         }
 
@@ -360,7 +362,7 @@ public class Studding : Threads {
 
         inner_thread_bounds(out Vec2 A, out Vec2 B);
 
-        Voxels vox = threads(face_out, false);
+        Voxels vox = threads(face_out);
 
         List<Vec2> zr = [
             new(A.X + extra, 0f),
@@ -434,7 +436,7 @@ public class Flats {
         this.flats_Lz = max(8f, r);
     }
 
-    public Voxels boss(Frame face_out) {
+    public Voxels at(Frame face_out) {
         assert(r > 0f);
         assert(Lz >= 0f);
         assert(tip_length_ratio >= 0f);
