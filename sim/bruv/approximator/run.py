@@ -84,59 +84,32 @@ def summary_2D(ratpoly, surf, *, extra_reqs=(), trimasker=None):
 def peep_2D(surf, *points):
     _, ax = new_plots(projection="3d")
     X, Y = Evenspace(*surf.bounds()).points(200**2, flatten=False)
-    # ax.plot_surface(X, Y, surf.f(X, Y), cmap="viridis")
+    ax.plot_surface(X, Y, surf.f(X, Y), cmap="viridis")
     ax.scatter(*points)
 
 
 
-def test1d():
-    print("approximating e^x")
-    surf = Surfspace(np.exp, 1, 4)
-
-    X, values = surf.points(100)
-
-    # RationalPolynomial.search_forwards(X, values, print_all_below=0.0)
-    # RationalPolynomial.search_backwards(X, values, max_error=0.01)
-
-    ratpoly, _ = RationalPolynomial.approximate(
-        [0, 2], [0, 2, 3], X, values,
-    )
-    print("found:", ratpoly)
-    X_f = Evenspace(*surf.bounds()).points(1000)
-    values_f = surf.f(X_f)
-    summary_1D(ratpoly, values_f, X_f)
-
-
-def test2d():
-    print("approximating e^(xy/10) + ln(x)")
-    surf = Surfspace(
-        lambda X, Y: np.exp(X*Y/10) + np.log(X),
-        1, 3,
-        10, 20
-    )
-
-    X, Y, values = surf.points(200)
-
-    # RationalPolynomial.search_forwards(X, Y, values,
-    #         blitz=3.0, print_all_below=0.02)
-    # RationalPolynomial.search_backwards(X, Y, values, max_error=0.02)
-
-    RationalPolynomialSum.search_forwards(X, Y, values, blitz=3.0, starting_cost=20)
-    ratpoly, app = RationalPolynomial.multiapproximate(
-        [0, 1, 3, 17], [1, 3, 4, 6, 7, 8, 10, 12], X, Y, values,
-    )
-    print(evaluator_abs_only(values, app))
-    print("found:", ratpoly)
-    summary_2D(ratpoly, surf)
 
 
 
+def cea(name, P, ofr):
+    # size aeat first.
+    P_exit = 101325.0
+    gamma_tht = CEA["t_gamma"](P, ofr, 1.0)
+    def isentropic_M_from_P_on_P0(P_on_P0, y):
+        return (2/(y - 1)*(P_on_P0 ** ((1 - y)/y) - 1)) ** 0.5;
+    def isentropic_A_on_Astar(M, y):
+        n = 0.5*(y + 1)/(y - 1)
+        return (2/(y + 1.0) + M*M/n/2)**n / M
+    M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
+    AEAT = isentropic_A_on_Astar(M_exit, gamma_tht)
+    return CEA[name](P, ofr, AEAT)
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
         points=200, spacing=1.25, max_error=0.015, blitz=2.0):
     def wrapped(what=""):
         print(f"approximating {our_name}")
-        f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
+        f = lambda P, ofr: cea(cea_name, P, ofr)
 
         surf = Surfspace(f, 1.0, 5.0, 1.0, 3.0, N0=200)
         P, ofr, V = surf.points(
@@ -155,11 +128,11 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
             RationalPolynomial.search_forwards(P, ofr, V, blitz=blitz,
                     evaluator=evaluator)
         elif what == "approximate":
-            ratpoly, _ = RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
-            print("found:", ratpoly)
-            summary_2D(ratpoly, surf)
+            rp = RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
+            print("found:", rp)
+            summary_2D(rp, surf)
         else:
-            assert False
+            assert False, f"invalid what: {what}"
     return wrapped
 
 
@@ -169,14 +142,14 @@ find_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
         pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
 find_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
         pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
-
+find_Isp = cea_approximation("Isp", "isp", rel_only=True, blitz=0.0, max_error=0.03,
+        pidxs=[1, 2, 4, 8, 13], qidxs=[0, 1, 2])
 
 def _run():
     find_T_cc(what="approximate")
     find_gamma_tht(what="approximate")
     find_Mw_tht(what="approximate")
-
-    # idea: ratpoly + const. :) adds only 1 op and may hugely improve accur.
+    find_Isp(what="approximate")
 
 
 

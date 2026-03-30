@@ -29,6 +29,7 @@
     X(T0_cc, f64, C_OUTPUT)                     \
     X(gamma_tht, f64, C_OUTPUT)                 \
     X(Mw_tht, f64, C_OUTPUT)                    \
+    X(efficiency, f64, C_OUTPUT)                \
     X(Thrust, f64, C_OUTPUT)                    \
     X(Isp, f64, C_OUTPUT)                       \
                                                 \
@@ -41,8 +42,6 @@
                                                 \
     X(optimise, i64, C_INPUT)                   \
     X(target_Thrust, f64, C_INPUT)              \
-    X(forced_ofr, f64, C_INPUT)                 \
-    X(forced_dm_cc, f64, C_INPUT)               \
 
 
 // Da state array.

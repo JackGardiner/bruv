@@ -4,6 +4,9 @@ GUI front-end for the c back-end.
 
 import json
 import sys
+import time
+from contextlib import contextmanager
+
 import numpy as np
 
 from . import bridge
@@ -41,6 +44,7 @@ def get_interpretation():
     interp.append("T0_cc", interp.F64, OUT)
     interp.append("gamma_tht", interp.F64, OUT)
     interp.append("Mw_tht", interp.F64, OUT)
+    interp.append("efficiency", interp.F64, OUT)
     interp.append("Thrust", interp.F64, OUT)
     interp.append("Isp", interp.F64, OUT)
 
@@ -53,8 +57,6 @@ def get_interpretation():
 
     interp.append("optimise", interp.I64, IN)
     interp.append("target_Thrust", interp.F64, IN)
-    interp.append("forced_ofr", interp.F64, IN)
-    interp.append("forced_dm_cc", interp.F64, IN)
 
     interp.finalise()
     return interp
@@ -87,14 +89,13 @@ def get_state(interp):
 
     state["optimise"] = 1
     state["target_Thrust"] = 5000.0
-    state["forced_ofr"] = float("nan")
-    state["forced_dm_cc"] = float("nan")
 
     return state
 
 def write_ammendments(state):
     extra = {
         "part_mating": {
+            "R_cc": state["R_cc"] * 1e3,
             "mdot_LOx": state["dm_ox"],
             "mdot_IPA": state["dm_fu"],
         },
@@ -102,6 +103,8 @@ def write_ammendments(state):
             "L_cc": state["L_cc"] * 1e3,
             "R_tht": state["R_tht"] * 1e3,
             "AEAT": state["AEAT"],
+            "NLF": state["NLF"],
+            "phi_conv": state["phi_conv"],
             "phi_div": state["phi_div"],
             "phi_exit": state["phi_exit"],
         },
@@ -115,7 +118,16 @@ def now_this_is_bruv():
     interp = get_interpretation()
     state = get_state(interp)
 
-    ret = state.execute()
+    @contextmanager
+    def time_me(label):
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            end = time.perf_counter()
+            print(f"{label} took {end - start:.4g} s.")
+    with time_me("Simulation"):
+        ret = state.execute()
     if ret is not None:
         print("FAILED:", ret)
         return 1

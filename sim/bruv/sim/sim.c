@@ -57,55 +57,50 @@ c_IH sim_interpretation_hash(void) {
 
 static void sim_ulate(simState* rstr s, i32 full_output) {
 
-    /* Combustion */
+    /* Input validation. */
+
+    assert(s->Lstar > 0.0, "invalid input: Lstar=%g", s->Lstar);
+    assert(s->R_cc > 0.0, "invalid input: R_cc=%g", s->R_cc);
+    assert(0.0 < s->NLF && s->NLF <= 1.0, "invalid input: NLF=%g", s->NLF);
+    assert(-PI_2 <= s->phi_conv && s->phi_conv < 0.0,
+                "invalid input: phi_conv=%g", s->phi_conv);
 
     assert(s->ofr > 0.0, "invalid input: ofr=%g", s->ofr);
     assert(s->dm_cc > 0.0, "invalid input: dm_cc=%g", s->dm_cc);
-    assert(s->P0_cc > 0.0, "invalid input: P0_cc=%g", s->P0_cc);
     assert(s->P_exit > 0.0, "invalid input: P_exit=%g", s->P_exit);
+    assert(s->P0_cc > 0.0, "invalid input: P0_cc=%g", s->P0_cc);
+
+    // Our CEA approximations assume ideally expanded at sea level.
+    assert(nearto(s->P_exit, 101325.0), "exit pressure must be sea-level "
+            "atmospheric, got: %g", s->P_exit);
+
+
+    /* Combustion */
 
     s->dm_fu = s->dm_cc / (s->ofr + 1.0);
     s->dm_ox = s->dm_cc - s->dm_fu;
 
-    s->T0_cc = cea_T_cc(s->P0_cc, s->ofr);
+    s->T0_cc = cea_T0_cc(s->P0_cc, s->ofr);
     s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
     s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
+    s->Isp = cea_Isp(s->P0_cc, s->ofr);
+
+    s->Thrust = s->Isp * s->dm_cc * STANDARD_GRAVITY;
 
     SpecificHeatRatio* shr = get_shr(s->gamma_tht);
-
-    f64 M_exit = isentropic_M_from_P_on_P0(s->P_exit / s->P0_cc, shr);
-    f64 P_exit = s->P0_cc * isentropic_P_on_P0(M_exit, shr);
-    f64 T_tht = s->T0_cc * isentropic_T_on_T0(1.0, shr);
-    f64 P_tht = s->P0_cc * isentropic_P_on_P0(1.0, shr);
-
-    // thrust = mdot * vel  [no pressure work]
-    // note this is a pretty bad vel_exit formula, disagrees with cea by ~10%.
-    f64 vel_exit = sqrt(2*shr->y/(shr->y - 1.0)
-                    * GAS_CONSTANT/s->Mw_tht
-                    * T_tht
-                    * (1.0 - pow(s->P_exit / P_tht, (shr->y - 1.0)/shr->y)));
-    s->Thrust = s->dm_cc * vel_exit;
-    assert(nearto(P_exit, s->P_exit),
-            "failed to find perfectly expanded nozzle?");
-
-    s->Isp = s->Thrust / s->dm_cc / STANDARD_GRAVITY;
-
-
-    /* Geometry */
-
     s->A_tht = s->dm_cc / s->P0_cc
              * sqrt(s->T0_cc * GAS_CONSTANT / s->Mw_tht / shr->y)
              * pow(0.5*(shr->y + 1.0), shr->n);
 
+    f64 M_exit = isentropic_M_from_P_on_P0(s->P_exit / s->P0_cc, shr);
+    f64 P_exit = s->P0_cc * isentropic_P_on_P0(M_exit, shr);
+    assert(nearto(P_exit, s->P_exit),
+            "failed to find perfectly expanded nozzle?");
+
     s->AEAT = isentropic_A_on_Astar(M_exit, shr);
 
-    assert(s->Lstar > 0.0, "invalid input: Lstar=%g", s->Lstar);
-    assert(s->R_cc > 0.0, "invalid input: R_cc=%g", s->R_cc);
-    assert(s->A_tht > 0.0, "invalid input: A_tht=%g", s->A_tht);
-    assert(s->AEAT > 1.0, "invalid input: AEAT=%g", s->AEAT);
-    assert(0.0 < s->NLF && s->NLF <= 1.0, "invalid input: NLF=%g", s->NLF);
-    assert(-PI_2 <= s->phi_conv && s->phi_conv < 0.0,
-                "invalid input: phi_conv=%g", s->phi_conv);
+
+    /* Geometry */
 
     Contour* cnt = &(Contour){0};
     { // Get chamber contour and find chamber cyl length.
@@ -128,6 +123,14 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     s->z_exit = cnt->z_exit;
     s->phi_div = cnt->phi_div;
     s->phi_exit = cnt->phi_exit;
+
+
+    /* Post-construction tweaks. */
+
+    s->efficiency = cos(s->phi_exit) // divergent exhaust.
+                  * 0.97 // estimated viscous losses.
+                  * 0.99; // estimated combustion losses.
+    s->Thrust *= s->efficiency;
 
 
     /* Outputs */
@@ -181,16 +184,14 @@ static void sim_params_to(const simParams* p, f64* rstr params) {
 
 static f64 sim_cost(const f64* rstr params, void* rstr user) {
     simState* s = user;
+    for (i32 i=0; i<sizeof(simParams)/sizeof(f64); ++i)
+        assert(isgood(params[i]), "bad :(");
 
     // Extract the given parameters.
     simParams p;
     sim_params_from(&p, params);
     s->ofr = p.ofr;
     s->dm_cc = p.dm_cc;
-    if (notnan(s->forced_ofr))
-        s->ofr = s->forced_ofr;
-    if (notnan(s->forced_dm_cc))
-        s->dm_cc = s->forced_dm_cc;
 
     // Simulate and evaluate.
     sim_ulate(s, NO_FULL_OUTPUT);
@@ -204,8 +205,6 @@ static void sim_optimise(simState* rstr s) {
     assert(s->optimise == 1, "invalid input: optimise=%lld", s->optimise);
     assert(s->target_Thrust > 0.0, "invalid input: target_Thrust=%lld",
             s->target_Thrust);
-    assert(isnan(s->forced_ofr) || within(s->forced_ofr, 1.0, 3.0),
-            "invalid input: forced_ofr=%lld", s->forced_ofr);
 
     // Setup the seeding params from the given state.
     simParams p = {
@@ -221,15 +220,18 @@ static void sim_optimise(simState* rstr s) {
     // Run the minimiser.
     f64 best_cost;
     u8 tmp[OPT_RUN_MEMSIZE(numel(x))];
-    i32 res = opt_run(sim_cost, s, numel(x), tmp, 1e-8, 1e-8, x, &best_cost);
-    if (!res) {
-        printf("failed to optimise :((\n");
-    } else {
-        printf("OPTIMISED :D\n");
-        printf("    cost: $%g -> $%g\n", initial_cost, best_cost);
-        printf("     ofr: %g\n", s->ofr);
-        printf("   dm_cc: %g kg/s\n", s->dm_cc);
-        printf("  Thrust: %g N\n", s->Thrust);
-        printf("     Isp: %g s\n", s->Isp);
+    enum { OPTIM_RUNS = 3 }; // several tries for max extraction?
+    for (i32 i=0; i<OPTIM_RUNS; ++i) {
+        i32 res = opt_run(sim_cost, s, numel(x), tmp, 1e-8, 1e-8, x, &best_cost);
+        if (!res) {
+            printf("failed to optimise :((\n");
+            return;
+        }
     }
+    printf("OPTIMISED :D\n");
+    printf("    cost: $%g -> $%g\n", initial_cost, best_cost);
+    printf("     ofr: %g\n", s->ofr);
+    printf("   dm_cc: %g kg/s\n", s->dm_cc);
+    printf("  Thrust: %g N\n", s->Thrust);
+    printf("     Isp: %g s\n", s->Isp);
 }

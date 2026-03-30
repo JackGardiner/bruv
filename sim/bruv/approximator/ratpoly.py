@@ -246,7 +246,7 @@ class Polynomial:
 class RationalPolynomial:
     """
     Represents a rational polynomial of the form:
-           p0 + p1 x + p2 x^2 + ... + x^n
+         p0 + p1 x + p2 x^2 + ... + pn x^n
         -----------------------------------
          q0 + q1 x + q2 x^2 + ... + qm x^m
     """
@@ -337,7 +337,6 @@ class RationalPolynomial:
                     #     continue
                     yield pidxs, qidxs
 
-
     @classmethod
     def approximate(cls, pidxs, qidxs, *points):
         ndim = len(points) - 1
@@ -349,61 +348,108 @@ class RationalPolynomial:
         return cls.approximate_ones(ndim, pidxs, qidxs, ones, real_values)
 
     @classmethod
-    def approximate_ones(cls, ndim, pidxs, qidxs, ones, real_values):
+    def approximate_ones(cls, ndim, pidxs, qidxs, ones, real_values,
+            normalise=True, evaluator=None, max_error=0.05):
         pidxs = list(pidxs)
         qidxs = list(qidxs)
         assert ndim >= 1
         assert real_values.ndim == 1
 
-        # implicitly set the lowest power coeff in the denom to 1.
-        def initial_state():
-            return np.zeros(len(pidxs) + len(qidxs) - 1)
+        L = ones.shape[0]
+        N = len(pidxs)
+        M = len(qidxs) - 1 # implicitly use 1 for lowest power coeff in denom.
+
         def get_coeffs(state):
-            pcoeffs = state[:len(pidxs)]
-            qcoeffs = state[len(pidxs):]
-            qcoeffs = np.concatenate(([1.0], qcoeffs))
+            pcoeffs = state[:N]
+            qcoeffs = np.concatenate(([1.0], state[N:]))
+            # qcoeffs = np.concatenate(([1.0], state[N:-1]))
+            # const = state[-1]
             return pcoeffs, qcoeffs
 
-        def jacobian(state):
+        def initial_state():
+            # Solve y * Q - P - c = 0
+            A = np.hstack([
+                -ones[:, pidxs],
+                (real_values[:, None]) * ones[:, qidxs[1:]],
+            ])
+            b = -real_values
+            x0, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
+            return x0
+
+        # Check if linearised guess is close enough to continue.
+
+        state = initial_state()
+
+        def too_much_error(state):
+            if evaluator is None:
+                return False
             pcoeffs, qcoeffs = get_coeffs(state)
             P = ones[:, pidxs] @ pcoeffs
             Q = ones[:, qidxs] @ qcoeffs
-            N = len(pidxs)
-            M = len(qidxs) - 1
-            J = np.zeros((ones.shape[0], N + M))
-            J[:, :N] = -ones[:, pidxs] / Q[:, None]
-            J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
-            return J
+            values = P / Q
+
+            return evaluator(real_values, values) > max_error
+        if too_much_error(state):
+            pcoeffs, qcoeffs = get_coeffs(state)
+            # stop here.
+            return RationalPolynomial(
+                Polynomial(ndim, pidxs, pcoeffs),
+                Polynomial(ndim, qidxs, qcoeffs),
+            )
+
+
+        # Do minimise least squares optimization, with approximately optimal
+        # initial state.
 
         def residuals(state):
             pcoeffs, qcoeffs = get_coeffs(state)
             P = ones[:, pidxs] @ pcoeffs
             Q = ones[:, qidxs] @ qcoeffs
-            with np.errstate(divide="ignore"):
-                values = P / Q
-            return real_values - values
+            return real_values - P / Q
 
-        # Optimise via least squares, since its significantly more stable than a
-        # minimise-max-error optimiser.
-        state = initial_state()
-        for _ in range(10):
-            res = scipy.optimize.least_squares(residuals, state,
-                    jac=jacobian, method="lm")
-            state = res.x
-            if res.status > 0:
-                break
-        pcoeffs, qcoeffs = get_coeffs(state)
-        # Make the top power in the numer have a coeff of 1.
-        factor = pcoeffs[-1]
-        if abs(factor) > 1e-8:
-            pcoeffs /= factor
-            qcoeffs /= factor
-        ratpoly = RationalPolynomial(
+        def jacobian(state):
+            pcoeffs, qcoeffs = get_coeffs(state)
+            P = ones[:, pidxs] @ pcoeffs
+            Q = ones[:, qidxs] @ qcoeffs
+            J = np.zeros((L, N + M))
+            J[:, :N] = -ones[:, pidxs] / Q[:, None]
+            J[:, N:] = (P[:, None] * ones[:, qidxs[1:]]) / (Q[:, None]**2)
+            return J
+
+        res = scipy.optimize.least_squares(
+            residuals,
+            state,
+            jac=jacobian,
+            method="lm"
+        )
+        pcoeffs, qcoeffs = get_coeffs(res.x)
+
+        if normalise:
+            # Normalize a coeff to 1. Try to pick the element which will minimise
+            # fp error, so like closest to geometric mean?
+            possible = np.concatenate((pcoeffs, qcoeffs))
+            log_possible = np.log(np.abs(possible))
+            log_mean = np.mean(log_possible)
+            deviations = np.abs(log_possible - np.mean(log_possible))
+            # Note we ignore leading constants, since that won't reduce total
+            # operations.
+            deviations = list(deviations)
+            possible = list(possible)
+            if qidxs[0] == 0:
+                deviations.pop(len(pcoeffs))
+                possible.pop(len(pcoeffs))
+            if pidxs[0] == 0:
+                deviations.pop(0)
+                possible.pop(0)
+            factor = possible[np.argmin(deviations)]
+            if abs(factor) > 1e-8:
+                pcoeffs /= factor
+                qcoeffs /= factor
+
+        return RationalPolynomial(
             Polynomial(ndim, pidxs, pcoeffs),
             Polynomial(ndim, qidxs, qcoeffs),
         )
-        values = ratpoly.eval_ones(ones)
-        return ratpoly, values
 
     @classmethod
     def search_forwards(cls, *points, blitz=0.0, starting_cost=2,
@@ -422,8 +468,10 @@ class RationalPolynomial:
             last_length = len(s)
 
             ones = yao.get_for_idxs(pidxs, qidxs)
-            ratpoly, values = cls.approximate_ones(ndim, pidxs, qidxs, ones,
-                    real_values)
+            ratpoly = cls.approximate_ones(ndim, pidxs, qidxs, ones, real_values,
+                    normalise=False, evaluator=evaluator,
+                    max_error=3*max(best_error, print_all_below))
+            values = ratpoly.eval_ones(ones)
             error = evaluator(real_values, values)
 
             if error <= max(best_error, print_all_below):
@@ -480,8 +528,10 @@ class RationalPolynomial:
                 last_length = len(s)
 
                 ones = yao.get_for_idxs(pi, qi)
-                ratpoly, values = cls.approximate_ones(yao.ndim, pi, qi, ones,
-                        real_values)
+                ratpoly = cls.approximate_ones(yao.ndim, pi, qi, ones,
+                        real_values, normalise=False, evaluator=evaluator,
+                        max_error=3*max_error)
+                values = ratpoly.eval_ones(ones)
                 error = evaluator(real_values, values)
                 if error < best_error:
                     best_error = error
@@ -646,7 +696,7 @@ class RationalPolynomialSum:
             maxidx = max(maxidx, max(qidxs))
         maxdegree = degreeof(ndim, maxidx)
         ones = YupAllOnes(*coords).get(maxdegree)
-        return cls.multiapproximate_ones(ndim, idxs, ones, real_values)
+        return cls.approximate_ones(ndim, idxs, ones, real_values)
 
     @classmethod
     def approximate_ones(cls, ndim, idxs, ones, real_values):
@@ -899,8 +949,8 @@ class LookupTable:
                 xmin, xmax = bounds[dim]
                 lin = lin_coords[dim]
                 lin = ((lin - xmin) / (xmax - xmin)).ravel()
-                ratpoly, _ = RationalPolynomial.approximate_ones(ndim, pidxs,
-                        qidxs, lin_ones, lin)
+                ratpoly = RationalPolynomial.approximate_ones(ndim, pidxs, qidxs,
+                        lin_ones, lin)
                 poff = offs[dim, 0]
                 qoff = offs[dim, 1]
                 plen = lens[dim, 0]
@@ -960,9 +1010,7 @@ class LookupTable:
             state = res.x
             if res.status > 0:
                 break
-        lut = get_obj(state)
-        values = lut.eval_ones(ones)
-        return lut, values
+        return get_obj(state)
 
     @classmethod
     def search_forwards(cls, f, *points, evaluator=evaluator_abs_only, padto=60,
@@ -1025,8 +1073,8 @@ class LookupTable:
             maxdegree = degreeof(ndim, maxidx)
             ones = yao.get(maxdegree)
 
-            lut, values = cls.approximate_ones(state[0], state[1], ones,
-                    real_values, f)
+            lut = cls.approximate_ones(state[0], state[1], ones, real_values, f)
+            values = lut.eval_ones(ones)
             error = evaluator(real_values, values)
 
             if error <= max(best_error, print_all_below):
