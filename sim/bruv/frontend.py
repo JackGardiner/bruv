@@ -44,9 +44,9 @@ def get_interpretation():
     interp.append("T0_cc", interp.F64, OUT)
     interp.append("gamma_tht", interp.F64, OUT)
     interp.append("Mw_tht", interp.F64, OUT)
-    interp.append("efficiency", interp.F64, OUT)
-    interp.append("Thrust", interp.F64, OUT)
     interp.append("Isp", interp.F64, OUT)
+    interp.append("Thrust", interp.F64, OUT)
+    interp.append("efficiency", interp.F64, OUT)
 
     interp.append("out_count", interp.I64, IN)
     interp.append("out_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
@@ -55,8 +55,9 @@ def get_interpretation():
     interp.append("out_T", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_P", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
-    interp.append("optimise", interp.I64, IN)
     interp.append("target_Thrust", interp.F64, IN)
+    interp.append("optimise_ofr", interp.I64, IN)
+    interp.append("optimise_dm_cc", interp.I64, IN)
 
     interp.finalise()
     return interp
@@ -72,13 +73,12 @@ def get_state(interp):
     state["NLF"] = config["chamber"]["NLF"]
     state["phi_conv"] = config["chamber"]["phi_conv"]
 
-
-    dm_ox = config["part_mating"]["mdot_LOx"]
-    dm_fu = config["part_mating"]["mdot_IPA"]
+    dm_ox = config["operating_conditions"]["mdot_LOx"]
+    dm_fu = config["operating_conditions"]["mdot_IPA"]
     state["ofr"] = dm_ox / dm_fu
     state["dm_cc"] = dm_ox + dm_fu
-    state["P_exit"] = 101325.0 # atmos @ sea level
-    state["P0_cc"] = config["part_mating"]["P_cc"]
+    state["P_exit"] = config["operating_conditions"]["P_exit"]
+    state["P0_cc"] = config["operating_conditions"]["P_cc"]
 
     state["out_count"] = 10000
     state["out_z"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
@@ -87,17 +87,23 @@ def get_state(interp):
     state["out_T"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
     state["out_P"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
 
-    state["optimise"] = 1
-    state["target_Thrust"] = 5000.0
+    state["target_Thrust"] = config["operating_conditions"]["Thrust"]
+    state["optimise_ofr"] = 1
+    state["optimise_dm_cc"] = 1
 
     return state
 
 def write_ammendments(state):
     extra = {
-        "part_mating": {
-            "R_cc": state["R_cc"] * 1e3,
+        "operating_conditions": {
+            "Thrust": state["Thrust"],
+            "P_cc": state["P0_cc"],
+            "P_exit": state["P_exit"],
             "mdot_LOx": state["dm_ox"],
             "mdot_IPA": state["dm_fu"],
+        },
+        "part_mating": {
+            "R_cc": state["R_cc"] * 1e3,
         },
         "chamber": {
             "L_cc": state["L_cc"] * 1e3,

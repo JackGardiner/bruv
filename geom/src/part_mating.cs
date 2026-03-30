@@ -20,18 +20,8 @@ public class PartMating {
     public required float D_bolt { get; init; }
     public required float D_washer { get; init; }
 
-    /* Non-geometric parameters: */
-    public required float rho_LOx { get; init; }
-    public required float rho_IPA { get; init; }
-    public required float mu_LOx { get; init; }
-    public required float mu_IPA { get; init; }
-    public required float P_cc { get; init; }
-    public required float Pr_LOx { get; init; }
-    public required float Pr_IPA { get; init; }
-    public required float mdot_LOx { get; init; }
-    public required float mdot_IPA { get; init; }
-
     /* Nice to agree on for purely visual matches: */
+
     public required float thickness_around_bolt { get; init; }
     public required float flange_thickness_cc { get; init; }
     public required float flange_thickness_inj { get; init; }

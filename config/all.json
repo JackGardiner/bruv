@@ -1,6 +1,21 @@
 {
+    "operating_conditions": {
+        "Thrust": 5e3,
+        "P_cc": 35e5,
+        "P_exit": 101.325e3,
+        "mdot_LOx": 1.2,
+        "mdot_IPA": 0.8,
+
+        "Pr_LOx": 1.25,
+        "Pr_IPA": 1.25,
+
+        "rho_LOx": 1141.0,
+        "rho_IPA": 786.0,
+        "mu_LOx": 2.04e-4,
+        "mu_IPA": 2.86e-3
+    },
     "part_mating": {
-        "R_cc": 50.0,
+        "R_cc": 45.0,
 
         "Mr_chnl": 60.0,
         "max_th_chnl": 3.0,
@@ -17,16 +32,6 @@
         "D_bolt": 6.3,
         "D_washer": 12.5,
 
-        "rho_LOx": 1141.0,
-        "rho_IPA": 786.0,
-        "mu_LOx": 2.04e-4,
-        "mu_IPA": 2.86e-3,
-        "P_cc": 35e5,
-        "Pr_LOx": 1.25,
-        "Pr_IPA": 1.25,
-        "mdot_LOx": 1.2,
-        "mdot_IPA": 0.8,
-
         "thickness_around_bolt": 6.0,
         "flange_thickness_cc": 7.0,
         "flange_thickness_inj": 7.0,
@@ -40,7 +45,7 @@
         "AEAT": 5.2,
         "R_tht": 23.0,
 
-        "NLF": 0.94,
+        "NLF": 1.0,
         "phi_conv": -0.7853981633974483,
         "phi_div": 0.4027190692943012,
         "phi_exit": 0.220523450546912,
@@ -61,13 +66,13 @@
 
         "portsize_inlet": "G1/2",
         "theta_inlet": -1.5707963267948966,
-        "th_inlet": 3.5,
+        "th_inlet": 4.5,
         "FR_inlet": 6.0,
 
         "no_tc": 6,
         "portsize_tc": "G1/16",
         "theta_tc": 1.5707963267948966,
-        "th_tc": 2.5,
+        "th_tc": 3.5,
         "D_tc": 1.5
     },
     "injector": {
@@ -120,10 +125,10 @@
         "z_IPAPT": 60.0,
         "z_CCPT": 60.0,
         "th_igniter": 4.0,
-        "th_LOxinlet": 4.0,
-        "th_LOxPT": 3.5,
-        "th_IPAPT": 3.5,
-        "th_CCPT": 3.5,
+        "th_LOxinlet": 4.5,
+        "th_LOxPT": 4.0,
+        "th_IPAPT": 4.0,
+        "th_CCPT": 4.0,
         "D_igniterh": 6.35,
         "D_LOxinleth": 15.0,
         "D_LOxPTh": 2.0,
@@ -137,7 +142,7 @@
     },
     "printer": {
         "name": "Nikon SLM280 2.0",
-        "max_print_angle": 0.785398163397,
+        "max_print_angle": 0.7853981633974483,
         "bed_size_width": 280.0,
         "bed_size_length": 280.0,
         "bed_size_height": 365.0

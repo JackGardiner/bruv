@@ -282,8 +282,8 @@ i32 opt_run(opt_cost_f cost, void* rstr user, i64 count, void* rstr tmp,
             // No change.
             new_cost = prev_cost;
         } else {
-            // Accelerate search by doing an additional line search along this new
-            // direction.
+            // Accelerate search by doing an additional line search along this
+            // new direction.
             f64 philo, phihi;
             opt_bracket1D(cost, user, count, tmp,
                     x, netdir, 0.0, min(1.0, prev_netdir_mag/4),

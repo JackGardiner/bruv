@@ -18,9 +18,8 @@ enum { NO_FULL_OUTPUT = 0, GIVE_FULL_OUTPUT = 1 };
 static void sim_optimise(simState* rstr s);
 
 void sim_execute(simState* rstr s) {
-    // Optimise if requested.
-    if (s->optimise)
-        sim_optimise(s);
+    // Optimise system.
+    sim_optimise(s);
 
     // Simulate and write all outputs.
     sim_ulate(s, GIVE_FULL_OUTPUT);
@@ -77,9 +76,6 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Combustion */
 
-    s->dm_fu = s->dm_cc / (s->ofr + 1.0);
-    s->dm_ox = s->dm_cc - s->dm_fu;
-
     s->T0_cc = cea_T0_cc(s->P0_cc, s->ofr);
     s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
     s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
@@ -98,6 +94,9 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             "failed to find perfectly expanded nozzle?");
 
     s->AEAT = isentropic_A_on_Astar(M_exit, shr);
+
+    s->dm_fu = s->dm_cc / (s->ofr + 1.0);
+    s->dm_ox = s->dm_cc - s->dm_fu;
 
 
     /* Geometry */
@@ -130,6 +129,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     s->efficiency = cos(s->phi_exit) // divergent exhaust.
                   * 0.97 // estimated viscous losses.
                   * 0.99; // estimated combustion losses.
+    s->Isp *= s->efficiency;
     s->Thrust *= s->efficiency;
 
 
@@ -169,31 +169,45 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 // = OPTIMISATION ============================================================ //
 // =========================================================================== //
 
-typedef struct simParams {
+typedef struct simParms {
+    /* <OPTIM ORDERING> */
     f64 ofr;
     f64 dm_cc;
 } simParams;
-static void sim_params_from(simParams* p, const f64* rstr params) {
-    p->ofr = bound_both(params[0], 1.0, 3.0);
-    p->dm_cc = bound_lower(params[1], 0.0);
+enum { PARAM_COUNT = sizeof(simParams) / 8 };
+typedef struct simUser {
+    simState* s;
+    i32 N; // how many parameters being optimised.
+
+    // Mapping of "`simParams` index" -> "`params[]` index". If that parameter is
+    // not being used, maps to -1.
+    i32 mapping[PARAM_COUNT];
+} simUser;
+static void sim_params_from(simUser* u, const f64* rstr params) {
+    i32 i;
+    /* <OPTIM ORDERING> */
+    if ((i = u->mapping[0]) >= 0)
+        u->s->ofr = bound_both(params[i], 1.0, 3.0);
+    if ((i = u->mapping[1]) >= 0)
+        u->s->dm_cc = bound_lower(params[i], 0.0);
 }
-static void sim_params_to(const simParams* p, f64* rstr params) {
-    params[0] = unbound_both(p->ofr, 1.0, 3.0);
-    params[1] = unbound_lower(p->dm_cc, 0.0);
+static void sim_params_to(const simUser* u, f64* rstr params) {
+    i32 i;
+    /* <OPTIM ORDERING> */
+    if ((i = u->mapping[0]) >= 0)
+        params[i] = unbound_both(u->s->ofr, 1.0, 3.0);
+    if ((i = u->mapping[1]) >= 0)
+        params[i] = unbound_lower(u->s->dm_cc, 0.0);
 }
 
 static f64 sim_cost(const f64* rstr params, void* rstr user) {
-    simState* s = user;
-    for (i32 i=0; i<sizeof(simParams)/sizeof(f64); ++i)
-        assert(isgood(params[i]), "bad :(");
+    simUser* u = user;
 
     // Extract the given parameters.
-    simParams p;
-    sim_params_from(&p, params);
-    s->ofr = p.ofr;
-    s->dm_cc = p.dm_cc;
+    sim_params_from(u, params);
 
     // Simulate and evaluate.
+    simState* s = u->s;
     sim_ulate(s, NO_FULL_OUTPUT);
     f64 cost = 0.0;
     cost += sqed(0.01 * (s->Thrust - s->target_Thrust)); // thrust target.
@@ -202,27 +216,45 @@ static f64 sim_cost(const f64* rstr params, void* rstr user) {
 }
 
 static void sim_optimise(simState* rstr s) {
-    assert(s->optimise == 1, "invalid input: optimise=%lld", s->optimise);
-    assert(s->target_Thrust > 0.0, "invalid input: target_Thrust=%lld",
+    assert(s->target_Thrust > 0.0, "invalid input: target_Thrust=%g",
             s->target_Thrust);
 
-    // Setup the seeding params from the given state.
-    simParams p = {
-        .ofr = s->ofr,
-        .dm_cc = s->dm_cc,
-    };
-    f64 x[sizeof(p) / sizeof(f64)];
-    sim_params_to(&p, x);
+    simUser* u = &(simUser){ .s = s };
+
+    // Setup the parameter mapping (to facilitate non-full optimisations).
+    {
+        i32 i = 0;
+        #define push(x) do {                        \
+                assert(i < PARAM_COUNT, "i=%d", i); \
+                if ((x)) u->mapping[i] = u->N++;    \
+                else     u->mapping[i] = -1;        \
+                ++i;                                \
+            } while (0)
+        /* <OPTIM ORDERING> */
+        push(s->optimise_ofr);
+        push(s->optimise_dm_cc);
+        #undef push
+    }
+
+    // If nothing to optimise, leave.
+    if (u->N == 0)
+        return;
+
+    // Setup the total seeding params from the given state.
+    f64 params[PARAM_COUNT]; // only first `u->N` elements used.
+    assert(within(u->N, 0, PARAM_COUNT), "u->N=%d", u->N);
+    sim_params_to(u, params);
 
     // Grab initial cost for funsies.
-    f64 initial_cost = sim_cost(x, s);
+    f64 initial_cost = sim_cost(params, u);
 
     // Run the minimiser.
     f64 best_cost;
-    u8 tmp[OPT_RUN_MEMSIZE(numel(x))];
-    enum { OPTIM_RUNS = 3 }; // several tries for max extraction?
+    u8 tmp[OPT_RUN_MEMSIZE(PARAM_COUNT)]; // worst-case sizing.
+    enum { OPTIM_RUNS = 1 }; // several tries for max extraction?
     for (i32 i=0; i<OPTIM_RUNS; ++i) {
-        i32 res = opt_run(sim_cost, s, numel(x), tmp, 1e-8, 1e-8, x, &best_cost);
+        i32 res = opt_run(sim_cost, u, u->N, tmp, 1e-8, 1e-8, params,
+                &best_cost);
         if (!res) {
             printf("failed to optimise :((\n");
             return;

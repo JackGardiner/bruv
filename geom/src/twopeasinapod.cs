@@ -156,19 +156,19 @@ public static class TwoPeasInAPod {
             var th_dmw = config.get<float>("injector/th_dmw");
             config.set("injector/element/th_plate", th_plate);
             config.set("injector/element/th_dmw", th_dmw);
-            var rho_1 = config.get<float>("part_mating/rho_LOx");
-            var rho_2 = config.get<float>("part_mating/rho_IPA");
-            var mu_1 = config.get<float>("part_mating/mu_LOx");
-            var mu_2 = config.get<float>("part_mating/mu_IPA");
+            var rho_1 = config.get<float>("operating_conditions/rho_LOx");
+            var rho_2 = config.get<float>("operating_conditions/rho_IPA");
+            var mu_1 = config.get<float>("operating_conditions/mu_LOx");
+            var mu_2 = config.get<float>("operating_conditions/mu_IPA");
             config.set("injector/element/rho_1", rho_1);
             config.set("injector/element/rho_2", rho_2);
             config.set("injector/element/mu_1", mu_1);
             config.set("injector/element/mu_2", mu_2);
-            var Pr_1 = config.get<float>("part_mating/Pr_LOx");
-            var Pr_2 = config.get<float>("part_mating/Pr_IPA");
-            var mdot_1 = config.get<float>("part_mating/mdot_LOx");
-            var mdot_2 = config.get<float>("part_mating/mdot_IPA");
-            var P_cc = config.get<float>("part_mating/P_cc");
+            var Pr_1 = config.get<float>("operating_conditions/Pr_LOx");
+            var Pr_2 = config.get<float>("operating_conditions/Pr_IPA");
+            var mdot_1 = config.get<float>("operating_conditions/mdot_LOx");
+            var mdot_2 = config.get<float>("operating_conditions/mdot_IPA");
+            var P_cc = config.get<float>("operating_conditions/P_cc");
             var no_injg = config.get<List<int>>("injector/no_injg");
             int no_inj = 0;
             foreach (int this_no in no_injg)
