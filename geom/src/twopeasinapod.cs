@@ -187,41 +187,32 @@ public static class TwoPeasInAPod {
 
                 var element = config.get_map("injector/element").DeepClone();
                 List<JsonMap> elements = [];
-                void setup(int no_inj=-1, int no_il=-1, float twoalpha_1=NAN,
-                        float Rbar_ch1=NAN, float Rbar_ch2=NAN,
-                        float Lbar_nz2=NAN, float Lbar_ch1=NAN) {
+                void setup(int no_inj=-1, float twoalpha_1=NAN,
+                        float Lbar_nz2=NAN, float Lbar_ch1=NAN,
+                        float mdot_scale = NAN) {
                     JsonMap e = (JsonMap)element.DeepClone();
 
                     if (no_inj != -1) {
                         e["mdot_1"] = mdot_1 / no_inj;
                         e["mdot_2"] = mdot_2 / no_inj;
                     }
-                    if (no_il != -1) {
-                        e["no_il1"] = no_il;
-                        e["no_il2"] = no_il;
-                    }
                     if (nonnan(twoalpha_1))
                         e["twoalpha_1"] = twoalpha_1;
-                    if (nonnan(Rbar_ch1))
-                        e["Rbar_ch1"] = Rbar_ch1;
-                    if (nonnan(Rbar_ch2))
-                        e["Rbar_ch2"] = Rbar_ch2;
                     if (nonnan(Lbar_nz2))
                         e["Lbar_nz2"] = Lbar_nz2;
                     if (nonnan(Lbar_ch1))
                         e["Lbar_ch1"] = Lbar_ch1;
+                    if (nonnan(mdot_scale)) {
+                        e["mdot_scale"] = mdot_scale;
+                    }
                     elements.Add(e);
                 }
 
-        /* 0 */ setup(no_inj:  7, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-        /* 1 */ setup(no_inj: 11, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-        /* 2 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-        /* 3 */ setup(no_inj: 15, no_il: 4, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-        /* 4 */ setup(no_inj: 15, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.2f);
-
-        /* 5 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.6f, Rbar_ch2: 1.2f);
-        /* 6 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.3f);
-        /* 7 */ setup(no_inj: 11, no_il: 5, Rbar_ch1: 1.4f, Rbar_ch2: 1.4f);
+        /* 8   */ setup(no_inj: 15, mdot_scale: 0.8f);
+        /* 9   */ setup(no_inj: 15, mdot_scale: 0.9f);
+        /* 10  */ setup(no_inj: 15, mdot_scale: 1.0f);
+        /* 11  */ setup(no_inj: 15, mdot_scale: 1.1f);
+        /* 12  */ setup(no_inj: 15, mdot_scale: 1.2f);
 
                 config.set("sample/elements", elements);
 

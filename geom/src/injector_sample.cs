@@ -296,7 +296,7 @@ public class InjectorSample : TPIAP.Pea {
             Frame at = get_at(i);
 
             ImageSignedDist img = new(
-                fromroot($"assets/sample-labels/sample-{i}.tga"),
+                fromroot($"assets/sample-labels/sample-{i+8}.tga"),
                 invert: true,
                 flipy: true
             );

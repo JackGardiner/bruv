@@ -82,6 +82,7 @@ public class InjectorElement {
     public required float FR_small { get; init; }
     public required float CR_nz1 { get; init; }
     public required float CR_nz2 { get; init; }
+    public required float mdot_scale { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
@@ -89,6 +90,15 @@ public class InjectorElement {
     public float z0_dmw = NAN;
     public float max_r = NAN;
     public float max_z = NAN;
+
+    // JBS testing experimental correction factors; 'x' for eXperiment-corrected
+    public float K_mdot_1 { get; init; } = 1.294592f;
+    public float K_mdot_2 { get; init; } = 2.542903f;
+
+    public float mdot_1_x = NAN;
+    public float mdot_2_x = NAN;
+
+
 
     // Coefficients of nozzle opening: IR_ch/IR_nz
     // reasonable bounds: idx?
@@ -122,6 +132,10 @@ public class InjectorElement {
     public void initialise() {
         assert(!inited);
 
+        // Calculate corrected mass flow rates
+        mdot_1_x = mdot_1 / K_mdot_1 / mdot_scale;
+        mdot_2_x = mdot_2 / K_mdot_2 / mdot_scale;
+
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
         assert(phi > 0f);
@@ -141,7 +155,7 @@ public class InjectorElement {
         float Cd_1 = GraphLookup.get_Cd(A_1, Rbar_ch1);
         float rmbar_1 = GraphLookup.get_rmbar(A_1, Rbar_ch1);
 
-        float Ir_nz1 = sqrt(mdot_1/PI/Cd_1/sqrt(2f*rho_1*DP_1));
+        float Ir_nz1 = sqrt(mdot_1_x/PI/Cd_1/sqrt(2f*rho_1*DP_1));
         float L_nz1 = 2f*Lbar_nz1*Ir_nz1;
 
         float Ir_ch1 = Rbar_ch1*Ir_nz1;
@@ -169,7 +183,7 @@ public class InjectorElement {
         for (int iter=0; iter<MAX_ITERS; ++iter) {
 
             // 1. Calculate current Cd based on current Ir.
-            Cd_2 = (mdot_1 + mdot_2)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
+            Cd_2 = (mdot_1_x + mdot_2_x)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
 
             // 2. Find A based on Cd (from Fig 34).
             A_2 = GraphLookup.get_A_from_Cd(Cd_2, Rbar_ch2);
@@ -306,6 +320,10 @@ public class InjectorElement {
         File.WriteAllLines(REPORT_PATH, [
             $"Injector Element Report",
             $"=======================",
+            $"",
+            $"  - LOX correction factor: {K_mdot_1}",
+            $"  - IPA correction factor: {K_mdot_2}",
+            $"  - Mass flow rate scale factor: {mdot_scale}",
             $"",
             $"Stage 1 (LOx):",
             $"  - Pressure difference: {DP_1*1e-5} bar",

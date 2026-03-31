@@ -100,8 +100,8 @@
         "FR_suprt": 0.5,
 
         "element": {
-            "no_il1": 5,
-            "no_il2": 5,
+            "no_il1": 4,
+            "no_il2": 4,
             "th_inj1": 0.8,
             "th_inj2": 0.8,
             "th_il1": 0.8,
