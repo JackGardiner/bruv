@@ -70,8 +70,6 @@ public class InjectorElement {
     public required float mdot_1 { get; init; }
     public required float mdot_2 { get; init; }
 
-    public required int no_il1 { get; init; }
-    public required int no_il2 { get; init; }
     public required float th_inj1 { get; init; }
     public required float th_inj2 { get; init; }
     public required float th_nz1 { get; init; }
@@ -95,10 +93,9 @@ public class InjectorElement {
     public float K_mdot_1 { get; init; } = 1.294592f;
     public float K_mdot_2 { get; init; } = 2.542903f;
 
-    public float mdot_1_x = NAN;
-    public float mdot_2_x = NAN;
-
-
+    // Number of tangential inlets.
+    public int no_il1 { get; init; } = 4;
+    public int no_il2 { get; init; } = 4;
 
     // Coefficients of nozzle opening: IR_ch/IR_nz
     // reasonable bounds: idx?
@@ -132,9 +129,10 @@ public class InjectorElement {
     public void initialise() {
         assert(!inited);
 
-        // Calculate corrected mass flow rates
-        mdot_1_x = mdot_1 / K_mdot_1 / mdot_scale;
-        mdot_2_x = mdot_2 / K_mdot_2 / mdot_scale;
+        // Make "pretend" mass flow rates to design the element around which in
+        // reality (from testing) give the desired mfr.
+        float mdot_1_x = mdot_1 / K_mdot_1 / mdot_scale;
+        float mdot_2_x = mdot_2 / K_mdot_2 / mdot_scale;
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
@@ -321,6 +319,7 @@ public class InjectorElement {
             $"Injector Element Report",
             $"=======================",
             $"",
+            $"Empirical corrections:",
             $"  - LOX correction factor: {K_mdot_1}",
             $"  - IPA correction factor: {K_mdot_2}",
             $"  - Mass flow rate scale factor: {mdot_scale}",

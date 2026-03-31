@@ -2,6 +2,7 @@ using static br.Br;
 using br;
 
 using JsonMap = System.Text.Json.Nodes.JsonObject; // object is a stupid name.
+using JsonSerializer = System.Text.Json.JsonSerializer;
 using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
@@ -187,32 +188,19 @@ public static class TwoPeasInAPod {
 
                 var element = config.get_map("injector/element").DeepClone();
                 List<JsonMap> elements = [];
-                void setup(int no_inj=-1, float twoalpha_1=NAN,
-                        float Lbar_nz2=NAN, float Lbar_ch1=NAN,
-                        float mdot_scale = NAN) {
+                void setup(params (string key, object value)[] overrides) {
                     JsonMap e = (JsonMap)element.DeepClone();
-
-                    if (no_inj != -1) {
-                        e["mdot_1"] = mdot_1 / no_inj;
-                        e["mdot_2"] = mdot_2 / no_inj;
-                    }
-                    if (nonnan(twoalpha_1))
-                        e["twoalpha_1"] = twoalpha_1;
-                    if (nonnan(Lbar_nz2))
-                        e["Lbar_nz2"] = Lbar_nz2;
-                    if (nonnan(Lbar_ch1))
-                        e["Lbar_ch1"] = Lbar_ch1;
-                    if (nonnan(mdot_scale)) {
-                        e["mdot_scale"] = mdot_scale;
-                    }
+                    foreach (var (key, value) in overrides)
+                        e[key] = JsonSerializer.SerializeToNode(value);
                     elements.Add(e);
                 }
 
-        /* 8   */ setup(no_inj: 15, mdot_scale: 0.8f);
-        /* 9   */ setup(no_inj: 15, mdot_scale: 0.9f);
-        /* 10  */ setup(no_inj: 15, mdot_scale: 1.0f);
-        /* 11  */ setup(no_inj: 15, mdot_scale: 1.1f);
-        /* 12  */ setup(no_inj: 15, mdot_scale: 1.2f);
+                config.set("sample/index_offset", 8);
+       /*  8 */ setup(("mdot_scale", 0.8f));
+       /*  9 */ setup(("mdot_scale", 0.9f));
+       /* 10 */ setup(("mdot_scale", 1.0f));
+       /* 11 */ setup(("mdot_scale", 1.1f));
+       /* 12 */ setup(("mdot_scale", 1.2f));
 
                 config.set("sample/elements", elements);
 

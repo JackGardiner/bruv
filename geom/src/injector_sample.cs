@@ -37,6 +37,7 @@ public class InjectorSample : TPIAP.Pea {
     public float extend_base_by => printable ? 3f : 0f;
     public float th_outer => print_resin ? 5f : 3f;
 
+    public required int index_offset { get; init; } = 0;
     public required InjectorElement[] elements { get; init; }
     public int N => numel(elements);
 
@@ -46,7 +47,9 @@ public class InjectorSample : TPIAP.Pea {
             elements[i].initialise();
             File.Move(
                 InjectorElement.REPORT_PATH,
-                fromroot($"exports/injector-sample-{i}-report.txt"),
+                fromroot(
+                    $"exports/injector-sample-{index_offset + i}-report.txt"
+                ),
                 overwrite: true
             );
         }
@@ -296,13 +299,15 @@ public class InjectorSample : TPIAP.Pea {
             Frame at = get_at(i);
 
             ImageSignedDist img = new(
-                fromroot($"assets/sample-labels/sample-{i+8}.tga"),
+                fromroot(
+                    $"assets/sample-labels/sample-{index_offset + i}.tga"
+                ),
                 invert: true,
                 flipy: true
             );
 
             PartMaker part = new();
-            part.name = $"Injector sample {i}";
+            part.name = $"Injector sample {index_offset + i}";
             part.voxels = make(
                 at,
                 elements[i],
@@ -319,7 +324,7 @@ public class InjectorSample : TPIAP.Pea {
             else
                 Geez.mesh(mesh);
 
-            TPIAP.save_mesh_only($"injector-sample-{i}", mesh);
+            TPIAP.save_mesh_only($"injector-sample-{index_offset + i}", mesh);
         }
         return all;
     }
