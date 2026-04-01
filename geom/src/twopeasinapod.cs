@@ -32,17 +32,17 @@ public static class TwoPeasInAPod {
     public const int LOOKSIE         = 0x10;
     public const int LOOKSIE_CUTAWAY = 0x20;
     /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
-    public const int MINIMISE_MEM     = 0x01 << BITC_ACTION;
-    public const int PRINTABLE        = 0x02 << BITC_ACTION;
-    public const int FILLETLESS       = 0x04 << BITC_ACTION;
+    public const int PRINTABLE_DMLS   = 0x01 << BITC_ACTION;
+    public const int PRINTABLE_SLA    = 0x02 << BITC_ACTION;
+    public const int MINIMISE_MEM     = 0x04 << BITC_ACTION;
     public const int TAKE_SCREENSHOTS = 0x08 << BITC_ACTION;
     public const int LOOKIN_FANCY     = 0x10 << BITC_ACTION;
-    public const int BRANDINGLESS     = 0x20 << BITC_ACTION;
-    public const int PRINT_RESIN      = 0x40 << BITC_ACTION;
+    public const int FILLETLESS       = 0x20 << BITC_ACTION;
+    public const int BRANDINGLESS     = 0x40 << BITC_ACTION;
     public const int ELEMENTLESS      = 0x80 << BITC_ACTION;
     /* bitwise or (|) ONE(1) of these peas: */
-    public const int CHAMBER  = 1 << (BITC_ACTION + BITC_MODIFIER);
-    public const int INJECTOR = 2 << (BITC_ACTION + BITC_MODIFIER);
+    public const int CHAMBER         = 1 << (BITC_ACTION + BITC_MODIFIER);
+    public const int INJECTOR        = 2 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_SAMPLE = 3 << (BITC_ACTION + BITC_MODIFIER);
     /* theres lowk more than 2 peas in this pod. */
     /* THATS ALL FOLKS */
@@ -83,6 +83,11 @@ public static class TwoPeasInAPod {
             throw new Exception("invalid 'make': no action selected");
         if (isclr(make, MASK_PEA))
             throw new Exception("invalid 'make': no pea selected");
+
+        // Ensure no mutually exclusive modifiers are set.
+        if (isset(make, PRINTABLE_DMLS) && isset(make, PRINTABLE_SLA))
+            throw new Exception("cannot set both 'PRINTABLE_DMLS' and "
+                              + "'PRINTABLE_SLA'");
 
         // Peep into modifiers and disable rendering if minimising memory.
         if (isset(make, MINIMISE_MEM)) {
@@ -196,11 +201,11 @@ public static class TwoPeasInAPod {
                 }
 
                 config.set("sample/index_offset", 8);
-       /*  8 */ setup(("mdot_scale", 0.8f));
-       /*  9 */ setup(("mdot_scale", 0.9f));
-       /* 10 */ setup(("mdot_scale", 1.0f));
-       /* 11 */ setup(("mdot_scale", 1.1f));
-       /* 12 */ setup(("mdot_scale", 1.2f));
+       /*  8 */ setup(("K_mdot_extra", 0.8f));
+       /*  9 */ setup(("K_mdot_extra", 0.9f));
+       /* 10 */ setup(("K_mdot_extra", 1.0f));
+       /* 11 */ setup(("K_mdot_extra", 1.1f));
+       /* 12 */ setup(("K_mdot_extra", 1.2f));
 
                 config.set("sample/elements", elements);
 

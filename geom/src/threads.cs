@@ -55,18 +55,18 @@ new(     "M12", [   12.0f, 10.106f,  1.75f,    0f,     0f,  17.5f ] ),
 new(     "M14", [   14.0f, 11.835f,  2.00f,    0f,     0f,  20.0f ] ),
 new(     "M16", [   16.0f, 13.835f,  2.00f,    0f,     0f,  20.0f ] ),
 
-new(   "G1/16", [  7.723f,  6.561f, 0.907f,    0f,     0f,   5.9f ] ),
-new(    "G1/8", [  9.728f,  8.566f, 0.907f,    0f,     0f,   7.7f ] ),
-new(    "G1/4", [ 13.157f, 11.445f, 1.337f,    0f,     0f,  10.3f ] ),
-new(    "G3/8", [ 16.662f, 14.950f, 1.337f,    0f,     0f,  13.5f ] ),
-new(    "G1/2", [ 20.955f, 18.631f, 1.814f,    0f,     0f,  14.9f ] ),
-new(    "G5/8", [ 22.911f, 20.587f, 1.814f,    0f,     0f,  16.5f ] ),
-new(    "G3/4", [ 26.441f, 24.117f, 1.814f,    0f,     0f,  19.3f ] ),
-new(    "G7/8", [ 30.201f, 27.877f, 1.814f,    0f,     0f,  22.3f ] ),
-new(      "G1", [ 33.249f, 30.291f, 2.309f,    0f,     0f,  21.2f ] ),
-new(  "G1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,     0f,  24.5f ] ),
-new(  "G1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,     0f,  27.3f ] ),
-new(  "G1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,     0f,  31.4f ] ),
+new(   "G1/16", [  7.723f,  6.561f, 0.907f,    0f,     0f,   7.1f ] ),
+new(    "G1/8", [  9.728f,  8.566f, 0.907f,    0f,     0f,   9.2f ] ),
+new(    "G1/4", [ 13.157f, 11.445f, 1.337f,    0f,     0f,  12.4f ] ),
+new(    "G3/8", [ 16.662f, 14.950f, 1.337f,    0f,     0f,  16.2f ] ),
+new(    "G1/2", [ 20.955f, 18.631f, 1.814f,    0f,     0f,  17.9f ] ),
+new(    "G5/8", [ 22.911f, 20.587f, 1.814f,    0f,     0f,  19.8f ] ),
+new(    "G3/4", [ 26.441f, 24.117f, 1.814f,    0f,     0f,  23.2f ] ),
+new(    "G7/8", [ 30.201f, 27.877f, 1.814f,    0f,     0f,  26.8f ] ),
+new(      "G1", [ 33.249f, 30.291f, 2.309f,    0f,     0f,  25.4f ] ),
+new(  "G1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,     0f,  29.4f ] ),
+new(  "G1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,     0f,  32.8f ] ),
+new(  "G1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,     0f,  37.7f ] ),
 
 new(  "Rc1/16", [  7.723f,  6.561f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
 new(   "Rc1/8", [  9.728f,  8.566f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
@@ -89,7 +89,7 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
         this.taper           = entry[3];
         this.gauge_length    = entry[4];
         this.threaded_length = entry[5];
-        this.extra_length = this.major_diameter * 0.05f;
+        this.extra_length = this.major_diameter * 0.1f;
         this.tip_length_ratio = 0f;
         this.incomplete_lower_length = 0f;
         this.incomplete_upper_length = 0f;
@@ -433,7 +433,7 @@ public class Flats {
         this.flats_yeah_or_nah = true;
         this.flats_beta = NAN; // determine based on input frame.
         this.flats_Lx = 2f*r; // adds no extra width.
-        this.flats_Lz = max(8f, r);
+        this.flats_Lz = max(10f, r);
     }
 
     public Voxels at(Frame face_out) {

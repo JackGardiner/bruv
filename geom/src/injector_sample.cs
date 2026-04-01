@@ -19,23 +19,16 @@ public class InjectorSample : TPIAP.Pea {
     public void drawings(in Voxels part)
         => throw new NotImplementedException();
 
-    public bool printable = false;
-    public bool print_resin = false;
+    public bool printable_dmls = false;
+    public bool printable_sla  = false;
     public void set_modifiers(int mods) {
-        printable = popbits(ref mods, TPIAP.PRINTABLE);
-        print_resin = popbits(ref mods, TPIAP.PRINT_RESIN);
-        _ = popbits(ref mods, TPIAP.MINIMISE_MEM);
-        _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
+        printable_dmls = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
+        printable_sla  = popbits(ref mods, TPIAP.PRINTABLE_SLA);
+        _              = popbits(ref mods, TPIAP.MINIMISE_MEM);
+        _              = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         if (mods != 0)
             throw new NotImplementedException();
-        if (print_resin) {
-            assert(!printable, "resin prints are assumed to print the final "
-                             + "product.");
-        }
     }
-
-    public float extend_base_by => printable ? 3f : 0f;
-    public float th_outer => print_resin ? 5f : 3f;
 
     public required int index_offset { get; init; } = 0;
     public required InjectorElement[] elements { get; init; }
@@ -43,7 +36,7 @@ public class InjectorSample : TPIAP.Pea {
 
     public void initialise() {
         for (int i=0; i<N; ++i) {
-            elements[i].printable = printable;
+            elements[i].printable = printable_dmls;
             elements[i].initialise();
             File.Move(
                 InjectorElement.REPORT_PATH,
@@ -59,8 +52,10 @@ public class InjectorSample : TPIAP.Pea {
     public Voxels make(Frame at, InjectorElement element, ImageSignedDist img,
             bool datum_on_opposite) {
 
-        const float EXTRA = 30f;
-        const float th_datum = 3f;
+        float EXTRA = 30f;
+        float th_datum = 3f;
+        float extend_base_by = printable_dmls ? 3f : 0f;
+        float th_outer = printable_sla ? 5f : 3f;
 
         // position inlets s.t. port isnt straight on one.
         element.voxels(at.rotxy(-PI_2 - 2/3f*PI/element.no_il2),
@@ -119,7 +114,7 @@ public class InjectorSample : TPIAP.Pea {
         /* FLATS */
         float flat_length = R/3.5f;
         float flat_off = nonhypot(R, flat_length);
-        if (!print_resin) { // no part-wide flats resin.
+        if (!printable_sla) { // no part-wide flats resin.
             Bar bar = new Bar(
                 at,
                 Lz_side,
@@ -135,7 +130,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* DATUM? */
-        if (!print_resin) { // no datum on resin.
+        if (!printable_sla) { // no datum on resin.
             Vec3 datum_orient = ONE3;
             float FR_datum = 4f;
             if (datum_on_opposite)
@@ -170,9 +165,9 @@ public class InjectorSample : TPIAP.Pea {
 
         /* PORTS */
         float L_port = 14f;
-        Tapping tap = new("Rc1/8", printable);
+        Tapping tap = new("Rc1/8", printable_dmls);
         // Drill thru in resin.
-        if (print_resin)
+        if (printable_sla)
             tap.extra_length = L_port - tap.straight_length + 4f;
         tap.tip_length_ratio = 0f;
 
@@ -232,7 +227,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* Nozzle extension. */
-        if (printable) {
+        if (printable_dmls) {
             vox.BoolAdd(new Rod(
                 at,
                 3*VOXEL_SIZE,
@@ -246,7 +241,7 @@ public class InjectorSample : TPIAP.Pea {
 
     public Voxels? voxels() {
         Bar buildplate = new(new(), 0.01f, 100f);
-        if (printable)
+        if (printable_dmls)
             Geez.bar(buildplate);
 
         Vec2[] corrections = [
@@ -271,7 +266,7 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-            if (!printable)
+            if (!printable_dmls)
                 return new(i*60*uX3);
             // or try to stack nicely:
             assert(N == 8);

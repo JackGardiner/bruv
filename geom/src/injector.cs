@@ -80,7 +80,6 @@ public class InjectorElement {
     public required float FR_small { get; init; }
     public required float CR_nz1 { get; init; }
     public required float CR_nz2 { get; init; }
-    public required float mdot_scale { get; init; }
     public float D_il1 = NAN;
     public float D_il2 = NAN;
     public float L_il1 = NAN;
@@ -92,6 +91,7 @@ public class InjectorElement {
     // JBS testing experimental correction factors; 'x' for eXperiment-corrected
     public float K_mdot_1 { get; init; } = 1.294592f;
     public float K_mdot_2 { get; init; } = 2.542903f;
+    public float K_mdot_extra { get; init; } = 1f; // additional factor.
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
@@ -131,8 +131,8 @@ public class InjectorElement {
 
         // Make "pretend" mass flow rates to design the element around which in
         // reality (from testing) give the desired mfr.
-        float mdot_1_x = mdot_1 / K_mdot_1 / mdot_scale;
-        float mdot_2_x = mdot_2 / K_mdot_2 / mdot_scale;
+        float mdot_1_x = mdot_1 / K_mdot_1 / K_mdot_extra;
+        float mdot_2_x = mdot_2 / K_mdot_2 / K_mdot_extra;
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
@@ -322,7 +322,7 @@ public class InjectorElement {
             $"Empirical corrections:",
             $"  - LOX correction factor: {K_mdot_1}",
             $"  - IPA correction factor: {K_mdot_2}",
-            $"  - Mass flow rate scale factor: {mdot_scale}",
+            $"  - Additional correction factor: {K_mdot_extra}",
             $"",
             $"Stage 1 (LOx):",
             $"  - Pressure difference: {DP_1*1e-5} bar",
@@ -820,12 +820,12 @@ public class Injector : TPIAP.Pea {
     public required string boltsize_mount { get; init; }
     public required float r_mount { get; init; }
     public required float z_mount { get; init; }
-    public Tapping tap_mount => new(boltsize_mount, printable)
+    public Tapping tap_mount => new(boltsize_mount, printable_dmls)
             { extra_length = 3f };
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.printable = printable;
+        element.printable = printable_dmls;
         element.initialise();
     }
 
@@ -859,15 +859,15 @@ public class Injector : TPIAP.Pea {
     public required float th_LOxPTh { get; init; }
     public required float th_IPAPTh { get; init; }
     public required float th_CCPTh { get; init; }
-    public Tapping tap_igniter => new(portsize_igniter, printable)
+    public Tapping tap_igniter => new(portsize_igniter, printable_dmls)
             { extra_length = 4f };
-    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable)
+    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable_dmls)
             { extra_length = 4f };
-    public Tapping tap_LOxPT => new(portsize_LOxPT, printable)
+    public Tapping tap_LOxPT => new(portsize_LOxPT, printable_dmls)
             { extra_length = 4f };
-    public Tapping tap_IPAPT => new(portsize_IPAPT, printable)
+    public Tapping tap_IPAPT => new(portsize_IPAPT, printable_dmls)
             { extra_length = 4f };
-    public Tapping tap_CCPT => new(portsize_CCPT, printable)
+    public Tapping tap_CCPT => new(portsize_CCPT, printable_dmls)
             { extra_length = 4f };
 
 
@@ -1198,7 +1198,7 @@ public class Injector : TPIAP.Pea {
 
     protected Voxels voxels_orings() {
         // No oring groove are printed, all are post machined.
-        if (printable)
+        if (printable_dmls)
             return new();
 
         Voxels vox = new Rod(
@@ -1669,17 +1669,17 @@ public class Injector : TPIAP.Pea {
     public string name => "injector";
 
 
+    public bool printable_dmls   = false;
     public bool minimise_mem     = false;
-    public bool printable        = false;
-    public bool filletless       = false;
     public bool take_screenshots = false;
+    public bool filletless       = false;
     public bool elementless      = false;
     public void set_modifiers(int mods) {
+        printable_dmls   = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
-        printable        = popbits(ref mods, TPIAP.PRINTABLE);
-        filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
+        filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         elementless      = popbits(ref mods, TPIAP.ELEMENTLESS);
         if (mods == 0)
             return;

@@ -130,7 +130,7 @@ public class Chamber : TPIAP.Pea {
     public required float th_inlet { get; init; }
     public required float FR_inlet { get; init; }
     public required float phi_inlet { get; init; }
-    public Tapping tap_inlet => new(portsize_inlet, printable);
+    public Tapping tap_inlet => new(portsize_inlet, printable_dmls);
 
     public required int no_tc { get; init; }
     public required string portsize_tc { get; init; }
@@ -138,7 +138,7 @@ public class Chamber : TPIAP.Pea {
     public required float th_tc { get; init; }
     public required float phi_tc { get; init; }
     public required float D_tc { get; init; }
-    public Tapping tap_tc => new(portsize_tc, printable);
+    public Tapping tap_tc => new(portsize_tc, printable_dmls);
 
 
     protected int DIVISIONS => max(200, (int)(200f / VOXEL_SIZE));
@@ -883,7 +883,7 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected const float min_A_neg_mani = 35f; // mm^2
+    protected const float min_A_neg_mani = 45f; // mm^2
     protected float A_neg_mani(float theta) {
         // Lerp between initial (at mani inlet) and final (opposite mani inlet).
         // This is so that the cross-sectional area lost from one channel to the
@@ -1011,7 +1011,8 @@ public class Chamber : TPIAP.Pea {
 
         // Place the inlet some way up the lower edge. Note the last coordinate
         // stores the axial angle.
-        inlet = rejxy((b + c)/2f, phi_inlet + PI);
+        float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
+        inlet = rejxy(c + normalise(b - c)*Dell, phi_inlet + PI);
 
         // Output the lower edge projected length to hugely aid the numerical
         // search for matching area.
@@ -1104,6 +1105,10 @@ public class Chamber : TPIAP.Pea {
         Frame inlet_out = inlet.transz(tap_inlet.threaded_length
                                      + 0.8f*FR_inlet);
         vox.BoolAdd(tap_inlet.at(inlet_out));
+        key.cycle(Geez.voxels(vox));
+
+        // ensure it doesnt clip inwards.
+        vox.BoolSubtract(voxels_cnt_filled(th_iw + th_chnl + th_imani, false));
         key.cycle(Geez.voxels(vox));
 
         return vox;
@@ -1262,6 +1267,7 @@ public class Chamber : TPIAP.Pea {
             // Supporting from tapping to include flats.
             Voxels this_pos = new Flats(tap_tc, th_tc){
                 Lz = Dz + 2f*EXTRA,
+                flats_Lz = INF,
             }.at(frame.transz(Dz));
             this_pos.BoolAdd(new Rod(
                 frame,
@@ -1417,10 +1423,7 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected void voxels_neg_bolts(Geez.Cycle key, out Voxels hole,
-            out Voxels clearance) {
-        using var __ = key.like();
-
+    protected void voxels_neg_bolts(out Voxels hole, out Voxels clearance) {
         hole = new();
         clearance = new();
         List<Geez.Key> keys = new(pm.no_bolt);
@@ -1428,7 +1431,6 @@ public class Chamber : TPIAP.Pea {
             float theta = i*TWOPI/pm.no_bolt;
             Frame frame = new Frame(fromcyl(pm.r_bolt, theta, 0f));
             Rod rod = new Rod(frame, pm.flange_thickness_cc, pm.D_bolt/2f);
-            keys.Add(Geez.rod(rod));
 
             hole.BoolAdd(rod.extended(EXTRA, Extend.UPDOWN));
             clearance.BoolAdd(new Rod(
@@ -1437,22 +1439,6 @@ public class Chamber : TPIAP.Pea {
                 pm.D_washer/2f
             ));
         }
-
-        // Also view o-ring grooves.
-        keys.Add(Geez.rod(new Rod(
-            new(ZERO3, -uZ3),
-            pm.Lz_Ioring,
-            pm.IR_Ioring,
-            pm.OR_Ioring
-        ), rings: 2, columns: 6));
-        keys.Add(Geez.rod(new Rod(
-            new(ZERO3, -uZ3),
-            pm.Lz_Ooring,
-            pm.IR_Ooring,
-            pm.OR_Ooring
-        ), rings: 2, columns: 6));
-
-        key.cycle(Geez.group(keys));
     }
 
 
@@ -1493,8 +1479,7 @@ public class Chamber : TPIAP.Pea {
         voxels_tc(key_tc, out Voxels? neg_tc, out Voxels? pos_tc);
         part.step("created thermocouples.");
 
-        Geez.Cycle key_bolts = new(colour: COLOUR_GREY);
-        voxels_neg_bolts(key_bolts, out Voxels? neg_bolt_hole,
+        voxels_neg_bolts(out Voxels? neg_bolt_hole,
                 out Voxels? neg_bolt_clearance);
         part.step("created bolt holes.");
 
@@ -1575,7 +1560,7 @@ public class Chamber : TPIAP.Pea {
         part.substep("subtracted negative thermocouples.");
         part.sub(ref neg_bolt_clearance);
         part.substep("subtracted bolt hole clearance (2/2).");
-        part.sub(ref neg_bolt_hole, key_bolts);
+        part.sub(ref neg_bolt_hole);
         part.substep("subtracted bolt hole.");
 
         part.step($"added inner componenets.");
@@ -1776,19 +1761,19 @@ public class Chamber : TPIAP.Pea {
     public string name => "chamber";
 
 
+    public bool printable_dmls   = false;
     public bool minimise_mem     = false;
-    public bool printable        = false;
-    public bool filletless       = false;
     public bool take_screenshots = false;
+    public bool filletless       = false;
     public bool brandingless     = false;
     public void set_modifiers(int mods) {
+        printable_dmls   = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
-        printable        = popbits(ref mods, TPIAP.PRINTABLE);
-        filletless       = popbits(ref mods, TPIAP.FILLETLESS);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
-        brandingless     = popbits(ref mods, TPIAP.BRANDINGLESS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
-        assert(mods == 0, $"unrecognised modifiers: 0x{mods:X}");
+        filletless       = popbits(ref mods, TPIAP.FILLETLESS);
+        brandingless     = popbits(ref mods, TPIAP.BRANDINGLESS);
+        assert(mods == 0, $"disallowed modifiers: 0x{mods:X}");
     }
 
 
