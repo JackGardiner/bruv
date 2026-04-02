@@ -73,6 +73,11 @@ public class Jason {
         _merge(_root, newmap);
     }
 
+    public bool has(string name) {
+        JsonMap parent = _parent_leaf(name, out string leaf);
+        return parent.TryGetPropertyValue(leaf, out _);
+    }
+
     public T get<T>(string name) {
         Type type = typeof(T);
 

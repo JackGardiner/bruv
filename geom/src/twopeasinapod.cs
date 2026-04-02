@@ -143,10 +143,16 @@ public static class TwoPeasInAPod {
             // Construct the chamber object.
             config.set("chamber/pm", config.get_map("part_mating"));
             var max_phi = config.get<float>("printer/max_print_angle");
-            config.set("chamber/phi_mani", max_phi);
-            config.set("chamber/phi_fixt", max_phi);
-            config.set("chamber/phi_inlet", -max_phi);
-            config.set("chamber/phi_tc", max_phi);
+            if (!config.has("chamber/phi_mani"))
+                config.set("chamber/phi_mani", max_phi);
+            if (!config.has("chamber/phi_inlet"))
+                config.set("chamber/phi_inlet", max_phi);
+            if (!config.has("chamber/phi_wid"))
+                config.set("chamber/phi_wid", -max_phi);
+            if (!config.has("chamber/phi_fixt"))
+                config.set("chamber/phi_fixt", max_phi);
+            if (!config.has("chamber/phi_tc"))
+                config.set("chamber/phi_tc", max_phi);
             pea = config.deserialise<Chamber>("chamber");
           } break;
 

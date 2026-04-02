@@ -871,7 +871,7 @@ public class Injector : TPIAP.Pea {
             { extra_length = 4f };
 
 
-    protected void voxels_plate(out Voxels pos, out Voxels neg) {
+    protected void voxels_plate(out Voxels pos, out Voxels? neg) {
         float phi_inner = torad(60f);
         List<Vec2> points = [
             new(-EXTRA, 0f),
@@ -893,15 +893,18 @@ public class Injector : TPIAP.Pea {
             points
         ));
 
-        // Film cooling holes.
-        neg = new();
-        foreach (Vec2 p in points_fc) {
-            neg.BoolAdd(new Rod(
-                new(rejxy(p, 0f)),
-                th_plate + pm.Lz_Ioring,
-                D_fc/2f
-            ).extended(2*VOXEL_SIZE, Extend.UP)
-             .extended(2f*EXTRA, Extend.DOWN));
+        // Film cooling holes (not included in metal printing).
+        neg = null;
+        if (!printable_dmls) {
+            neg = new();
+            foreach (Vec2 p in points_fc) {
+                neg.BoolAdd(new Rod(
+                    new(rejxy(p, 0f)),
+                    th_plate + pm.Lz_Ioring,
+                    D_fc/2f
+                ).extended(2*VOXEL_SIZE, Extend.UP)
+                .extended(2f*EXTRA, Extend.DOWN));
+            }
         }
     }
 
@@ -1142,19 +1145,19 @@ public class Injector : TPIAP.Pea {
         }
         key.voxels(vox);
 
-        // Fuel inlet ring wall.
-        vox.BoolSubtract(new Rod(
-            new(),
-            flange.Lz,
-            Or_chnl
-        ).extended(2f*EXTRA, Extend.UPDOWN));
+        // Flange extension into cone.
+        Voxels extra = new Rod(new(), mani_vol.peak.X, pm.flange_outer_radius);
+        extra.BoolIntersect(mani_vol.A.shelled(mani_vol.th/2f).positive
+                                      .lengthed(2f*EXTRA, 0f));
+        vox.BoolAdd(extra);
         key.voxels(vox);
 
-        // Flange extension into cone.
-        Voxels extra = flange;
-        extra.BoolSubtract(mani_vol.A.transz(mani_vol.Lz/2f)
-                                     .lengthed(2f*EXTRA, 0f));
-        vox.BoolAdd(extra);
+        // Clip correctly.
+        vox.BoolSubtract(new Rod(
+            new(),
+            mani_vol.peak.X,
+            Or_chnl
+        ).extended(2f*EXTRA, Extend.UPDOWN));
         key.voxels(vox);
 
         return vox;
@@ -1196,10 +1199,10 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected Voxels voxels_orings() {
+    protected Voxels? voxels_orings() {
         // No oring groove are printed, all are post machined.
         if (printable_dmls)
-            return new();
+            return null;
 
         Voxels vox = new Rod(
             new(),
@@ -1529,9 +1532,6 @@ public class Injector : TPIAP.Pea {
         part.sub(ref neg_bolt_clearance, keepme: true);
         part.substep("subtracted mating bolt clearance (1/3).");
 
-        part.sub(ref neg_film_cooling, keepme: true);
-        part.substep("subtracted film cooling holes (1/3).");
-
         part.sub(ref neg_igniter_no_tap, keepme: true);
         part.substep("subtracted igniter hole (1/2).");
 
@@ -1566,9 +1566,6 @@ public class Injector : TPIAP.Pea {
         part.sub(ref neg_bolt_clearance, keepme: true);
         part.substep("subtracted mating bolt clearance (2/3).");
 
-        part.sub(ref neg_film_cooling, keepme: true);
-        part.substep("subtracted film cooling holes (2/3).");
-
         part.sub(ref neg_igniter_no_tap);
         part.substep("subtracted igniter hole (2/2).");
 
@@ -1592,16 +1589,24 @@ public class Injector : TPIAP.Pea {
 
         part.step("merged injector elements");
 
-        part.sub(ref neg_film_cooling);
-        part.substep("subtracted film cooling holes (3/3).");
+        if (neg_film_cooling != null) {
+            part.sub(ref neg_film_cooling);
+            part.substep("subtracted film cooling holes.");
+        } else {
+            part.substep("skipping film cooling holes (not printed).");
+        }
         part.sub(ref neg_bolt_hole);
         part.substep("subtracted mating bolt hole.");
         part.sub(ref neg_bolt_clearance);
         part.substep("subtracted mating bolt clearance (3/3).");
         part.sub(ref neg_mounting);
         part.substep("subtracted mounting bolts.");
-        part.sub(ref neg_orings);
-        part.substep("subtracted O-rings.");
+        if (neg_orings != null) {
+            part.sub(ref neg_orings);
+            part.substep("subtracted O-rings.");
+        } else {
+            part.substep("skipping O-rings (not printed).");
+        }
         part.sub(ref neg_igniter);
         part.substep("subtracted igniter void (2/2).");
         part.sub(ref neg_ports);

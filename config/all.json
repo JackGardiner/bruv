@@ -46,10 +46,9 @@
         "R_tht": 23.0,
 
         "NLF": 1.0,
-        "phi_conv": -0.7853981633974483,
+        "phi_conv": -0.6108652381980153,
         "phi_div": 0.4027190692943012,
         "phi_exit": 0.220523450546912,
-        "phi_wid": -0.7853981633974483,
 
         "th_iw": 1.5,
         "th_ow": 2.5,
@@ -60,23 +59,23 @@
 
         "th_imani": 1.5,
         "th_omani": 2.5,
+        "phi_mani": 0.6108652381980153,
 
         "no_fixt": 4,
         "wi_fixt": 10.0,
 
         "portsize_inlet": "G1/2",
-        "theta_inlet": -1.5707963267948966,
+        "theta_inlet": 1.5707963267948966,
         "th_inlet": 4.5,
         "FR_inlet": 6.0,
 
         "no_tc": 6,
         "portsize_tc": "G1/16",
-        "theta_tc": 1.5707963267948966,
         "th_tc": 3.5,
         "D_tc": 1.5
     },
     "injector": {
-        "no_injg": [5, 10],
+        "no_injg": [4, 8],
         "r_injg": [17.0, 34.0],
         "theta0_injg": [0.0, 0.314159],
 
@@ -140,7 +139,7 @@
     },
     "printer": {
         "name": "Nikon SLM280 2.0",
-        "max_print_angle": 0.7853981633974483,
+        "max_print_angle": 0.6981317007977318,
         "bed_size_width": 280.0,
         "bed_size_length": 280.0,
         "bed_size_height": 365.0

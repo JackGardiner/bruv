@@ -127,14 +127,13 @@ public class Chamber : TPIAP.Pea {
 
     public required string portsize_inlet { get; init; }
     public required float theta_inlet { get; init; }
+    public required float phi_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float FR_inlet { get; init; }
-    public required float phi_inlet { get; init; }
     public Tapping tap_inlet => new(portsize_inlet, printable_dmls);
 
     public required int no_tc { get; init; }
     public required string portsize_tc { get; init; }
-    public required float theta_tc { get; init; }
     public required float th_tc { get; init; }
     public required float phi_tc { get; init; }
     public required float D_tc { get; init; }
@@ -920,7 +919,7 @@ public class Chamber : TPIAP.Pea {
 
 
     protected void points_maybe_mani(float neg_min_z, out List<Vec2> neg,
-            out List<Vec2> pos, out Vec3 inlet, out float Lr) {
+            out List<Vec2> pos, out Vec2 inlet, out float Lr) {
         // note neg_min_z for neg is only a "construction" value, it is filleted
         // so is not the true minimum.
 
@@ -1009,10 +1008,9 @@ public class Chamber : TPIAP.Pea {
         Polygon.fillet(pos, 3, FR_a + th_omani, divisions: divisions_a);
         Polygon.fillet(pos, 2, FR_c + th_omani, divisions: divisions_c);
 
-        // Place the inlet some way up the lower edge. Note the last coordinate
-        // stores the axial angle.
+        // Place the inlet s.t. its top point coincides with c.
         float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
-        inlet = rejxy(c + normalise(b - c)*Dell, phi_inlet + PI);
+        inlet = c + normalise(b - c)*Dell;
 
         // Output the lower edge projected length to hugely aid the numerical
         // search for matching area.
@@ -1028,10 +1026,11 @@ public class Chamber : TPIAP.Pea {
         // Use an approximation to get an initial guess for min z.
         // https://www.desmos.com/calculator/bfsipdjpsd
         assert(phi_exit > 0f);
-        float max_phi = PI_4;
+        assert(phi_mani > 0f);
+        assert(phi_mani > phi_exit, $"phi_exit={phi_exit}, phi_mani={phi_mani}");
         float cosa = cos(phi_exit);
         float sina = sin(phi_exit);
-        float tanb = tan(max_phi);
+        float tanb = tan(phi_mani);
         float L = 2f*sqrt(A/(cosa*cosa*tanb - sina*sina/tanb));
         float Az = L*cosa;
       #if false
@@ -1040,22 +1039,23 @@ public class Chamber : TPIAP.Pea {
         float Br = L/2f*(sina + cosa*tanb);
       #endif
         float min_z = cnt_z6 - th_ow - Az; // guess.
-        Vec3 inlet_ZRp = new(NAN, NAN, NAN);
-        for (int i=0; i<10; ++i) {
-            points_maybe_mani(min_z, out neg, out pos, out inlet_ZRp,
+        Vec2 inlet_zr = NAN2;
+        for (int i=0; i<100; ++i) {
+            points_maybe_mani(min_z, out neg, out pos, out inlet_zr,
                     out float Lr);
             float rem_A = A - Polygon.area(neg);
-            float Dz = -rem_A/Lr; // very good guess, but still a guess.
+            float Dz = -rem_A/Lr / sin(phi_mani);
+            // ^ very good guess, but still a guess.
             min_z += Dz;
             assert(min_z > cnt_z4);
             if (abs(Dz) < 1e-3 && abs(rem_A) < 1e-2)
                 break;
-            assert(i != 9, $"Dz={Dz}, rem_A={rem_A}");
+            assert(i != 99, $"Dz={Dz}, rem_A={rem_A}");
         }
         inlet = new(
-            fromcyl(inlet_ZRp.Y, theta, inlet_ZRp.X),
+            fromzr(inlet_zr, theta),
             fromcyl(1f, theta + PI_2, 0f),
-            fromsph(1f, theta, inlet_ZRp.Z)
+            fromsph(1f, theta, phi_mani + PI_2)
         );
     }
 
@@ -1136,10 +1136,10 @@ public class Chamber : TPIAP.Pea {
                 points[^1].X,
                 R_exit + th_iw + th_chnl + th_omani + 15f
             ));
-            points.Add(points[^1] - uX2*14);
+            points.Add(points[^1] - uX2*14f);
             points.Add(
                 Polygon.line_intersection(
-                    points[^1], points[^1] - ONE2,
+                    points[^1], points[^1] + frompol(1f, PI + phi_fixt),
                     points[0], points[0] - uX2
                 )
             );
@@ -1179,20 +1179,28 @@ public class Chamber : TPIAP.Pea {
                 Fillet.concave(l.vox, FR_inlet, inplace: true);
         }
 
+        // Diamond underneath.
         vox.BoolAdd(new Bar(
             inlet_end.rotxy(PI_4),
             -inlet_Lz,
             inlet_R
         ).extended(zextra, Extend.DOWN)
          .at_edge(Bar.X0_Y0));
-        float phi = PI_2 + phi_inlet;
-        float ell = (magxy(inlet_end.pos) - R_tht)/cos(phi);
+        // Flange connection.
+        float th = 4.5f;
+        Frame bottom_tip = inlet_end.transy(-inlet_R * SQRT2 + th);
+        bottom_tip = bottom_tip.rotyz(phi_inlet + PI_2 - argphi(inlet_end.Z));
         vox.BoolAdd(new Bar(
-            inlet_end,
-            4.5f,
-            ell,
+            bottom_tip,
+            th,
+            (magxy(bottom_tip.pos) - R_tht)/sin(phi_inlet),
             -inlet_Lz
         ).at_face(Bar.Y0));
+        vox.BoolSubtract(new Bar(
+            bottom_tip,
+            inlet_Lz,
+            4f*th
+        ));
 
         return vox;
     }
@@ -1572,9 +1580,9 @@ public class Chamber : TPIAP.Pea {
             part.substep("no branding to add.");
         }
 
-        part.voxels.BoolSubtract(new Rod(
-            new Frame(ZERO3, -uZ3),
-            2f*EXTRA,
+        part.voxels.BoolIntersect(new Rod(
+            new(),
+            cnt_z6,
             pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
         ));
         part.substep("clipped bottom excess.", view_part: true);
