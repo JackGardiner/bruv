@@ -493,11 +493,9 @@ public class InjectorElement {
             out Voxels neg_il1);
         voxels_il(at, no_il2, C2, D_il2, L_il2, th_il2, phi, out Voxels pos_il2,
             out Voxels neg_il2);
+
         pos.BoolAdd(pos_il1);
         pos.BoolAdd(pos_il2);
-        neg.BoolAdd(neg_il1);
-        neg.BoolAdd(neg_il2);
-
 
         // Dreaded fillet.
         Fillet.concave(pos, FR_small, true);
@@ -517,6 +515,9 @@ public class InjectorElement {
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
 
+        // do after to preserve sharp teardrop tip.
+        neg.BoolAdd(neg_il1);
+        neg.BoolAdd(neg_il2);
 
         // Add nozzle chamfers.
         if (!printable) {
@@ -540,6 +541,9 @@ public class InjectorElement {
             float th, float phi, out Voxels pos, out Voxels neg) {
         pos = new();
         neg = new();
+        // scale D to account for teardrop shape
+        // https://www.desmos.com/calculator/fqzzrkxw2t
+        D = 2f * D * sqrt(PI/(3*PI + 4));
         // Add the tangential inlets.
         for (int i=0; i<no; ++i) {
             float theta = i*TWOPI/no;
@@ -550,9 +554,25 @@ public class InjectorElement {
             Frame frame = new Frame.Cyl(at).circum(inlet);
             // x=+axial, y=+radial.
             Rod pipe = new(frame, L, D/2f);
+            Bar diamond = new(frame.rotxy(PI_4), L, SQRT2*D/2f);
+            Bar cropper = new(frame, L, 2*D);
+
+            //
+            Voxels single_il_neg = new ();
+            single_il_neg.BoolAdd(diamond
+                .extended(3*VOXEL_SIZE, Extend.UP)
+                .translate(
+                    new Vec3(0f, 0f, (D/2f)*(SQRT2-1f)),
+                    relative: false));
+            single_il_neg.BoolIntersect(cropper
+                .extended(3*VOXEL_SIZE, Extend.UP)
+                .translate(new Vec3(0f, 0f, D/(2f*SQRT2) + D), relative: false));
+
+            neg.BoolAdd(single_il_neg);
             neg.BoolAdd(pipe.extended(3*VOXEL_SIZE, Extend.UP));
 
             Voxels this_pos = pipe.shelled(th);
+            this_pos.BoolAdd(diamond.shelled(th));
 
             // support.
             Bar tear = new Bar(
