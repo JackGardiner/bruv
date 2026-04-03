@@ -106,9 +106,46 @@ public class Chamber : TPIAP.Pea {
             theta_chnl_lookup[i] = theta_chnl_lookup[i - 1] + Dtheta;
         }
 
+        // ease in-out.
+        {
+            float[] Dthetas = new float[N - 1];
+            for (int i=0; i<N - 1; ++i)
+                Dthetas[i] = theta_chnl_lookup[i + 1] - theta_chnl_lookup[i];
+
+            float L = 8f;
+
+            int n = 0;
+            for (int i=0; i<N; ++i) {
+                float z = lerp(zlo, zhi, i, N);
+                if (z >= L) {
+                    n = i;
+                    break;
+                }
+            }
+            for (int i=n - 1; i>-1; --i) {
+                float Dtheta = Dthetas[i];
+                Dtheta *= i / (float)n;
+                theta_chnl_lookup[i] = theta_chnl_lookup[i + 1] - Dtheta;
+            }
+
+            n = N - 1;
+            for (int i=N - 1; i>-1; --i) {
+                float z = lerp(zlo, zhi, i, N);
+                if (z <= zhi - L) {
+                    n = i;
+                    break;
+                }
+            }
+            for (int i=n + 1; i<N; ++i) {
+                float Dtheta = Dthetas[i - 1];
+                Dtheta *= (N - 1 - i) / (float)(N - n);
+                theta_chnl_lookup[i] = theta_chnl_lookup[i - 1] + Dtheta;
+            }
+        }
+
         // ensure first channel is at stagnation point of manifold.
         {
-            float Dtheta = theta_inlet + PI - theta_chnl_lookup[N - 1];
+            float Dtheta = theta_inlet + PI - theta_chnl(zhi);
             for (int i=0; i<N; ++i)
                 theta_chnl_lookup[i] += Dtheta;
         }
