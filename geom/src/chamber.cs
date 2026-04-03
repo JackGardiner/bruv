@@ -144,6 +144,8 @@ public class Chamber : TPIAP.Pea {
 
     protected const float EXTRA = 10f; // trimmed at some point.
 
+    protected float extend_base_by => printable_dmls ? 5f : 0f;
+
 
     /*
     master desie: https://www.desmos.com/calculator/lmik9lpejc
@@ -270,7 +272,7 @@ public class Chamber : TPIAP.Pea {
         // The wid sdf gives the distance to the channel mid-contour.
         cnt_wid_off = th_iw + 0.5f*th_web;
 
-        cnt_X = EXTRA + 1.1f*max(pm.Mr_chnl, R_exit);
+        cnt_X = EXTRA + extend_base_by + 1.1f*max(pm.Mr_chnl, R_exit);
 
 
         cnt_r_conv = 1.5f*R_tht;
@@ -450,12 +452,10 @@ public class Chamber : TPIAP.Pea {
                 df = 1f + ddp*term1 + dp*dp*((3*A0*p + 2*B0)*p + C0);
             }
 
-            // Chuck it threw some newton raphson iters.
-            float f;
-            float df;
+            // Chuck it through some newton raphson iters.
             for (int i=0; i<10; ++i) { // don loop forever.
-                eff(S, out f, out df);
-                S -= f/df;
+                eff(S, out float f, out float df);
+                S -= f / df;
                 if (f < 1e-3f)
                     break;
             }
@@ -616,7 +616,7 @@ public class Chamber : TPIAP.Pea {
     protected Voxels voxels_cnt_filled(float max_off, bool widened,
             bool extra=true) {
         List<Vec2> V = new(DIVISIONS + 2);
-        float zlo = cnt_z0;
+        float zlo = cnt_z0 - extend_base_by;
         float zhi = cnt_z6;
         if (extra) {
             zlo -= EXTRA;
@@ -633,8 +633,8 @@ public class Chamber : TPIAP.Pea {
     }
     protected Voxels voxels_cnt_shelled(float min_off, float th, bool widened,
             bool extra=true) {
-        List<Vec2> V = new();
-        float zlo = cnt_z0;
+        List<Vec2> V = new(2*DIVISIONS);
+        float zlo = cnt_z0 - extend_base_by;
         float zhi = cnt_z6;
         if (extra) {
             zlo -= EXTRA;
@@ -683,11 +683,11 @@ public class Chamber : TPIAP.Pea {
                 wireframe.Add(wire);
             }
 
-            key.cycle(Geez.group(wireframe));
+            key <<= Geez.group(wireframe);
         }
 
         Voxels vox = voxels_cnt_filled(0f, false);
-        key.cycle(Geez.voxels(vox));
+        key.voxels(vox);
         return vox;
     }
 
@@ -731,8 +731,8 @@ public class Chamber : TPIAP.Pea {
                 vertices.Add(frompol(rhi, theta));
             }
         }
-        // duplicate lowest polygon downwards by EXTRA.
-        frames.Insert(0, frames[0] - EXTRA*uZ3);
+        // duplicate lowest polygon downwards.
+        frames.Insert(0, frames[0] - (EXTRA + extend_base_by)*uZ3);
         for (int j=0; j<M; ++j)
             vertices.Insert(0, vertices[M - 1]);
 
@@ -804,8 +804,8 @@ public class Chamber : TPIAP.Pea {
                 vertices.Add(frompol(rhi, theta));
             }
         }
-        // duplicate lowest polygon downwards by EXTRA.
-        frames.Insert(0, frames[0] - EXTRA*uZ3);
+        // duplicate lowest polygon downwards.
+        frames.Insert(0, frames[0] - (EXTRA + extend_base_by)*uZ3);
         for (int j=0; j<M; ++j)
             vertices.Insert(0, vertices[M - 1]);
 
@@ -871,12 +871,12 @@ public class Chamber : TPIAP.Pea {
             vox.BoolAdd(new(mesh));
         }
 
-        key.cycle(Geez.voxels(vox));
+        key.voxels(vox);
         Geez.remove(mesh_keys);
 
         if (!filletless) {
             Fillet.convex(vox, 0.4f, inplace: true);
-            key.cycle(Geez.voxels(vox));
+            key.voxels(vox);
         }
 
         return vox;
@@ -951,8 +951,8 @@ public class Chamber : TPIAP.Pea {
         float FR_a = 2f;
         float FR_b = 1.5f;
         float FR_c = 2f;
-        int divisions_a = DIVISIONS/100;
-        int divisions_c = DIVISIONS/80;
+        int divisions_a = max(6, DIVISIONS/100);
+        int divisions_c = max(6, DIVISIONS/80);
 
         // Get the contour hugging the outer wall.
         neg = new();
@@ -1320,7 +1320,7 @@ public class Chamber : TPIAP.Pea {
             new Frame(),
             pm.flange_thickness_cc,
             pm.flange_outer_radius
-        ).extended(EXTRA, Extend.DOWN);
+        ).extended(EXTRA + extend_base_by, Extend.DOWN);
         keys.Add(Geez.voxels(vox));
 
         for (int i=0; i<pm.no_bolt; ++i) {
@@ -1370,29 +1370,29 @@ public class Chamber : TPIAP.Pea {
 
             Voxels this_vox = new(Polygon.mesh_extruded(
                 Frame.cyl_axial(p),
-                Lz + zhi,
+                Lz + zhi + EXTRA,
                 tracexy,
-                extend_by: EXTRA,
-                extend_dir: Extend.UPDOWN
+                extend_by: EXTRA + extend_base_by,
+                extend_dir: Extend.DOWN
             ));
             this_vox.BoolSubtract(new(Polygon.mesh_extruded(
                 Frame.cyl_circum(p + (Lz - 1f)*uZ3),
-                2f*Lr,
+                2f*Lr + EXTRA,
                 tracezr,
                 at_middle: true,
-                extend_by: EXTRA,
-                extend_dir: Extend.UPDOWN
+                extend_by: EXTRA + extend_base_by,
+                extend_dir: Extend.DOWN
             )));
             this_vox.BoolAdd(new Rod(
                 new Frame(p),
                 Lz,
                 Lr
-            ).extended(EXTRA, Extend.DOWN));
+            ).extended(EXTRA + extend_base_by, Extend.DOWN));
             keys.Add(Geez.voxels(this_vox));
             vox.BoolAdd(this_vox);
         }
 
-        key.cycle(Geez.group(keys));
+        key <<= Geez.group(keys);
 
         return vox;
     }
@@ -1431,16 +1431,18 @@ public class Chamber : TPIAP.Pea {
         return vox;
     }
 
-    protected void voxels_neg_bolts(out Voxels hole, out Voxels clearance) {
+    protected void voxels_bolts(out Voxels hole, out Voxels clearance) {
         hole = new();
         clearance = new();
-        List<Geez.Key> keys = new(pm.no_bolt);
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            Frame frame = new Frame(fromcyl(pm.r_bolt, theta, 0f));
-            Rod rod = new Rod(frame, pm.flange_thickness_cc, pm.D_bolt/2f);
+            Frame frame = new(fromcyl(pm.r_bolt, theta, 0f));
 
-            hole.BoolAdd(rod.extended(EXTRA, Extend.UPDOWN));
+            hole.BoolAdd(new Rod(
+                frame,
+                pm.flange_thickness_cc + EXTRA,
+                pm.D_bolt/2f
+            ).extended(EXTRA + extend_base_by, Extend.DOWN));
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_cc),
                 3f*EXTRA,
@@ -1487,7 +1489,7 @@ public class Chamber : TPIAP.Pea {
         voxels_tc(key_tc, out Voxels? neg_tc, out Voxels? pos_tc);
         part.step("created thermocouples.");
 
-        voxels_neg_bolts(out Voxels? neg_bolt_hole,
+        voxels_bolts(out Voxels? neg_bolt_hole,
                 out Voxels? neg_bolt_clearance);
         part.step("created bolt holes.");
 
@@ -1584,7 +1586,7 @@ public class Chamber : TPIAP.Pea {
             new(),
             cnt_z6,
             pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
-        ));
+        ).extended(extend_base_by, Extend.DOWN));
         part.substep("clipped bottom excess.", view_part: true);
 
         part.step("finished.");
@@ -1787,7 +1789,7 @@ public class Chamber : TPIAP.Pea {
 
     public void initialise() {
         initialise_cnt();
-        initialise_chnl();
+        initialise_chnl(); // requires initialised contour.
 
         // Easiest way to determine if the parameters create a realisable nozzle.
 

@@ -7,7 +7,6 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
-using BBox3 = PicoGK.BBox3;
 
 
 /* INEJCTOR ELEMENT DESIGN, BI-SWIRL COAXIAL.
@@ -53,6 +52,7 @@ public class InjectorElement {
     public Vec2 F2 = NAN2;
 
     public bool printable { get; set; } = false;
+    public float extend_base_by { get; set; } = NAN;
 
     public required float phi { get; init; }
     /* ^ must be same as LOx/OPA dividing cone */
@@ -384,8 +384,8 @@ public class InjectorElement {
             E1,
             F1,
             // Extend outer inj to plate + extra.
-            new(-EXTRA, F1.Y),
-            new(-EXTRA, 0f),
+            new(-EXTRA - (printable ? extend_base_by : 0f), F1.Y),
+            new(-EXTRA - (printable ? extend_base_by : 0f), 0f),
         ];
         Polygon.cull_adjacent_duplicates(neg_points1);
         List<Vec2> pos_points1 = [
@@ -421,8 +421,8 @@ public class InjectorElement {
             D2,
             E2,
             F2,
-            new(-EXTRA, F2.Y),
-            new(-EXTRA, 0f),
+            new(-EXTRA - (printable ? extend_base_by : 0f), F2.Y),
+            new(-EXTRA - (printable ? extend_base_by : 0f), 0f),
         ];
         neg_points2.Insert(0, neg_points2[0]*uX2);
         Polygon.cull_adjacent_duplicates(neg_points2);
@@ -513,7 +513,9 @@ public class InjectorElement {
         );
         if (printable) {
             // Make the tip a little bigger..
-            just_the_tip = just_the_tip.extended(F1.X, Extend.DOWN);
+            assert(nonnan(extend_base_by));
+            just_the_tip = just_the_tip.extended(F1.X + extend_base_by,
+                    Extend.DOWN);
         }
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
@@ -825,8 +827,6 @@ public class InjectorElement {
 
 public class Injector : TPIAP.Pea {
 
-    protected const float EXTRA = 6f;
-
     public required PartMating pm { get; init; }
 
     public float Ir_chnl => pm.Mr_chnl - 0.5f*pm.max_th_chnl;
@@ -864,6 +864,7 @@ public class Injector : TPIAP.Pea {
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
         element.printable = printable_dmls;
+        element.extend_base_by = extend_base_by;
         element.initialise();
     }
 
@@ -909,11 +910,16 @@ public class Injector : TPIAP.Pea {
             { extra_length = 4f };
 
 
+    protected const float EXTRA = 6f;
+
+    protected float extend_base_by => printable_dmls ? 5f : 0f;
+
+
     protected void voxels_plate(out Voxels pos, out Voxels? neg) {
         float phi_inner = torad(60f);
         List<Vec2> points = [
-            new(-EXTRA, 0f),
-            new(-EXTRA, Ir_chnl),
+            new(-EXTRA - extend_base_by, 0f),
+            new(-EXTRA - extend_base_by, Ir_chnl),
             new(th_plate, Ir_chnl),
             new(pm.Lz_Ioring + th_plate, pm.OR_Ioring + 0.5f),
             new(pm.Lz_Ioring + th_plate, pm.IR_Ioring - 0.5f),
@@ -941,7 +947,7 @@ public class Injector : TPIAP.Pea {
                     th_plate + pm.Lz_Ioring,
                     D_fc/2f
                 ).extended(2*VOXEL_SIZE, Extend.UP)
-                .extended(2f*EXTRA, Extend.DOWN));
+                 .extended(2f*EXTRA + extend_base_by, Extend.DOWN));
             }
         }
     }
@@ -1130,7 +1136,8 @@ public class Injector : TPIAP.Pea {
             new(th_plate*uZ3),
             -th_plate,
             D_igniterh/2f - 1f // 1mm ledge for tube to sit on.
-        ).extended(EXTRA, Extend.UPDOWN));
+        ).extended(EXTRA, Extend.UPDOWN)
+         .extended(extend_base_by, Extend.DOWN));
 
         neg_no_tap = neg.voxDuplicate();
         neg.BoolAdd(tap_igniter.at(new(z_igniter*uZ3)));
@@ -1170,7 +1177,7 @@ public class Injector : TPIAP.Pea {
             pm.flange_outer_radius
         );
 
-        Voxels vox = flange.extended(EXTRA, Extend.DOWN);
+        Voxels vox = flange.extended(EXTRA + extend_base_by, Extend.DOWN);
         key.voxels(vox);
 
         for (int i=0; i<pm.no_bolt; ++i) {
@@ -1179,14 +1186,14 @@ public class Injector : TPIAP.Pea {
                 new(fromcyl(pm.r_bolt, theta, 0f)),
                 flange.Lz,
                 pm.D_bolt/2f + pm.thickness_around_bolt
-            ).extended(EXTRA, Extend.DOWN));
+            ).extended(EXTRA + extend_base_by, Extend.DOWN));
         }
         key.voxels(vox);
 
         // Flange extension into cone.
         Voxels extra = new Rod(new(), mani_vol.peak.X, pm.flange_outer_radius);
         extra.BoolIntersect(mani_vol.A.shelled(mani_vol.th/2f).positive
-                                      .lengthed(2f*EXTRA, 0f));
+                                      .lengthed(2f*EXTRA + extend_base_by, 0f));
         vox.BoolAdd(extra);
         key.voxels(vox);
 
@@ -1195,7 +1202,7 @@ public class Injector : TPIAP.Pea {
             new(),
             mani_vol.peak.X,
             Or_chnl
-        ).extended(2f*EXTRA, Extend.UPDOWN));
+        ).extended(2f*EXTRA + extend_base_by, Extend.UPDOWN));
         key.voxels(vox);
 
         return vox;
@@ -1220,16 +1227,17 @@ public class Injector : TPIAP.Pea {
         clearance = new();
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            Vec2 p = frompol(pm.r_bolt, theta);
+            Frame frame = new(fromcyl(pm.r_bolt, theta, 0f));
+
             // for bolt.
             hole.BoolAdd(new Rod(
-                new(rejxy(p, 0f)),
-                pm.flange_thickness_inj,
+                frame,
+                pm.flange_thickness_inj + EXTRA,
                 pm.D_bolt/2f
-            ).extended(2f*EXTRA, Extend.UPDOWN));
+            ).extended(2f*EXTRA + extend_base_by, Extend.DOWN));
             // for washer/nut.
             clearance.BoolAdd(new Rod(
-                new(rejxy(p, pm.flange_thickness_inj)),
+                frame.transz(pm.flange_thickness_inj),
                 z_mount - pm.flange_thickness_inj,
                 pm.D_washer/2f
             ).extended(EXTRA, Extend.UP));
@@ -1247,13 +1255,13 @@ public class Injector : TPIAP.Pea {
             pm.Lz_Ioring,
             pm.IR_Ioring,
             pm.OR_Ioring
-        ).extended(EXTRA, Extend.DOWN);
+        ).extended(EXTRA + extend_base_by, Extend.DOWN);
         vox.BoolAdd(new Rod(
             new(),
             pm.Lz_Ooring,
             pm.IR_Ooring,
             pm.OR_Ooring
-        ).extended(EXTRA, Extend.DOWN));
+        ).extended(EXTRA + extend_base_by, Extend.DOWN));
         return vox;
     }
 
@@ -1419,10 +1427,14 @@ public class Injector : TPIAP.Pea {
             this_pos.BoolAdd(new Rod(at, -at.pos.Z, flats.r));
             this_pos.BoolSubtract(mani_vol.volume_entire);
 
-            this_pos.BoolAdd(new Rod(at, -at.pos.Z - EXTRA, D_h/2f + th_h));
+            this_pos.BoolAdd(new Rod(
+                at,
+                -at.pos.Z - EXTRA - (sub_pos == null ? extend_base_by : 0f),
+                D_h/2f + th_h
+            ));
             Voxels this_neg_no_tap = new Rod(
                 at,
-                -at.pos.Z - EXTRA,
+                -at.pos.Z - EXTRA - (sub_neg == null ? extend_base_by : 0f),
                 D_h/2f
             ).extended(EXTRA, Extend.UPDOWN);
             Voxels this_neg = this_neg_no_tap.voxDuplicate();
@@ -1464,15 +1476,16 @@ public class Injector : TPIAP.Pea {
             mani_vol.A.outer_r0
         ).extended(EXTRA, Extend.DOWN);
 
+        Voxels underneath = new Rod(new(), -3f*EXTRA, pm.flange_outer_radius);
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
-                sub_pos: mani_vol.volume_entire,
-                sub_neg: mani_vol.volume_only_lower);
+                sub_pos: underneath + mani_vol.volume_entire,
+                sub_neg: underneath + mani_vol.volume_only_lower);
         portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh,
-                sub_pos: mani_vol.volume_entire,
-                sub_neg: mani_vol.volume_only_lower);
+                sub_pos: underneath + mani_vol.volume_entire,
+                sub_neg: underneath + mani_vol.volume_only_lower);
         portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh,
-                sub_pos: mani_vol.volume_only_lower,
-                sub_neg: volume_plate);
+                sub_pos: underneath + mani_vol.volume_only_lower,
+                sub_neg: underneath + volume_plate);
         portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh);
 
         pos = _pos;
@@ -1653,8 +1666,8 @@ public class Injector : TPIAP.Pea {
         part.step("removed voids.");
 
         part.voxels.BoolSubtract(new Rod(
-            new(),
-            -2f*EXTRA,
+            new(-extend_base_by*uZ3),
+            -3f*EXTRA,
             overall_Lr + EXTRA
         ));
         part.substep("clipped bottom.", view_part: true);
