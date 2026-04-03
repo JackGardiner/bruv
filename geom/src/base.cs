@@ -338,6 +338,8 @@ public class Ball : ShellableShape<Ball> {
         : this(ZERO3, inner_r, outer_r) {}
     public Ball(in Vec3 centre, float outer_r)
         : this(centre, -INF, outer_r) {}
+    public Ball(in Frame centre, float outer_r)
+        : this(centre, -INF, outer_r) {}
     public Ball(in Vec3 centre, float inner_r, float outer_r)
         : this(new Frame(centre), inner_r, outer_r) {}
     public Ball(in Frame centre, float inner_r, float outer_r) {

@@ -496,10 +496,13 @@ public class InjectorElement {
 
         pos.BoolAdd(pos_il1);
         pos.BoolAdd(pos_il2);
+        neg.BoolAdd(neg_il1);
+        neg.BoolAdd(neg_il2);
 
         // Dreaded fillet.
         Fillet.concave(pos, FR_small, true);
-        Fillet.both(neg, FR_small, true);
+        Fillet.concave(neg, FR_small, true);
+
 
         // dont let the inner nozzle end get filleted.
         Rod just_the_tip = new(
@@ -514,10 +517,6 @@ public class InjectorElement {
         }
         pos.BoolAdd(just_the_tip);
         neg.BoolSubtract(just_the_tip);
-
-        // do after to preserve sharp teardrop tip.
-        neg.BoolAdd(neg_il1);
-        neg.BoolAdd(neg_il2);
 
         // Add nozzle chamfers.
         if (!printable) {
@@ -541,9 +540,9 @@ public class InjectorElement {
             float th, float phi, out Voxels pos, out Voxels neg) {
         pos = new();
         neg = new();
-        // scale D to account for teardrop shape
-        // https://www.desmos.com/calculator/fqzzrkxw2t
-        D = 2f * D * sqrt(PI/(3*PI + 4));
+        // Scale D to account for teardrop shape
+        // https://www.desmos.com/calculator/2ftycddpdw
+        D /= sqrt(0.75f + 1f/PI);
         // Add the tangential inlets.
         for (int i=0; i<no; ++i) {
             float theta = i*TWOPI/no;
@@ -553,26 +552,45 @@ public class InjectorElement {
             // make frame circum to this element centre.
             Frame frame = new Frame.Cyl(at).circum(inlet);
             // x=+axial, y=+radial.
-            Rod pipe = new(frame, L, D/2f);
-            Bar diamond = new(frame.rotxy(PI_4), L, SQRT2*D/2f);
-            Bar cropper = new(frame, L, 2*D);
 
-            //
-            Voxels single_il_neg = new ();
-            single_il_neg.BoolAdd(diamond
-                .extended(3*VOXEL_SIZE, Extend.UP)
-                .translate(
-                    new Vec3(0f, 0f, (D/2f)*(SQRT2-1f)),
-                    relative: false));
-            single_il_neg.BoolIntersect(cropper
-                .extended(3*VOXEL_SIZE, Extend.UP)
-                .translate(new Vec3(0f, 0f, D/(2f*SQRT2) + D), relative: false));
+            // Main pipe.
+            neg.BoolAdd(new Rod(
+                frame,
+                L,
+                D/2f
+            ));
+            // Tear drop sharp top edge.
+            neg.BoolAdd(new Bar(
+                frame.rotxy(-PI_4),
+                L,
+                D/2f
+            ).at_edge(Bar.X1_Y1));
+            // Rounded extra at the end.
+            neg.BoolAdd(new Ball(frame.transz(L), D/2f));
 
-            neg.BoolAdd(single_il_neg);
-            neg.BoolAdd(pipe.extended(3*VOXEL_SIZE, Extend.UP));
-
-            Voxels this_pos = pipe.shelled(th);
-            this_pos.BoolAdd(diamond.shelled(th));
+            // Main pipe.
+            Voxels this_pos = new Rod(
+                frame,
+                L,
+                D/2f + th
+            );
+            // Tear drop top.
+            this_pos.BoolAdd(new Bar(
+                frame.rotxy(-PI_4),
+                L,
+                D/2f + th
+            ).at_edge(Bar.X1_Y1));
+            // round top by clearing square then adding pipe :)
+            this_pos.BoolSubtract(new Bar(
+                frame.transx(SQRT2*(D/2f + th)).rotxy(-PI_4),
+                L,
+                2f*th
+            ).extended(3f*VOXEL_SIZE, Extend.UPDOWN));
+            this_pos.BoolAdd(new Rod(
+                frame.transx(SQRT2*D/2f),
+                L,
+                th
+            ));
 
             // support.
             Bar tear = new Bar(
