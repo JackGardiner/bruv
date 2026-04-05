@@ -31,12 +31,9 @@ public class Threads {
                                   + incomplete_upper_length
                                   + incomplete_lower_length;
 
-    public float bore_diameter // conservative material removal:
-        => 0.9f*minor_diameter + taper_offset(straight_length);
 
     public float major_radius => 0.5f*major_diameter;
     public float minor_radius => 0.5f*minor_diameter;
-    public float bore_radius  => 0.5f*bore_diameter;
 
     public Threads(string size) {
         Dictionary<string, List<float>> lookup = new([
@@ -212,6 +209,11 @@ new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
 
 public class Tapping : Threads {
     public bool printable { get; }
+
+    public float bore_diameter // conservative material removal:
+        => 0.8f*minor_diameter + taper_offset(straight_length);
+
+    public float bore_radius => 0.5f*bore_diameter;
 
     public Tapping(string size, bool printable=false)
             : base(size) {

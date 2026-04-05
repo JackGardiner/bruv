@@ -115,8 +115,7 @@ public class Transformer {
     }
 
     public Mesh mesh(in Mesh mesh) {
-        List<Vec3> V = new();
-        List<Triangle> I = new();
+        List<Vec3> V = new(mesh.nVertexCount());
         for (int i=0; i<mesh.nVertexCount(); ++i) {
             Vec3 v = vec(mesh.vecVertexAt(i));
             V.Add(v);
@@ -131,7 +130,7 @@ public class Transformer {
     }
 
     public Voxels voxels(in Voxels vox, bool dispose=false) {
-        Mesh a = new Mesh(vox);
+        Mesh a = new(vox);
         if (dispose)
             vox.Dispose();
         Mesh b = mesh(a);
