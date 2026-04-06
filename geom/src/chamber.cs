@@ -38,15 +38,23 @@ public class Chamber : TPIAP.Pea {
     public required float th_iw { get; init; }
     public required float th_ow { get; init; }
 
+    public required float helix_angle { get; init; }
+
     public required int no_web { get; init; }
     public required float th_web { get; init; }
-    public required float Ltheta_web { get; init; }
+    public required float psi_web { get; init; }
+    public float wi_web = NAN;
 
-    public int no_chnl = -1;
-    public float th_chnl = NAN;
-    public float Ltheta_chnl = NAN;
-    public float A_chnl_exit = NAN;
+    public int no_chnl => no_web;
+    public float th_chnl => th_web;
     public required float FR_chnl { get; init; }
+    public float A_chnl_exit = NAN;
+    public float z1_chnl = NAN;
+    float wi_chnl(float r) {
+        float wi = TWOPI*r/no_web - wi_web;
+        assert(wi >= 0f, $"r={r}");
+        return wi;
+    }
 
     protected float[] theta_chnl_lookup = [];
     protected float theta_chnl_lookup_zlo = NAN;
@@ -64,22 +72,34 @@ public class Chamber : TPIAP.Pea {
         return lerp(A, B, t);
     }
     protected void initialise_chnl() {
-        no_chnl = no_web;
-        th_chnl = th_web;
-        Ltheta_chnl = TWOPI/no_chnl - Ltheta_web;
-        assert(Ltheta_chnl > 0f);
+        // Get circumferential width rather than normal-to-helix-angle width.
+        wi_web = psi_web / cos(helix_angle);
+
+
+        { // Setup "top" of channel to be the base of the triangular-ish opening.
+            // guess then simple fixed-point iteration.
+            z1_chnl = cnt_z6 - th_omani - th_chnl - 0.5f*wi_chnl(R_exit) - 1f;
+            for (int i=0; true; ++i) {
+                float r = cnt_radius_at(z1_chnl, th_iw + th_chnl, false);
+                float next_z1_chnl = cnt_z6 - th_omani - th_chnl
+                                   - 0.5f*wi_chnl(r) - 1f;
+                float Dz = abs(next_z1_chnl - z1_chnl);
+                z1_chnl = next_z1_chnl;
+                if (Dz < 1e-3f)
+                    break;
+                assert(i < 100, $"z1_chnl={z1_chnl}, Dz={Dz}");
+            }
+        }
+
 
         // Compute theta channel.
-
-        float phi = torad(30f); // MAGIC (heart eyes)
-        // TODO: ^
 
         int N = 2*DIVISIONS;
         theta_chnl_lookup = new float[N];
         // distributed between zlo and zhi, clamped outside.
 
-        float zlo = theta_chnl_lookup_zlo = cnt_z0;
-        float zhi = theta_chnl_lookup_zhi = cnt_z6 - th_chnl - th_omani;
+        float zlo = theta_chnl_lookup_zlo = 0f;
+        float zhi = theta_chnl_lookup_zhi = z1_chnl;
 
         Vec3 prev = NAN3;
         for (int i=0; i<N; ++i) {
@@ -91,13 +111,16 @@ public class Chamber : TPIAP.Pea {
                 Vec3 generatrix = normalise(fromcyl(r, prev_theta, z) - prev);
                 Vec3 tangent = fromcyl(1f, prev_theta + PI_2, 0f);
                 Vec3 outwards = cross(tangent, generatrix);
-                Vec3 dir = rotate(generatrix, outwards, -phi);
+                Vec3 dir = rotate(generatrix, outwards, -helix_angle);
                 Vec3 curr = Polygon.plane_line_intersection(prev, prev + dir,
                         z*uZ3, uZ3);
                 theta = argxy(curr);
             }
             prev = fromcyl(r, theta, z);
             theta_chnl_lookup[i] = theta;
+
+            // Just to check it doesnt shit the bed:
+            _ = wi_chnl(r);
         }
 
         // ensure no full circles between steps.
@@ -151,8 +174,12 @@ public class Chamber : TPIAP.Pea {
                 theta_chnl_lookup[i] += Dtheta;
         }
 
-        A_chnl_exit = Ltheta_chnl/TWOPI * PI*(sqed(R_exit + th_iw + th_chnl)
-                                            - sqed(R_exit + th_iw));
+        { // Compute cs area of channel at entry point (~nozzle exit).
+            float rlo = cnt_radius_at(z1_chnl, th_iw, false);
+            float rhi = cnt_radius_at(z1_chnl, th_iw + th_chnl, false);
+            // https://www.desmos.com/calculator/c0by5f6cs8
+            A_chnl_exit = (rhi - rlo) * (PI/no_web * (rhi + rlo) - wi_web);
+        }
     }
 
     public required float th_imani { get; init; }
@@ -491,11 +518,12 @@ public class Chamber : TPIAP.Pea {
             }
 
             // Chuck it through some newton raphson iters.
-            for (int i=0; i<10; ++i) { // don loop forever.
+            for (int i=0; true; ++i) {
                 eff(S, out float f, out float df);
                 S -= f / df;
                 if (f < 1e-3f)
                     break;
+                assert(i < 10, $"f={f}");
             }
 
             float pS = (-cnt_para_bz - sqrt(cnt_para_bz*cnt_para_bz
@@ -641,12 +669,12 @@ public class Chamber : TPIAP.Pea {
         // brute force it by assuming the distance we are from the actual desired
         // offset is perfectly horizontal. note this has like i think linear
         // convergence so pretty bad but eh its fine.
-        for (int i=0; i<10; ++i) { // don loop forever.
+        for (int i=0; true; ++i) {
             float Dr = signed_dist - sdf(new(r, 0f, z));
             r += Dr; // doctor semi colon.
             if (abs(Dr) < 1e-3)
                 break;
-            assert(i != 9, $"Dr={Dr}");
+            assert(i < 10, $"Dr={Dr}"); // don loop forever.
         }
         return r;
     }
@@ -736,106 +764,37 @@ public class Chamber : TPIAP.Pea {
     }
 
 
-    protected Mesh mesh_chnl() {
-        int N0 = DIVISIONS;
-        int N1 = max(4, DIVISIONS/60);
-        int M = max(4, (int)(Ltheta_chnl*DIVISIONS/TWOPI));
+    protected Mesh mesh_chnl(out List<Vec2> V0) {
+        /* constant webbing length (not angular) thickness */
+
+        int N = DIVISIONS;
+        int M = max(6, (int)(wi_chnl(pm.R_cc)/VOXEL_SIZE));
         M += M & 1; // make even.
-        assert(N0 >= 2);
-        assert(N1 >= 2);
         assert(M >= 2);
 
-        List<Vec3> frames = new(N0 + N1 + 1);
-        List<Vec2> vertices = new((N0 + N1 + 1)*M);
+        List<Vec3> frames = new(N);
+        List<Vec2> vertices = new(N*M);
         // ccw winding of vertices about +axial.
 
-        float zlo = cnt_z0;
-        float zhi = cnt_z6 - th_omani - th_chnl;
-        for (int i=0; i<N0; ++i) {
-            float z = lerp(zlo, zhi, i, N0);
-            float rlo = cnt_radius_at(z, th_iw, true);
-            float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
-            float Mtheta = theta_chnl(z);
-            float thetalo = Mtheta - Ltheta_chnl/2f;
-            float thetahi = Mtheta + Ltheta_chnl/2f;
-
-            frames.Add(z*uZ3);
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(thetahi, thetalo, j, M/2);
-                vertices.Add(frompol(rlo, theta));
-            }
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(thetalo, thetahi, j, M/2);
-                vertices.Add(frompol(rhi, theta));
-            }
-        }
-        // duplicate lowest polygon downwards.
-        frames.Insert(0, frames[0] - (EXTRA + extend_base_by)*uZ3);
-        for (int j=0; j<M; ++j)
-            vertices.Insert(0, vertices[M - 1]);
-
-        zlo = zhi;
-        zhi = cnt_z6 - th_omani;
-        for (int i=0; i<N1; ++i) {
-            float z = lerp(zlo, zhi, i, N1);
-            float Mtheta = theta_chnl(z);
-            float rlo = cnt_radius_at(z, th_iw, true);
-            float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
-            float thetalo = Mtheta - Ltheta_chnl/2f;
-            float thetahi = Mtheta + Ltheta_chnl/2f;
-            rhi += th_chnl/2f; // safety.
-
-            frames.Add(z*uZ3);
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(thetahi, thetalo, j, M/2);
-                vertices.Add(frompol(rlo, theta));
-            }
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(thetalo, thetahi, j, M/2);
-                vertices.Add(frompol(rhi, theta));
-            }
-        }
-
-        return Polygon.mesh_swept(new FramesCart(frames), vertices);
-    }
-
-    protected Mesh mesh_chnl_const_th_web(float wi_web, out List<Vec2> V0) {
-        int N0 = DIVISIONS;
-        int N1 = DIVISIONS/20;
-        int M = max(5, (int)(Ltheta_chnl*DIVISIONS/TWOPI));
-        M += M & 1; // make even.
-        assert(N0 >= 2);
-        assert(N1 >= 2);
-        assert(M >= 2);
-
-        List<Vec3> frames = new(N0 + N1 + 1);
-        List<Vec2> vertices = new((N0 + N1 + 1)*M);
-        // ccw winding of vertices about +axial.
-
-        float zlo = cnt_z0;
-        float zhi = cnt_z6 - th_omani - th_chnl;
-        for (int i=0; i<N0; ++i) {
-            float z = lerp(zlo, zhi, i, N0);
+        float zlo = 0f;
+        float zhi = z1_chnl;
+        for (int i=0; i<N; ++i) {
+            float z = lerp(zlo, zhi, i, N);
             float Mtheta = theta_chnl(z);
             float rlo = cnt_radius_at(z, th_iw, true);
             float rhi = cnt_radius_at(z, th_iw + th_chnl, true);
 
             frames.Add(z*uZ3);
 
-            float r;
-            float wi() => TWOPI*r/no_web - wi_web;
-
-            r = rlo;
-            float theta0lo = Mtheta - wi()/2f/r;
-            float theta0hi = Mtheta + wi()/2f/r;
+            float theta0lo = Mtheta - wi_chnl(rlo)/rlo/2f;
+            float theta0hi = Mtheta + wi_chnl(rlo)/rlo/2f;
             assert(theta0hi > theta0lo);
             for (int j=0; j<M/2; ++j) {
                 float theta = lerp(theta0hi, theta0lo, j, M/2);
                 vertices.Add(frompol(rlo, theta));
             }
-            r = rhi;
-            float theta1lo = Mtheta - wi()/2f/r;
-            float theta1hi = Mtheta + wi()/2f/r;
+            float theta1lo = Mtheta - wi_chnl(rhi)/rhi/2f;
+            float theta1hi = Mtheta + wi_chnl(rhi)/rhi/2f;
             assert(theta1hi > theta1lo);
             for (int j=0; j<M/2; ++j) {
                 float theta = lerp(theta1lo, theta1hi, j, M/2);
@@ -850,36 +809,45 @@ public class Chamber : TPIAP.Pea {
         V0 = vertices[..M];
 
 
-        zlo = zhi;
-        zhi = cnt_z6 - th_omani;
-        for (int i=0; i<N1; ++i) {
-            float z = lerp(zlo, zhi, i, N1);
-            float Mtheta = theta_chnl(z);
-            float rlo = cnt_radius_at(z, th_iw, true);
-            float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani, true);
-            rhi += th_chnl/2f; // safety.
+        // Handle channel inlets. Shape as a recantangle w triangle roof.
 
-            frames.Add(z*uZ3);
+        // Do the rectangle in the same mesh.
+        {
+            float Mtheta = theta_chnl(z1_chnl);
+            float wi0 = wi_chnl(
+                cnt_radius_at(z1_chnl, th_iw, true)
+            );
+            float wi1 = wi_chnl(
+                cnt_radius_at(z1_chnl, th_iw + th_chnl + th_imani, true)
+            );
+            for (float z=z1_chnl + 1e-3f; true; z += VOXEL_SIZE) {
+                float rlo = cnt_radius_at(z, th_iw, true);
+                float rhi = cnt_radius_at(z, th_iw + th_chnl + th_imani, true);
+                rhi += 4f*VOXEL_SIZE; // safety.
 
-            float r;
-            float wi() => TWOPI*r/no_web - wi_web;
+                float curr_wi1 = wi1 - 2f*max(0f, z - z1_chnl - th_chnl);
+                float curr_wi0 = lerp(0f, wi0, invlerp(0f, wi1, curr_wi1));
+                if (curr_wi0 < 1e-3f || curr_wi1 < 1e-3f)
+                    break;
 
-            r = rlo;
-            float theta0lo = Mtheta - wi()/2f/r;
-            float theta0hi = Mtheta + wi()/2f/r;
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(theta0hi, theta0lo, j, M/2);
-                vertices.Add(frompol(rlo, theta));
-            }
-            // dont use rhi here since thats not the outer radius of channel.
-            r = cnt_radius_at(z, th_iw + th_chnl, true);
-            float theta1lo = Mtheta - wi()/2f/r;
-            float theta1hi = Mtheta + wi()/2f/r;
-            for (int j=0; j<M/2; ++j) {
-                float theta = lerp(theta1lo, theta1hi, j, M/2);
-                vertices.Add(frompol(rhi, theta));
+                frames.Add(z*uZ3);
+
+                float theta0lo = Mtheta - curr_wi0/rlo/2f;
+                float theta0hi = Mtheta + curr_wi0/rlo/2f;
+                for (int j=0; j<M/2; ++j) {
+                    float theta = lerp(theta0hi, theta0lo, j, M/2);
+                    vertices.Add(frompol(rlo, theta));
+                }
+                float theta1lo = Mtheta - curr_wi1/rhi/2f;
+                float theta1hi = Mtheta + curr_wi1/rhi/2f;
+                for (int j=0; j<M/2; ++j) {
+                    float theta = lerp(theta1lo, theta1hi, j, M/2);
+                    vertices.Add(frompol(rhi, theta));
+                }
             }
         }
+
+        // Now add the triangle top with weird meshing tech.
 
         return Polygon.mesh_swept(new FramesCart(frames), vertices);
     }
@@ -891,20 +859,7 @@ public class Chamber : TPIAP.Pea {
         Voxels vox = new();
         List<Geez.Key> keys = new();
 
-      #if false
-        print("th_chnl,   30deg helix angle,  1.5mm wi_web: "
-           + $"{(TWOPI*R_tht/no_web - 1.5f)*cos(torad(30f))} mm");
-        print("th_chnl,   30deg helix angle,  1.5mm th_web: "
-           + $"{TWOPI*R_tht/no_web*cos(torad(30f)) - 1.5f} mm");
-        print("wi_chnl,   30deg helix angle,  1.5mm wi_web: "
-           + $"{TWOPI*R_tht/no_web - 1.5f} mm");
-        print("wi_chnl,   30deg helix angle,  1.5mm th_web: "
-           + $"{TWOPI*R_tht/no_web - 1.5f/cos(torad(30f))} mm");
-      #endif
-        float wi_web = 1.5f / cos(torad(30f));
-
-        // TODO: hi
-        Mesh mesh0 = mesh_chnl_const_th_web(wi_web, out List<Vec2> V0);
+        Mesh mesh0 = mesh_chnl(out List<Vec2> V0);
         for (int i=0; i<no_chnl; ++i) {
             float Dtheta = i*TWOPI/no_chnl;
             Transformer trans = new Transformer().rotate(uZ3, Dtheta);
@@ -1084,17 +1039,17 @@ public class Chamber : TPIAP.Pea {
 
 
     protected void points_maybe_mani(float neg_min_z, out List<Vec2> neg,
-            out List<Vec2> pos, out Vec2 inlet, out float Lr) {
+            out List<Vec2> pos, out Vec2 inlet) {
         // note neg_min_z for neg is only a "construction" value, it is filleted
         // so is not the true minimum.
 
         /* Neg is a outer-wall hugging triangle thing:
-    |---,._   - a (filleted)
+    |'-,  - a
+    |   `-,
     |      `-,
-    |         `-,
-    |           `;  - c (filleted)
-   |          ,-'
-   |      ,-'
+    |         ',  - c (filleted)
+   |        ,-'
+   |     ,-'
   ,'`---'
   |   '---- b (filleted)
         */
@@ -1113,24 +1068,22 @@ public class Chamber : TPIAP.Pea {
  |  ,-'
  '-'      - e
         */
-        float FR_a = 2f;
         float FR_b = 1.5f;
         float FR_c = 2f;
-        int divisions_a = max(6, DIVISIONS/100);
-        int divisions_c = max(6, DIVISIONS/80);
+        int divisions_wall = DIVISIONS/20;
+        int divisions_b = max(6, DIVISIONS/60);
+        int divisions_c = max(6, DIVISIONS/100);
+        int divisions_A = max(6, DIVISIONS/80);
 
         // Get the contour hugging the outer wall.
-        neg = new();
+        neg = new(2*divisions_wall);
         float neg_max_z = cnt_z6 - th_omani;
-        for (int i=0; i<DIVISIONS/8; ++i) {
-            float z = lerp(neg_max_z, neg_min_z, i, DIVISIONS/8);
+        for (int i=0; i<2*divisions_wall; ++i) {
+            float z = lerp(neg_max_z, neg_min_z, i, 2*divisions_wall);
             float r = cnt_radius_at(z, th_iw + th_chnl + th_imani, false);
             neg.Add(new(z, r));
         }
-        // Get an "overhanging" point (to ensure the channel isnt partially
-        // restricted by being in a non-right-angle corner).
-        Vec2 a = neg[0] + uY2*th_chnl;
-        // Get the lowest point.
+        Vec2 a = neg[0];
         Vec2 b = neg[^1];
         // Then get the intersection between the shallowest lines we can make
         // from these two points. https://www.desmos.com/calculator/xfhcgwu2el
@@ -1148,38 +1101,31 @@ public class Chamber : TPIAP.Pea {
             (d.Y - b.Y)/tan(phi_mani) + b.X - th_omani/sin(phi_mani),
             R_tht
         );
+        neg.Add(c);
 
         // Now fillet the lower corner.
-        neg.Add(c); // temp, to ensure the line.
-        int divs_fillet = DIVISIONS/10;
-        Polygon.fillet(neg, numel(neg) - 2, FR_b, divisions: divs_fillet);
-        neg.RemoveAt(numel(neg) - 1);
+        Polygon.fillet(neg, numel(neg) - 2, FR_b, divisions: divisions_b);
 
         // Note that this fillet has made the polygon variable-length, so
         // resample it to a fixed amount.
-        List<Vec2> wall = neg[..^(divs_fillet + 1)];
-        List<Vec2> fillet = neg[^divs_fillet..];
-        wall = Polygon.resample(wall, DIVISIONS/25);
-        fillet = Polygon.resample(fillet, DIVISIONS/60);
-        // Add the other two points to make the final closed loop.
-        neg = [..wall, ..fillet, c, a];
+        List<Vec2> wall = neg[.. (^divisions_b)];
+        wall = Polygon.resample(wall, divisions_wall);
+        neg = [..wall, ..neg[(^divisions_b) ..]];
 
-        // Fixed-count fillet for the outer corner and the overhang corner.
-        Polygon.fillet(neg, numel(neg) - 2, FR_c, divisions: divisions_c);
-        Polygon.fillet(neg, numel(neg) - 1, FR_a, divisions: divisions_a);
+        // Fixed-count fillet for the outer corner.
+        Polygon.fillet(neg, numel(neg) - 1, FR_c, divisions: divisions_c,
+                only_this_vertex: true /* justin caseme */);
 
         // Pos so easyyy with all fixed-division fillets.
         pos = [d, e, C, A];
-        Polygon.fillet(pos, 3, FR_a + th_omani, divisions: divisions_a);
-        Polygon.fillet(pos, 2, FR_c + th_omani, divisions: divisions_c);
+        Polygon.fillet(pos, 3, th_omani, divisions: divisions_A,
+                only_this_vertex: true);
+        Polygon.fillet(pos, 2, FR_c + th_omani, divisions: divisions_c,
+                only_this_vertex: true);
 
         // Place the inlet s.t. its top point coincides with c.
         float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
         inlet = c + normalise(b - c)*Dell;
-
-        // Output the lower edge projected length to hugely aid the numerical
-        // search for matching area.
-        Lr = abs((c - b).Y);
     }
 
     protected void points_mani(float theta, out List<Vec2> neg,
@@ -1205,17 +1151,24 @@ public class Chamber : TPIAP.Pea {
       #endif
         float min_z = cnt_z6 - th_ow - Az; // guess.
         Vec2 inlet_zr = NAN2;
-        for (int i=0; i<100; ++i) {
-            points_maybe_mani(min_z, out neg, out pos, out inlet_zr,
-                    out float Lr);
-            float rem_A = A - Polygon.area(neg);
-            float Dz = -rem_A/Lr / sin(phi_mani);
-            // ^ very good guess, but still a guess.
-            min_z += Dz;
-            assert(min_z > cnt_z4);
-            if (abs(Dz) < 1e-3 && abs(rem_A) < 1e-2)
+        for (int i=0; true; ++i) {
+            points_maybe_mani(min_z, out neg, out pos, out inlet_zr);
+            float A0 = Polygon.area(neg);
+            float f0 = A - A0;
+            if (abs(f0) < 1e-1f)
                 break;
-            assert(i != 99, $"Dz={Dz}, rem_A={rem_A}");
+            // discrete newton-raphson iter.
+            float eps = 1e-2f;
+            points_maybe_mani(min_z - eps, out List<Vec2> negA, out _, out _);
+            points_maybe_mani(min_z + eps, out List<Vec2> negB, out _, out _);
+            float fA = A - Polygon.area(negA);
+            float fB = A - Polygon.area(negB);
+            float DfDz = (fB - fA) / eps / 2f;
+            assert(!nearzero(DfDz));
+            min_z -= f0/DfDz;
+            assert(min_z > cnt_z4);
+            // hopefully an overkill number of iters.
+            assert(i < 20, $"f0={f0}, DfDz={DfDz}");
         }
         inlet = new(
             fromzr(inlet_zr, theta),
@@ -1243,7 +1196,7 @@ public class Chamber : TPIAP.Pea {
         key.cycle(Geez.mesh(mesh));
         Voxels vox = new(mesh);
 
-        float zextra = 1.5f;
+        float zextra = R_exit;
         vox.BoolAdd(new Rod(
             inlet,
             FR_inlet + EXTRA,

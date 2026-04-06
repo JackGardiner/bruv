@@ -53,15 +53,17 @@
         "th_iw": 1.5,
         "th_ow": 2.5,
 
+        "helix_angle": 0.5235987755982988,
+
         "no_web": 32,
         "th_web": 2.0,
-        "Ltheta_web": 0.03,
+        "psi_web": 1.5,
 
         "FR_chnl": 0.4,
 
         "th_imani": 1.5,
         "th_omani": 2.5,
-        "phi_mani": 0.6108652381980153,
+        "phi_mani": 0.6981317007977318,
 
         "no_fixt": 4,
         "wi_fixt": 10.0,

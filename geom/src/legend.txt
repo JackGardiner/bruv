@@ -86,6 +86,7 @@ LENGTHS/ANGLES:
   off = distance normal to surface.
   th = thickness normal to surface.
   wi = circumferential width (non-angular).
+  psi = cross-ways width.
   ell = arc length.
   L = length (typically axial).
   I_ = inner length.
