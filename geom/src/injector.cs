@@ -898,16 +898,15 @@ public class Injector : TPIAP.Pea {
     public required float th_LOxPTh { get; init; }
     public required float th_IPAPTh { get; init; }
     public required float th_CCPTh { get; init; }
-    public Tapping tap_igniter => new(portsize_igniter, printable_dmls)
-            { extra_length = 4f };
+    public Tapping tap_igniter => new(portsize_igniter, printable_dmls);
     public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable_dmls)
-            { extra_length = 4f };
+            { extra_length = 2f };
     public Tapping tap_LOxPT => new(portsize_LOxPT, printable_dmls)
-            { extra_length = 4f };
+            { extra_length = 2f };
     public Tapping tap_IPAPT => new(portsize_IPAPT, printable_dmls)
-            { extra_length = 4f };
+            { extra_length = 2f };
     public Tapping tap_CCPT => new(portsize_CCPT, printable_dmls)
-            { extra_length = 4f };
+            { extra_length = 2f };
 
 
     protected const float EXTRA = 6f;
@@ -1007,7 +1006,7 @@ public class Injector : TPIAP.Pea {
 
 
         // Manifold peak.
-        float max_r = Or_chnl + 1.8f*th_plate/tan(phi_mw);
+        float max_r = Or_chnl + (th_plate + pm.max_th_chnl)*tan(phi_mw);
         // https://www.desmos.com/calculator/tusqawwtn5
         Vec2 peak = new( /* (z,r) */
             max_r/2f/tan(phi_mw) + z0_dmw/2f,
@@ -1153,7 +1152,7 @@ public class Injector : TPIAP.Pea {
         key.voxels(pos);
 
         // Donut fillet at the base.
-        float FR = 5f;
+        float FR = 4f;
         pos.BoolAdd(new Rod(
             new(uZ3*th_plate),
             FR - VOXEL_SIZE,
@@ -1567,21 +1566,21 @@ public class Injector : TPIAP.Pea {
                 out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
         part.step("created ports.");
 
-        part.add(ref manifold, key_manifold);
-        part.substep("added manifold walls.");
-        part.add(ref pos_igniter, key_igniter);
-        part.substep("added igniter.");
         part.add(ref flange, key_flange);
         part.substep("added flange.");
         part.add(ref gussets, key_gussets);
         part.substep("added gussets.");
-        part.add(ref pos_ports, key_ports);
-        part.substep("added ports.");
+        part.add(ref manifold, key_manifold, keepme: true);
+        part.substep("added manifold walls (1/2).");
+        part.add(ref pos_igniter, key_igniter, keepme: true);
+        part.substep("added igniter (1/2).");
+        part.add(ref pos_ports, key_ports, keepme: true);
+        part.substep("added ports (1/2).");
 
-        part.step("added upper material.");
+        part.step("added material.");
 
         part.sub(ref neg_bolt_clearance, keepme: true);
-        part.substep("subtracted mating bolt clearance (1/3).");
+        part.substep("subtracted mating bolt clearance (1/2).");
 
         part.sub(ref neg_igniter_no_tap, keepme: true);
         part.substep("subtracted igniter hole (1/2).");
@@ -1590,55 +1589,44 @@ public class Injector : TPIAP.Pea {
         part.substep("subtracted port holes (1/2).");
 
         if (!filletless) {
-            Fillet.concave(part.voxels, pm.concave_fillet_radius, inplace: true);
-            part.substep("concave filleted part.", view_part: true);
+            Fillet.both(part.voxels,
+                concave_FR: pm.concave_fillet_radius,
+                convex_FR: pm.convex_fillet_radius,
+                inplace: true
+            );
+            part.substep("filleted part.", view_part: true);
         } else {
-            part.substep("skipping supports concave fillet (filletless "
-                       + "requested).");
+            part.substep("skipping part fillet (filletless requested).");
         }
 
-        part.step("concave clean up");
+        part.step("partial clean up");
+
+        {
+            Voxels? inside_mani = new Rod(new(), mani_vol.peak.X, Ir_chnl);
+            inside_mani.BoolIntersect(mani_vol.volume_entire);
+
+            part.sub(ref inside_mani);
+            part.substep("cleared manifold.");
+            part.add(ref manifold, key_manifold);
+            part.substep("added manifold walls (2/2).");
+            part.add(ref pos_igniter, key_igniter);
+            part.substep("added igniter (2/2).");
+            part.add(ref pos_ports, key_ports);
+            part.substep("added ports (2/2).");
+        }
+
+        part.step("overhang clean up");
+
 
         part.add(ref plate, key_plate);
         part.substep("added base plate.");
         part.add(ref supports, key_supports);
         part.substep("added supports.");
-        // Fillet supports for strength. Unfortunately its just for the best to
-        // be part-wide.
-        if (!filletless) {
-            Fillet.concave(part.voxels, 1.5f*FR_suprt, inplace: true);
-            part.substep("filleted supports.", view_part: true);
-        } else {
-            part.substep("skipping supports fillet.");
-        }
-
-        part.step("added lower material.");
-
-        part.sub(ref neg_bolt_clearance, keepme: true);
-        part.substep("subtracted mating bolt clearance (2/3).");
-
-        part.sub(ref neg_igniter_no_tap);
-        part.substep("subtracted igniter hole (2/2).");
-
-        part.sub(ref neg_ports_no_tap);
-        part.substep("subtracted port holes (2/2).");
-
-        if (!filletless) {
-            Fillet.convex(part.voxels, pm.convex_fillet_radius, inplace: true);
-            part.substep("convex filleted part.", view_part: true);
-        } else {
-            part.substep("skipping supports convex fillet (filletless "
-                       + "requested).");
-        }
-
-        part.step("convex clean up");
-
         part.add(ref pos_elements);
         part.substep("added injector elements.");
-        part.sub(ref neg_elements, key_elements);
-        part.substep("subtracted injector elements.");
 
-        part.step("merged injector elements");
+        part.step("added plate material.");
+
 
         if (neg_film_cooling != null) {
             part.sub(ref neg_film_cooling);
@@ -1649,7 +1637,7 @@ public class Injector : TPIAP.Pea {
         part.sub(ref neg_bolt_hole);
         part.substep("subtracted mating bolt hole.");
         part.sub(ref neg_bolt_clearance);
-        part.substep("subtracted mating bolt clearance (3/3).");
+        part.substep("subtracted mating bolt clearance (2/2).");
         part.sub(ref neg_mounting);
         part.substep("subtracted mounting bolts.");
         if (neg_orings != null) {
@@ -1662,6 +1650,8 @@ public class Injector : TPIAP.Pea {
         part.substep("subtracted igniter void (2/2).");
         part.sub(ref neg_ports);
         part.substep("subtracted port voids (2/2).");
+        part.sub(ref neg_elements, key_elements);
+        part.substep("subtracted injector elements.");
 
         part.step("removed voids.");
 
