@@ -858,8 +858,9 @@ public class Injector : TPIAP.Pea {
     public required string boltsize_mount { get; init; }
     public required float r_mount { get; init; }
     public required float z_mount { get; init; }
+    public float extra_on_mounts => printable_dmls ? 5f : 0f;
     public Tapping tap_mount => new(boltsize_mount, printable_dmls)
-            { extra_length = 3f };
+            { extra_length = 3f + extra_on_mounts };
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
@@ -1380,11 +1381,11 @@ public class Injector : TPIAP.Pea {
                 frames.Add(frame);
             }
 
-            // Extend up by `EXTRA`.
-            frames.Add(top.transz(EXTRA));
+            // Extend up.
+            frames.Add(top.transz(EXTRA + extra_on_mounts));
             vertices.AddRange(vertices[(numel(vertices) - M)..]);
 
-            // Extend in by `EXTRA`.
+            // Extend in.
             frames.Insert(0, bot.transz(-EXTRA));
             vertices.InsertRange(0, vertices[..M]);
 
@@ -1392,6 +1393,7 @@ public class Injector : TPIAP.Pea {
             pos.BoolAdd(new(m));
 
             // Bolt hole + clean top.
+            top = top.transz(extra_on_mounts);
             neg.BoolAdd(tap_mount.at(top));
             neg.BoolAdd(new Rod(top, EXTRA, 2f*strut_radius));
 
