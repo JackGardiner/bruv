@@ -1574,10 +1574,6 @@ public class Injector : TPIAP.Pea {
         part.substep("added gussets.");
         part.add(ref manifold, key_manifold, keepme: true);
         part.substep("added manifold walls (1/2).");
-        part.add(ref pos_igniter, key_igniter, keepme: true);
-        part.substep("added igniter (1/2).");
-        part.add(ref pos_ports, key_ports, keepme: true);
-        part.substep("added ports (1/2).");
 
         part.step("added material.");
 
@@ -1590,16 +1586,43 @@ public class Injector : TPIAP.Pea {
         part.sub(ref neg_ports_no_tap, keepme: true);
         part.substep("subtracted port holes (1/2).");
 
+        // Want to fillet the igniter and the ports separately so they dont have
+        // weird interactions with each other. It is a grim double fillet tho.
+        Voxels? part_igniter = part.voxels.voxDuplicate();
+        part_igniter.BoolAdd(pos_igniter);
+        part.key.voxels(part_igniter);
+        part.substep("branched and added igniter (1/2).");
+
+        if (!filletless) {
+            Fillet.both(part_igniter,
+                concave_FR: pm.concave_fillet_radius,
+                convex_FR: pm.convex_fillet_radius,
+                inplace: true
+            );
+            part.substep("filleted branched part (1/2).", view_part: true);
+        } else {
+            part.substep("skipping branched part fillet (1/2) "
+                       + "(filletless requested).");
+        }
+
+        part.add(ref pos_ports, key_ports, keepme: true);
+        part.substep("branched and added ports (1/2).");
+
         if (!filletless) {
             Fillet.both(part.voxels,
                 concave_FR: pm.concave_fillet_radius,
                 convex_FR: pm.convex_fillet_radius,
                 inplace: true
             );
-            part.substep("filleted part.", view_part: true);
+            part.substep("filleted branched part (2/2).", view_part: true);
         } else {
-            part.substep("skipping part fillet (filletless requested).");
+            part.substep("skipping branched part fillet (2/2) "
+                       + "(filletless requested).");
         }
+
+        part.add(ref part_igniter);
+        part.substep("combined both branches.");
+
 
         part.step("partial clean up");
 
