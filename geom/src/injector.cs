@@ -1038,7 +1038,7 @@ public class Injector : TPIAP.Pea {
             keys.Add(Geez.mesh(this_pos));
             pos.BoolAdd(new(this_pos));
             neg.BoolAdd((Voxels)this_neg);
-            volume_only_lower.BoolSubtract(this_neg.transz(1.5f*VOXEL_SIZE));
+            volume_only_lower.BoolSubtract(this_neg.transz(-1.5f*VOXEL_SIZE));
         }
         key <<= Geez.group(keys);
 
