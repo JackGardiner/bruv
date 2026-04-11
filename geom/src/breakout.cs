@@ -10,24 +10,27 @@ namespace br {
 
 public class Breakout {
     public List<Vec2> V0 { get; }
-    public float Lz { get; }
-    public float Lx { get; }
+    public float Lz { get; set; }
+    public float Lx { get; set; }
     public float D1 => 2f*r1;
-    public float r1 { get; }
-    public float FR { get; }
-    public int N { get {
-        int n = max(30, (int)(20f / VOXEL_SIZE));
+    public float r1 { get; set; }
+    public float FR { get; set; }
+    public static int N { get {
+        int n = max(30, (int)(40f / VOXEL_SIZE));
         n += n & 1; // make even.
         return n;
     } }
-    public int M => max(20, (int)(13f / VOXEL_SIZE));
+    public static int M => max(20, (int)(27f / VOXEL_SIZE));
+    private float max_y0;
 
     public float straight_for => 0.2f*Lz;
-    public float swing_radius => Lz - r1 - straight_for;
+    public float swing_radius => Lz - straight_for;
 
     public Breakout(Slice<Vec2> V0, float Lz, float Lx, float D1, float FR=0f) {
         this.V0 = Polygon.resample(V0, N, true);
+        // TODO: centroid calc rather than assume centred on origin.
         int start_at = 0;
+        max_y0 = 0f;
         for (int i=0; i<numel(this.V0); ++i) {
             Vec2 a = this.V0[i];
             Vec2 b = this.V0[start_at];
@@ -35,6 +38,8 @@ public class Breakout {
                 continue;
             if (b.X < 0f || abs(a.Y) < abs(b.Y))
                 start_at = i;
+
+            max_y0 = max(max_y0, abs(a.Y));
         }
         this.V0 = [..this.V0[start_at..], ..this.V0[..start_at]];
         this.Lz = Lz;
@@ -49,7 +54,6 @@ public class Breakout {
 
 
         // Get the point at the start of the swing.
-        Vec3 p0 = start_up * (-straight_for * uZ3);
         Frame F0 = start_up.transz(-straight_for);
         // F0: x = +outwards, y = sideways, z = +upwards
 
@@ -88,8 +92,13 @@ public class Breakout {
         for (int i=0; i<M; ++i) {
             // double x length when travelling vertical.
             float phi = argphi(F[i].Z);
-            float stretch = 1f + abs(phi - PI_2)/PI_2;
-            Vtear.AddRange(Vtear1.Select((v) => v*(stretch*uX2 + uY2)));
+            float stretchx = 1f + abs(phi - PI_2)/PI_2;
+            // morph to match inlet width.
+            float t = i / (float)(M - 1);
+            t = t*t*(3f - 2f*t); // ease in-out.
+            float stretchy = lerp(max_y0/r1, 1f, t);
+            Vec2 stretch = new(stretchx, stretchy);
+            Vtear.AddRange(Vtear1.Select((v) => v * stretch));
         }
 
         // Extend at both ends.

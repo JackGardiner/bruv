@@ -473,14 +473,14 @@ public class Flats {
                           + flat_V * r*sqrt(mag2(corner_edge) - r*r);
 
         List<Vec2> xy = [
-            tangent_edge,
             corner_edge,
-            flipy(corner_edge),
-            flipy(tangent_edge),
-            -tangent_edge,
-            -corner_edge,
-            flipx(corner_edge),
+            tangent_edge,
             flipx(tangent_edge),
+            flipx(corner_edge),
+            -corner_edge,
+            -tangent_edge,
+            flipy(tangent_edge),
+            flipy(corner_edge),
         ];
         // Excess extrude and we'll clip to conical.
         Voxels vox_flats = new(Polygon.mesh_extruded(face_out, -net_Lz, xy));

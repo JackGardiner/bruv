@@ -1093,28 +1093,28 @@ public class Cone : AxialShape<Cone> {
         List<Vec2> vertices;
         bool donut;
         if (obj.isfilled) {
-            vertices = [obj.a*uX2, obj.a, obj.b, obj.b*uX2];
+            vertices = [obj.b*uX2, obj.b, obj.a, obj.a*uX2];
             donut = false;
         } else {
             if (obj.c.Y >= 0f && obj.d.Y >= 0f) {
-                vertices = [obj.c, obj.a, obj.b, obj.d];
+                vertices = [obj.d, obj.b, obj.a, obj.c];
                 donut = true;
             } else {
                 vertices = [
-                    new(obj.c.X, max(0f, obj.c.Y)),
-                    obj.a,
-                    obj.b,
                     new(obj.d.X, max(0f, obj.d.Y)),
+                    obj.b,
+                    obj.a,
+                    new(obj.c.X, max(0f, obj.c.Y)),
                 ];
                 float intercept_x = cross(obj.c, obj.d) / (obj.d.Y - obj.c.Y);
                 Vec2 intercept = new(intercept_x, 0f);
                 // Add if non-duplicate.
                 if (obj.c.Y < 0f) {
                     if (!nearto(vertices[^1], intercept))
-                        vertices.Add(intercept);
+                        vertices.Insert(0, intercept);
                 } else {
                     if (!nearto(vertices[0], intercept))
-                        vertices.Insert(0, intercept);
+                        vertices.Add(intercept);
                 }
                 donut = false;
             }

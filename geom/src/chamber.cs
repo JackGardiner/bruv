@@ -195,7 +195,8 @@ public class Chamber : TPIAP.Pea {
     public required float phi_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float FR_inlet { get; init; }
-    public Tapping tap_inlet => new(portsize_inlet, printable_dmls);
+    public Tapping tap_inlet => new(portsize_inlet, printable_dmls)
+            { threaded_length = 15f };
 
     public required int no_tc { get; init; }
     public required string portsize_tc { get; init; }

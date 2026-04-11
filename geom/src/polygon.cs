@@ -37,7 +37,8 @@ public static class Polygon {
         return ell;
     }
 
-    public static bool is_simple(in Slice<Vec2> vertices, out string why) {
+    public static bool is_simple(in Slice<Vec2> vertices, out string why,
+            bool only_ccw=true) {
         int N = numel(vertices);
         if (N < 3) {
             why = "fewer than three vertices";
@@ -131,6 +132,13 @@ public static class Polygon {
                     return false;
                 }
             }
+        }
+
+        // CCW winding order.
+        bool ccw = area(vertices, true) >= 0f;
+        if (only_ccw && !ccw) {
+            why = "non-ccw winding order";
+            return false;
         }
 
         why = "";
