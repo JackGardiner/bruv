@@ -444,7 +444,7 @@ public static class Polygon {
                 break;
               NEXT:;
             }
-            assert(found, "no ear found?");
+            assert(found, "degenerate polygon: no ear found");
         }
         triangle(ref mesh, I[0], I[1], I[2]);
     }
@@ -654,6 +654,7 @@ public static class Polygon {
                 Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
                 if (!is_simple(v, out why))
                     assert(false, $"cooked it: {why}");
+                assert(area(v, true) > 0f, $"cooked it: cw winding polygon");
             }
         }
 

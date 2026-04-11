@@ -883,115 +883,29 @@ public class Chamber : TPIAP.Pea {
         // Cooling channel breakouts.
 
         // Setup.
-        int N = DIVISIONS / 3;
-        int M = DIVISIONS / 5;
         V0 = [.. V0.Select((v) => rotate(v, -theta_chnl(0f)))];
         V0 = [.. V0.Select((v) => v - pm.Mr_chnl*uX2)];
-        V0 = Polygon.resample(V0, N, true);
-        int start_at = 0;
-        for (int i=0; i<numel(V0); ++i) {
-            Vec2 a = V0[i];
-            Vec2 b = V0[start_at];
-            if (a.X < 0f)
-                continue;
-            if (b.X < 0f || abs(a.Y) < abs(b.Y))
-                start_at = i;
-        }
-        V0 = [..V0[start_at..], ..V0[..start_at]];
-
-        float vertical_offset = extend_base_by*0.3f;
-        float swing_radius = extend_base_by*0.4f;
+        float z_spacing = extend_base_by*0.2f;
+        Breakout breakout = new(V0
+                , Lz: extend_base_by - 2f*z_spacing
+                , Lx: pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
+                    - pm.Mr_chnl + EXTRA
+                , D1: 7f
+                , FR: filletless ? 0f : FR_chnl
+            );
 
         vox.BoolIntersect(new Rod(
             new(),
             cnt_z6,
             pm.flange_outer_radius
-        ).extended(vertical_offset, Extend.DOWN));
+        ).extended(breakout.straight_for + z_spacing, Extend.DOWN));
         key.voxels(vox);
-
-
-        // Make the breakout.
-        Voxels breakout(float theta) {
-
-            // Get the initial point.
-            Vec3 p0 = fromcyl(pm.Mr_chnl, theta, -vertical_offset);
-            Frame F0 = Frame.cyl_axial(p0).flipyz();
-            // x = +radial, y = -circum, z = -axial
-
-            // Get the swinging frames.
-            List<Frame> F = new(M);
-            for (int i=0; i<M; ++i) {
-                float by = lerp(0f, PI_2, i, M);
-                F.Add(F0.swing(swing_radius * uX3, uY3, by));
-            }
-            // F1: x = +axial, y = -circum, z = +radial
-
-            // CS goes from original -> circular.
-            float r = 3f;
-            List<Vec2> V1 = Polygon.circle(N, r);
-
-            List<Vec2> V = new(N * M);
-            for (int i=0; i<M; ++i) {
-                float t = i / (float)(M - 1);
-                t = t*t*(3f - 2f*t); // ease in-out.
-                V.AddRange(Polygon.lerp(V0, V1, t));
-            }
-
-            // Also add a teardrop roof to the entire channel to ensure nice
-            // printing.
-            List<Frame> Ftear = new(M);
-            for (int i=0; i<M; ++i) {
-                float by = lerp(0f, PI_2, i, M);
-                Vec3 p = F0.pos;
-                Vec3 a = F0 * (swing_radius * uX3);
-                Vec3 q = a + rotate(p - a, F0.to_global_dir(uY3), by);
-                Ftear.Add(Frame.cyl_radial(q));
-            }
-            // x = +circum, y = +axial
-            List<Vec2> Vtear1 = new(N){ SQRT2*r * uY2 };
-            for (int i=0; i<N - 1; ++i) {
-                float ang = (i < N/2)
-                          ? lerp(0.75f*PI,   PI, i, N/2)
-                          : lerp(      0f, PI_4, i - N/2, N - 1 - N/2);
-                Vtear1.Add(frompol(r, ang));
-            }
-            List<Vec2> Vtear = new(N*M);
-            for (int i=0; i<M; ++i) {
-                float phi = argphi(F[i].Z);
-                float stretch = phi/PI_2;
-                Vtear.AddRange(Vtear1.Select((v) => v*(uX2 + stretch*uY2)));
-            }
-
-            // Extend at both ends.
-            F.Insert(0, F[0].transz(-FR_chnl - 2f*VOXEL_SIZE));
-            V.InsertRange(0, V[..N]);
-            float Dz1 = pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
-                      - pm.Mr_chnl
-                      + EXTRA;
-            F.Add(F[^1].transz(Dz1));
-            V.AddRange(V[^N..]);
-            Ftear.Add(Ftear[^1].transz(Dz1));
-            Vtear.AddRange(Vtear[^N..]);
-
-
-            // Create.
-            Voxels v = new(Polygon.mesh_swept(new FramesSequence(F), V));
-            if (!filletless)
-                Fillet.convex(v, FR_chnl, true);
-            v.BoolAdd(new(Polygon.mesh_swept(new FramesSequence(Ftear), Vtear)));
-            if (!filletless)
-                Fillet.concave(v, FR_chnl, true);
-
-            // Justin caseme.
-            v.IntersectImplicit(new Space(new(-4f*uZ3), -INF, 0f));
-
-            return v;
-        }
 
         for (int i=0; i<no_chnl; ++i) {
             float Dtheta = i*TWOPI/no_chnl;
             float theta = theta_chnl(0f) + Dtheta;
-            Voxels v = breakout(theta);
+            Vec3 p = fromcyl(pm.Mr_chnl, theta, -z_spacing);
+            Voxels v = breakout.at(Frame.cyl_axial(p));
             keys.Add(Geez.voxels(v));
             vox.BoolAdd(v);
         }
@@ -1594,14 +1508,14 @@ public class Chamber : TPIAP.Pea {
         Voxels? gas = voxels_gas(key_gas);
         part.step("created gas cavity.");
 
+        Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
+        Voxels? chnl = voxels_chnl(key_chnl);
+        part.step("created channels.");
+
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
         Voxels? neg_mani = voxels_neg_mani(key_mani, out Frame inlet);
         Voxels? pos_mani = voxels_pos_mani(inlet);
         part.step("created manifold.");
-
-        Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
-        Voxels? chnl = voxels_chnl(key_chnl);
-        part.step("created channels.");
 
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
         voxels_tc(key_tc, out Voxels? neg_tc, out Voxels? pos_tc);
