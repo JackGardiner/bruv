@@ -900,9 +900,10 @@ public class Injector : TPIAP.Pea {
     public required float th_LOxPTh { get; init; }
     public required float th_IPAPTh { get; init; }
     public required float th_CCPTh { get; init; }
-    public Tapping tap_igniter => new(portsize_igniter, printable_dmls);
+    public Tapping tap_igniter => new(portsize_igniter, printable_dmls)
+            { extra_length = 2f };
     public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable_dmls)
-            { extra_length = 2f, threaded_length = 15f };
+            { extra_length = 2f };
     public Tapping tap_LOxPT => new(portsize_LOxPT, printable_dmls)
             { extra_length = 2f };
     public Tapping tap_IPAPT => new(portsize_IPAPT, printable_dmls)
@@ -933,10 +934,10 @@ public class Injector : TPIAP.Pea {
             new(-EXTRA - extend_base_by, 0f),
         ];
 
-        Polygon.fillet(points, 5, 3f);
-        Polygon.fillet(points, 4, 2f);
-        Polygon.fillet(points, 3, 3f);
-        Polygon.fillet(points, 2, 2f);
+        Polygon.fillet(points, 4, 3f);
+        Polygon.fillet(points, 3, 2f);
+        Polygon.fillet(points, 2, 3f);
+        Polygon.fillet(points, 1, 2f);
 
         plate = new(Polygon.mesh_revolved(
             new(),
@@ -1887,8 +1888,12 @@ public class Injector : TPIAP.Pea {
         part.substep("subtracted port voids (2/2).");
         part.sub(ref neg_elements, key_elements);
         part.substep("subtracted injector elements.");
-        part.sub(ref neg_ipa_inlet_breakout, key_ipa_inlet_breakout);
-        part.substep("subtracted IPA inlet breakout.");
+        if (neg_ipa_inlet_breakout != null) {
+            part.sub(ref neg_ipa_inlet_breakout, key_ipa_inlet_breakout);
+            part.substep("subtracted IPA inlet breakout.");
+        } else {
+            part.substep("skipping IPA inlet breakout (machined away).");
+        }
 
         part.step("removed voids.");
 

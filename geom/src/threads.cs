@@ -216,7 +216,9 @@ public class Tapping : Threads {
     public float bore_radius => 0.5f*bore_diameter;
 
     public Tapping(string size, bool printable=false)
-            : base(size) {
+            : base(size.Split(" ", 2)[0]) {
+        // note that `size` is allowed to specify a threaded length after the
+        // size, separated by a space.
         this.printable = printable;
 
         incomplete_lower_length = 2f*pitch;
@@ -229,6 +231,13 @@ public class Tapping : Threads {
         }
         // 45deg tip ig.
         tip_length_ratio = 1f;
+
+        string[] parts = size.Split(" ");
+        if (numel(parts) > 1) {
+            threaded_length = float.Parse(parts[1],
+                    System.Globalization.CultureInfo.InvariantCulture);
+        }
+        assert(numel(parts) <= 2, "unrecognised sizing string");
     }
 
 
