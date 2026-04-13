@@ -99,6 +99,8 @@ public class InjectorSample : TPIAP.Pea {
         dividing.BoolIntersect(interior
                 .girthed(Rmid)
                 .extended(EXTRA, Extend.UPDOWN));
+        dividing.BoolIntersect(top_cone.positive
+                .lengthed(0f, interior.Lz + EXTRA));
 
         Voxels sides = interior.shelled(th_outer)
                 .extended(extend_base_by, Extend.DOWN);
