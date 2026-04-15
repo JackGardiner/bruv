@@ -128,7 +128,7 @@ public class InjectorElement {
 
     // Mixing residence time.
     // reasonable bounds: [0.1ms, 1.5ms]
-    public float tau_i { get; init; } = 0.15e-3f;
+    public float tau_i { get; init; } = 0.12e-3f;
 
 
     private const float EXTRA = 6f;
@@ -224,14 +224,12 @@ public class InjectorElement {
 
         /* Inner nozzle vertical offset: */
 
-        float K_m = mdot_1/mdot_2;
         float cspf_1 = 1f - sqed(rmbar_1); // coefficient of stage passage
         float cspf_2 = 1f - sqed(rmbar_2); //   fullness.
-        float mixing_length = SQRT2 * tau_i
-                            * (
-                                K_m/(K_m + 1f)*Cd_2/cspf_2*sqrt(DP_2/rho_2)
-                               + 1f/(K_m + 1f)*Cd_1/cspf_1*sqrt(DP_1/rho_1)
-                            );
+        float mixing_length = SQRT2 * tau_i * (
+                mdot_1/(mdot_1 + mdot_2)*Cd_1/cspf_1*sqrt(DP_1/rho_1)
+              + mdot_2/(mdot_1 + mdot_2)*Cd_2/cspf_2*sqrt(DP_2/rho_2)
+            );
 
         // float z0_inj1 = L_nz2 - mixing_length;
         assert(mixing_length <= L_nz2);
