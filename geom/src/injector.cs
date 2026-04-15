@@ -96,8 +96,12 @@ public class InjectorElement {
     // public float K_mdot_2 { get; init; } = 2.542903f;
 
     /* round 3 */
-    public float K_mdot_1 { get; init; } = 1.302f;
-    public float K_mdot_2 { get; init; } = 3.277f;
+    // public float K_mdot_1 { get; init; } = 1.302f;
+    // public float K_mdot_2 { get; init; } = 3.277f;
+
+    /* round 4 skull emoji */
+    public float K_mdot_1 { get; init; } = 1.320f;
+    public float K_mdot_2 { get; init; } = 1.460f;
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
