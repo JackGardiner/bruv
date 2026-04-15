@@ -89,9 +89,15 @@ public class InjectorElement {
     public float max_z = NAN;
 
     // JBS testing experimental correction factors.
-    public float Kmdot_1 { get; init; } = 1.32f;
-    public float Kmdot_2 { get; init; } = 1.46f;
-    public float Kmdot_extra { get; init; } = 1f; // additional factor.
+    public float K_mdot_extra { get; init; } = 1f; // for sweepin.
+
+    /* round 2 */
+    // public float K_mdot_1 { get; init; } = 1.294592f;
+    // public float K_mdot_2 { get; init; } = 2.542903f;
+
+    /* round 3 */
+    public float K_mdot_1 { get; init; } = 1.302f;
+    public float K_mdot_2 { get; init; } = 3.277f;
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
@@ -131,8 +137,8 @@ public class InjectorElement {
 
         // Make "pretend" mass flow rates to design the element around which in
         // reality (from testing) give the desired mfr.
-        float mdot_1_x = mdot_1 / Kmdot_1 / Kmdot_extra;
-        float mdot_2_x = mdot_2 / Kmdot_2 / Kmdot_extra;
+        float mdot_1_x = mdot_1 / K_mdot_1 / K_mdot_extra;
+        float mdot_2_x = mdot_2 / K_mdot_2 / K_mdot_extra;
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
@@ -320,9 +326,9 @@ public class InjectorElement {
             $"=======================",
             $"",
             $"Empirical corrections:",
-            $"  - LOX correction factor: {Kmdot_1}",
-            $"  - IPA correction factor: {Kmdot_2}",
-            $"  - Additional correction factor: {Kmdot_extra}",
+            $"  - LOX correction factor: {K_mdot_1}",
+            $"  - IPA correction factor: {K_mdot_2}",
+            $"  - Additional correction factor: {K_mdot_extra}",
             $"",
             $"Stage 1 (LOx):",
             $"  -1 Pressure difference: {DP_1*1e-5} bar",
