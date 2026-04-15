@@ -88,14 +88,14 @@ public class InjectorElement {
     public float max_r = NAN;
     public float max_z = NAN;
 
-    // JBS testing experimental correction factors; 'x' for eXperiment-corrected
-    public float K_mdot_1 { get; init; } = 1.294592f;
-    public float K_mdot_2 { get; init; } = 2.542903f;
-    public float K_mdot_extra { get; init; } = 1f; // additional factor.
+    // JBS testing experimental correction factors.
+    public float Kmdot_1 { get; init; } = 1.32f;
+    public float Kmdot_2 { get; init; } = 1.46f;
+    public float Kmdot_extra { get; init; } = 1f; // additional factor.
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
-    public int no_il2 { get; init; } = 4;
+    public int no_il2 { get; init; } = 3;
 
     // Coefficients of nozzle opening: IR_ch/IR_nz
     // reasonable bounds: idx?
@@ -131,8 +131,8 @@ public class InjectorElement {
 
         // Make "pretend" mass flow rates to design the element around which in
         // reality (from testing) give the desired mfr.
-        float mdot_1_x = mdot_1 / K_mdot_1 / K_mdot_extra;
-        float mdot_2_x = mdot_2 / K_mdot_2 / K_mdot_extra;
+        float mdot_1_x = mdot_1 / Kmdot_1 / Kmdot_extra;
+        float mdot_2_x = mdot_2 / Kmdot_2 / Kmdot_extra;
 
         // Within this ALL LENGTHS ARE IN METRES. converted to mm at end.
 
@@ -171,17 +171,17 @@ public class InjectorElement {
         float Ir_nz2 = min_fluid_inner_radius_2;
 
         // Iteratively solve nozzle dimensions.
-        float A_2 = NAN;
-        float Cd_2 = NAN;
-        float rmbar_2 = NAN;
+        float A_2;
+        float Cd_2;
+        float rmbar_2;
 
         const int MAX_ITERS = 100;
         const float TOLERANCE = 0.001e-3f;
         float diff = +INF;
-        for (int iter=0; iter<MAX_ITERS; ++iter) {
+        for (int iter=0; true; ++iter) {
 
             // 1. Calculate current Cd based on current Ir.
-            Cd_2 = (mdot_1_x + mdot_2_x)/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
+            Cd_2 = mdot_2_x/PI/sqed(Ir_nz2)/sqrt(2f*rho_2*DP_2);
 
             // 2. Find A based on Cd (from Fig 34).
             A_2 = GraphLookup.get_A_from_Cd(Cd_2, Rbar_ch2);
@@ -320,39 +320,39 @@ public class InjectorElement {
             $"=======================",
             $"",
             $"Empirical corrections:",
-            $"  - LOX correction factor: {K_mdot_1}",
-            $"  - IPA correction factor: {K_mdot_2}",
-            $"  - Additional correction factor: {K_mdot_extra}",
+            $"  - LOX correction factor: {Kmdot_1}",
+            $"  - IPA correction factor: {Kmdot_2}",
+            $"  - Additional correction factor: {Kmdot_extra}",
             $"",
             $"Stage 1 (LOx):",
-            $"  - Pressure difference: {DP_1*1e-5} bar",
-            $"  - Mass flow rate: {mdot_1} kg/s",
-            $"  - Nozzle inner radius: {Ir_nz1*1e3f} mm",
-            $"  - Nozzle length: {L_nz1*1e3f} mm",
-            $"  - Chamber inner radius: {Ir_ch1*1e3f} mm",
-            $"  - Chamber length: {L_ch1*1e3f} mm",
-            $"  - Inlet count: {no_il1}",
-            $"  - Inlet radius: {Ir_il1*1e3f} mm",
-            $"  - Inlet Reynolds number: {Re_il1}",
-            $"  - A_1: {A_1}",
-            $"  - Cd_1: {Cd_1}",
-            $"  - rmbar_1: {rmbar_1}",
-            $"  - cspf_1: {cspf_1}",
+            $"  -1 Pressure difference: {DP_1*1e-5} bar",
+            $"  -1 Mass flow rate: {mdot_1} kg/s",
+            $"  -1 Nozzle inner radius: {Ir_nz1*1e3f} mm",
+            $"  -1 Nozzle length: {L_nz1*1e3f} mm",
+            $"  -1 Chamber inner radius: {Ir_ch1*1e3f} mm",
+            $"  -1 Chamber length: {L_ch1*1e3f} mm",
+            $"  -1 Inlet count: {no_il1}",
+            $"  -1 Inlet radius: {Ir_il1*1e3f} mm",
+            $"  -1 Inlet Reynolds number: {Re_il1}",
+            $"  -1 A: {A_1}",
+            $"  -1 Cd: {Cd_1}",
+            $"  -1 rmbar: {rmbar_1}",
+            $"  -1 cspf: {cspf_1}",
             $"",
             $"Stage 2 (IPA):",
-            $"  - Pressure difference: {DP_2*1e-5} bar",
-            $"  - Mass flow rate: {mdot_2} kg/s",
-            $"  - Nozzle inner radius: {Ir_nz2*1e3f} mm",
-            $"  - Nozzle length: {L_nz2*1e3f} mm",
-            $"  - Chamber inner radius: {Ir_ch2*1e3f} mm",
-            $"  - Chamber length: {L_ch2*1e3f} mm",
-            $"  - Inlet count: {no_il2}",
-            $"  - Inlet radius: {Ir_il2*1e3f} mm",
-            $"  - Inlet Reynolds number: {Re_il2}",
-            $"  - A_2: {A_2}",
-            $"  - Cd_2: {Cd_2}",
-            $"  - rmbar_2: {rmbar_2}",
-            $"  - cspf_2: {cspf_2}",
+            $"  -2 Pressure difference: {DP_2*1e-5} bar",
+            $"  -2 Mass flow rate: {mdot_2} kg/s",
+            $"  -2 Nozzle inner radius: {Ir_nz2*1e3f} mm",
+            $"  -2 Nozzle length: {L_nz2*1e3f} mm",
+            $"  -2 Chamber inner radius: {Ir_ch2*1e3f} mm",
+            $"  -2 Chamber length: {L_ch2*1e3f} mm",
+            $"  -2 Inlet count: {no_il2}",
+            $"  -2 Inlet radius: {Ir_il2*1e3f} mm",
+            $"  -2 Inlet Reynolds number: {Re_il2}",
+            $"  -2 A: {A_2}",
+            $"  -2 Cd: {Cd_2}",
+            $"  -2 rmbar: {rmbar_2}",
+            $"  -2 cspf: {cspf_2}",
             $"",
             $"Interactions:",
             $"  - Mixing length: {mixing_length*1e3f} mm",

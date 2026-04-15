@@ -512,6 +512,9 @@ public class PartMaker : IDisposable {
 
     public Voxels voxels { get; set; }
     public Geez.Cycle key { get; set; }
+
+    public float total_volume_to_calc_volumetric_fill { get; set; }
+
     public Geez.Screenshotta? screenshotta { get; set; } // screen shot a
     protected System.Diagnostics.Stopwatch stopwatch; // cheeky timer.
 
@@ -522,6 +525,7 @@ public class PartMaker : IDisposable {
     public PartMaker() {
         voxels = new();
         key = new();
+        total_volume_to_calc_volumetric_fill = NAN;
         screenshotta = null;
         stopwatch = new();
         stopwatch.Start();
@@ -545,6 +549,10 @@ public class PartMaker : IDisposable {
         Vec3 size = bounds.vecSize();
         print($"- bounds: {size.X:G4}mm x {size.Y:G4}mm x {size.Z:G4}mm");
         print($"- volume: {vol_mm3*1e-3:G4} mL");
+        if (nonnan(total_volume_to_calc_volumetric_fill)) {
+            float fill = vol_mm3 / total_volume_to_calc_volumetric_fill;
+            print($"- volumetric fill: {fill*100f:F2}%");
+        }
         print();
     }
 
