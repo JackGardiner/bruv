@@ -6,8 +6,8 @@
         "mdot_LOx": 1.2,
         "mdot_IPA": 0.8,
 
-        "Pr_LOx": 1.25,
-        "Pr_IPA": 1.25,
+        "Pr_LOx": 1.2,
+        "Pr_IPA": 1.2,
 
         "rho_LOx": 1141.0,
         "rho_IPA": 786.0,
