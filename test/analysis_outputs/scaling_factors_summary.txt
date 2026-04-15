@@ -1,0 +1,69 @@
+================================================================================
+BAZAROV SCALING FACTORS SUMMARY
+================================================================================
+
+>>> Stage 2 (IPA)
+--------------------------------------------------------------------------------
+  Copper (n=8):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  2.525993  +/-  0.192991
+      Range: [2.114816, 2.794709]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  2.444767  +/-  0.276349
+      Range: [2.083292, 2.964943]
+
+  Resin baseline (n=8):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  2.045771  +/-  0.143447
+      Range: [1.870649, 2.323290]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  2.061152  +/-  0.306167
+      Range: [1.690188, 2.710393]
+
+  Resin new (n=9):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  1.499835  +/-  0.311713
+      Range: [1.038699, 1.943051]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  1.580279  +/-  0.278081
+      Range: [1.112103, 1.887362]
+
+
+>>> Stage 1 (LOX)
+--------------------------------------------------------------------------------
+  Copper (n=8):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  1.243625  +/-  0.061818
+      Range: [1.156471, 1.319612]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  0.706419  +/-  0.168758
+      Range: [0.522669, 1.069662]
+
+  Resin baseline (n=8):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  1.000223  +/-  0.074328
+      Range: [0.933463, 1.133028]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  0.597751  +/-  0.200039
+      Range: [0.410358, 1.063648]
+
+  Resin new (n=9):
+
+    K_mdot (scaling factor for mass flow):
+      Mean:  0.799008  +/-  0.155663
+      Range: [0.582802, 1.068620]
+
+    K_Cd (scaling factor for discharge coefficient):
+      Mean:  0.422873  +/-  0.080177
+      Range: [0.308244, 0.557256]
+

@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+venv
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS stuff
+.DS_Store
+Thumbs.dbpp
+
+# vscode
+.vscode/
+
+# logeronis
+/logs
+
+# videos
+/videos
+
+# stu special
+_*

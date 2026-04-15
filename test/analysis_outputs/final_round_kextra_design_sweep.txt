@@ -1,0 +1,16 @@
+====================================================================================================
+FINAL ROUND K_EXTRA DESIGN SWEEP (Stage 2 IPA and Stage 1 LOX paired)
+====================================================================================================
+Formula:
+  mdot_design = target_mdot / (K_base * K_mdot_extra)
+
+Requested base source: RS_NEW
+K_mdot_extra sweep: [0.9, 0.95, 1.0, 1.05, 1.1]
+Target flows: Stage2 IPA=0.710146 kg/s, Stage1 LOX=1.252352 kg/s
+
+ k_mdot_extra k_base_source  stage2_target_mdot_kgps  stage2_k_base  stage2_k_effective  stage2_mdot_design_kgps  stage1_target_mdot_kgps  stage1_k_base  stage1_k_effective  stage1_mdot_design_kgps
+         0.90        RS_NEW                 0.710146       1.499835            1.349852                 0.526092                 1.252352       0.799008            0.719107                 1.741537
+         0.95        RS_NEW                 0.710146       1.499835            1.424844                 0.498403                 1.252352       0.799008            0.759058                 1.649877
+         1.00        RS_NEW                 0.710146       1.499835            1.499835                 0.473483                 1.252352       0.799008            0.799008                 1.567383
+         1.05        RS_NEW                 0.710146       1.499835            1.574827                 0.450936                 1.252352       0.799008            0.838959                 1.492746
+         1.10        RS_NEW                 0.710146       1.499835            1.649819                 0.430439                 1.252352       0.799008            0.878909                 1.424894

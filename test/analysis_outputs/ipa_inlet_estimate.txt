@@ -1,0 +1,53 @@
+IPA Inlet Radius Estimator
+============================================================
+
+Target MFR per element : 41.1570 g/s  (0.041157 kg/s)
+Target source          : auto (from resin_copper_guidance.csv: copper target / transfer ratio / 12 elements)
+Number of elements     : 12
+Total resin target     : 493.88 g/s
+
+--- Empirical Fit ---
+Population             : All RS  (n=17)
+Fit degree             : 2
+R²                     : 0.90045
+  mdot (g/s) = (103.302) × r^2 + (150.447) × r^1 + (-45.71)
+
+--- Data range ---
+Inlet radius range     : 0.5666 – 1.0053 mm
+mdot range (fit data)  : 61.47 – 213.79 g/s
+
+--- Intersection ---
+Basis (4 inlets)
+  Estimated inlet radius : 0.4428 mm
+  Within data range      : NO — extrapolation
+  ** Extrapolation: treat estimate with caution **
+
+--- Inlet Count Conversion (4 → 3 inlets, constant total area) ---
+  Formula                : r_new = r_orig × sqrt(n_orig / n_new)
+                         = 0.4428 × sqrt(4/3)
+                         = 0.4428 × 1.154701
+  New inlet radius       : 0.5113 mm
+  Total inlet area check : orig = 2.46364 mm²,  new = 2.46364 mm²
+  Within data range      : NO — extrapolation
+  ** Extrapolation: treat estimate with caution **
+
+--- All RS sample points (IPA) ---
+Sample     Inlet r (mm)     mdot_exp (g/s)     Family
+----------------------------------------------------------
+RS0        1.0053           213.788            1
+RS1        0.8776           151.227            1
+RS2        0.7849           142.897            1
+RS3        0.7430           108.883            1
+RS4        0.6646           123.909            1
+RS5        0.7853           143.681            1
+RS6        0.8091           141.593            1
+RS7        0.8317           157.377            1
+RS8        0.7239           114.988            2
+RS9        0.6795           104.104            2
+RS10       0.6428           83.573             2
+RS11       0.6119           61.469             2
+RS12       0.5842           69.291             2
+RS14       0.6586           95.283             3
+RS15       0.6236           103.108            3
+RS16       0.5928           96.632             3
+RS17       0.5666           70.379             3

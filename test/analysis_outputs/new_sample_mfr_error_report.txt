@@ -1,0 +1,34 @@
+==========================================================================================
+NEW SAMPLE MFR ERROR REPORT
+==========================================================================================
+New sample index threshold: RS8+
+New samples found: 9
+Baseline resin samples used for scaling: 8 (RS0-RS7)
+
+Stage 2 (IPA)
+------------------------------------------------------------------------------------------
+Baseline K_mdot from old RS samples: 2.045771 +/- 0.143447
+
+RS8: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.114988 kg/s, error=-5.02%
+RS9: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.104104 kg/s, error=-14.01%
+RS10: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.083573 kg/s, error=-30.97%
+RS11: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.061469 kg/s, error=-49.23%
+RS12: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.069291 kg/s, error=-42.77%
+RS14: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.095283 kg/s, error=-21.30%
+RS15: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.103108 kg/s, error=-14.83%
+RS16: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.096632 kg/s, error=-20.18%
+RS17: theory=0.059179 kg/s, expected(scaled)=0.121066 kg/s, actual=0.070379 kg/s, error=-41.87%
+
+Stage 1 (LOX)
+------------------------------------------------------------------------------------------
+Baseline K_mdot from old RS samples: 1.000223 +/- 0.074328
+
+RS8: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.111524 kg/s, error=6.84%
+RS9: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.097248 kg/s, error=-6.84%
+RS10: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.076252 kg/s, error=-26.95%
+RS11: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.071215 kg/s, error=-31.78%
+RS12: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.067199 kg/s, error=-35.62%
+RS14: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.095269 kg/s, error=-8.73%
+RS15: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.087386 kg/s, error=-16.29%
+RS16: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.083563 kg/s, error=-19.95%
+RS17: theory=0.104363 kg/s, expected(scaled)=0.104386 kg/s, actual=0.060823 kg/s, error=-41.73%

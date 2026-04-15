@@ -1,0 +1,39 @@
+Injector Element Report
+=======================
+
+Stage 1 (LOx):
+  - Pressure difference: 8.75 bar
+  - Mass flow rate: 0.17142858 kg/s
+  - Nozzle inner radius: 2.0421371 mm
+  - Nozzle length: 4.0842743 mm
+  - Chamber inner radius: 2.8589919 mm
+  - Chamber length: 11.435967 mm
+  - Inlet count: 5
+  - Inlet radius: 0.8941674 mm
+  - Inlet Reynolds number: 267565.03
+  - A_1: 1.4604616
+  - Cd_1: 0.29282063
+  - rmbar_1: 0.48715135
+  - cspf_1: 0.7626836
+
+Stage 2 (IPA):
+  - Pressure difference: 8.75 bar
+  - Mass flow rate: 0.114285715 kg/s
+  - Nozzle inner radius: 4.4544835 mm
+  - Nozzle length: 4.4544835 mm
+  - Chamber inner radius: 5.34538 mm
+  - Chamber length: 534.53796 mm
+  - Inlet count: 5
+  - Inlet radius: 1.0053452 mm
+  - Inlet Reynolds number: 11316.335
+  - A_2: 4.7116756
+  - Cd_2: 0.12358254
+  - rmbar_2: 0.70548385
+  - cspf_2: 0.5022925
+
+Interactions:
+  - Mixing length: 1.9470044 mm
+  - Annulus inner radius: 2.842137 mm
+  - Annulus outer radius: 4.4544835 mm
+  - Annulus radial gap: 1.6123462 mm
+  - Inner injector axial offset: 4.8219266 mm
