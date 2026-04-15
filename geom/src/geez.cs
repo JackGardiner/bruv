@@ -2280,12 +2280,20 @@ public static class Geez {
 
     public static Key points(in Slice<Vec3> ps, float r=2f, Colour? colour=null,
             bool hires=false) {
+        return Geez.points(ps, Slice<float>.filled(r, numel(ps)), colour: colour,
+                hires: hires);
+    }
+    public static Key points(in Slice<Vec3> ps, Slice<float> rs,
+            Colour? colour=null, bool hires=false) {
+        assert(numel(ps) == numel(rs));
         using var __ = Scoped.locked(_geezed);
         if (lockdown_check(out Key lockedkey))
             return lockedkey;
         Mesh ball = hires ? _ball_hires : _ball_lores;
         List<Mesh> meshes = new(numel(ps));
-        foreach (Vec3 p in ps) {
+        for (int i=0; i<numel(ps); ++i) {
+            Vec3 p = ps[i];
+            float r = rs[i];
             assert(isgood(p), $"p={p}");
             Mesh mesh = ball.mshCreateTransformed(r*ONE3, p);
             meshes.Add(mesh);

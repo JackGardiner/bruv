@@ -1200,11 +1200,63 @@ public class Gyroid : FramedShape<Gyroid>, IImplicit {
     public override Gyroid with_centre(in Frame newcentre)
         => new(newcentre, th, period);
 
-    public float fSignedDistance(in Vec3 p) {
+    public float distance_to_gyroid(in Vec3 p) {
         Vec3 q = centre / p;
-        q *= frequency;
-        float v = sin(q.X)*cos(q.Y) + sin(q.Y)*cos(q.Z) + sin(q.Z)*cos(q.X);
-        return abs(v) - 0.5f*th;
+
+        static Vec3 yzx(Vec3 v) => new(v.Y, v.Z, v.X);
+        static Vec3 zxy(Vec3 v) => new(v.Z, v.X, v.Y);
+
+        float w = frequency;
+        Vec3 s = sin(w*q);
+        Vec3 c = cos(w*q);
+
+        // Gyroid function. Surface is correctly at f=0, however this is not a
+        // true sdf elsewhere.
+        float f = dot(s, yzx(c));
+        float sgnf = (f >= 0f) ? 1f : -1f;
+
+        // Gradient.
+        Vec3 G = w * (c*yzx(c) - s*zxy(s));
+        float mag2G = max(1e-6f, mag2(G));
+
+        // Less agressive steps to prevent instability.
+        float lambda = 0.25f;
+
+        // Iteratively find the closest point on the gyroid surface.
+        Vec3 r = q - f/mag2G * G;
+        for (int i=0; i<1000; ++i) {
+            Vec3 old_r = r;
+
+            Vec3 sr = sin(w*r);
+            Vec3 cr = cos(w*r);
+
+            // Project onto the surface.
+            float fr = dot(sr, yzx(cr));
+            Vec3 Gr = w * (cr*yzx(cr) - sr*zxy(sr));
+            float mag2Gr = max(1e-6f, mag2(Gr));
+            r -= lambda * fr/mag2Gr * G;
+
+            sr = sin(w*r);
+            cr = cos(w*r);
+
+            // Step in direction which would make surface normal point towards
+            // our point.
+            Gr = w * (cr*yzx(cr) - sr*zxy(sr));
+            float magGr = max(1e-6f, mag(Gr));
+            Vec3 n = Gr / magGr;
+            r = q + dot(r - q, n)*n;
+
+            // Update things.
+            f = sgnf * mag(r - q);
+            if (abs(mag(old_r - r)) < 1e-3f)
+                break;
+        }
+
+        return f;
+    }
+
+    public float fSignedDistance(in Vec3 p) {
+        return abs(distance_to_gyroid(p)) - 0.5f*th;
     }
 }
 

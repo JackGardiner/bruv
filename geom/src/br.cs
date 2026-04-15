@@ -363,6 +363,12 @@ public static partial class Br {
     public static float sin(float a) => MathF.Sin(a);
     public static float cos(float a) => MathF.Cos(a);
     public static float tan(float a) => MathF.Tan(a);
+    public static Vec2 sin(Vec2 a) => new(sin(a.X), sin(a.Y));
+    public static Vec2 cos(Vec2 a) => new(cos(a.X), cos(a.Y));
+    public static Vec2 tan(Vec2 a) => new(tan(a.X), tan(a.Y));
+    public static Vec3 sin(Vec3 a) => new(sin(a.X), sin(a.Y), sin(a.Z));
+    public static Vec3 cos(Vec3 a) => new(cos(a.X), cos(a.Y), cos(a.Z));
+    public static Vec3 tan(Vec3 a) => new(tan(a.X), tan(a.Y), tan(a.Z));
 
     public static float asin(float a) => MathF.Asin(a);
     public static float acos(float a) => MathF.Acos(a);
