@@ -2,3 +2,5 @@
 
 scipy
 CEA_Wrap
+thermo
+chemical

@@ -2,9 +2,10 @@
 Array/grid creation functions.
 """
 
+import matplotlib.tri
 import numpy as np
 
-__all__ = ["concentrate", "Evenspace", "Surfspace"]
+__all__ = ["concentrate", "Masker", "Evenspace", "Surfspace"]
 
 
 def concentrate(X, c, s):
@@ -39,6 +40,30 @@ def concentrate(X, c, s):
     return X*(hi - lo) + lo
 
 
+class Masker:
+    def __init__(self, f):
+        self.f = f
+
+    def points(self, P):
+        return self.f(*np.moveaxis(P, -1, 0))
+    def coords(self, *C):
+        return self.f(*C)
+    def triang(self, triang):
+        x0 = triang.x[triang.triangles[:, 0]]
+        x1 = triang.x[triang.triangles[:, 1]]
+        x2 = triang.x[triang.triangles[:, 2]]
+        y0 = triang.y[triang.triangles[:, 0]]
+        y1 = triang.y[triang.triangles[:, 1]]
+        y2 = triang.y[triang.triangles[:, 2]]
+        xc = (x0 + x1 + x2) / 3.0
+        yc = (y0 + y1 + y2) / 3.0
+        mask = self.f(xc, yc)
+        mask &= self.f(x0, y0)
+        mask &= self.f(x1, y1)
+        mask &= self.f(x2, y2)
+        triang.set_mask(~mask)
+
+
 class Evenspace:
     def __init__(self, xlo, xhi, ylo=None, yhi=None):
         assert (ylo is None) == (yhi is None)
@@ -69,7 +94,7 @@ class Evenspace:
 
 
 class Surfspace:
-    def __init__(self, f, xlo, xhi, ylo=None, yhi=None, *, N0=None):
+    def __init__(self, f, xlo, xhi, ylo=None, yhi=None, *, N0=None, masker=None):
         assert (ylo is None) == (yhi is None)
         self.ndim = 1 if yhi is None else 2
         self.f = f
@@ -77,12 +102,14 @@ class Surfspace:
         self.xhi = float(xhi)
         self.ylo = float(ylo) if ylo is not None else None
         self.yhi = float(yhi) if yhi is not None else None
+        self.masker = masker
 
         if N0 is None:
             N0 = 100 if self.ndim == 2 else 2000
 
         # Compute some thing for 1D points.
         if self.ndim == 1:
+            assert self.masker is None
             X0 = np.linspace(self.xlo, self.xhi, N0)
             Y0 = f(X0)
             xspan = self.xhi - self.xlo
@@ -103,6 +130,12 @@ class Surfspace:
         Xf = np.linspace(self.xlo, self.xhi, N0)
         Yf = np.linspace(self.ylo, self.yhi, N0)
         Xf, Yf = np.meshgrid(Xf, Yf)
+        Xf = Xf.ravel()
+        Yf = Yf.ravel()
+        if masker is not None:
+            mask = masker.coords(Xf, Yf)
+            Xf = Xf[mask]
+            Yf = Yf[mask]
         Zf = f(Xf, Yf)
 
         # Find z range.
@@ -111,36 +144,43 @@ class Surfspace:
 
         # Find surface area, and therefore minimum spacing.
         def surface_area(X, Y, Z):
-            # Get the four corners of each grid cell.
-            A = np.stack([X[:-1, :-1], Y[:-1, :-1], Z[:-1, :-1]], axis=-1)
-            B = np.stack([X[1:, :-1], Y[1:, :-1], Z[1:, :-1]], axis=-1)
-            C = np.stack([X[:-1, 1:], Y[:-1, 1:], Z[:-1, 1:]], axis=-1)
-            D = np.stack([X[1:, 1:], Y[1:, 1:], Z[1:, 1:]], axis=-1)
+            triang = matplotlib.tri.Triangulation(
+                X * (self.xhi - self.xlo) + self.xlo,
+                Y * (self.yhi - self.ylo) + self.ylo,
+            )
+            if masker is not None:
+                masker.triang(triang)
 
-            # Triangle 1: A-B-C
-            AB = B - A
-            AC = C - A
-            cross1 = np.cross(AB, AC)
-            area1 = 0.5 * np.linalg.norm(cross1, axis=-1)
-            # Weight area by gradient, s.t. steeper areas are weighted even
-            # beyond accounting for their tilt.
-            nx1, ny1, nz1 = cross1[..., 0], cross1[..., 1], cross1[..., 2]
-            grad1 = np.sqrt(nx1**2 + ny1**2) / (np.abs(nz1) + 1e-8)
-            area1 *= (1.0 + np.sqrt(grad1))
+            tris = triang.triangles
+            if triang.mask is not None:
+                tris = tris[~triang.mask]
 
-            # Triangle 2: B-D-C
-            BD = D - B
-            BC = C - B
-            cross2 = np.cross(BD, BC)
-            area2 = 0.5 * np.linalg.norm(cross2, axis=-1)
-            nx2, ny2, nz2 = cross2[..., 0], cross2[..., 1], cross2[..., 2]
-            grad2 = np.sqrt(nx2**2 + ny2**2) / (np.abs(nz2) + 1e-8)
-            area2 *= (1.0 + np.sqrt(grad2))
+            # Vertex positions in 3D.
+            P0 = np.stack([X[tris[:, 0]], Y[tris[:, 0]], Z[tris[:, 0]]], axis=-1)
+            P1 = np.stack([X[tris[:, 1]], Y[tris[:, 1]], Z[tris[:, 1]]], axis=-1)
+            P2 = np.stack([X[tris[:, 2]], Y[tris[:, 2]], Z[tris[:, 2]]], axis=-1)
 
-            # Total area is sum of all triangle areas.
-            return np.sum(area1 + area2)
+            # Triangle edges.
+            E1 = P1 - P0
+            E2 = P2 - P0
 
-        # Min distance kinda arbitrarily grabbed.
+            # Cross product (triangle normal * 2 area).
+            cross = np.cross(E1, E2)
+
+            # True triangle area in 3D.
+            area = 0.5 * np.linalg.norm(cross, axis=-1)
+
+            # Extract normal components.
+            nx, ny, nz = cross[:, 0], cross[:, 1], cross[:, 2]
+
+            # Weight from gradient.
+            grad = np.sqrt(nx**2 + ny**2) / (np.abs(nz) + 1e-8)
+
+            # Apply weighting.
+            area *= 1.0 + np.sqrt(grad)
+
+            return np.sum(area)
+
         self._surface_area = surface_area(
             (Xf - self.xlo) / (self.xhi - self.xlo),
             (Yf - self.ylo) / (self.yhi - self.ylo),
@@ -190,6 +230,16 @@ class Surfspace:
         w = (z - self.zlo) / (self.zhi - self.zlo)
         points[:, 2] = w
 
+        def mask(P):
+            assert len(P.shape) == 2 and P.shape[1] == 3
+            if self.masker is None:
+                return P
+            X = P[:, 0]*(self.xhi - self.xlo) + self.xlo
+            Y = P[:, 1]*(self.yhi - self.ylo) + self.ylo
+            return P[self.masker.coords(X, Y)]
+
+        points = mask(points)
+
         while points.shape[0] < N:
             s = f"{points.shape[0]:<{len(str(N))}}/{N}"
             print(s, end="\r")
@@ -201,6 +251,7 @@ class Surfspace:
             z = self.f(x, y)
             w = (z - self.zlo) / (self.zhi - self.zlo)
             batch = np.vstack([u, v, w]).T
+            batch = mask(batch)
             if points.shape[0] > 0:
                 # Ensure its not close to existing points.
                 diff = points[np.newaxis, :, :] - batch[:, np.newaxis, :]
@@ -210,8 +261,7 @@ class Surfspace:
                 dx, dy, dz = diff[:, :, 0], diff[:, :, 1], diff[:, :, 2]
                 grad = np.sqrt(dx**2 + dy**2) / (np.abs(dz) + 1e-8)
                 dist_sq *= 1.0 + 1.0/(np.sqrt(grad) + 1e-8)
-                mask = np.min(dist_sq, axis=-1) >= min_dist**2
-                batch = batch[mask]
+                batch = batch[np.min(dist_sq, axis=-1) >= min_dist**2]
 
             if batch.shape[0] > 0:
                 points = np.vstack([points, batch[0, :]])
