@@ -147,6 +147,8 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
 
 find_cea_T_cc = cea_approximation("T_cc", "c_t", blitz=0.0,
         pidxs=[1, 3, 5], qidxs=[0, 2, 3, 4, 5])
+find_cea_rho_cc = cea_approximation("rho_cc", "rho", blitz=2.0,
+        pidxs=[1, 4, 5, 8], qidxs=[0, 1, 2, 4, 8, 9])
 find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
         pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
 find_cea_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
@@ -210,6 +212,7 @@ find_ipa_k = ipa_approximation("k", "k", blitz=0.0,
 
 def _run():
     find_cea_T_cc(what="approximate")
+    find_cea_rho_cc(what="approximate")
     find_cea_gamma_tht(what="approximate")
     find_cea_Mw_tht(what="approximate")
     find_cea_Isp(what="approximate")

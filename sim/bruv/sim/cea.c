@@ -26,6 +26,35 @@ f64 cea_T0_cc(f64 P0_cc, f64 ofr) {
     return Num / Den;
 }
 
+f64 cea_rho0_cc(f64 P0_cc, f64 ofr) {
+    /* max error of: */
+    /*    abs 2.13% */
+    /*    rel 4.04% */
+    /* requires: */
+    /*    x in [1.0, 5.0] */
+    /*    y in [1.0, 3.0] */
+    f64 x1 = P0_cc*1e-6;
+    f64 y1 = ofr;
+    assert(1.0 <= x1 && x1 <= 5.0, "approximation input oob: x=%g", x1);
+    assert(1.0 <= y1 && y1 <= 3.0, "approximation input oob: y=%g", y1);
+    f64 x1y1 = x1*y1;
+    f64 y2 = y1*y1;
+    f64 x1y2 = x1y1*y1;
+    f64 y3 = y2*y1;
+    f64 n1 = -0.8180216500865743;
+    f64 n5 = -0.1447943641210669;
+    f64 n8 = -0.3551090045227703;
+    f64 d0 = +1.5981364484469536;
+    f64 d1 = -3.4251377283405136;
+    f64 d2 = -2.797547670773615;
+    f64 d4 = +4.498504910795119;
+    f64 d8 = -1.755893183726429;
+    f64 d9 = -0.19199325958537036;
+    f64 Num = n1*x1 + x1y1 + n5*y2 + n8*x1y2;
+    f64 Den = d0 + d1*x1 + d2*y1 + d4*x1y1 + d8*x1y2 + d9*y3;
+    return Num / Den;
+}
+
 f64 cea_gamma_tht(f64 P0_cc, f64 ofr) {
     /* max error of: */
     /*    abs 0.106% */
