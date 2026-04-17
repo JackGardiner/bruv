@@ -652,7 +652,7 @@ class RationalPolynomial:
                 s += f"    f64 d{i} = {ftoa(coeff)};\n"
             cs = [f"d{i}" for i in q.idxs]
             xs = [xnames[i] for i in q.idxs]
-            s += f"    f64 Num = {"-"*(numer < 0)}n0;\n"
+            s += f"    f64 Num = n0;\n"
             s += f"    f64 Den = {poly(ones, cs, xs)};\n"
             s += f"    return Num / Den;"
             return s
