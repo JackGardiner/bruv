@@ -691,7 +691,7 @@ public class Chamber : TPIAP.Pea {
         }
         V.Add(new(zlo, 0f));
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS);
+            float z = lerp(zhi, zlo, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, max_off, widened)));
         }
         V.Add(new(zhi, 0f));
@@ -708,10 +708,10 @@ public class Chamber : TPIAP.Pea {
             zhi += EXTRA;
         }
         for (int i=0; i<DIVISIONS; ++i) {
-            float z = lerp(zlo, zhi, i, DIVISIONS);
+            float z = lerp(zhi, zlo, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off + th, widened)));
         }
-        for (int i=DIVISIONS - 1; i>-1; --i) {
+        for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(zlo, zhi, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, min_off, widened)));
         }
