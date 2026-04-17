@@ -102,7 +102,7 @@ def peep_2D(surf, *points, N=200):
 
 
 
-def cea_ideal_AEAT(P, ofr):
+def cea_AEAT_for(P, ofr, M_lerp_1_to_exit):
     P_exit = 101325.0
     gamma_tht = CEA["t_gamma"](P, ofr, 1.0)
     def isentropic_M_from_P_on_P0(P_on_P0, y):
@@ -111,11 +111,18 @@ def cea_ideal_AEAT(P, ofr):
     def isentropic_A_on_Astar(M, y):
         n = 0.5*(y + 1)/(y - 1)
         return (2/(y + 1.0) + M*M/n/2)**n / M
-    return isentropic_A_on_Astar(M_exit, gamma_tht)
+    return isentropic_A_on_Astar(1 + (M_exit - 1)*M_lerp_1_to_exit, gamma_tht)
 
 def cea(name, P, ofr):
-    AEAT = cea_ideal_AEAT(P, ofr)
+    AEAT = cea_AEAT_for(P, ofr, 1.0)
     return CEA[name](P, ofr, AEAT)
+
+def getattr_cea(cea_result, name):
+    if name == "c_mach":
+        return 0.0
+    if name == "t_mach":
+        return 1.0
+    return getattr(cea_result, name)
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
         points=200, spacing=1.25, max_error=0.015, blitz=2.0):
@@ -156,6 +163,14 @@ find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
         pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
 find_cea_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
         pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_mu_tht = cea_approximation("mu_tht", "t_visc", blitz=0.0,
+        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_mu_exit = cea_approximation("mu_exit", "visc", blitz=0.0,
+        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_cp_tht = cea_approximation("cp_tht", "t_cp", blitz=0.0,
+        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_cp_exit = cea_approximation("cp_exit", "cp", blitz=0.0,
+        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
 find_cea_Isp = cea_approximation("Isp", "isp", rel_only=True, blitz=0.0,
         max_error=0.03,
         pidxs=[1, 2, 4, 8, 13], qidxs=[0, 1, 2])
@@ -215,46 +230,34 @@ find_ipa_k = ipa_approximation("k", "k", blitz=0.0,
 
 
 
-def cea_cp_as_function_of_M(P0_cc, ofr, M_exit, cp_tht, cp_exit):
-    factor = 1/(1 + np.exp(-40*(ofr - 1.2))) - 1/(1 + np.exp(-40*(ofr - 1.9)))
-    n = 1.8
-    n += factor * (1 - (1 - (P0_cc - 1)/4)**3) * 1 * (1 - ((ofr - 1.3)/0.5)**2)
-    b = (cp_exit - cp_tht) / (M_exit - 1)
-    b *= 1.0 - factor*(cp_tht/1000 - 4 - (P0_cc - 1)/4)/4
-    b *= 1.0 + factor*(0.25 - ((P0_cc - 3)/4)**2)
-    c = cp_tht
-    a = (cp_exit - c - b*(M_exit-1)) / (M_exit-1)**n
-    return lambda M: a*(M-1)**n + b*(M-1) + c
 
-def check_cea_cp():
+def cea_property_along(X_name, Y_name, P0_cc, ofr):
+    AEAT = cea_AEAT_for(P0_cc, ofr, 1.0)
+    X = []
+    Y = []
+    for aeat in np.linspace(1.0, AEAT, 100):
+        cea_res = CEA(P0_cc, ofr, aeat)
+        X.append(getattr_cea(cea_res, X_name))
+        Y.append(getattr_cea(cea_res, Y_name))
+    pairs = sorted(zip(X, Y))
+    X, Y = zip(*pairs)
 
-    def approx(P0_cc, ofr):
-        M_exit = cea("mach", P0_cc, ofr)
-        cp_tht = cea("t_cp", P0_cc, ofr)
-        cp_exit = cea("cp", P0_cc, ofr)
-        M = np.linspace(1.0, M_exit, 100)
-        cp = cea_cp_as_function_of_M(P0_cc, ofr, M_exit, cp_tht, cp_exit)
-        return M, cp(M)
+    X = np.array(X)
+    Y = np.array(Y)
 
-    def realdeal(P0_cc, ofr):
-        AEAT = cea_ideal_AEAT(P0_cc, ofr)
-        M = []
-        cp = []
-        for aeat in np.linspace(1.0, AEAT, 100):
-            cea_res = CEA(P0_cc, ofr, aeat)
-            M.append(cea_res.mach)
-            cp.append(cea_res.cp)
-        M = np.array(M)
-        cp = np.array(cp)
+    X0 = np.linspace(X[0], X[len(X) - 1], 30)
+    Y0 = np.interp(X0, X, Y)
+    X0 = np.insert(X0, 0, getattr_cea(cea_res, f"c_{X_name}"))
+    Y0 = np.insert(Y0, 0, getattr_cea(cea_res, f"c_{Y_name}"))
 
-        M0 = np.linspace(M.min(), M.max(), 30)
-        cp0 = np.interp(M0, M, cp)
-        return M0, cp0
+    pairs0 = sorted(zip(X0, Y0))
+    X0, Y0 = zip(*pairs0)
 
+    return X0, Y0
 
-    # Sample input ranges
+def cea_compare_along(X_name, Y_name, approx):
     P0_ccs = np.linspace(1, 5, 5)
-    ofrs = np.linspace(1, 3, 8)
+    ofrs = np.linspace(1.0, 3.0, 8)
 
     cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
 
@@ -262,12 +265,90 @@ def check_cea_cp():
     for i, P0_cc in enumerate(P0_ccs):
         for j, ofr in enumerate(ofrs):
             x1, y1 = approx(P0_cc, ofr)
-            x2, y2 = realdeal(P0_cc, ofr)
+            x2, y2 = cea_property_along(X_name, Y_name, P0_cc, ofr)
             ax[i].set_title(f"P={P0_cc:.3g}")
             ax[i].plot(x1, y1, label=f"APPROX ofr={ofr:.3g}",
                     color=cmap(j))
             ax[i].scatter(x2, y2, label=f"ACTUAL ofr={ofr:.3g}",
                     marker="o", facecolors="none", color=cmap(j))
+            if len(x1) == 0:
+                ax[i].plot(x2, y2, "--", color=cmap(j))
+
+
+
+def fit_quad(x0, y0, x1, y1, x2, y2):
+    # Determinant of the Vandermonde matrix
+    det = x0**2 * (x1 - x2) \
+        - x1**2 * (x0 - x2) \
+        + x2**2 * (x0 - x1)
+    assert det != 0
+
+    a = y0 * (x1 - x2) \
+      - y1 * (x0 - x2) \
+      + y2 * (x0 - x1)
+    b = x0**2 * (y1 - y2) \
+      - x1**2 * (y0 - y2) \
+      + x2**2 * (y0 - y1)
+    c = x0**2 * (x1*y2 - x2*y1) \
+      - x1**2 * (x0*y2 - x2*y0) \
+      + x2**2 * (x0*y1 - x1*y0)
+    a /= det
+    b /= det
+    c /= det
+    return a, b, c
+
+def cea_quadfit_function_of_M(M_midm, M_exit, V_cc, V_tht, V_midm, V_exit):
+    a, b, c = fit_quad(1.0, V_tht, M_midm, V_midm, M_exit, V_exit)
+    return lambda M: np.where(
+        M > 1,
+        a*M**2 + b*M + c,
+        M * V_tht + (1 - M) * V_cc
+    )
+
+def cea_quadfit(name, P0_cc, ofr):
+    M_exit = cea("mach", P0_cc, ofr)
+    M_midm = 1 + (M_exit - 1) / 2
+    V_cc = cea(f"c_{name}", P0_cc, ofr)
+    V_tht = cea(f"t_{name}", P0_cc, ofr)
+    V_exit = cea(name, P0_cc, ofr)
+    V_midm = CEA[name](P0_cc, ofr, cea_AEAT_for(P0_cc, ofr, 0.5))
+
+    M = np.linspace(1.0, M_exit, 100)
+    M = np.insert(M, 0, 0.0)
+    M = np.insert(M, 1, 0.5)
+    f = cea_quadfit_function_of_M(M_midm, M_exit, V_cc, V_tht, V_midm, V_exit)
+    return M, f(M)
+
+
+def find_cea_cp_along():
+    def approx(P0_cc, ofr):
+        return cea_quadfit("cp", P0_cc, ofr)
+    cea_compare_along("mach", "cp", approx)
+
+
+def cea_mu_as_function_of_M(P0_cc, ofr, M_exit, mu_tht, mu_exit):
+    a = (mu_exit - mu_tht) / (M_exit - 1)
+    b = mu_tht - a
+    return lambda M: a*M + b
+
+def find_cea_mu_along():
+    def approx(P0_cc, ofr):
+        M_exit = cea("mach", P0_cc, ofr)
+        mu_tht = cea("t_visc", P0_cc, ofr)
+        mu_exit = cea("visc", P0_cc, ofr)
+        M = np.linspace(1.0, M_exit, 100)
+        M = np.concatenate((np.array([0.0]), M))
+        mu = cea_mu_as_function_of_M(P0_cc, ofr, M_exit, mu_tht, mu_exit)
+        return M, mu(M)
+    cea_compare_along("mach", "visc", approx)
+
+
+
+def find_cea_Pr_along():
+    def approx(P0_cc, ofr):
+        return cea_quadfit("pran", P0_cc, ofr)
+    cea_compare_along("mach", "pran", approx)
+
 
 
 
@@ -277,9 +358,17 @@ def _run():
     # find_cea_rho_cc(what="approximate")
     # find_cea_gamma_tht(what="approximate")
     # find_cea_Mw_tht(what="approximate")
+
+    # find_cea_mu_tht(what="peep")
+    # find_cea_mu_exit(what="peep")
+    # find_cea_cp_tht(what="peep")
+    # find_cea_cp_exit(what="peep")
+
     # find_cea_Isp(what="approximate")
 
-    check_cea_cp()
+    find_cea_cp_along()
+    find_cea_mu_along()
+    find_cea_Pr_along()
 
     # find_ipa_rho(what="approximate")
     # find_ipa_cp(what="approximate")
