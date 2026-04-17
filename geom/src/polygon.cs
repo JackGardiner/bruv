@@ -38,7 +38,7 @@ public static class Polygon {
     }
 
     public static bool is_simple(in Slice<Vec2> vertices, out string why,
-            bool only_ccw=true) {
+            bool? need_ccw=null) {
         int N = numel(vertices);
         if (N < 3) {
             why = "fewer than three vertices";
@@ -136,8 +136,9 @@ public static class Polygon {
 
         // CCW winding order.
         bool ccw = area(vertices, true) >= 0f;
-        if (only_ccw && !ccw) {
-            why = "non-ccw winding order";
+        if (need_ccw != null && ccw != need_ccw) {
+        string winding = need_ccw.Value ? "ccw" : "cw";
+            why = $"incorrect winding order, needed {winding}";
             return false;
         }
 
@@ -459,8 +460,8 @@ public static class Polygon {
 
 
     public static Mesh mesh_revolved(
-            in Frame revolve_about,
-            in Slice<Vec2> vertices, /* (z,r), any winding */
+            Frame revolve_about,
+            Slice<Vec2> vertices, /* (z,r), any (consistent) winding */
             float by=TWOPI,
             int slicesize=-1, int slicecount=-1, bool donut=false,
             bool checksimple=true
@@ -495,11 +496,16 @@ public static class Polygon {
                                                        + "create a solid");
 
         // Checkme.
-        if (checksimple) {
-            for (int n=0; n<slicecount; ++n) {
-                Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
-                if (!is_simple(v, out why))
-                    assert(false, $"cooked it: {why}");
+        bool ccw;
+        {
+            Slice<Vec2> v0 = vertices.subslice(0, slicesize);
+            ccw = area(v0, true) >= 0f;
+            if (checksimple) {
+                for (int n=0; n<slicecount; ++n) {
+                    Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
+                    if (!is_simple(v, out why, need_ccw: ccw))
+                        assert(false, $"cooked it: {why}");
+                }
             }
         }
 
@@ -528,7 +534,6 @@ public static class Polygon {
 
         // Make the full list of vertices for sweep (trying not to copy if
         // unneeded).
-        bool ccw = area(vertices, true) >= 0f;
         Slice<Vec2> swept_vertices = vertices;
         if (!donut) {
             List<Vec2> copy = [..vertices];
@@ -549,9 +554,14 @@ public static class Polygon {
 
             swept_vertices = new(copy);
         }
-        if (ccw != (by > 0f)) // ccw when travelling +circum.
-            swept_vertices = swept_vertices.reversed();
         swept_vertices = swept_vertices.tiled(tilecount);
+
+        // Ensure correct winding.
+        if (ccw != (by > 0f)) {
+            if (abs(by) != TWOPI)
+                revolve_about = revolve_about.rotxy(by);
+            by = -by;
+        }
 
         // Get the spinning frame for sweep.
         FramesSpin swept_frames = new FramesSpin(
@@ -573,7 +583,7 @@ public static class Polygon {
     public static Mesh mesh_extruded(
             Frame bbase,
             float Lz,
-            in Slice<Vec2> vertices, /* (x,y), any winding */
+            Slice<Vec2> vertices, /* (x,y), any winding */
             bool at_middle=false,
             float extend_by=NAN, Extend extend_dir=Extend.NONE,
             bool checksimple=true
@@ -640,8 +650,8 @@ public static class Polygon {
 
 
     public static Mesh mesh_swept(
-            in Frames frames,
-            in Slice<Vec2> vertices, /* (x,y), winding ccw */
+            Frames frames,
+            Slice<Vec2> vertices, /* (x,y), ccw winding in direction of travel */
             bool closed=false, bool ringed=true,
             bool checksimple=true
         ) {
@@ -662,7 +672,6 @@ public static class Polygon {
                 Slice<Vec2> v = vertices.subslice(n*slicesize, slicesize);
                 if (!is_simple(v, out why))
                     assert(false, $"cooked it: {why}");
-                assert(area(v, true) > 0f, $"cooked it: cw winding polygon");
             }
         }
 
