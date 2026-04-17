@@ -689,12 +689,12 @@ public class Chamber : TPIAP.Pea {
             zlo -= EXTRA;
             zhi += EXTRA;
         }
-        V.Add(new(zlo, 0f));
+        V.Add(new(zhi, 0f));
         for (int i=0; i<DIVISIONS; ++i) {
             float z = lerp(zhi, zlo, i, DIVISIONS);
             V.Add(new(z, cnt_radius_at(z, max_off, widened)));
         }
-        V.Add(new(zhi, 0f));
+        V.Add(new(zlo, 0f));
         Mesh mesh = Polygon.mesh_revolved(new(), V);
         return new(mesh);
     }
