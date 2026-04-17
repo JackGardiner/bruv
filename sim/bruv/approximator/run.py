@@ -3,6 +3,7 @@ Runs the static approximator, outputting all found approximations.
 """
 
 import argparse
+import itertools
 import sys
 from math import pi
 
@@ -101,17 +102,19 @@ def peep_2D(surf, *points, N=200):
 
 
 
-def cea(name, P, ofr):
-    # size aeat first.
+def cea_ideal_AEAT(P, ofr):
     P_exit = 101325.0
     gamma_tht = CEA["t_gamma"](P, ofr, 1.0)
     def isentropic_M_from_P_on_P0(P_on_P0, y):
         return (2/(y - 1)*(P_on_P0 ** ((1 - y)/y) - 1)) ** 0.5;
+    M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
     def isentropic_A_on_Astar(M, y):
         n = 0.5*(y + 1)/(y - 1)
         return (2/(y + 1.0) + M*M/n/2)**n / M
-    M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
-    AEAT = isentropic_A_on_Astar(M_exit, gamma_tht)
+    return isentropic_A_on_Astar(M_exit, gamma_tht)
+
+def cea(name, P, ofr):
+    AEAT = cea_ideal_AEAT(P, ofr)
     return CEA[name](P, ofr, AEAT)
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
@@ -210,17 +213,78 @@ find_ipa_mu = ipa_approximation("mu", "mu", spacing=1.15, blitz=2.0,
 find_ipa_k = ipa_approximation("k", "k", blitz=0.0,
         pidxs=[0], qidxs=[0, 1, 2, 3])
 
-def _run():
-    find_cea_T_cc(what="approximate")
-    find_cea_rho_cc(what="approximate")
-    find_cea_gamma_tht(what="approximate")
-    find_cea_Mw_tht(what="approximate")
-    find_cea_Isp(what="approximate")
 
-    find_ipa_rho(what="approximate")
-    find_ipa_cp(what="approximate")
-    find_ipa_mu(what="approximate")
-    find_ipa_k(what="approximate")
+
+def cea_cp_as_function_of_M(P0_cc, ofr, M_exit, cp_tht, cp_exit):
+    factor = 1/(1 + np.exp(-40*(ofr - 1.2))) - 1/(1 + np.exp(-40*(ofr - 1.9)))
+    n = 1.8
+    n += factor * (1 - (1 - (P0_cc - 1)/4)**3) * 1 * (1 - ((ofr - 1.3)/0.5)**2)
+    b = (cp_exit - cp_tht) / (M_exit - 1)
+    b *= 1.0 - factor*(cp_tht/1000 - 4 - (P0_cc - 1)/4)/4
+    b *= 1.0 + factor*(0.25 - ((P0_cc - 3)/4)**2)
+    c = cp_tht
+    a = (cp_exit - c - b*(M_exit-1)) / (M_exit-1)**n
+    return lambda M: a*(M-1)**n + b*(M-1) + c
+
+def check_cea_cp():
+
+    def approx(P0_cc, ofr):
+        M_exit = cea("mach", P0_cc, ofr)
+        cp_tht = cea("t_cp", P0_cc, ofr)
+        cp_exit = cea("cp", P0_cc, ofr)
+        M = np.linspace(1.0, M_exit, 100)
+        cp = cea_cp_as_function_of_M(P0_cc, ofr, M_exit, cp_tht, cp_exit)
+        return M, cp(M)
+
+    def realdeal(P0_cc, ofr):
+        AEAT = cea_ideal_AEAT(P0_cc, ofr)
+        M = []
+        cp = []
+        for aeat in np.linspace(1.0, AEAT, 100):
+            cea_res = CEA(P0_cc, ofr, aeat)
+            M.append(cea_res.mach)
+            cp.append(cea_res.cp)
+        M = np.array(M)
+        cp = np.array(cp)
+
+        M0 = np.linspace(M.min(), M.max(), 30)
+        cp0 = np.interp(M0, M, cp)
+        return M0, cp0
+
+
+    # Sample input ranges
+    P0_ccs = np.linspace(1, 5, 5)
+    ofrs = np.linspace(1, 3, 8)
+
+    cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
+
+    _, ax = new_plots(cols=len(P0_ccs))
+    for i, P0_cc in enumerate(P0_ccs):
+        for j, ofr in enumerate(ofrs):
+            x1, y1 = approx(P0_cc, ofr)
+            x2, y2 = realdeal(P0_cc, ofr)
+            ax[i].set_title(f"P={P0_cc:.3g}")
+            ax[i].plot(x1, y1, label=f"APPROX ofr={ofr:.3g}",
+                    color=cmap(j))
+            ax[i].scatter(x2, y2, label=f"ACTUAL ofr={ofr:.3g}",
+                    marker="o", facecolors="none", color=cmap(j))
+
+
+
+
+def _run():
+    # find_cea_T_cc(what="approximate")
+    # find_cea_rho_cc(what="approximate")
+    # find_cea_gamma_tht(what="approximate")
+    # find_cea_Mw_tht(what="approximate")
+    # find_cea_Isp(what="approximate")
+
+    check_cea_cp()
+
+    # find_ipa_rho(what="approximate")
+    # find_ipa_cp(what="approximate")
+    # find_ipa_mu(what="approximate")
+    # find_ipa_k(what="approximate")
 
 
 
