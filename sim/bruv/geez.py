@@ -45,7 +45,7 @@ new_plots = lambda path=None, rows=1, cols=1, *, overwrite_ok=False, \
 #                        t_col=None, t_size=10, bold=False, box=True, \
 #                        rotation="horizontal": None
 
-new_window = lambda title=None: "window"
+new_window = lambda title=None, emptyok=False: "window"
 # window.new_figure = <mimic of new_figure, where each figure is in a new tab>
 # window.new_plots = <mimic of new_plots, where each figure is in a new tab>
 
@@ -346,6 +346,7 @@ def _make_window(window_title=None):
     win.protocol("WM_DELETE_WINDOW", lambda w=win: _br_on_window_close(w))
     win.br_figures = []
     win.br_notebook = None
+    win.br_emptyok = False
     return win
 
 def _make_figure(master, path=None, *, overwrite_ok=False, **kwargs):
@@ -434,8 +435,10 @@ class _Window:
         fig = _make_figure(tab, path, overwrite_ok=overwrite_ok, **fig_kw)
         self._win.br_figures.append(fig)
         return _make_plots(fig, rows, cols, **kwargs)
-def new_window(title=None):
-    return _Window(_make_window(title))
+def new_window(title=None, emptyok=False):
+    win = _make_window(title)
+    win.br_emptyok = emptyok
+    return _Window(win)
 
 class _NoWindow:
     def new_figure(self, *args, **kwargs):
@@ -451,12 +454,15 @@ def _post():
         fig.tight_layout()
     to_remove = []
     for win in _windows:
-        if win.br_notebook is not None:
-            tabs = win.br_notebook.tabs()
-            if len(tabs) == 0:
-                warnings.warn("a window has no figures, closing it...")
-                win.destroy()
-                to_remove.append(win)
+        if win.br_notebook is None:
+            continue
+        tabs = win.br_notebook.tabs()
+        if len(tabs) > 0:
+            continue
+        if not win.br_emptyok:
+            warnings.warn("a window has no figures, closing it...")
+        win.destroy()
+        to_remove.append(win)
     for win in to_remove:
         _windows.remove(win)
 
