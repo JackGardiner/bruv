@@ -66,12 +66,14 @@ f64 isentropic_A_on_Astar(f64 M, const SpecificHeatRatio* shr) {
     return pow(2.0/(shr->y + 1.0) + sqed(M)/shr->n/2.0, shr->n) / M;
 }
 
+f64 isentropic_T_on_T0(f64 M, const SpecificHeatRatio* shr) {
+    return 1.0 / (1.0 + (shr->y - 1.0)/2.0 * sqed(M));
+}
 f64 isentropic_P_on_P0(f64 M, const SpecificHeatRatio* shr) {
     return pow(1.0 + (shr->y - 1.0)/2.0 * sqed(M), shr->y/(1.0 - shr->y));
 }
-
-f64 isentropic_T_on_T0(f64 M, const SpecificHeatRatio* shr) {
-    return 1.0 / (1.0 + (shr->y - 1.0)/2.0 * sqed(M));
+f64 isentropic_rho_on_rho0(f64 M, const SpecificHeatRatio* shr) {
+    return pow(1.0 + (shr->y - 1.0)/2.0 * sqed(M), 1.0/(1.0 - shr->y));
 }
 
 

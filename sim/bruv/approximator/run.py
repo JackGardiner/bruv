@@ -26,13 +26,15 @@ def summary_1D(name, ratpoly, values, X, *, extra_reqs=()):
     approx = ratpoly(X)
     abserr = ratpoly.abs_error(values, X)
     relerr = ratpoly.rel_error(values, X)
+    print(f"    /* rect-bounded rational polynomial approximation */")
     print(f"    /* max error of: */")
-    print(f"    /*    abs {np.abs(abserr).max()*100:.3g}% */")
-    print(f"    /*    rel {np.abs(relerr).max()*100:.3g}% */")
-    print(f"    /* requires: */")
-    print(f"    /*    x in [{X.min()}, {X.max()}] */")
+    print(f"    /*   abs {np.abs(abserr).max()*100:.3g}% */")
+    print(f"    /*   rel {np.abs(relerr).max()*100:.3g}% */")
     for x in extra_reqs:
-        print(f"    /*    {x} */")
+        print(f"    /* also requires: */")
+        print(f"    /*   {x} */")
+    print(f"    const f64 XLO = {X.min()};")
+    print(f"    const f64 XHI = {X.max()};")
     print(ratpoly.code())
     _, axes = summary_1D.window.new_plots(cols=2, title=name)
     axes[0].plot(X, values, label="actual function")
@@ -53,14 +55,17 @@ def summary_2D(name, ratpoly, surf, *, extra_reqs=()):
     abserr = np.abs(abs_error(values, approx))
     relerr = np.abs(rel_error(values, approx))
     Xmin, Xmax, Ymin, Ymax = surf.bounds()
+    print(f"    /* rect-bounded rational polynomial approximation */")
     print(f"    /* max error of: */")
-    print(f"    /*    abs {abserr.max()*100:.3g}% */")
-    print(f"    /*    rel {relerr.max()*100:.3g}% */")
-    print(f"    /* requires: */")
-    print(f"    /*    x in [{Xmin}, {Xmax}] */")
-    print(f"    /*    y in [{Ymin}, {Ymax}] */")
+    print(f"    /*   abs {abserr.max()*100:.3g}% */")
+    print(f"    /*   rel {relerr.max()*100:.3g}% */")
     for x in extra_reqs:
-        print(f"    /*    {x} */")
+        print(f"    /* also requires: */")
+        print(f"    /*   {x} */")
+    print(f"    const f64 XLO = {Xmin};")
+    print(f"    const f64 XHI = {Xmax};")
+    print(f"    const f64 YLO = {Ymin};")
+    print(f"    const f64 YHI = {Ymax};")
     print(ratpoly.code())
 
     tri = matplotlib.tri.Triangulation(X, Y)
@@ -88,7 +93,7 @@ summary_2D.window = geez.no_window()
 
 
 def peep_2D(surf, *points, N=200):
-    _, ax = new_plots(projection="3d")
+    _, ax = peep_2D.window.new_plots(projection="3d")
     X, Y = Evenspace(*surf.bounds()).points(N**2, flatten=True)
     tri = matplotlib.tri.Triangulation(X, Y)
     if surf.masker is not None:
@@ -96,25 +101,29 @@ def peep_2D(surf, *points, N=200):
     ax.plot_trisurf(tri, surf.f(X, Y), cmap="viridis")
     if points:
         ax.scatter(*points)
+peep_2D.window = geez.no_window()
 
 
 
 
-
+def isentropic_M_from_P_on_P0(P_on_P0, y):
+    return (2/(y - 1)*(P_on_P0 ** ((1 - y)/y) - 1)) ** 0.5
+def isentropic_A_on_Astar(M, y):
+    n = 0.5*(y + 1)/(y - 1)
+    return (2/(y + 1.0) + M*M/n/2)**n / M
 
 def cea_AEAT_for(P, ofr, M_lerp_1_to_exit):
     P_exit = 101325.0
     gamma_tht = CEA["t_gamma"](P, ofr, 1.0)
-    def isentropic_M_from_P_on_P0(P_on_P0, y):
-        return (2/(y - 1)*(P_on_P0 ** ((1 - y)/y) - 1)) ** 0.5;
     M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
-    def isentropic_A_on_Astar(M, y):
-        n = 0.5*(y + 1)/(y - 1)
-        return (2/(y + 1.0) + M*M/n/2)**n / M
     return isentropic_A_on_Astar(1 + (M_exit - 1)*M_lerp_1_to_exit, gamma_tht)
 
 def cea(name, P, ofr):
-    AEAT = cea_AEAT_for(P, ofr, 1.0)
+    if name.startswith("midm_"):
+        AEAT = cea_AEAT_for(P, ofr, 0.5)
+        name = name[len("midm_"):]
+    else:
+        AEAT = cea_AEAT_for(P, ofr, 1.0)
     return CEA[name](P, ofr, AEAT)
 
 def getattr_cea(cea_result, name):
@@ -125,21 +134,24 @@ def getattr_cea(cea_result, name):
     return getattr(cea_result, name)
 
 def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
-        points=200, spacing=1.25, max_error=0.015, blitz=2.0):
+        points=200, spacing=1.25, max_error=0.015, blitz=2.0, lut=None):
     def wrapped(what=""):
-        print(f"approximating CEA {our_name}")
+        if what != "get":
+            print(f"approximating CEA {our_name}")
         f = lambda P, ofr: cea(cea_name, P, ofr)
 
         surf = Surfspace(f, 1.0, 5.0, 1.0, 3.0, N0=200)
-        P, ofr, V = surf.points(
-            1000 if what=="approximate" else points,
-            spacing=spacing
-        )
+        if not (lut is not None and what == "approximate"):
+            P, ofr, V = surf.points(
+                1000 if what=="approximate" else points,
+                spacing=spacing
+            )
 
         evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
 
         if what == "peep":
             peep_2D(surf, P, ofr, V)
+            print("peeped")
         elif what == "backwards":
             RationalPolynomial.search_backwards(P, ofr, V, max_error=max_error,
                     evaluator=evaluator)
@@ -147,34 +159,83 @@ def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False
             RationalPolynomial.search_forwards(P, ofr, V, blitz=blitz,
                     evaluator=evaluator)
         elif what == "approximate":
+            if lut is not None:
+                JustGimmeATable(our_name, cea_name, *lut).run()
+                return
             rp = RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
             print("found:", rp)
             summary_2D(f"CEA {our_name}", rp, surf)
+        elif what == "get":
+            if lut is not None:
+                return JustGimmeATable(our_name, cea_name, *lut)
+            return RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
         else:
             assert False, f"invalid what: {what}"
     return wrapped
 
 
-find_cea_T_cc = cea_approximation("T_cc", "c_t", blitz=0.0,
-        pidxs=[1, 3, 5], qidxs=[0, 2, 3, 4, 5])
-find_cea_rho_cc = cea_approximation("rho_cc", "rho", blitz=2.0,
-        pidxs=[1, 4, 5, 8], qidxs=[0, 1, 2, 4, 8, 9])
-find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
-        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
-find_cea_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
-        pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
-find_cea_mu_tht = cea_approximation("mu_tht", "t_visc", blitz=0.0,
-        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
-find_cea_mu_exit = cea_approximation("mu_exit", "visc", blitz=0.0,
-        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
-find_cea_cp_tht = cea_approximation("cp_tht", "t_cp", blitz=0.0,
-        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
-find_cea_cp_exit = cea_approximation("cp_exit", "cp", blitz=0.0,
-        pidxs=[2 ,1], qidxs=[0, 1, 2, 3, 4, 5])
 find_cea_Isp = cea_approximation("Isp", "isp", rel_only=True, blitz=0.0,
         max_error=0.03,
         pidxs=[1, 2, 4, 8, 13], qidxs=[0, 1, 2])
 
+find_cea_T_cc = cea_approximation("T_cc", "c_t", blitz=0.0,
+        pidxs=[1, 3, 5], qidxs=[0, 2, 3, 4, 5])
+find_cea_rho_cc = cea_approximation("rho_cc", "rho", blitz=2.0,
+        pidxs=[1, 4, 5, 8], qidxs=[0, 1, 2, 4, 8, 9])
+
+find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
+        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
+find_cea_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
+        pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
+
+find_cea_cp_cc = cea_approximation("cp_cc", "c_cp",
+        blitz=3.0,
+        pidxs=[0, 1, 2, 4, 5, 6, 8], qidxs=[0, 1, 2, 4, 6, 8, 9])
+find_cea_cp_tht = cea_approximation("cp_tht", "t_cp",
+        blitz=3.0, points=300, spacing=1.3,
+        pidxs=[0, 1, 3, 5, 6, 7, 8, 9, 11, 12, 14], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_cp_midm = cea_approximation("cp_midm", "midm_cp",
+        blitz=3.0, points=300, spacing=1.3,
+        pidxs=[0, 1, 2, 4, 5, 6, 7], qidxs=[0, 1, 2, 4, 5, 8, 9, 10, 11, 12, 14],
+        # give up
+        lut=(20, 40))
+find_cea_cp_exit = cea_approximation("cp_exit", "cp",
+        blitz=3.0, max_error=0.045, points=400, spacing=1.25,
+        pidxs=[1, 2, 3, 4, 5, 6, 7, 8],
+        qidxs=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+               19, 20, 21, 22, 24, 25, 26, 27],
+        # its so over
+        lut=(15, 100))
+
+find_cea_mu_cc = cea_approximation("mu_cc", "c_visc",
+        blitz=3.0,
+        pidxs=[1, 4, 5], qidxs=[0, 1, 2, 5])
+find_cea_mu_tht = cea_approximation("mu_tht", "t_visc",
+        blitz=3.0,
+        pidxs=[0, 2, 4, 5], qidxs=[0, 1, 2, 5])
+find_cea_mu_midm = cea_approximation("mu_midm", "midm_visc",
+        blitz=3.0,
+        pidxs=[0, 4, 8, 9], qidxs=[0, 1, 2, 4, 5])
+find_cea_mu_exit = cea_approximation("mu_exit", "visc",
+        blitz=3.0, max_error=0.01, points=300, spacing=1.3,
+        pidxs=[0, 4, 6, 8, 9, 12, 13], qidxs=[0, 1, 2, 3, 4, 5, 7])
+
+find_cea_Pr_cc = cea_approximation("Pr_cc", "c_pran",
+        blitz=5.0,
+        pidxs=[0, 1, 2, 4, 5], qidxs=[0, 1, 2, 3, 5, 7, 8, 9, 12, 14])
+find_cea_Pr_tht = cea_approximation("Pr_tht", "t_pran",
+        blitz=5.0,
+        pidxs=[0, 1, 2, 4, 5], qidxs=[0, 1, 2, 3, 5, 7, 8, 9, 12, 13, 14])
+find_cea_Pr_midm = cea_approximation("Pr_midm", "midm_pran",
+        blitz=5.0,
+        pidxs=[2, 3, 4, 5, 9], qidxs=[0, 2, 5, 9, 12, 13],
+        # we down
+        lut=(10, 40))
+find_cea_Pr_exit = cea_approximation("Pr_exit", "pran",
+        blitz=5.0,
+        pidxs=[], qidxs=[], # genuinely never gonna happen
+        # :((
+        lut=(10, 60))
 
 
 @Masker
@@ -256,12 +317,16 @@ def cea_property_along(X_name, Y_name, P0_cc, ofr):
     return X0, Y0
 
 def cea_compare_along(X_name, Y_name, approx):
-    P0_ccs = np.linspace(1, 5, 5)
-    ofrs = np.linspace(1.0, 3.0, 8)
+    # P0_ccs = np.linspace(1, 5, 5)
+    # ofrs = np.linspace(1.0, 3.0, 8)
+    P0_ccs = np.array([3.5])
+    ofrs = np.array([1.76])
 
     cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
 
     _, ax = new_plots(cols=len(P0_ccs))
+    if not isinstance(ax, np.ndarray):
+        ax = [ax]
     for i, P0_cc in enumerate(P0_ccs):
         for j, ofr in enumerate(ofrs):
             x1, y1 = approx(P0_cc, ofr)
@@ -319,32 +384,43 @@ def cea_quadfit(name, P0_cc, ofr):
     f = cea_quadfit_function_of_M(M_midm, M_exit, V_cc, V_tht, V_midm, V_exit)
     return M, f(M)
 
+def cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm, get_exit):
+    gamma_tht = get_gamma(P0_cc, ofr)
+    M_exit = isentropic_M_from_P_on_P0(101325.0 / (P0_cc*1e6), gamma_tht);
+    M_midm = 1 + (M_exit - 1) / 2
+    V_cc = get_cc(P0_cc, ofr)
+    V_tht = get_tht(P0_cc, ofr)
+    V_midm = get_midm(P0_cc, ofr)
+    V_exit = get_exit(P0_cc, ofr)
 
-def find_cea_cp_along():
+    M = np.linspace(1.0, M_exit, 100)
+    M = np.insert(M, 0, 0.0)
+    M = np.insert(M, 1, 0.5)
+    f = cea_quadfit_function_of_M(M_midm, M_exit, V_cc, V_tht, V_midm, V_exit)
+    return M, f(M)
+
+
+def check_cea_cp_along():
+    get_gamma = find_cea_gamma_tht(what="get")
+    get_cc = find_cea_cp_cc(what="get")
+    get_tht = find_cea_cp_tht(what="get")
+    get_midm = find_cea_cp_midm(what="get")
+    get_exit = find_cea_cp_exit(what="get")
     def approx(P0_cc, ofr):
-        return cea_quadfit("cp", P0_cc, ofr)
+        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
+                get_exit)
     cea_compare_along("mach", "cp", approx)
-
-
-def cea_mu_as_function_of_M(P0_cc, ofr, M_exit, mu_tht, mu_exit):
-    a = (mu_exit - mu_tht) / (M_exit - 1)
-    b = mu_tht - a
-    return lambda M: a*M + b
-
-def find_cea_mu_along():
+def check_cea_mu_along():
+    get_gamma = find_cea_gamma_tht(what="get")
+    get_cc = find_cea_mu_cc(what="get")
+    get_tht = find_cea_mu_tht(what="get")
+    get_midm = find_cea_mu_midm(what="get")
+    get_exit = find_cea_mu_exit(what="get")
     def approx(P0_cc, ofr):
-        M_exit = cea("mach", P0_cc, ofr)
-        mu_tht = cea("t_visc", P0_cc, ofr)
-        mu_exit = cea("visc", P0_cc, ofr)
-        M = np.linspace(1.0, M_exit, 100)
-        M = np.concatenate((np.array([0.0]), M))
-        mu = cea_mu_as_function_of_M(P0_cc, ofr, M_exit, mu_tht, mu_exit)
-        return M, mu(M)
+        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
+                get_exit)
     cea_compare_along("mach", "visc", approx)
-
-
-
-def find_cea_Pr_along():
+def check_cea_Pr_along():
     def approx(P0_cc, ofr):
         return cea_quadfit("pran", P0_cc, ofr)
     cea_compare_along("mach", "pran", approx)
@@ -352,39 +428,158 @@ def find_cea_Pr_along():
 
 
 
+class JustGimmeATable:
+    # holy balls some are hard. just gimme a lookuptable.
+
+    def __init__(self, our_name, cea_name, size_P, size_ofr):
+        self.name = our_name
+        self.cea_name = cea_name
+        self.shape = (size_P, size_ofr)
+        self.Plo = 1.0
+        self.Phi = 5.0
+        self.ofrlo = 1.0
+        self.ofrhi = 3.0
+        P = np.linspace(self.Plo, self.Phi, size_P)
+        ofr = np.linspace(self.ofrlo, self.ofrhi, size_ofr)
+        P, ofr = np.meshgrid(P, ofr, indexing="ij")
+        self.tbl = cea(cea_name, P, ofr)
+        self.tbl = self.tbl.flatten("C")
+
+    def __call__(self, P, ofr):
+        P = (P - self.Plo) / (self.Phi - self.Plo)
+        P *= self.shape[0] - 1
+        i = np.minimum(np.floor(P).astype(int), self.shape[0] - 2)
+        t = P - i
+        ofr = (ofr - self.ofrlo) / (self.ofrhi - self.ofrlo)
+        ofr *= self.shape[1] - 1
+        j = np.minimum(np.floor(ofr).astype(int), self.shape[1] - 2)
+        s = ofr - j
+        c00 = self.tbl[i*self.shape[1] + j]
+        c01 = self.tbl[i*self.shape[1] + j + 1]
+        c10 = self.tbl[(i + 1)*self.shape[1] + j]
+        c11 = self.tbl[(i + 1)*self.shape[1] + j + 1]
+        c0 = c00 + s*(c01 - c00)
+        c1 = c10 + s*(c11 - c10)
+        return c0 + t*(c1 - c0)
+
+    def run(self):
+        lines = []
+
+        Plo, Phi, ofrlo, ofrhi = self.Plo, self.Phi, self.ofrlo, self.ofrhi
+        rows, cols = self.shape
+
+        X, Y = Evenspace(Plo, Phi, ofrlo, ofrhi).points(400**2, flatten=False)
+        values = cea(self.cea_name, X, Y)
+        approx = self(X, Y)
+        abserr = np.abs(abs_error(values, approx))
+        relerr = np.abs(rel_error(values, approx))
+
+        fig, axes = summary_2D.window.new_plots(rows=2, cols=2,
+                title=f"CEA {self.name}")
+        cont = axes[0,0].contourf(X, Y, values, levels=300, cmap="viridis")
+        fig.colorbar(cont, ax=axes[0, 0])
+        axes[0,0].set_title("actual function")
+        axes[0,0].set_grid("none")
+        cont = axes[0,1].contourf(X, Y, approx, levels=300, cmap="viridis")
+        fig.colorbar(cont, ax=axes[0, 1])
+        axes[0,1].set_title("approximation")
+        axes[0,1].set_grid("none")
+        cont = axes[1,0].contourf(X, Y, 100*abserr, levels=300, cmap="viridis")
+        fig.colorbar(cont, ax=axes[1, 0])
+        axes[1,0].set_title("abs error")
+        axes[1,0].set_grid("none")
+        cont = axes[1,1].contourf(X, Y, 100*relerr, levels=300, cmap="viridis")
+        fig.colorbar(cont, ax=axes[1, 1])
+        axes[1,1].set_title("rel error")
+        axes[1,1].set_grid("none")
+
+
+        lines.append(f"static const f32 CEA_TBL_{self.name}[{rows * cols}];")
+        lines.extend([
+            f"    /* evenly-spaced flattened 2D LUT, access: */",
+            f"    /*   [i,j] -> [YLEN*i + j] */",
+            f"    /* max error of: */",
+            f"    /*   abs {abserr.max()*100:.3g}% */",
+            f"    /*   rel {relerr.max()*100:.3g}% */",
+        ])
+        lines.append(f"    const f64 XLO = {Plo};")
+        lines.append(f"    const f64 XHI = {Phi};")
+        lines.append(f"    const f64 YLO = {ofrlo};")
+        lines.append(f"    const f64 YHI = {ofrhi};")
+        lines.append(f"    enum {{ XLEN = {rows},")
+        lines.append(f"           YLEN = {cols}, }};")
+        lines.append(f"static const f32 CEA_TBL_{self.name}[{rows * cols}] = {{")
+
+        # x.01234567ennn,
+        # =16 diggies.
+        display_cols = (80 - 4) // 16
+
+        flat = self.tbl.flatten("C") # row-major: element [j][i] -> j*SIZE_0 + i
+        n = len(flat)
+
+        for start in range(0, n, display_cols):
+            chunk = flat[start:start + display_cols]
+            entries = []
+            for k, val in enumerate(chunk):
+                s = f"{val:.8e},"
+                s += " " * (16 - len(s))
+                entries.append(s)
+            lines.append(" "*4 + "".join(entries))
+
+        lines.append(f"}};")
+        lines.append(f"")
+
+        print("\n".join(lines))
+
+
+
+
 
 def _run():
-    # find_cea_T_cc(what="approximate")
-    # find_cea_rho_cc(what="approximate")
-    # find_cea_gamma_tht(what="approximate")
-    # find_cea_Mw_tht(what="approximate")
+    find_cea_Isp(what="approximate")
 
-    # find_cea_mu_tht(what="peep")
-    # find_cea_mu_exit(what="peep")
-    # find_cea_cp_tht(what="peep")
-    # find_cea_cp_exit(what="peep")
+    find_cea_T_cc(what="approximate")
+    find_cea_rho_cc(what="approximate")
 
-    # find_cea_Isp(what="approximate")
+    find_cea_gamma_tht(what="approximate")
+    find_cea_Mw_tht(what="approximate")
 
-    find_cea_cp_along()
-    find_cea_mu_along()
-    find_cea_Pr_along()
+    find_cea_cp_cc(what="approximate")
+    find_cea_cp_tht(what="approximate")
+    find_cea_cp_midm(what="approximate")
+    find_cea_cp_exit(what="approximate")
 
-    # find_ipa_rho(what="approximate")
-    # find_ipa_cp(what="approximate")
-    # find_ipa_mu(what="approximate")
-    # find_ipa_k(what="approximate")
+    find_cea_mu_cc(what="approximate")
+    find_cea_mu_tht(what="approximate")
+    find_cea_mu_midm(what="approximate")
+    find_cea_mu_exit(what="approximate")
+
+    find_cea_Pr_cc(what="approximate")
+    find_cea_Pr_tht(what="approximate")
+    find_cea_Pr_midm(what="approximate")
+    find_cea_Pr_exit(what="approximate")
+
+    check_cea_cp_along()
+    check_cea_mu_along()
+    check_cea_Pr_along()
+
+    find_ipa_rho(what="approximate")
+    find_ipa_cp(what="approximate")
+    find_ipa_mu(what="approximate")
+    find_ipa_k(what="approximate")
 
 
 
 def run(view=True, save=False):
+    global peep_window
     with CEA.configure("LOx", "IPA"), IPA.configure():
         with geez.instance(view, save):
             # stoud redirect nested to not capture meta output.
             with paths.splice_stdout(paths.APPROXIMATOR_OUTPUT, view, save):
-                win = geez.new_window()
+                win = geez.new_window("summary", emptyok=True)
                 summary_1D.window = win
                 summary_2D.window = win
+                peep_2D.window = geez.new_window("peep", emptyok=True)
                 _run()
 
 

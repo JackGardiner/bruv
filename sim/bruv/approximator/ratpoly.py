@@ -1088,6 +1088,109 @@ class LookupTable:
             best_error = min(best_error, error)
 
 
+    @classmethod
+    def approximate_linear(cls, shape, ones, real_values, f, evaluator=None,
+            max_error=1.0):
+        ndim = len(shape)
+        assert real_values.ndim == 1
+        coords = [ones[:, 1 + dim] for dim in range(ndim)]
+        bounds = [(c.min(), c.max()) for c in coords]
+        N = np.prod(shape)
+
+        def initial_state():
+            state = np.zeros(N)
+            lins = []
+            for dim, (xmin, xmax) in enumerate(bounds):
+                lin = np.linspace(xmin, xmax, shape[dim])
+                shapeto = [1] * ndim
+                shapeto[dim] = shape[dim]
+                lin = lin.reshape(shapeto)
+                lin = np.broadcast_to(lin, shape)
+                lins.append(lin.ravel())
+            state[:N] = f(*lins)
+            return state
+
+        def get_table(state):
+            return state.reshape(shape).astype(np.float32)
+
+        def get_obj(state):
+            table = get_table(state)
+            lookups = [cls.linear_lookup(xmin, xmax) for xmin, xmax in bounds]
+            return LookupTable(table, *lookups)
+
+        def residuals(state):
+            obj = get_obj(state)
+            values = obj.eval_ones(ones)
+            return real_values - values
+
+        # Optimise via least squares, since its significantly more stable than a
+        # minimise-max-error optimiser.
+        state = initial_state()
+
+        def too_much_error(state):
+            if evaluator is None:
+                return False
+            obj = get_obj(state)
+            values = obj.eval_ones(ones)
+            return evaluator(real_values, values) > max_error
+        if too_much_error(state):
+            return get_obj(state)
+
+        res = scipy.optimize.least_squares(residuals, state)
+        return get_obj(res.x)
+
+    @classmethod
+    def search_linear(cls, f, *points, evaluator=evaluator_abs_only, padto=40,
+            print_all_below=0.01, only_table=(), only_ratpoly=(), blitz=0.0):
+        coords = points[:-1]
+        real_values = points[-1]
+        yao = YupAllOnes(*coords)
+        ndim = len(coords)
+
+        rmax = (1 + 3 / blitz**0.6) if blitz > 0.0 else float('inf')
+        def shapes_at_cost(cost):
+            assert len(points) == 3
+            for i in range(2, math.isqrt(cost)):
+                if cost % i != 0:
+                    continue
+                j = cost // i
+                # Since i <= sqrt(cost) <= j, ratio is always j/i.
+                if j/i > rmax:
+                    continue
+                yield i, j
+                if i != j:
+                    yield j, i
+
+        def all_shapes():
+            for cost in itertools.count(26*64):
+                for shape in shapes_at_cost(cost):
+                    yield shape
+
+        best_error = float("inf")
+        last_length = 0
+        for shape in all_shapes():
+            s = "x".join(map(str, shape))
+            print(s + " " * (last_length - len(s)), end="\r")
+            last_length = len(s)
+
+            ones = yao.get(1)
+
+            lut = cls.approximate_linear(shape, ones, real_values, f,
+                    evaluator=evaluator, max_error=0.025)
+            values = lut.eval_ones(ones)
+            error = evaluator(real_values, values)
+
+            if error <= max(best_error, print_all_below):
+                s = f"{s} .."
+                s += "." * (padto - len(s))
+                s += f" {100 * error:.4g}%"
+                s += " *" * (error <= best_error)
+                s += " " * (len(s) - last_length)
+                print(s)
+                last_length = 0
+            best_error = min(best_error, error)
+
+
     class linear_lookup:
         def __init__(self, xlo, xhi):
             self.xlo = xlo

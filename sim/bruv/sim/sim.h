@@ -25,8 +25,9 @@
     X(dm_ox, f64, C_OUTPUT)                     \
     X(dm_fu, f64, C_OUTPUT)                     \
     X(P_exit, f64, C_INPUT)                     \
-    X(P0_cc, f64, C_INPUT)                      \
     X(T0_cc, f64, C_OUTPUT)                     \
+    X(P0_cc, f64, C_INPUT)                      \
+    X(rho0_cc, f64, C_OUTPUT)                   \
     X(gamma_tht, f64, C_OUTPUT)                 \
     X(Mw_tht, f64, C_OUTPUT)                    \
     X(Isp, f64, C_OUTPUT)                       \
@@ -39,6 +40,10 @@
     X(out_M, f64*, C_INPUT | C_OUTPUT_DATA)     \
     X(out_T, f64*, C_INPUT | C_OUTPUT_DATA)     \
     X(out_P, f64*, C_INPUT | C_OUTPUT_DATA)     \
+    X(out_rho, f64*, C_INPUT | C_OUTPUT_DATA)   \
+    X(out_cp, f64*, C_INPUT | C_OUTPUT_DATA)    \
+    X(out_mu, f64*, C_INPUT | C_OUTPUT_DATA)    \
+    X(out_Pr, f64*, C_INPUT | C_OUTPUT_DATA)    \
                                                 \
     X(target_Thrust, f64, C_INPUT)              \
     X(optimise_ofr, i64, C_INPUT)               \

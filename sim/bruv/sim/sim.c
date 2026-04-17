@@ -76,22 +76,31 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Combustion */
 
-    s->T0_cc = cea_T0_cc(s->P0_cc, s->ofr);
-    s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
-    s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
     s->Isp = cea_Isp(s->P0_cc, s->ofr);
-
     s->Thrust = s->Isp * s->dm_cc * STANDARD_GRAVITY;
 
+    s->T0_cc = cea_T0_cc(s->P0_cc, s->ofr);
+    s->rho0_cc = cea_rho0_cc(s->P0_cc, s->ofr);
+
+    s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
+    s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
     SpecificHeatRatio* shr = get_shr(s->gamma_tht);
-    s->A_tht = s->dm_cc / s->P0_cc
-             * sqrt(s->T0_cc * GAS_CONSTANT / s->Mw_tht / shr->y)
-             * pow(0.5*(shr->y + 1.0), shr->n);
 
     f64 M_exit = isentropic_M_from_P_on_P0(s->P_exit / s->P0_cc, shr);
     f64 P_exit = s->P0_cc * isentropic_P_on_P0(M_exit, shr);
     assert(nearto(P_exit, s->P_exit),
             "failed to find perfectly expanded nozzle?");
+
+    ceaFit* fit_cp = &(ceaFit){0};
+    ceaFit* fit_mu = &(ceaFit){0};
+    ceaFit* fit_Pr = &(ceaFit){0};
+    cea_fit_cp(fit_cp, s->P0_cc, s->ofr, M_exit);
+    cea_fit_mu(fit_mu, s->P0_cc, s->ofr, M_exit);
+    cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, M_exit);
+
+    s->A_tht = s->dm_cc / s->P0_cc
+             * sqrt(s->T0_cc * GAS_CONSTANT / s->Mw_tht / shr->y)
+             * pow(0.5*(shr->y + 1.0), shr->n);
 
     s->AEAT = isentropic_A_on_Astar(M_exit, shr);
 
@@ -155,11 +164,19 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
               : isentropic_sup_M(A_on_Astar, shr);
         f64 T = s->T0_cc * isentropic_T_on_T0(M, shr);
         f64 P = s->P0_cc * isentropic_P_on_P0(M, shr);
+        f64 rho = s->rho0_cc * isentropic_rho_on_rho0(M, shr);
+        f64 cp = cea_sample(fit_cp, M);
+        f64 mu = cea_sample(fit_mu, M);
+        f64 Pr = cea_sample(fit_Pr, M);
         s->out_z[i] = z;
         s->out_r[i] = r;
+        s->out_M[i] = M;
         s->out_T[i] = T;
         s->out_P[i] = P;
-        s->out_M[i] = M;
+        s->out_rho[i] = rho;
+        s->out_cp[i] = cp;
+        s->out_mu[i] = mu;
+        s->out_Pr[i] = Pr;
     }
 }
 

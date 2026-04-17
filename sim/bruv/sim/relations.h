@@ -23,7 +23,9 @@ f64 isentropic_sup_M(f64 A_on_Astar, const SpecificHeatRatio* shr);
 f64 isentropic_sub_M(f64 A_on_Astar, const SpecificHeatRatio* shr);
 
 f64 isentropic_A_on_Astar(f64 M, const SpecificHeatRatio* shr);
-f64 isentropic_P_on_P0(f64 M, const SpecificHeatRatio* shr);
+
 f64 isentropic_T_on_T0(f64 M, const SpecificHeatRatio* shr);
+f64 isentropic_P_on_P0(f64 M, const SpecificHeatRatio* shr);
+f64 isentropic_rho_on_rho0(f64 M, const SpecificHeatRatio* shr);
 
 f64 isentropic_M_from_P_on_P0(f64 P_on_P0, const SpecificHeatRatio* shr);
