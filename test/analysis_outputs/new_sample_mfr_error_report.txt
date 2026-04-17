@@ -2,7 +2,7 @@
 NEW SAMPLE MFR ERROR REPORT
 ==========================================================================================
 New sample index threshold: RS8+
-New samples found: 9
+New samples found: 17
 Baseline resin samples used for scaling: 8 (RS0-RS7)
 
 Stage 2 (IPA)

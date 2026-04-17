@@ -44,11 +44,13 @@ FIT_POPULATION = "all"
 COLOR_FAM1  = "tab:orange"    # RS0–7   Family 1
 COLOR_FAM2  = "tab:green"     # RS8–12  Family 2
 COLOR_FAM3  = "tab:purple"    # RS13+   Family 3
+COLOR_FAM4  = "tab:brown"     # RS18+   Family 4
 COLOR_FIT   = "tab:blue"
 COLOR_TGT   = "crimson"
 
 NEW_SAMPLE_INDEX_MIN = 8
 NEW_ROUND_INDEX_MIN  = 13
+NEW_FAMILY4_INDEX_MIN = 18
 
 # ---------------------------------------------------------------------------
 # Load data
@@ -71,7 +73,8 @@ s  = collated[collated["sample_type"] == "S"].copy().dropna(
 # RS families
 fam1 = rs[rs["sample_index"] < NEW_SAMPLE_INDEX_MIN]
 fam2 = rs[(rs["sample_index"] >= NEW_SAMPLE_INDEX_MIN) & (rs["sample_index"] < NEW_ROUND_INDEX_MIN)]
-fam3 = rs[rs["sample_index"] >= NEW_ROUND_INDEX_MIN]
+fam3 = rs[(rs["sample_index"] >= NEW_ROUND_INDEX_MIN) & (rs["sample_index"] < NEW_FAMILY4_INDEX_MIN)]
+fam4 = rs[rs["sample_index"] >= NEW_FAMILY4_INDEX_MIN]
 
 # Population used for the fit
 if FIT_POPULATION == "sweep":
@@ -154,7 +157,7 @@ def scatter_family(df, color, marker, label):
     yv = df["Flow1_kgs_mean"].values * 1e3
     ax.scatter(xv, yv, color=color, marker=marker, s=80, alpha=0.9, zorder=3, label=label)
     for _, row in df.iterrows():
-        tag  = f"RS{int(row['sample_index'])}"
+        tag  = str(row.get("sample_id") or f"RS{int(row['sample_index'])}")
         xval = row["stage2_inlet_radius_mm"]
         yval = row["Flow1_kgs_mean"] * 1e3
         if np.isfinite(xval) and np.isfinite(yval):
@@ -164,6 +167,7 @@ def scatter_family(df, color, marker, label):
 scatter_family(fam1, COLOR_FAM1, "o", "RS Family 1 (RS0–7)")
 scatter_family(fam2, COLOR_FAM2, "D", "RS Family 2 (RS8–12)")
 scatter_family(fam3, COLOR_FAM3, "s", "RS Family 3 (RS13+)")
+scatter_family(fam4, COLOR_FAM4, "^", "RS Family 4 (RS18+)")
 
 # Copper samples
 if not s.empty:
@@ -309,13 +313,16 @@ for _, row in rs.sort_values("sample_index").iterrows():
     si   = int(row["sample_index"])
     r_v  = row["stage2_inlet_radius_mm"]
     md_v = row["Flow1_kgs_mean"] * 1e3
+    sample_label = str(row.get("sample_id") or f"RS{si}")
     if si < NEW_SAMPLE_INDEX_MIN:
         fam = "1"
     elif si < NEW_ROUND_INDEX_MIN:
         fam = "2"
-    else:
+    elif si < NEW_FAMILY4_INDEX_MIN:
         fam = "3"
-    lines.append(f"RS{si:<8} {r_v:<16.4f} {md_v:<18.3f} {fam}")
+    else:
+        fam = "4"
+    lines.append(f"{sample_label:<10} {r_v:<16.4f} {md_v:<18.3f} {fam}")
 
 out_txt = OUTPUT_DIR / "ipa_inlet_estimate.txt"
 out_txt.write_text("\n".join(lines), encoding="utf-8")

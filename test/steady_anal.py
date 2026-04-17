@@ -34,7 +34,7 @@ REPORT_SECTION_PREFIX = {
 }
 
 REPORT_FILE_RE = re.compile(r"injector-sample-(\d+)-report\.txt$", re.IGNORECASE)
-TRIMMED_FILE_RE = re.compile(r"(RS|S)(\d+)-.+\.csv$", re.IGNORECASE)
+TRIMMED_FILE_RE = re.compile(r"(RS|S)(\d+)(?:\.(\d+))?-.+\.csv$", re.IGNORECASE)
 
 # ----------------------------
 # User-configurable run values
@@ -47,10 +47,12 @@ MODE = "both"  # "both", "S", or "RS"
 MAKE_PLOTS = True
 NEW_SAMPLE_INDEX_MIN = 8   # RS8+ = K_extra sweep (Family 2 onwards)
 NEW_ROUND_INDEX_MIN   = 13  # RS13+ = new K_corr round (Family 3)
+NEW_FAMILY4_INDEX_MIN = 18  # RS18+ = Family 4 resin round
 SAMPLE_COLOR_S        = "tab:blue"
 SAMPLE_COLOR_RS_OLD   = "tab:orange"   # Family 1: RS0-7  (baseline geometry)
 SAMPLE_COLOR_RS_NEW   = "tab:green"    # Family 2: RS8-12 (K_extra sweep, old K_corr)
 SAMPLE_COLOR_RS_NEW2  = "tab:purple"   # Family 3: RS13+  (new K_corr round)
+SAMPLE_COLOR_RS_NEW3  = "tab:brown"    # Family 4: RS18+  (latest resin round)
 
 # Optional targets (kg/s) — 12 injector elements
 TARGET_COPPER_FLOW_STAGE2 = 0.7101464633719627  # Stage 2 (IPA) = Flow1, mdot_IPA
@@ -92,13 +94,30 @@ def normalize_key(raw_key: str) -> str:
 	return key
 
 
-def parse_sample_meta(file_path: Path) -> tuple[str, int]:
+def parse_sample_meta(file_path: Path) -> tuple[str, int, int | None]:
 	match = TRIMMED_FILE_RE.search(file_path.name)
 	if not match:
 		raise ValueError(f"Unable to parse sample type/index from filename: {file_path.name}")
 	sample_type = match.group(1).upper()
 	sample_index = int(match.group(2))
-	return sample_type, sample_index
+	secondary_index = int(match.group(3)) if match.group(3) is not None else None
+	return sample_type, sample_index, secondary_index
+
+
+def format_sample_id(sample_type: str, sample_index: int, secondary_index: int | None = None) -> str:
+	if secondary_index is None:
+		return f"{sample_type}{sample_index}"
+	return f"{sample_type}{sample_index}.{secondary_index}"
+
+
+def format_sample_id_from_row(row: pd.Series) -> str:
+	sample_type = str(row.get("sample_type", ""))
+	sample_index = row.get("sample_index", None)
+	secondary_index = row.get("sample_secondary_index", None)
+	if pd.isna(sample_index):
+		return sample_type
+	secondary_index_int = None if pd.isna(secondary_index) else int(secondary_index)
+	return format_sample_id(sample_type, int(sample_index), secondary_index_int)
 
 
 def parse_report_file(file_path: Path) -> dict:
@@ -242,7 +261,9 @@ def check_lc_fm_consistency(derived: pd.DataFrame, threshold_pct: float = 5.0) -
 		return {"lc_mfr_gs": np.nan, "fm_mfr_gs": np.nan, "error_pct": np.nan,
 				"ok": False, "msg": "Insufficient data points"}
 
-	slope = float(np.polyfit(t_sec[mask], lc[mask], 1)[0])
+	t_vals = pd.Series(t_sec[mask], dtype=float).dropna().tolist()
+	lc_vals = pd.Series(lc[mask], dtype=float).dropna().tolist()
+	slope = float(np.polyfit(t_vals, lc_vals, 1)[0])
 	lc_mfr = -slope  # LC decreases as propellant is consumed
 
 	fm_mfr = float(np.nanmean(np.asarray(fm1, dtype=float) + np.asarray(fm2, dtype=float)))
@@ -261,7 +282,7 @@ def check_lc_fm_consistency(derived: pd.DataFrame, threshold_pct: float = 5.0) -
 
 
 def summarize_trimmed_file(file_path: Path) -> tuple[dict, pd.DataFrame]:
-	sample_type, sample_index = parse_sample_meta(file_path)
+	sample_type, sample_index, secondary_index = parse_sample_meta(file_path)
 	df = pd.read_csv(file_path)
 
 	missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -278,6 +299,8 @@ def summarize_trimmed_file(file_path: Path) -> tuple[dict, pd.DataFrame]:
 	row = {
 		"sample_type": sample_type,
 		"sample_index": sample_index,
+		"sample_secondary_index": secondary_index,
+		"sample_id": format_sample_id(sample_type, sample_index, secondary_index),
 		"source_file": file_path.name,
 		"row_count": int(len(derived)),
 		"lc_fm_check_ok":       lc_check["ok"],
@@ -304,7 +327,7 @@ def load_trimmed_summaries(trimmed_dir: Path) -> tuple[pd.DataFrame, dict[str, p
 	if not rows:
 		return pd.DataFrame(), raw_runs
 
-	df = pd.DataFrame(rows).sort_values(["sample_type", "sample_index", "source_file"]).reset_index(drop=True)
+	df = pd.DataFrame(rows).sort_values(["sample_type", "sample_index", "sample_secondary_index", "source_file"]).reset_index(drop=True)
 	return df, raw_runs
 
 
@@ -361,14 +384,17 @@ def split_sample_groups_by_recency(group: pd.DataFrame) -> list[tuple[str, pd.Da
 	if sample_type == "RS" and "sample_index" in group.columns:
 		fam1 = group[group["sample_index"] < NEW_SAMPLE_INDEX_MIN]
 		fam2 = group[(group["sample_index"] >= NEW_SAMPLE_INDEX_MIN) & (group["sample_index"] < NEW_ROUND_INDEX_MIN)]
-		fam3 = group[group["sample_index"] >= NEW_ROUND_INDEX_MIN]
+		fam3 = group[(group["sample_index"] >= NEW_ROUND_INDEX_MIN) & (group["sample_index"] < NEW_FAMILY4_INDEX_MIN)]
+		fam4 = group[group["sample_index"] >= NEW_FAMILY4_INDEX_MIN]
 		plot_groups: list[tuple[str, pd.DataFrame, str, str]] = []
 		if not fam1.empty:
 			plot_groups.append(("RS Family 1 (RS0–7)", fam1, SAMPLE_COLOR_RS_OLD, "o"))
 		if not fam2.empty:
 			plot_groups.append(("RS Family 2 (RS8–12)", fam2, SAMPLE_COLOR_RS_NEW, "D"))
 		if not fam3.empty:
-			plot_groups.append(("RS Family 3 (RS13+)", fam3, SAMPLE_COLOR_RS_NEW2, "s"))
+			plot_groups.append(("RS Family 3 (RS13–17)", fam3, SAMPLE_COLOR_RS_NEW2, "s"))
+		if not fam4.empty:
+			plot_groups.append(("RS Family 4 (RS18+)", fam4, SAMPLE_COLOR_RS_NEW3, "^"))
 		return plot_groups
 
 	return [(sample_type, group, "gray", "o")]
@@ -386,8 +412,8 @@ def write_lc_fm_report(collated: pd.DataFrame, out_dir: Path, threshold_pct: flo
 	lines.append("=" * 80)
 
 	alarms = []
-	for _, row in collated.sort_values(["sample_type", "sample_index"]).iterrows():
-		tag  = f"{row['sample_type']}{int(row['sample_index']):>3}"
+	for _, row in collated.sort_values(["sample_type", "sample_index", "sample_secondary_index"]).iterrows():
+		tag  = format_sample_id_from_row(row)
 		msg  = str(row.get("lc_fm_msg", "N/A"))
 		ok   = bool(row.get("lc_fm_check_ok", False))
 		lines.append(f"  {tag}  {msg}")
@@ -481,16 +507,16 @@ def write_new_sample_mfr_error_report(collated: pd.DataFrame, out_dir: Path) -> 
 					continue
 				expected_mdot = theory_mdot * baseline_mean
 				pct_error = 100.0 * (actual_mdot - expected_mdot) / expected_mdot if abs(expected_mdot) > 0 else np.nan
-				stage_rows.append((int(row["sample_index"]), theory_mdot, expected_mdot, actual_mdot, pct_error))
+				stage_rows.append((format_sample_id_from_row(row), theory_mdot, expected_mdot, actual_mdot, pct_error))
 
 			if not stage_rows:
 				lines.append("No new-sample data available for this stage.")
 				lines.append("")
 				continue
 
-			for sample_index, theory_mdot, expected_mdot, actual_mdot, pct_error in stage_rows:
+			for sample_id, theory_mdot, expected_mdot, actual_mdot, pct_error in stage_rows:
 				lines.append(
-					f"RS{sample_index}: theory={theory_mdot:.6f} kg/s, expected(scaled)={expected_mdot:.6f} kg/s, "
+					f"{sample_id}: theory={theory_mdot:.6f} kg/s, expected(scaled)={expected_mdot:.6f} kg/s, "
 					f"actual={actual_mdot:.6f} kg/s, error={pct_error:.2f}%"
 				)
 			lines.append("")
@@ -1260,6 +1286,7 @@ def write_final_round_recommendation(
 			theory_vals_for_n.append(th_v)
 			sweep_rows.append({
 				"sample_index": int(row["sample_index"]),
+				"sample_id": format_sample_id_from_row(row),
 				"k_extra":      kextra_v,
 				"mdot_theory":  th_v,
 				"mdot_exp":     exp_v,
@@ -1307,8 +1334,9 @@ def write_final_round_recommendation(
 		for r in sweep_rows:
 			ke_s  = f"{r['k_extra']:.2f}" if not pd.isna(r["k_extra"]) else "  N/A"
 			err_s = f"{r['pct_err_vs_target']:+.2f}%" if not pd.isna(r["pct_err_vs_target"]) else "  N/A"
+			sample_label = str(r.get("sample_id") or f"RS{int(r['sample_index'])}")
 			lines.append(
-				f"  RS{r['sample_index']:>2}  {ke_s:>8}  {r['mdot_theory']:>12.6f}  "
+				f"  {sample_label:>8}  {ke_s:>8}  {r['mdot_theory']:>12.6f}  "
 				f"{r['mdot_exp']:>10.6f}  {r['pred_copper']:>13.6f}  {err_s:>17}"
 			)
 		lines.append("")
@@ -1319,7 +1347,7 @@ def write_final_round_recommendation(
 		best_k_extra = np.nan
 		coeffs = None
 		if len(ke_arr) >= 2 and not pd.isna(target_per_elem):
-			coeffs = np.polyfit(ke_arr, pred_arr, 1)
+			coeffs = np.asarray(np.polyfit(ke_arr.tolist(), pred_arr.tolist(), 1), dtype=float)
 			slope, intercept = float(coeffs[0]), float(coeffs[1])
 			if abs(slope) > 1e-12:
 				best_k_extra = (target_per_elem - intercept) / slope
@@ -1327,7 +1355,7 @@ def write_final_round_recommendation(
 		# Residual scatter from fit as proxy for uncertainty on K_extra
 		k_extra_unc = np.nan
 		if coeffs is not None and len(ke_arr) >= 3:
-			residuals = pred_arr - np.polyval(coeffs, ke_arr)
+			residuals = np.asarray(pred_arr, dtype=float) - np.asarray(np.polyval(coeffs, ke_arr.tolist()), dtype=float)
 			pred_rmse = float(np.sqrt(np.mean(residuals ** 2)))
 			# Propagate RMSE in pred_cu to uncertainty in K_extra via fit slope
 			if abs(float(coeffs[0])) > 1e-12:
@@ -1493,7 +1521,8 @@ def write_final_round_recommendation(
 		lines.append(f"    NEW {k_corr_name}:         {k_corr_new:.6f}  (= K_corr_old × K_extra*)")
 		lines.append(f"    K_total nominal (new×1.0): {k_corr_new:.6f}")
 		lines.append(f"    --- reference: pred_copper/elem at current K_extra=1.0 ---")
-		lines.append(f"      Direct RS{nominal_row['sample_index']}:  {pred_nominal_direct:.6f} kg/s  (ratio={pred_nominal_direct/target_pe:.3f})")
+		direct_label = str(nominal_row.get("sample_id") or f"RS{int(nominal_row['sample_index'])}")
+		lines.append(f"      Direct {direct_label}:  {pred_nominal_direct:.6f} kg/s  (ratio={pred_nominal_direct/target_pe:.3f})")
 		if not pd.isna(pred_nominal_fit):
 			lines.append(f"      Linear fit:  {pred_nominal_fit:.6f} kg/s  (ratio={pred_nominal_fit/target_pe:.3f})")
 		lines.append(f"    Target/elem:               {target_pe:.6f} kg/s  (= {res['cfg']['target']:.6f} / {n_elem})")
@@ -1646,7 +1675,6 @@ def write_optimization_overview_plots(
 			"target":      target_copper_flow_stage2,
 			"color_s":     SAMPLE_COLOR_S,
 			"color_rb":    SAMPLE_COLOR_RS_OLD,
-			"color_rn":    SAMPLE_COLOR_RS_NEW,
 			"color_sweep": "tab:red",
 		},
 		"stage1_lox": {
@@ -1657,7 +1685,6 @@ def write_optimization_overview_plots(
 			"target":      target_copper_flow_stage1,
 			"color_s":     "tab:cyan",
 			"color_rb":    "tab:orange",
-			"color_rn":    "tab:olive",
 			"color_sweep": "tab:purple",
 		},
 	}
@@ -1766,17 +1793,22 @@ def write_optimization_overview_plots(
 		_scatter(copper,  cfg["color_s"],  "o", f"Copper / S  (n={len(copper)})")
 		_scatter(rs_base, cfg["color_rb"], "s", f"Resin baseline / RS0–{NEW_SAMPLE_INDEX_MIN-1}  (n={len(rs_base)})")
 
-		# RS new — annotate with sample index
-		for _, row in rs_new.iterrows():
-			th_v = float(pd.to_numeric(row.get(theory_col, np.nan), errors="coerce"))
-			ex_v = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
-			if pd.isna(th_v) or pd.isna(ex_v):
+		# RS new by family — distinct color/marker (includes Family 4 RS18+)
+		for fam_label, fam_group, fam_color, fam_marker in split_sample_groups_by_recency(rs_new):
+			th = pd.to_numeric(fam_group[theory_col], errors="coerce")
+			ex = pd.to_numeric(fam_group[exp_col], errors="coerce")
+			mask = th.notna() & ex.notna()
+			if not mask.any():
 				continue
-			ax_par.scatter(th_v, ex_v, color=cfg["color_rn"], marker="D", s=90, zorder=6)
-			ax_par.annotate(f"RS{int(row['sample_index'])}", (th_v, ex_v), xytext=(5, 4),
-							textcoords="offset points", fontsize=7.5, color=cfg["color_rn"])
-		ax_par.scatter([], [], color=cfg["color_rn"], marker="D", s=90,
-					   label=f"Resin sweep / RS{NEW_SAMPLE_INDEX_MIN}+  (K_extra 0.8–1.2)")
+			ax_par.scatter(th[mask], ex[mask], color=fam_color, marker=fam_marker, s=90, zorder=6,
+						   label=f"{fam_label}  (n={int(mask.sum())})")
+			for _, row in fam_group.iterrows():
+				th_v = float(pd.to_numeric(row.get(theory_col, np.nan), errors="coerce"))
+				ex_v = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
+				if pd.isna(th_v) or pd.isna(ex_v):
+					continue
+				ax_par.annotate(format_sample_id_from_row(row), (th_v, ex_v), xytext=(5, 4),
+						textcoords="offset points", fontsize=7.5, color=fam_color)
 
 		ax_par.set_xlabel("Bazarov theory mdot  (kg/s, N-element total)")
 		ax_par.set_ylabel("Actual mdot, single element  (kg/s)")
@@ -1803,15 +1835,38 @@ def write_optimization_overview_plots(
 			kt_vals.append(k_total); ratio_vals.append(ratio); si_vals.append(int(row["sample_index"]))
 
 		if kt_vals:
-			ax_ratio.scatter(kt_vals, ratio_vals, color=cfg["color_rn"], s=110, marker="D", zorder=5)
-			for kt, ra, si in zip(kt_vals, ratio_vals, si_vals):
-				ax_ratio.annotate(f"RS{si}", (kt, ra), xytext=(5, 3),
-								  textcoords="offset points", fontsize=8)
+			# Plot RS new by family on the convergence ratio panel as well.
+			for fam_label, fam_group, fam_color, fam_marker in split_sample_groups_by_recency(rs_new):
+				fam_kt, fam_ratio, fam_si = [], [], []
+				for _, row in fam_group.iterrows():
+					ex_v    = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
+					ke_v    = float(pd.to_numeric(row.get(KEXTRA_COL, np.nan), errors="coerce")) if KEXTRA_COL in row.index else np.nan
+					kcorr_v = float(pd.to_numeric(row.get(k_corr_col, np.nan), errors="coerce")) if k_corr_col in row.index else np.nan
+					if pd.isna(ex_v) or pd.isna(ke_v) or pd.isna(kcorr_v) or abs(kcorr_v) < 1e-12:
+						continue
+					fam_kt.append(kcorr_v * ke_v)
+					fam_ratio.append((ex_v * transfer) / target_pe)
+					fam_si.append(int(row["sample_index"]))
+
+				if not fam_kt:
+					continue
+				ax_ratio.scatter(fam_kt, fam_ratio, color=fam_color, s=110, marker=fam_marker, zorder=5,
+							 label=fam_label)
+				for _, row in fam_group.iterrows():
+					ex_v    = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
+					ke_v    = float(pd.to_numeric(row.get(KEXTRA_COL, np.nan), errors="coerce")) if KEXTRA_COL in row.index else np.nan
+					kcorr_v = float(pd.to_numeric(row.get(k_corr_col, np.nan), errors="coerce")) if k_corr_col in row.index else np.nan
+					if pd.isna(ex_v) or pd.isna(ke_v) or pd.isna(kcorr_v) or abs(kcorr_v) < 1e-12:
+						continue
+					k_total = kcorr_v * ke_v
+					ratio   = (ex_v * transfer) / target_pe
+					ax_ratio.annotate(format_sample_id_from_row(row), (k_total, ratio), xytext=(5, 3),
+							  textcoords="offset points", fontsize=8, color=fam_color)
 			if len(kt_vals) >= 2:
 				coeffs = np.polyfit(kt_vals, ratio_vals, 1)
 				k_fit  = np.linspace(min(kt_vals) - 0.1, max(kt_vals) + 0.1, 200)
 				ax_ratio.plot(k_fit, np.polyval(coeffs, k_fit), "--",
-							  color=cfg["color_rn"], lw=1.8, label="Linear fit")
+							  color=cfg["color_sweep"], lw=1.8, label="Linear fit (all RS new)")
 				slope, intercept = float(coeffs[0]), float(coeffs[1])
 				if abs(slope) > 1e-12:
 					k_opt = (1.0 - intercept) / slope
@@ -1867,7 +1922,7 @@ def write_optimization_overview_plots(
 			k_rs = ex_rs / th_rs
 			if abs(k_rs) < 1e-12:
 				continue
-			pairs.append({"idx": int(row["sample_index"]), "transfer": k_s / k_rs})
+			pairs.append({"idx": int(row["sample_index"]), "sample_id": format_sample_id_from_row(row), "transfer": k_s / k_rs})
 
 		if not pairs:
 			continue
@@ -1900,7 +1955,7 @@ def write_optimization_overview_plots(
 		if not meta or pd.isna(transfer) or target_pe is None or pd.isna(target_pe):
 			continue
 
-		kt_vals, ratio_vals, si_vals = [], [], []
+		kt_vals, ratio_vals, sample_ids = [], [], []
 		for _, row in rs_new.iterrows():
 			ex_v    = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
 			ke_v    = float(pd.to_numeric(row.get(KEXTRA_COL, np.nan), errors="coerce")) if KEXTRA_COL in row.index else np.nan
@@ -1909,19 +1964,19 @@ def write_optimization_overview_plots(
 				continue
 			kt_vals.append(kcorr_v * ke_v)
 			ratio_vals.append((ex_v * transfer) / target_pe)
-			si_vals.append(int(row["sample_index"]))
+			sample_ids.append(format_sample_id_from_row(row))
 
 		if not kt_vals:
 			continue
 		ax_funnel.scatter(kt_vals, ratio_vals, color=color, s=100, marker="D",
 						  label=cfg["stage_name"], zorder=5)
-		for kt, ra, si in zip(kt_vals, ratio_vals, si_vals):
-			ax_funnel.annotate(f"RS{si}", (kt, ra), xytext=(5, 3),
+		for kt, ra, sample_id in zip(kt_vals, ratio_vals, sample_ids):
+			ax_funnel.annotate(sample_id, (kt, ra), xytext=(5, 3),
 							   textcoords="offset points", fontsize=7.5, color=color)
 		if len(kt_vals) >= 2:
-			coeffs = np.polyfit(kt_vals, ratio_vals, 1)
+			coeffs = np.asarray(np.polyfit(list(map(float, kt_vals)), list(map(float, ratio_vals)), 1), dtype=float)
 			k_fit  = np.linspace(min(kt_vals) - 0.1, max(kt_vals) + 0.1, 200)
-			ax_funnel.plot(k_fit, np.polyval(coeffs, k_fit), "--", color=color, lw=1.8)
+			ax_funnel.plot(k_fit, np.asarray(np.polyval(coeffs, k_fit.tolist()), dtype=float), "--", color=color, lw=1.8)
 			# Mark where fit crosses target (ratio = 1.0)
 			slope, intercept = float(coeffs[0]), float(coeffs[1])
 			if abs(slope) > 1e-12:

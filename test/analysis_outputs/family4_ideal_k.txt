@@ -1,0 +1,27 @@
+==========================================================================================
+FAMILY 4 IDEAL K ESTIMATE (RS18+ ONLY)
+==========================================================================================
+
+Data scope:
+  Input file: C:\Users\jack7\Documents\ARES Git\bruv\test\analysis_outputs\steady_collated_both.csv
+  Family 4 filter: sample_type=RS and sample_index >= 18
+  RS samples used: RS18, RS19, RS20, RS21, RS21.2, RS22, RS23, RS24
+
+Fit model per stage: k_mdot = slope * K_extra + intercept
+Ideal K_extra is where k_mdot = 1.
+
+>>> Stage 2 (IPA)
+------------------------------------------------------------------------------------------
+  Points used: 0
+  Fit: k_mdot = nan * K_extra + nan
+  Ideal K_extra (k_mdot=1): unavailable
+
+>>> Stage 1 (LOX)
+------------------------------------------------------------------------------------------
+  Points used: 0
+  Fit: k_mdot = nan * K_extra + nan
+  Ideal K_extra (k_mdot=1): unavailable
+
+>>> PAIRED OPTIMUM (single K_extra for both stages)
+------------------------------------------------------------------------------------------
+  Paired optimum unavailable

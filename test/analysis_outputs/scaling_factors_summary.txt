@@ -24,7 +24,7 @@ BAZAROV SCALING FACTORS SUMMARY
       Mean:  2.061152  +/-  0.306167
       Range: [1.690188, 2.710393]
 
-  Resin new (n=9):
+  Resin new (n=17):
 
     K_mdot (scaling factor for mass flow):
       Mean:  1.499835  +/-  0.311713
@@ -57,7 +57,7 @@ BAZAROV SCALING FACTORS SUMMARY
       Mean:  0.597751  +/-  0.200039
       Range: [0.410358, 1.063648]
 
-  Resin new (n=9):
+  Resin new (n=17):
 
     K_mdot (scaling factor for mass flow):
       Mean:  0.799008  +/-  0.155663

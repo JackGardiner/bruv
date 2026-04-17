@@ -1,0 +1,3 @@
+stage,stage_name,n_points,kextra_min,kextra_max,slope,intercept,fit_rmse_kmdot,ideal_k_extra,ideal_k_extra_unc,current_correction_factor_mean,recommended_correction_factor,correction_factor_name
+stage2,Stage 2 (IPA),0,,,,,,,,,,IPA correction factor
+stage1,Stage 1 (LOX),0,,,,,,,,,,LOX correction factor
