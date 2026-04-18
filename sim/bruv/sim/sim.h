@@ -41,6 +41,7 @@
     X(out_T, f64*, C_INPUT | C_OUTPUT_DATA)     \
     X(out_P, f64*, C_INPUT | C_OUTPUT_DATA)     \
     X(out_rho, f64*, C_INPUT | C_OUTPUT_DATA)   \
+    X(out_gamma, f64*, C_INPUT | C_OUTPUT_DATA)    \
     X(out_cp, f64*, C_INPUT | C_OUTPUT_DATA)    \
     X(out_mu, f64*, C_INPUT | C_OUTPUT_DATA)    \
     X(out_Pr, f64*, C_INPUT | C_OUTPUT_DATA)    \

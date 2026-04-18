@@ -208,10 +208,17 @@ find_cea_T_cc = cea_approximation("T_cc", "c_t", blitz=0.0,
 find_cea_rho_cc = cea_approximation("rho_cc", "rho", blitz=2.0,
         pidxs=[1, 4, 5, 8], qidxs=[0, 1, 2, 4, 8, 9])
 
-find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
-        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
 find_cea_Mw_tht = cea_approximation("Mw_tht", "t_mw", rel_only=True, blitz=0.0,
         pidxs=[2], qidxs=[0, 1, 2, 3, 4, 5])
+
+find_cea_gamma_cc = cea_approximation("gamma_cc", "c_gamma")
+find_cea_gamma_tht = cea_approximation("gamma_tht", "t_gamma", rel_only=True,
+        pidxs=[0, 1, 2, 3, 4, 5], qidxs=[0, 1, 2, 3, 4, 5, 7, 8, 9])
+find_cea_gamma_lowm = cea_approximation("gamma_lowm", "lowm_gamma",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_lowm})"])
+find_cea_gamma_midm = cea_approximation("gamma_midm", "midm_gamma",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"])
+find_cea_gamma_exit = cea_approximation("gamma_exit", "gamma")
 
 find_cea_cp_cc = cea_approximation("cp_cc", "c_cp",
         blitz=3.0,
@@ -503,6 +510,17 @@ def cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm, get_midm,
     return M, f(M)
 
 
+def check_cea_gamma_along():
+    get_gamma = find_cea_gamma_tht(what="get")
+    get_cc = find_cea_gamma_cc(what="get")
+    get_tht = find_cea_gamma_tht(what="get")
+    get_lowm = find_cea_gamma_lowm(what="get")
+    get_midm = find_cea_gamma_midm(what="get")
+    get_exit = find_cea_gamma_exit(what="get")
+    def approx(P0_cc, ofr):
+        return cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm,
+                get_midm, get_exit)
+    cea_compare_along("mach", "gamma", approx)
 def check_cea_cp_along():
     get_gamma = find_cea_gamma_tht(what="get")
     get_cc = find_cea_cp_cc(what="get")
@@ -678,8 +696,13 @@ def _run():
     find_cea_T_cc(what="approximate")
     find_cea_rho_cc(what="approximate")
 
-    find_cea_gamma_tht(what="approximate")
     find_cea_Mw_tht(what="approximate")
+
+    find_cea_gamma_cc(what="approximate")
+    find_cea_gamma_tht(what="approximate")
+    find_cea_gamma_lowm(what="approximate")
+    find_cea_gamma_midm(what="approximate")
+    find_cea_gamma_exit(what="approximate")
 
     find_cea_cp_cc(what="approximate")
     find_cea_cp_tht(what="approximate")
@@ -699,6 +722,7 @@ def _run():
     find_cea_Pr_midm(what="approximate")
     find_cea_Pr_exit(what="approximate")
 
+    check_cea_gamma_along()
     check_cea_cp_along()
     check_cea_mu_along()
     check_cea_Pr_along()

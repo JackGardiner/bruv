@@ -91,9 +91,11 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     assert(nearto(P_exit, s->P_exit),
             "failed to find perfectly expanded nozzle?");
 
+    ceaFit* fit_gamma = &(ceaFit){0};
     ceaFit* fit_cp = &(ceaFit){0};
     ceaFit* fit_mu = &(ceaFit){0};
     ceaFit* fit_Pr = &(ceaFit){0};
+    cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, M_exit);
     cea_fit_cp(fit_cp, s->P0_cc, s->ofr, M_exit);
     cea_fit_mu(fit_mu, s->P0_cc, s->ofr, M_exit);
     cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, M_exit);
@@ -151,9 +153,14 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             s->out_count);
     assert(s->out_z, "output array 'out_z' is null");
     assert(s->out_r, "output array 'out_r' is null");
+    assert(s->out_M, "output array 'out_M' is null");
     assert(s->out_T, "output array 'out_T' is null");
     assert(s->out_P, "output array 'out_P' is null");
-    assert(s->out_M, "output array 'out_M' is null");
+    assert(s->out_rho, "output array 'out_rho' is null");
+    assert(s->out_gamma, "output array 'out_gamma' is null");
+    assert(s->out_cp, "output array 'out_cp' is null");
+    assert(s->out_mu, "output array 'out_mu' is null");
+    assert(s->out_Pr, "output array 'out_Pr' is null");
 
     for (i64 i=0; i<s->out_count; ++i) {
         f64 z = lerpidx(0.0, cnt->z_exit, i, s->out_count);
@@ -165,6 +172,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         f64 T = s->T0_cc * isentropic_T_on_T0(M, shr);
         f64 P = s->P0_cc * isentropic_P_on_P0(M, shr);
         f64 rho = s->rho0_cc * isentropic_rho_on_rho0(M, shr);
+        f64 gamma = cea_sample(fit_gamma, M);
         f64 cp = cea_sample(fit_cp, M);
         f64 mu = cea_sample(fit_mu, M);
         f64 Pr = cea_sample(fit_Pr, M);
@@ -174,6 +182,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         s->out_T[i] = T;
         s->out_P[i] = P;
         s->out_rho[i] = rho;
+        s->out_gamma[i] = gamma;
         s->out_cp[i] = cp;
         s->out_mu[i] = mu;
         s->out_Pr[i] = Pr;

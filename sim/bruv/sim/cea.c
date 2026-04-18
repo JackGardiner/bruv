@@ -75,6 +75,37 @@ f64 cea_rho0_cc(f64 P0_cc, f64 ofr) {
 }
 
 
+f64 cea_Mw_tht(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.00724% */
+    /*   rel 0.016% */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_Mw_tht.i"
+    CEA_2DLOOKUP();
+}
+
+
+f64 cea_gamma_cc(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0105% */
+    /*   rel 0.138% */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_gamma_cc.i"
+    CEA_2DLOOKUP();
+}
+
 f64 cea_gamma_tht(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
@@ -90,18 +121,52 @@ f64 cea_gamma_tht(f64 P0_cc, f64 ofr) {
     CEA_2DLOOKUP();
 }
 
-f64 cea_Mw_tht(f64 P0_cc, f64 ofr) {
+f64 cea_gamma_lowm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.00724% */
-    /*   rel 0.016% */
+    /*   abs 0.00973% */
+    /*   rel 0.108% */
+    /* also requires: */
+    /*   'M_midm' as: lerp(1, M_exit, 0.1) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
     const f64 YHI = 3.0;
     enum { XLEN = 80,
            YLEN = 80, };
-    #include "tbl/cea_Mw_tht.i"
+    #include "tbl/cea_gamma_lowm.i"
+    CEA_2DLOOKUP();
+}
+
+f64 cea_gamma_midm(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0111% */
+    /*   rel 0.114% */
+    /* also requires: */
+    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_gamma_midm.i"
+    CEA_2DLOOKUP();
+}
+
+f64 cea_gamma_exit(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0826% */
+    /*   rel 0.764% */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_gamma_exit.i"
     CEA_2DLOOKUP();
 }
 
@@ -371,6 +436,9 @@ f64 cea_sample(const ceaFit* fit, f64 M) {
             );                                                  \
         fit->value_cc = value_cc;                               \
     } while (0)
+void cea_fit_gamma(ceaFit* fit, f64 P0_cc, f64 ofr, f64 M_exit) {
+    cea_make_fit(gamma);
+}
 void cea_fit_cp(ceaFit* fit, f64 P0_cc, f64 ofr, f64 M_exit) {
     cea_make_fit(cp);
 }
