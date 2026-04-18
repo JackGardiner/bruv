@@ -904,7 +904,7 @@ i32 nearhoriz_vec3(vec3 xyz);
 // ========================= //
 
 
-// Sets `*a` and `*b` s.t. the function f(x) = a*x + b will pass through
+// Sets `*a` and `*b` s.t. the function f, f(x) = a*x + b, will pass through
 // (`x0`, `y0`) and (`x1`, `y1`).
 #define fit_linear(a, b, x0, y0, x1, y1) ( generic( \
         (x0)+(y0)+(x1)+(y1)                         \
@@ -914,8 +914,8 @@ i32 nearhoriz_vec3(vec3 xyz);
 void fit_linear_f64(f64* rstr a, f64* rstr b, f64 x0, f64 y0, f64 x1, f64 y1);
 void fit_linear_f32(f32* rstr a, f32* rstr b, f32 x0, f32 y0, f32 x1, f32 y1);
 
-// Sets `*a`, `*b`, and `*c` s.t. the function f(x) = a*x^2 + b*x + c will pass
-// through (`x0`, `y0`), (`x1`, `y1`), and (`x2`, `y2`).
+// Sets `*a`, `*b`, and `*c` s.t. the function f, f(x) = a*x^2 + b*x + c, will
+// pass through (`x0`, `y0`), (`x1`, `y1`), and (`x2`, `y2`).
 #define fit_quadratic(a, b, c, x0, y0, x1, y1, x2, y2) ( generic(   \
         (x0)+(y0)+(x1)+(y1)+(x2)+(y2)                               \
         , f64: fit_quadratic_f64                                    \
@@ -925,6 +925,19 @@ void fit_quadratic_f64(f64* rstr a, f64* rstr b, f64* rstr c, f64 x0, f64 y0,
         f64 x1, f64 y1, f64 x2, f64 y2);
 void fit_quadratic_f32(f32* rstr a, f32* rstr b, f32* rstr c, f32 x0, f32 y0,
         f32 x1, f32 y1, f32 x2, f32 y2);
+
+// Sets `*a`, `*b`, `*c`, and `*d` s.t. the function f,
+// f(x) = a*x^3 + b*x^2 + c*x + d, will pass through (`x0`, `y0`), (`x1`, `y1`),
+// (`x2`, `y2`), and (`x3`, `y3`).
+#define fit_cubic(a, b, c, d, x0, y0, x1, y1, x2, y2, x3, y3) ( generic(    \
+        (x0)+(y0)+(x1)+(y1)+(x2)+(y2)+(x3)+(y3)                             \
+        , f64: fit_cubic_f64                                                \
+        , f32: fit_cubic_f32                                                \
+    ) ((a), (b), (c), (d), (x0), (y0), (x1), (y1), (x2), (y2), (x3), (y3)) )
+void fit_cubic_f64(f64* rstr a, f64* rstr b, f64* rstr c, f64* rstr d, f64 x0,
+        f64 y0, f64 x1, f64 y1, f64 x2, f64 y2, f64 x3, f64 y3);
+void fit_cubic_f32(f32* rstr a, f32* rstr b, f32* rstr c, f32* rstr d, f32 x0,
+        f32 y0, f32 x1, f32 y1, f32 x2, f32 y2, f32 x3, f32 y3);
 
 
 

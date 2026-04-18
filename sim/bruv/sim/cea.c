@@ -136,13 +136,30 @@ f64 cea_cp_tht(f64 P0_cc, f64 ofr) {
     CEA_2DLOOKUP();
 }
 
+f64 cea_cp_lowm(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0894% */
+    /*   rel 0.0481% */
+    /* also requires: */
+    /*   'M_midm' as: lerp(1, M_exit, 0.1) */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_cp_lowm.i"
+    CEA_2DLOOKUP();
+}
+
 f64 cea_cp_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0945% */
-    /*   rel 0.0506% */
+    /*   abs 0.0988% */
+    /*   rel 0.0544% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.2) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -199,13 +216,30 @@ f64 cea_mu_tht(f64 P0_cc, f64 ofr) {
     CEA_2DLOOKUP();
 }
 
+f64 cea_mu_lowm(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0137% */
+    /*   rel 0.0303% */
+    /* also requires: */
+    /*   'M_midm' as: lerp(1, M_exit, 0.1) */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_mu_lowm.i"
+    CEA_2DLOOKUP();
+}
+
 f64 cea_mu_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0125% */
-    /*   rel 0.0274% */
+    /*   abs 0.0127% */
+    /*   rel 0.0267% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.2) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -262,13 +296,30 @@ f64 cea_Pr_tht(f64 P0_cc, f64 ofr) {
     CEA_2DLOOKUP();
 }
 
+f64 cea_Pr_lowm(f64 P0_cc, f64 ofr) {
+    /* evenly-spaced flattened (C-ordered) 2D LUT */
+    /* max error of: */
+    /*   abs 0.0587% */
+    /*   rel 0.27% */
+    /* also requires: */
+    /*   'M_midm' as: lerp(1, M_exit, 0.1) */
+    const f64 XLO = 1.0;
+    const f64 XHI = 5.0;
+    const f64 YLO = 1.0;
+    const f64 YHI = 3.0;
+    enum { XLEN = 80,
+           YLEN = 80, };
+    #include "tbl/cea_Pr_lowm.i"
+    CEA_2DLOOKUP();
+}
+
 f64 cea_Pr_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0602% */
-    /*   rel 0.257% */
+    /*   abs 0.0636% */
+    /*   rel 0.277% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.2) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -300,18 +351,21 @@ f64 cea_Pr_exit(f64 P0_cc, f64 ofr) {
 
 f64 cea_sample(const ceaFit* fit, f64 M) {
     if (M < 1.0)
-        return lerp(fit->value_cc, fit->a + fit->b + fit->c, M);
-    return (fit->a*M + fit->b)*M + fit->c;
+        return lerp(fit->value_cc, fit->a + fit->b + fit->c + fit->d, M);
+    return ((fit->a*M + fit->b)*M + fit->c)*M + fit->d;
 }
 
 #define cea_make_fit(name) do {                                 \
-        f64 M_midm = 0.8 + 0.2*M_exit;                          \
+        f64 M_lowm = 0.9 + 0.1*M_exit;                          \
+        f64 M_midm = 0.7 + 0.3*M_exit;                          \
         f64 value_cc = GLUE(cea_, name, _cc)(P0_cc, ofr);       \
         f64 value_tht = GLUE(cea_, name, _tht)(P0_cc, ofr);     \
+        f64 value_lowm = GLUE(cea_, name, _lowm)(P0_cc, ofr);   \
         f64 value_midm = GLUE(cea_, name, _midm)(P0_cc, ofr);   \
         f64 value_exit = GLUE(cea_, name, _exit)(P0_cc, ofr);   \
-        fit_quadratic(&fit->a, &fit->b, &fit->c,                \
+        fit_cubic(&fit->a, &fit->b, &fit->c, &fit->d,           \
                 1.0, value_tht,                                 \
+                M_lowm, value_lowm,                             \
                 M_midm, value_midm,                             \
                 M_exit, value_exit                              \
             );                                                  \

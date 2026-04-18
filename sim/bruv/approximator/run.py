@@ -123,9 +123,13 @@ def cea_AEAT_for(P, ofr, M_lerp_1_to_exit):
     M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
     return isentropic_A_on_Astar(1 + (M_exit - 1)*M_lerp_1_to_exit, gamma_tht)
 
-CEA_M_midm = 0.2
+CEA_M_lowm = 0.1
+CEA_M_midm = 0.3
 def cea(name, P, ofr):
-    if name.startswith("midm_"):
+    if name.startswith("lowm_"):
+        AEAT = cea_AEAT_for(P, ofr, CEA_M_lowm)
+        name = name[len("lowm_"):]
+    elif name.startswith("midm_"):
         AEAT = cea_AEAT_for(P, ofr, CEA_M_midm)
         name = name[len("midm_"):]
     else:
@@ -154,7 +158,7 @@ def find_approximation(get_surf, type_name, var_name, pidxs=None,
 
         surf = get_surf() # evaluate now rather than on init.
 
-        if not (lut is not None and what == "approximate"):
+        if not (lut is not None and what in {"get", "approximate"}):
             X, Y, V = surf.points(
                 1000 if what=="approximate" else points,
                 spacing=spacing
@@ -215,6 +219,8 @@ find_cea_cp_cc = cea_approximation("cp_cc", "c_cp",
 find_cea_cp_tht = cea_approximation("cp_tht", "t_cp",
         blitz=3.0, points=300, spacing=1.3,
         pidxs=[0, 1, 3, 5, 6, 7, 8, 9, 11, 12, 14], qidxs=[0, 1, 2, 3, 4, 5])
+find_cea_cp_lowm = cea_approximation("cp_lowm", "lowm_cp",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_lowm})"])
 find_cea_cp_midm = cea_approximation("cp_midm", "midm_cp",
         extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=3.0, points=300, spacing=1.3,
@@ -235,6 +241,8 @@ find_cea_mu_cc = cea_approximation("mu_cc", "c_visc",
 find_cea_mu_tht = cea_approximation("mu_tht", "t_visc",
         blitz=3.0,
         pidxs=[0, 2, 4, 5], qidxs=[0, 1, 2, 5])
+find_cea_mu_lowm = cea_approximation("mu_lowm", "lowm_visc",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_lowm})"])
 find_cea_mu_midm = cea_approximation("mu_midm", "midm_visc",
         extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=3.0,
@@ -249,6 +257,8 @@ find_cea_Pr_cc = cea_approximation("Pr_cc", "c_pran",
 find_cea_Pr_tht = cea_approximation("Pr_tht", "t_pran",
         blitz=5.0,
         pidxs=[0, 1, 2, 4, 5], qidxs=[0, 1, 2, 3, 5, 7, 8, 9, 12, 13, 14])
+find_cea_Pr_lowm = cea_approximation("Pr_lowm", "lowm_pran",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_lowm})"])
 find_cea_Pr_midm = cea_approximation("Pr_midm", "midm_pran",
         extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=5.0,
@@ -328,8 +338,8 @@ def cea_property_along(X_name, Y_name, P0_cc, ofr):
 def cea_compare_along(X_name, Y_name, approx):
     P0_ccs = np.linspace(1, 5, 5)
     ofrs = np.linspace(1.0, 3.0, 8)
-    # P0_ccs = np.array([3.5])
-    # ofrs = np.array([1.76])
+    P0_ccs = np.linspace(3.3, 3.7, 3)
+    ofrs = np.linspace(1.56, 1.96, 3)
 
     cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
 
@@ -409,35 +419,122 @@ def cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm, get_exit)
     return M, f(M)
 
 
+def fit_cubic(x0, y0, x1, y1, x2, y2, x3, y3):
+    x0_2 = x0 * x0
+    x1_2 = x1 * x1
+    x2_2 = x2 * x2
+    x3_2 = x3 * x3
+
+    x0_3 = x0_2 * x0
+    x1_3 = x1_2 * x1
+    x2_3 = x2_2 * x2
+    x3_3 = x3_2 * x3
+
+    # Determinant of the Vandermonde matrix
+    den = x0_3 * (x1_2 * (x2 - x3) - x2_2 * (x1 - x3) + x3_2 * (x1 - x2)) \
+        - x1_3 * (x0_2 * (x2 - x3) - x2_2 * (x0 - x3) + x3_2 * (x0 - x2)) \
+        + x2_3 * (x0_2 * (x1 - x3) - x1_2 * (x0 - x3) + x3_2 * (x0 - x1)) \
+        - x3_3 * (x0_2 * (x1 - x2) - x1_2 * (x0 - x2) + x2_2 * (x0 - x1))
+
+    assert den != 0
+
+    a = y0 * (x1_2 * (x2 - x3) - x2_2 * (x1 - x3) + x3_2 * (x1 - x2)) \
+      - y1 * (x0_2 * (x2 - x3) - x2_2 * (x0 - x3) + x3_2 * (x0 - x2)) \
+      + y2 * (x0_2 * (x1 - x3) - x1_2 * (x0 - x3) + x3_2 * (x0 - x1)) \
+      - y3 * (x0_2 * (x1 - x2) - x1_2 * (x0 - x2) + x2_2 * (x0 - x1))
+
+    b = x0_3 * (y1 * (x2 - x3) - y2 * (x1 - x3) + y3 * (x1 - x2)) \
+      - x1_3 * (y0 * (x2 - x3) - y2 * (x0 - x3) + y3 * (x0 - x2)) \
+      + x2_3 * (y0 * (x1 - x3) - y1 * (x0 - x3) + y3 * (x0 - x1)) \
+      - x3_3 * (y0 * (x1 - x2) - y1 * (x0 - x2) + y2 * (x0 - x1))
+
+    c = x0_3 * (x1_2 * (y2 - y3) - x2_2 * (y1 - y3) + x3_2 * (y1 - y2)) \
+      - x1_3 * (x0_2 * (y2 - y3) - x2_2 * (y0 - y3) + x3_2 * (y0 - y2)) \
+      + x2_3 * (x0_2 * (y1 - y3) - x1_2 * (y0 - y3) + x3_2 * (y0 - y1)) \
+      - x3_3 * (x0_2 * (y1 - y2) - x1_2 * (y0 - y2) + x2_2 * (y0 - y1))
+
+    d = x0_3 * (x1_2 * (x2 * y3 - x3 * y2) - x2_2 * (x1 * y3 - x3 * y1) \
+                + x3_2 * (x1 * y2 - x2 * y1)) \
+      - x1_3 * (x0_2 * (x2 * y3 - x3 * y2) - x2_2 * (x0 * y3 - x3 * y0) \
+                + x3_2 * (x0 * y2 - x2 * y0)) \
+      + x2_3 * (x0_2 * (x1 * y3 - x3 * y1) - x1_2 * (x0 * y3 - x3 * y0) \
+                + x3_2 * (x0 * y1 - x1 * y0)) \
+      - x3_3 * (x0_2 * (x1 * y2 - x2 * y1) - x1_2 * (x0 * y2 - x2 * y0) \
+                + x2_2 * (x0 * y1 - x1 * y0))
+
+    a /= den
+    b /= den
+    c /= den
+    d /= den
+
+    return a, b, c, d
+
+def cea_cubefit_function_of_M(M_lowm, M_midm, M_exit, V_cc, V_tht, V_lowm,
+        V_midm, V_exit):
+    a, b, c, d = fit_cubic(
+        1.0, V_tht,
+        M_lowm, V_lowm,
+        M_midm, V_midm,
+        M_exit, V_exit
+    )
+    return lambda M: np.where(
+        M > 1,
+        ((a*M + b)*M + c)*M + d,
+        M * (a + b + c + d) + (1 - M) * V_cc
+    )
+
+def cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm, get_midm,
+        get_exit):
+    gamma_tht = get_gamma(P0_cc, ofr)
+    M_exit = isentropic_M_from_P_on_P0(101325.0 / (P0_cc*1e6), gamma_tht);
+    M_lowm = 1 + (M_exit - 1) * CEA_M_lowm
+    M_midm = 1 + (M_exit - 1) * CEA_M_midm
+    V_cc = get_cc(P0_cc, ofr)
+    V_tht = get_tht(P0_cc, ofr)
+    V_lowm = get_lowm(P0_cc, ofr)
+    V_midm = get_midm(P0_cc, ofr)
+    V_exit = get_exit(P0_cc, ofr)
+
+    M = np.linspace(1.0, M_exit, 100)
+    M = np.insert(M, 0, 0.0)
+    M = np.insert(M, 1, 0.5)
+    f = cea_cubefit_function_of_M(M_lowm, M_midm, M_exit, V_cc, V_tht,
+            V_lowm, V_midm, V_exit)
+    return M, f(M)
+
+
 def check_cea_cp_along():
     get_gamma = find_cea_gamma_tht(what="get")
     get_cc = find_cea_cp_cc(what="get")
     get_tht = find_cea_cp_tht(what="get")
+    get_lowm = find_cea_cp_lowm(what="get")
     get_midm = find_cea_cp_midm(what="get")
     get_exit = find_cea_cp_exit(what="get")
     def approx(P0_cc, ofr):
-        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
-                get_exit)
+        return cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm,
+                get_midm, get_exit)
     cea_compare_along("mach", "cp", approx)
 def check_cea_mu_along():
     get_gamma = find_cea_gamma_tht(what="get")
     get_cc = find_cea_mu_cc(what="get")
     get_tht = find_cea_mu_tht(what="get")
+    get_lowm = find_cea_mu_lowm(what="get")
     get_midm = find_cea_mu_midm(what="get")
     get_exit = find_cea_mu_exit(what="get")
     def approx(P0_cc, ofr):
-        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
-                get_exit)
+        return cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm,
+                get_midm, get_exit)
     cea_compare_along("mach", "visc", approx)
 def check_cea_Pr_along():
     get_gamma = find_cea_gamma_tht(what="get")
     get_cc = find_cea_Pr_cc(what="get")
     get_tht = find_cea_Pr_tht(what="get")
+    get_lowm = find_cea_Pr_lowm(what="get")
     get_midm = find_cea_Pr_midm(what="get")
     get_exit = find_cea_Pr_exit(what="get")
     def approx(P0_cc, ofr):
-        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
-                get_exit)
+        return cea_cubefit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_lowm,
+                get_midm, get_exit)
     cea_compare_along("mach", "pran", approx)
 
 
@@ -586,16 +683,19 @@ def _run():
 
     find_cea_cp_cc(what="approximate")
     find_cea_cp_tht(what="approximate")
+    find_cea_cp_lowm(what="approximate")
     find_cea_cp_midm(what="approximate")
     find_cea_cp_exit(what="approximate")
 
     find_cea_mu_cc(what="approximate")
     find_cea_mu_tht(what="approximate")
+    find_cea_mu_lowm(what="approximate")
     find_cea_mu_midm(what="approximate")
     find_cea_mu_exit(what="approximate")
 
     find_cea_Pr_cc(what="approximate")
     find_cea_Pr_tht(what="approximate")
+    find_cea_Pr_lowm(what="approximate")
     find_cea_Pr_midm(what="approximate")
     find_cea_Pr_exit(what="approximate")
 

@@ -36,7 +36,7 @@ f64 ipa_rho(f64 T, f64 P) {
     /*   abs 0.366% */
     /*   rel 0.458% */
     /* also requires: */
-    /*   x < (y - 1.41) / (1.97e-3 * y - 2.582e-3) */
+    /*   x < 18.75 * y + 417.5 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
@@ -53,7 +53,7 @@ f64 ipa_cp(f64 T, f64 P) {
     /*   abs 0.00939% */
     /*   rel 0.0072% */
     /* also requires: */
-    /*   x < (y - 1.41) / (1.97e-3 * y - 2.582e-3) */
+    /*   x < 18.75 * y + 417.5 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
@@ -70,7 +70,7 @@ f64 ipa_mu(f64 T, f64 P) {
     /*   abs 0.239% */
     /*   rel 0.222% */
     /* also requires: */
-    /*   x < (y - 1.41) / (1.97e-3 * y - 2.582e-3) */
+    /*   x < 18.75 * y + 417.5 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
@@ -87,7 +87,7 @@ f64 ipa_k(f64 T, f64 P) {
     /*   abs 0.000662% */
     /*   rel 0.00209% */
     /* also requires: */
-    /*   x < (y - 1.41) / (1.97e-3 * y - 2.582e-3) */
+    /*   x < 18.75 * y + 417.5 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;

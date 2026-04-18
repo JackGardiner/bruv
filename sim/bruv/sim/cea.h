@@ -13,16 +13,19 @@ f64 cea_Mw_tht(f64 P0_cc, f64 ofr);
 
 f64 cea_cp_cc(f64 P0_cc, f64 ofr);
 f64 cea_cp_tht(f64 P0_cc, f64 ofr);
+f64 cea_cp_lowm(f64 P0_cc, f64 ofr);
 f64 cea_cp_midm(f64 P0_cc, f64 ofr);
 f64 cea_cp_exit(f64 P0_cc, f64 ofr);
 
 f64 cea_mu_cc(f64 P0_cc, f64 ofr);
 f64 cea_mu_tht(f64 P0_cc, f64 ofr);
+f64 cea_mu_lowm(f64 P0_cc, f64 ofr);
 f64 cea_mu_midm(f64 P0_cc, f64 ofr);
 f64 cea_mu_exit(f64 P0_cc, f64 ofr);
 
 f64 cea_Pr_cc(f64 P0_cc, f64 ofr);
 f64 cea_Pr_tht(f64 P0_cc, f64 ofr);
+f64 cea_Pr_lowm(f64 P0_cc, f64 ofr);
 f64 cea_Pr_midm(f64 P0_cc, f64 ofr);
 f64 cea_Pr_exit(f64 P0_cc, f64 ofr);
 
@@ -35,6 +38,7 @@ typedef struct ceaFit {
     f64 a;
     f64 b;
     f64 c;
+    f64 d;
 } ceaFit;
 f64 cea_sample(const ceaFit* fit, f64 M);
 
