@@ -243,6 +243,7 @@ BRIDGE_CACHE = BIN_BRIDGE / "cache.json"
 
 APPROXIMATOR_OUTPUT = OUT / "approximator.txt"
 APPROXIMATOR_FIGS = OUT / "approximator_figs"
+APPROXIMATOR_TBLS = OUT / "tbl"
 
 
 PATHS_PY = BRUV / "paths.py"

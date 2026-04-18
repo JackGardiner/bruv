@@ -139,5 +139,6 @@ def CEA(oxid, fuel):
         spacing,
         f,
         CEA_Result.from_arr,
-        CEA_Result.to_arr
+        CEA_Result.to_arr,
+        CEA_Result.NAN
     )

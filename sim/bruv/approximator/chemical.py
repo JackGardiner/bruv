@@ -42,5 +42,6 @@ def IPA():
         spacing,
         f,
         IPA_Properties.from_arr,
-        IPA_Properties.to_arr
+        IPA_Properties.to_arr,
+        IPA_Properties.NAN
     )

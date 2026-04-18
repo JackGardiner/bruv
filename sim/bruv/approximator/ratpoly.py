@@ -127,7 +127,8 @@ def broadcasted_shape(*coords):
 
 
 def rel_error(real_values, values):
-    return (values - real_values) / (real_values.max() - real_values.min())
+    return (values - real_values) \
+         / (np.nanmax(real_values) - np.nanmin(real_values))
 def abs_error(real_values, values):
     with np.errstate(divide="ignore"):
         return values / real_values - 1

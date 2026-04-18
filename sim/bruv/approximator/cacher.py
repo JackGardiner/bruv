@@ -15,12 +15,14 @@ __all__ = ["Cacher", "cls_Result", "cls_Fetcher"]
 
 
 class Cacher:
-    def __init__(self, name, spacing, function, obj_from_arr, obj_to_arr):
+    def __init__(self, name, spacing, function, obj_from_arr, obj_to_arr,
+            obj_nan):
         self.name = name
+        self.spacing = spacing
         self.f = function
         self.obj_from_arr = obj_from_arr
         self.obj_to_arr = obj_to_arr
-        self.spacing = spacing
+        self.obj_nan = obj_nan
         self._cache = {}
         self._changed = False
 
@@ -31,7 +33,10 @@ class Cacher:
     def _lock(self):
         return paths.FileLock(self._path_lock())
 
+    IDX_INVALID = np.iinfo(np.int32).min
     def _get(self, idx):
+        if any(x == self.IDX_INVALID for x in idx):
+            return self.obj_nan
         if idx not in self._cache:
             params = np.array(idx) * self.spacing
             self._cache[idx] = self.f(*params)
@@ -64,8 +69,10 @@ class Cacher:
 
         # Compute surrounding integer grid indices
         idx = np.array(list(params)) / self.spacing
-        i0 = np.floor(idx).astype(int)
-        i1 = i0 + 1
+
+        mask = np.isnan(idx)
+        i0 = np.where(mask, self.IDX_INVALID, np.floor(idx)).astype(np.int32)
+        i1 = np.where(mask, self.IDX_INVALID, i0 + 1)
         t = idx - i0
 
         def interp(corner):
@@ -154,6 +161,7 @@ def cls_Result(names, correction=lambda name, x: x):
 
     Result.NAMES = list(names)
     Result.MAPPING = {n: i for i, n in enumerate(Result.NAMES)}
+    Result.NAN = Result(np.full(len(names), np.nan))
 
     return Result
 

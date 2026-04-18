@@ -28,11 +28,12 @@ def summary_1D(name, ratpoly, values, X, *, extra_reqs=()):
     relerr = ratpoly.rel_error(values, X)
     print(f"    /* rect-bounded rational polynomial approximation */")
     print(f"    /* max error of: */")
-    print(f"    /*   abs {np.abs(abserr).max()*100:.3g}% */")
-    print(f"    /*   rel {np.abs(relerr).max()*100:.3g}% */")
-    for x in extra_reqs:
+    print(f"    /*   abs {np.nanmax(np.abs(abserr))*100:.3g}% */")
+    print(f"    /*   rel {np.nanmax(np.abs(relerr))*100:.3g}% */")
+    if extra_reqs:
         print(f"    /* also requires: */")
-        print(f"    /*   {x} */")
+        for x in extra_reqs:
+            print(f"    /*   {x} */")
     print(f"    const f64 XLO = {X.min()};")
     print(f"    const f64 XHI = {X.max()};")
     print(ratpoly.code())
@@ -50,18 +51,22 @@ def summary_2D(name, ratpoly, surf, *, extra_reqs=()):
         X = X[mask]
         Y = Y[mask]
     values = surf.f(X, Y)
-
     approx = ratpoly(X, Y)
+    mask = np.isnan(values) | np.isnan(approx)
+    values[mask] = np.nan
+    approx[mask] = np.nan
+
     abserr = np.abs(abs_error(values, approx))
     relerr = np.abs(rel_error(values, approx))
     Xmin, Xmax, Ymin, Ymax = surf.bounds()
     print(f"    /* rect-bounded rational polynomial approximation */")
     print(f"    /* max error of: */")
-    print(f"    /*   abs {abserr.max()*100:.3g}% */")
-    print(f"    /*   rel {relerr.max()*100:.3g}% */")
-    for x in extra_reqs:
+    print(f"    /*   abs {np.nanmax(abserr)*100:.3g}% */")
+    print(f"    /*   rel {np.nanmax(relerr)*100:.3g}% */")
+    if extra_reqs:
         print(f"    /* also requires: */")
-        print(f"    /*   {x} */")
+        for x in extra_reqs:
+            print(f"    /*   {x} */")
     print(f"    const f64 XLO = {Xmin};")
     print(f"    const f64 XHI = {Xmax};")
     print(f"    const f64 YLO = {Ymin};")
@@ -118,9 +123,10 @@ def cea_AEAT_for(P, ofr, M_lerp_1_to_exit):
     M_exit = isentropic_M_from_P_on_P0(P_exit / (P*1e6), gamma_tht)
     return isentropic_A_on_Astar(1 + (M_exit - 1)*M_lerp_1_to_exit, gamma_tht)
 
+CEA_M_midm = 0.2
 def cea(name, P, ofr):
     if name.startswith("midm_"):
-        AEAT = cea_AEAT_for(P, ofr, 0.5)
+        AEAT = cea_AEAT_for(P, ofr, CEA_M_midm)
         name = name[len("midm_"):]
     else:
         AEAT = cea_AEAT_for(P, ofr, 1.0)
@@ -133,45 +139,60 @@ def getattr_cea(cea_result, name):
         return 1.0
     return getattr(cea_result, name)
 
-def cea_approximation(our_name, cea_name, pidxs=None, qidxs=None, rel_only=False,
-        points=200, spacing=1.25, max_error=0.015, blitz=2.0, lut=None):
+LUT_FOR_ALL = True
+
+def find_approximation(get_surf, type_name, var_name, pidxs=None,
+        qidxs=None, rel_only=False, points=200, spacing=1.25, max_error=0.015,
+        blitz=2.0, lut=None, extra_reqs=()):
+
+    if LUT_FOR_ALL:
+        lut = (80, 80)
+
     def wrapped(what=""):
         if what != "get":
-            print(f"approximating CEA {our_name}")
-        f = lambda P, ofr: cea(cea_name, P, ofr)
+            print(f"approximating {type_name} {var_name}")
 
-        surf = Surfspace(f, 1.0, 5.0, 1.0, 3.0, N0=200)
+        surf = get_surf() # evaluate now rather than on init.
+
         if not (lut is not None and what == "approximate"):
-            P, ofr, V = surf.points(
+            X, Y, V = surf.points(
                 1000 if what=="approximate" else points,
                 spacing=spacing
             )
+        if lut is not None:
+            tbl = JustGimmeATable(surf, f"{type_name.lower()}_{var_name}", *lut)
 
         evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
 
         if what == "peep":
-            peep_2D(surf, P, ofr, V)
+            peep_2D(surf, X, Y, V)
             print("peeped")
         elif what == "backwards":
-            RationalPolynomial.search_backwards(P, ofr, V, max_error=max_error,
+            RationalPolynomial.search_backwards(X, Y, V, max_error=max_error,
                     evaluator=evaluator)
         elif what == "forwards":
-            RationalPolynomial.search_forwards(P, ofr, V, blitz=blitz,
+            RationalPolynomial.search_forwards(X, Y, V, blitz=blitz,
                     evaluator=evaluator)
         elif what == "approximate":
             if lut is not None:
-                JustGimmeATable(our_name, cea_name, *lut).run()
+                tbl.run(extra_reqs=extra_reqs)
                 return
-            rp = RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
+            rp = RationalPolynomial.approximate(pidxs, qidxs, X, Y, V)
             print("found:", rp)
-            summary_2D(f"CEA {our_name}", rp, surf)
+            summary_2D(f"{type_name} {var_name}", rp, surf,
+                    extra_reqs=extra_reqs)
         elif what == "get":
             if lut is not None:
-                return JustGimmeATable(our_name, cea_name, *lut)
-            return RationalPolynomial.approximate(pidxs, qidxs, P, ofr, V)
+                return tbl
+            return RationalPolynomial.approximate(pidxs, qidxs, X, Y, V)
         else:
             assert False, f"invalid what: {what}"
     return wrapped
+
+def cea_approximation(our_name, cea_name, **kwargs):
+    f = lambda P, ofr: cea(cea_name, P, ofr)
+    surf = lambda: Surfspace(f, 1.0, 5.0, 1.0, 3.0, N0=200)
+    return find_approximation(surf, "CEA", our_name, **kwargs)
 
 
 find_cea_Isp = cea_approximation("Isp", "isp", rel_only=True, blitz=0.0,
@@ -195,6 +216,7 @@ find_cea_cp_tht = cea_approximation("cp_tht", "t_cp",
         blitz=3.0, points=300, spacing=1.3,
         pidxs=[0, 1, 3, 5, 6, 7, 8, 9, 11, 12, 14], qidxs=[0, 1, 2, 3, 4, 5])
 find_cea_cp_midm = cea_approximation("cp_midm", "midm_cp",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=3.0, points=300, spacing=1.3,
         pidxs=[0, 1, 2, 4, 5, 6, 7], qidxs=[0, 1, 2, 4, 5, 8, 9, 10, 11, 12, 14],
         # give up
@@ -214,6 +236,7 @@ find_cea_mu_tht = cea_approximation("mu_tht", "t_visc",
         blitz=3.0,
         pidxs=[0, 2, 4, 5], qidxs=[0, 1, 2, 5])
 find_cea_mu_midm = cea_approximation("mu_midm", "midm_visc",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=3.0,
         pidxs=[0, 4, 8, 9], qidxs=[0, 1, 2, 4, 5])
 find_cea_mu_exit = cea_approximation("mu_exit", "visc",
@@ -227,6 +250,7 @@ find_cea_Pr_tht = cea_approximation("Pr_tht", "t_pran",
         blitz=5.0,
         pidxs=[0, 1, 2, 4, 5], qidxs=[0, 1, 2, 3, 5, 7, 8, 9, 12, 13, 14])
 find_cea_Pr_midm = cea_approximation("Pr_midm", "midm_pran",
+        extra_reqs=[f"'M_midm' as: lerp(1, M_exit, {CEA_M_midm})"],
         blitz=5.0,
         pidxs=[2, 3, 4, 5, 9], qidxs=[0, 2, 5, 9, 12, 13],
         # we down
@@ -241,44 +265,29 @@ find_cea_Pr_exit = cea_approximation("Pr_exit", "pran",
 @Masker
 def ipa_masker(T, P):
     # Psat check is way worse. thermo.Chemical is pretty shithouse.
-    # https://www.desmos.com/calculator/beepq3klam
-    A = -1.41
-    B = -2.582e-3
-    C = 1.97e-3
-    max_T = (A + P) / (B + C*P)
+    # https://www.desmos.com/calculator/laxpd5p1zh
+    if False:
+        A = -1.41
+        B = -2.582e-3
+        C = 1.97e-3
+        max_T = (A + P) / (B + C*P)
+    else:
+        A = 18.75
+        B = 417.5
+        max_T = A*P + B
     return T <= max_T
-ipa_masker.as_string = "x < (y - 1.41) / (1.97e-3 * y - 2.582e-3)"
+ipa_masker.as_string = "x < 18.75 * y + 417.5"
 
-def ipa_approximation(our_name, ipa_name, pidxs=None, qidxs=None, rel_only=False,
-        points=200, spacing=1.25, max_error=0.015, blitz=2.0):
-    def wrapped(what=""):
-        print(f"approximating IPA {our_name}")
-        f = IPA[ipa_name]
+def ipa_approximation(our_name, ipa_name, **kwargs):
+    f = lambda *args: IPA[ipa_name](*args)
+    surf = lambda: Surfspace(f, 250.0, 500.0, 2.0, 7.0, N0=200,
+            masker=ipa_masker)
+    if "extra_reqs" not in kwargs:
+        kwargs["extra_reqs"] = []
+    kwargs["extra_reqs"] = list(kwargs["extra_reqs"])
+    kwargs["extra_reqs"].append(ipa_masker.as_string)
+    return find_approximation(surf, "IPA", our_name, **kwargs)
 
-        surf = Surfspace(f, 250.0, 500.0, 2.0, 7.0, N0=200, masker=ipa_masker)
-        T, P, V = surf.points(
-            1000 if what=="approximate" else points,
-            spacing=spacing
-        )
-
-        evaluator = evaluator_rel_only if rel_only else evaluator_abs_only
-
-        if what == "peep":
-            peep_2D(surf, T, P, V)
-        elif what == "backwards":
-            RationalPolynomial.search_backwards(T, P, V, max_error=max_error,
-                    evaluator=evaluator)
-        elif what == "forwards":
-            RationalPolynomial.search_forwards(T, P, V, blitz=blitz,
-                    evaluator=evaluator)
-        elif what == "approximate":
-            rp = RationalPolynomial.approximate(pidxs, qidxs, T, P, V)
-            print("found:", rp)
-            summary_2D(f"IPA {our_name}", rp, surf,
-                    extra_reqs=[ipa_masker.as_string])
-        else:
-            assert False, f"invalid what: {what}"
-    return wrapped
 
 find_ipa_rho = ipa_approximation("rho", "rho", blitz=0.0,
         pidxs=[0, 1, 2], qidxs=[0, 1, 2, 3, 4])
@@ -317,10 +326,10 @@ def cea_property_along(X_name, Y_name, P0_cc, ofr):
     return X0, Y0
 
 def cea_compare_along(X_name, Y_name, approx):
-    # P0_ccs = np.linspace(1, 5, 5)
-    # ofrs = np.linspace(1.0, 3.0, 8)
-    P0_ccs = np.array([3.5])
-    ofrs = np.array([1.76])
+    P0_ccs = np.linspace(1, 5, 5)
+    ofrs = np.linspace(1.0, 3.0, 8)
+    # P0_ccs = np.array([3.5])
+    # ofrs = np.array([1.76])
 
     cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
 
@@ -376,7 +385,7 @@ def cea_quadfit(name, P0_cc, ofr):
     V_cc = cea(f"c_{name}", P0_cc, ofr)
     V_tht = cea(f"t_{name}", P0_cc, ofr)
     V_exit = cea(name, P0_cc, ofr)
-    V_midm = CEA[name](P0_cc, ofr, cea_AEAT_for(P0_cc, ofr, 0.5))
+    V_midm = CEA[name](P0_cc, ofr, cea_AEAT_for(P0_cc, ofr, CEA_M_midm))
 
     M = np.linspace(1.0, M_exit, 100)
     M = np.insert(M, 0, 0.0)
@@ -387,7 +396,7 @@ def cea_quadfit(name, P0_cc, ofr):
 def cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm, get_exit):
     gamma_tht = get_gamma(P0_cc, ofr)
     M_exit = isentropic_M_from_P_on_P0(101325.0 / (P0_cc*1e6), gamma_tht);
-    M_midm = 1 + (M_exit - 1) / 2
+    M_midm = 1 + (M_exit - 1) * CEA_M_midm
     V_cc = get_cc(P0_cc, ofr)
     V_tht = get_tht(P0_cc, ofr)
     V_midm = get_midm(P0_cc, ofr)
@@ -421,8 +430,14 @@ def check_cea_mu_along():
                 get_exit)
     cea_compare_along("mach", "visc", approx)
 def check_cea_Pr_along():
+    get_gamma = find_cea_gamma_tht(what="get")
+    get_cc = find_cea_Pr_cc(what="get")
+    get_tht = find_cea_Pr_tht(what="get")
+    get_midm = find_cea_Pr_midm(what="get")
+    get_exit = find_cea_Pr_exit(what="get")
     def approx(P0_cc, ofr):
-        return cea_quadfit("pran", P0_cc, ofr)
+        return cea_quadfit_real(P0_cc, ofr, get_gamma, get_cc, get_tht, get_midm,
+                get_exit)
     cea_compare_along("mach", "pran", approx)
 
 
@@ -431,29 +446,34 @@ def check_cea_Pr_along():
 class JustGimmeATable:
     # holy balls some are hard. just gimme a lookuptable.
 
-    def __init__(self, our_name, cea_name, size_P, size_ofr):
-        self.name = our_name
-        self.cea_name = cea_name
+    def __init__(self, surf, name, size_P, size_ofr):
+        self.surf = surf
+        self.name = name
         self.shape = (size_P, size_ofr)
-        self.Plo = 1.0
-        self.Phi = 5.0
-        self.ofrlo = 1.0
-        self.ofrhi = 3.0
-        P = np.linspace(self.Plo, self.Phi, size_P)
-        ofr = np.linspace(self.ofrlo, self.ofrhi, size_ofr)
-        P, ofr = np.meshgrid(P, ofr, indexing="ij")
-        self.tbl = cea(cea_name, P, ofr)
-        self.tbl = self.tbl.flatten("C")
+        X = np.linspace(surf.xlo, surf.xhi, size_P)
+        Y = np.linspace(surf.ylo, surf.yhi, size_ofr)
+        X, Y = np.meshgrid(X, Y, indexing="ij")
+        if surf.masker is not None:
+            mask = surf.masker.coords(X, Y)
+            X[~mask] = np.nan
+            Y[~mask] = np.nan
+        self.tbl = surf.f(X, Y)
+        self.tbl = self.tbl.flatten("C") # rowmajor.
 
-    def __call__(self, P, ofr):
-        P = (P - self.Plo) / (self.Phi - self.Plo)
-        P *= self.shape[0] - 1
-        i = np.minimum(np.floor(P).astype(int), self.shape[0] - 2)
-        t = P - i
-        ofr = (ofr - self.ofrlo) / (self.ofrhi - self.ofrlo)
-        ofr *= self.shape[1] - 1
-        j = np.minimum(np.floor(ofr).astype(int), self.shape[1] - 2)
-        s = ofr - j
+    def __call__(self, x, y):
+        xlo, xhi, ylo, yhi = self.surf.bounds()
+        x = (x - xlo) / (xhi - xlo)
+        x *= self.shape[0] - 1
+        i = np.floor(x).astype(int)
+        i = np.maximum(i, 0)
+        i = np.minimum(i, self.shape[0] - 2)
+        t = x - i
+        y = (y - ylo) / (yhi - ylo)
+        y *= self.shape[1] - 1
+        j = np.floor(y).astype(int)
+        j = np.maximum(j, 0)
+        j = np.minimum(j, self.shape[1] - 2)
+        s = y - j
         c00 = self.tbl[i*self.shape[1] + j]
         c01 = self.tbl[i*self.shape[1] + j + 1]
         c10 = self.tbl[(i + 1)*self.shape[1] + j]
@@ -462,20 +482,23 @@ class JustGimmeATable:
         c1 = c10 + s*(c11 - c10)
         return c0 + t*(c1 - c0)
 
-    def run(self):
+    def run(self, extra_reqs=()):
         lines = []
 
-        Plo, Phi, ofrlo, ofrhi = self.Plo, self.Phi, self.ofrlo, self.ofrhi
+        xlo, xhi, ylo, yhi = self.surf.bounds()
         rows, cols = self.shape
 
-        X, Y = Evenspace(Plo, Phi, ofrlo, ofrhi).points(400**2, flatten=False)
-        values = cea(self.cea_name, X, Y)
+        X, Y = Evenspace(*self.surf.bounds()).points(400**2, flatten=False)
+        values = self.surf.f(X, Y)
         approx = self(X, Y)
+        mask = np.isnan(values) | np.isnan(approx)
+        values[mask] = np.nan
+        approx[mask] = np.nan
         abserr = np.abs(abs_error(values, approx))
         relerr = np.abs(rel_error(values, approx))
 
         fig, axes = summary_2D.window.new_plots(rows=2, cols=2,
-                title=f"CEA {self.name}")
+                title=f"LUT {self.name}")
         cont = axes[0,0].contourf(X, Y, values, levels=300, cmap="viridis")
         fig.colorbar(cont, ax=axes[0, 0])
         axes[0,0].set_title("actual function")
@@ -494,42 +517,59 @@ class JustGimmeATable:
         axes[1,1].set_grid("none")
 
 
-        lines.append(f"static const f32 CEA_TBL_{self.name}[{rows * cols}];")
         lines.extend([
-            f"    /* evenly-spaced flattened 2D LUT, access: */",
-            f"    /*   [i,j] -> [YLEN*i + j] */",
+            f"    /* evenly-spaced flattened (C-ordered) 2D LUT */",
             f"    /* max error of: */",
-            f"    /*   abs {abserr.max()*100:.3g}% */",
-            f"    /*   rel {relerr.max()*100:.3g}% */",
+            f"    /*   abs {np.nanmax(abserr)*100:.3g}% */",
+            f"    /*   rel {np.nanmax(relerr)*100:.3g}% */",
         ])
-        lines.append(f"    const f64 XLO = {Plo};")
-        lines.append(f"    const f64 XHI = {Phi};")
-        lines.append(f"    const f64 YLO = {ofrlo};")
-        lines.append(f"    const f64 YHI = {ofrhi};")
+        if extra_reqs:
+            lines.append(f"    /* also requires: */")
+            for x in extra_reqs:
+                lines.append(f"    /*   {x} */")
+        lines.append(f"    const f64 XLO = {xlo};")
+        lines.append(f"    const f64 XHI = {xhi};")
+        lines.append(f"    const f64 YLO = {ylo};")
+        lines.append(f"    const f64 YHI = {yhi};")
         lines.append(f"    enum {{ XLEN = {rows},")
         lines.append(f"           YLEN = {cols}, }};")
-        lines.append(f"static const f32 CEA_TBL_{self.name}[{rows * cols}] = {{")
+        lines.append(f"    #include \"tbl/{self.name}.i\"")
+        lines.append(f"")
 
-        # x.01234567ennn,
-        # =16 diggies.
-        display_cols = (80 - 4) // 16
+        print("\n".join(lines))
 
-        flat = self.tbl.flatten("C") # row-major: element [j][i] -> j*SIZE_0 + i
-        n = len(flat)
+        # now write the table tile.
+        lines = [
+            f"/* LUT for {self.name} */"
+        ]
+        lines.append(f"static const f32 tbl[{rows * cols}] = {{")
+
+        # x.01234567ennnf,
+        # =17 diggies.
+        entrylen = 17
+        display_cols = (80 - 4) // entrylen
+
+        n = len(self.tbl)
 
         for start in range(0, n, display_cols):
-            chunk = flat[start:start + display_cols]
+            chunk = self.tbl[start:start + display_cols]
             entries = []
             for k, val in enumerate(chunk):
-                s = f"{val:.8e},"
-                s += " " * (16 - len(s))
+                if val == val:
+                    s = f"{val:.8e}f,"
+                else:
+                    s = "fNAN,"
+                s += " " * (entrylen - len(s))
                 entries.append(s)
             lines.append(" "*4 + "".join(entries))
 
         lines.append(f"}};")
         lines.append(f"")
 
-        print("\n".join(lines))
+        paths.APPROXIMATOR_TBLS.mkdir(parents=True, exist_ok=True)
+        with open(paths.APPROXIMATOR_TBLS / f"{self.name}.i", "w") as f:
+            f.write("\n".join(lines))
+
 
 
 
