@@ -22,6 +22,7 @@
                                                                 \
     X(helix_angle, f64, C_INPUT)                                \
     X(th_iw, f64, C_INPUT)                                      \
+    X(th_ow, f64, C_INPUT)                                      \
     X(no_chnl, i64, C_INPUT)                                    \
     X(th_chnl, f64, C_INPUT)                                    \
     X(wi_chnl, f64, C_INPUT)                                    \
@@ -62,6 +63,8 @@
     X(out_P_c, f64*, C_INPUT | C_OUTPUT_DATA)                   \
     X(out_T_wg, f64*, C_INPUT | C_OUTPUT_DATA)                  \
     X(out_T_wc, f64*, C_INPUT | C_OUTPUT_DATA)                  \
+    X(out_startup_SF, f64*, C_INPUT | C_OUTPUT_DATA)            \
+    X(out_firing_SF, f64*, C_INPUT | C_OUTPUT_DATA)             \
                                                                 \
     X(target_Thrust, f64, C_INPUT)                              \
     X(optimise_ofr, i64, C_INPUT)                               \

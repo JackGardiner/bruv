@@ -9,6 +9,7 @@
 #include "ipa.h"
 #include "optim.h"
 #include "relations.h"
+#include "stress.h"
 #include "thermal.h"
 
 
@@ -151,8 +152,8 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Thermals. */
 
-    i32 stns_N = 1000;
-    thermalStation* stns = malloc(stns_N * sizeof(thermalStation));
+    i32 thermal_N = 1000;
+    thermalStation* thermal_stns = malloc(thermal_N * sizeof(thermalStation));
 
     // Set target fuel injector pressure.
     s->P_fu1 = s->Pr_fu * s->P0_cc;
@@ -162,10 +163,12 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     for (i32 iter=0; /* true */; ++iter) {
         enum { MAX_ITERS = 100 };
 
-        (void)thermal_sim(s, cnt, stns, stns_N);
+        i32 possible_system = thermal_sim(s, cnt, thermal_stns, thermal_N);
+        // assert(possible_system, "dujj");
+        (void)possible_system;
         // TODO: ^ possible system return
-        f64 T_fu1 = stns[0].T_c;
-        f64 P_fu1 = stns[0].P_c;
+        f64 T_fu1 = thermal_stns[0].T_c;
+        f64 P_fu1 = thermal_stns[0].P_c;
         f64 diff = iterstep(&s->P_fu0, s->P_fu1 + s->P_fu0 - P_fu1);
         if (diff < 1.0) {
             s->T_fu1 = T_fu1;
@@ -174,6 +177,15 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         }
         assert(iter < MAX_ITERS, "failed to converge");
     }
+
+
+    /* Stresses. */
+
+    i32 stress_N = 1000;
+    stressStation* stress_stns = malloc(stress_N * sizeof(stressStation));
+
+    stress_sim(s, cnt, thermal_stns, thermal_N, stress_stns, stress_N);
+
 
 
     /* Outputs */
@@ -215,10 +227,6 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             f64 mu_g = cea_sample(fit_mu, M_g);
             f64 Pr_g = cea_sample(fit_Pr, M_g);
 
-            f64 t_c = (z - 0.0) / (cnt->z_exit - 0.0);
-            t_c *= stns_N - 1;
-            i32 i_c = min(max((i32)t_c, 0), stns_N - 2);
-            t_c -= i_c;
 
             s->out_z[i] = z;
             s->out_r[i] = r;
@@ -230,10 +238,28 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             s->out_cp_g[i] = cp_g;
             s->out_mu_g[i] = mu_g;
             s->out_Pr_g[i] = Pr_g;
-            s->out_T_c[i] = lerp(stns[i_c].T_c, stns[i_c + 1].T_c, t_c);
-            s->out_P_c[i] = lerp(stns[i_c].P_c, stns[i_c + 1].P_c, t_c);
-            s->out_T_wg[i] = lerp(stns[i_c].T_wg, stns[i_c + 1].T_wg, t_c);
-            s->out_T_wc[i] = lerp(stns[i_c].T_wc, stns[i_c + 1].T_wc, t_c);
+            {
+                f64 t = z / cnt->z_exit;
+                t *= thermal_N - 1;
+                i32 k = min(max((i32)t, 0), thermal_N - 2);
+                t -= k;
+                typeof(thermal_stns) stns = thermal_stns;
+                s->out_T_c[i] = lerp(stns[k].T_c, stns[k + 1].T_c, t);
+                s->out_P_c[i] = lerp(stns[k].P_c, stns[k + 1].P_c, t);
+                s->out_T_wg[i] = lerp(stns[k].T_wg, stns[k + 1].T_wg, t);
+                s->out_T_wc[i] = lerp(stns[k].T_wc, stns[k + 1].T_wc, t);
+            }
+            {
+                f64 t = z / cnt->z_exit;
+                t *= stress_N - 1;
+                i32 k = min(max((i32)t, 0), stress_N - 2);
+                t -= k;
+                typeof(stress_stns) stns = stress_stns;
+                s->out_startup_SF[i] = lerp(stns[k].startup.SF,
+                        stns[k + 1].startup.SF, t);
+                s->out_firing_SF[i] = lerp(stns[k].firing.SF,
+                        stns[k + 1].firing.SF, t);
+            }
         }
     }
 }

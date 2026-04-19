@@ -1,9 +1,11 @@
 #include "thermal.h"
 
+#include "assertion.h"
 #include "cea.h"
 #include "ethanol.h"
 #include "ipa.h"
 #include "maths.h"
+#include "material.h"
 #include "relations.h"
 
 
@@ -142,12 +144,12 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
             q = q_convective + q_radiative;
             assert(q >= 0.0, "coolant should not heat cc gases, q=%g", q);
 
-            f64 k_iw = 320.0; // single datapoint smile.
+            f64 k_w = CuCr1Zr_k(0.5*(T_wg + T_wc));
 
             // Model web as a fin.
             f64 wi_web = TWOPI*rA/s->no_chnl - s->wi_chnl;
             f64 eta_web; {
-                f64 term = s->th_chnl * sqrt(h_c / k_iw / wi_web);
+                f64 term = s->th_chnl * sqrt(h_c / k_w / wi_web);
                 f64 exp_twoterm = exp2(LOG2E*2.0*term);
                 f64 tanh_term = (exp_twoterm - 1.0)
                               / (exp_twoterm + 1.0);
@@ -155,7 +157,7 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
             }
 
             // Cylindrical conductor resistance.
-            f64 Rth_iw = rA * LN2*log2(1.0 + s->th_iw/rA) / k_iw;
+            f64 Rth_iw = rA * LN2*log2(1.0 + s->th_iw/rA) / k_w;
             // Fin + convective resistance.
             f64 Rth_c = TWOPI*rA / h_c
                       / s->no_chnl / (s->wi_chnl + 2.0*eta_web*s->th_chnl)

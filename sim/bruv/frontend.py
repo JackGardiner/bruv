@@ -38,6 +38,7 @@ def get_interpretation():
 
     interp.append("helix_angle", interp.F64, IN)
     interp.append("th_iw", interp.F64, IN)
+    interp.append("th_ow", interp.F64, IN)
     interp.append("no_chnl", interp.I64, IN)
     interp.append("th_chnl", interp.F64, IN)
     interp.append("wi_chnl", interp.F64, IN)
@@ -78,6 +79,8 @@ def get_interpretation():
     interp.append("out_P_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_wg", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_wc", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_startup_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_firing_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("target_Thrust", interp.F64, IN)
     interp.append("optimise_ofr", interp.I64, IN)
@@ -99,11 +102,14 @@ def get_state(interp):
 
     state["helix_angle"] = config["chamber"]["helix_angle"]
     state["th_iw"] = config["chamber"]["th_iw"] * 1e-3
+    state["th_ow"] = config["chamber"]["th_ow"] * 1e-3
     state["no_chnl"] = config["chamber"]["no_web"]
     state["th_chnl"] = config["chamber"]["th_web"]
     state["eps_chnl"] = config["material"]["roughness_depth"]
-    state["th_chnl"] = 1.5e-3
-    state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.5e-3
+    state["th_iw"] = 1.0e-3
+    state["th_chnl"] = 1.0e-3
+    state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.0e-3
+    # state["wi_chnl"] = 1.75e-3
     state["Pr_fu"] = config["operating_conditions"]["Pr_IPA"]
     state["T_fu0"] = config["operating_conditions"]["T_IPA"]
 
@@ -130,10 +136,12 @@ def get_state(interp):
     state["out_P_c"] = new_out()
     state["out_T_wg"] = new_out()
     state["out_T_wc"] = new_out()
+    state["out_startup_SF"] = new_out()
+    state["out_firing_SF"] = new_out()
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
-    state["optimise_ofr"] = 1
-    state["optimise_dm_cc"] = 1
+    state["optimise_ofr"] = 0
+    state["optimise_dm_cc"] = 0
 
     return state
 
@@ -197,6 +205,7 @@ def write_ammendments(state):
             "phi_exit": state["phi_exit"],
             "helix_angle": state["helix_angle"],
             "th_iw": state["th_iw"] * 1e3,
+            "th_ow": state["th_ow"] * 1e3,
             "no_web": state["no_chnl"],
             "th_web": state["th_chnl"] * 1e3,
             "psi_web": math.cos(state["helix_angle"])*state["wi_chnl"] * 1e3,
@@ -246,6 +255,8 @@ def now_this_is_bruv():
     P_c = state["out_P_c"].view(state["out_count"])
     T_wg = state["out_T_wg"].view(state["out_count"])
     T_wc = state["out_T_wc"].view(state["out_count"])
+    startup_SF = state["out_startup_SF"].view(state["out_count"])
+    firing_SF = state["out_firing_SF"].view(state["out_count"])
     win = geez.new_window()
 
     _, axes = win.new_plots(rows=2, cols=3)
@@ -284,12 +295,13 @@ def now_this_is_bruv():
     axes[1,0].set_title("mach number")
     axes[0,1].plot(z*1e3, T_c)
     axes[0,1].set_title("coolant temperature [K]")
-    axes[1,1].plot(z*1e3, T_wg)
-    axes[1,1].set_title("wall gas temperature [K]")
-    axes[0,2].plot(z*1e3, P_c*1e-5)
-    axes[0,2].set_title("coolant pressure [bar]")
-    axes[1,2].plot(z*1e3, T_wc)
-    axes[1,2].set_title("wall coolant temperature [K]")
+    axes[1,1].plot(z*1e3, P_c*1e-5)
+    axes[1,1].set_title("coolant pressure [bar]")
+    axes[0,2].plot(z*1e3, T_wg, label="gas-side")
+    axes[0,2].plot(z*1e3, T_wc, label="coolant-side")
+    axes[0,2].set_title("wall temperature [K]")
+    axes[1,2].plot(z*1e3, firing_SF)
+    axes[1,2].set_title("firing SF")
 
     return 0
 
