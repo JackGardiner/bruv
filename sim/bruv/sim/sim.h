@@ -26,13 +26,18 @@
     X(th_chnl, f64, C_INPUT)                                    \
     X(wi_chnl, f64, C_INPUT)                                    \
     X(eps_chnl, f64, C_INPUT)                                   \
+    X(Pr_fu, f64, C_INPUT)                                      \
     X(T_fu0, f64, C_INPUT)                                      \
+    X(P_fu0, f64, C_OUTPUT)                                     \
+    X(T_fu1, f64, C_OUTPUT)                                     \
+    X(P_fu1, f64, C_OUTPUT)                                     \
                                                                 \
     X(ofr, f64, C_INPUT | C_OUTPUT)                             \
     X(dm_cc, f64, C_INPUT | C_OUTPUT)                           \
     X(dm_ox, f64, C_OUTPUT)                                     \
     X(dm_fu, f64, C_OUTPUT)                                     \
     X(P_exit, f64, C_INPUT)                                     \
+    X(M_exit, f64, C_OUTPUT)                                    \
     X(P0_cc, f64, C_INPUT)                                      \
     X(T0_cc, f64, C_OUTPUT)                                     \
     X(rho0_cc, f64, C_OUTPUT)                                   \

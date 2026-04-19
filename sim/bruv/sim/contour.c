@@ -247,7 +247,7 @@ void cnt_change_length(Contour* cnt, f64 DL_cc) {
 
 
 
-f64 cnt_r(Contour* cnt, f64 z) {
+f64 cnt_r(const Contour* cnt, f64 z) {
     // Note we extend the radius at points 0 and 6 downwards and upwards,
     // respectively.
 
@@ -280,7 +280,7 @@ f64 cnt_r(Contour* cnt, f64 z) {
     return cnt->r6;
 }
 
-f64 cnt_V_subsonic(Contour* cnt) {
+f64 cnt_V_subsonic(const Contour* cnt) {
     f64 V = 0.0;
 
     // Ramblings in here: https://www.desmos.com/calculator/3zfoctnl7z

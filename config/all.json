@@ -9,6 +9,8 @@
         "Pr_LOx": 1.2,
         "Pr_IPA": 1.2,
 
+        "T_IPA": 298.15,
+
         "rho_LOx": 1141.0,
         "rho_IPA": 786.0,
         "mu_LOx": 2.04e-4,
@@ -74,7 +76,7 @@
         "FR_inlet": 5.0,
 
         "no_tc": 6,
-        "portsize_tc": "G1/16",
+        "portsize_tc": "G1/8",
         "th_tc": 3.5,
         "D_tc": 1.5
     },

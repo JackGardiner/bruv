@@ -45,5 +45,5 @@ Contour* init_cnt(Contour* cnt, f64 R_cc, f64 L_cc, f64 A_tht, f64 AEAT, f64 NLF
 
 void cnt_change_length(Contour* cnt, f64 DL_cc);
 
-f64 cnt_r(Contour* cnt, f64 z);
-f64 cnt_V_subsonic(Contour* cnt); // volume up-to throat.
+f64 cnt_r(const Contour* cnt, f64 z);
+f64 cnt_V_subsonic(const Contour* cnt); // volume up-to throat.

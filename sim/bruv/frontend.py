@@ -3,6 +3,7 @@ GUI front-end for the c back-end.
 """
 
 import json
+import math
 import sys
 import time
 from contextlib import contextmanager
@@ -41,13 +42,18 @@ def get_interpretation():
     interp.append("th_chnl", interp.F64, IN)
     interp.append("wi_chnl", interp.F64, IN)
     interp.append("eps_chnl", interp.F64, IN)
+    interp.append("Pr_fu", interp.F64, IN)
     interp.append("T_fu0", interp.F64, IN)
+    interp.append("P_fu0", interp.F64, OUT)
+    interp.append("T_fu1", interp.F64, OUT)
+    interp.append("P_fu1", interp.F64, OUT)
 
     interp.append("ofr", interp.F64, IN | OUT)
     interp.append("dm_cc", interp.F64, IN | OUT)
     interp.append("dm_ox", interp.F64, OUT)
     interp.append("dm_fu", interp.F64, OUT)
     interp.append("P_exit", interp.F64, IN)
+    interp.append("M_exit", interp.F64, OUT)
     interp.append("P0_cc", interp.F64, IN)
     interp.append("T0_cc", interp.F64, OUT)
     interp.append("rho0_cc", interp.F64, OUT)
@@ -98,8 +104,8 @@ def get_state(interp):
     state["eps_chnl"] = config["material"]["roughness_depth"]
     state["th_chnl"] = 1.5e-3
     state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.5e-3
-    state["eps_chnl"] = 0.0
-    state["T_fu0"] = 25.0 + 273.15
+    state["Pr_fu"] = config["operating_conditions"]["Pr_IPA"]
+    state["T_fu0"] = config["operating_conditions"]["T_IPA"]
 
     dm_ox = config["operating_conditions"]["mdot_LOx"]
     dm_fu = config["operating_conditions"]["mdot_IPA"]
@@ -126,8 +132,8 @@ def get_state(interp):
     state["out_T_wc"] = new_out()
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
-    state["optimise_ofr"] = 0
-    state["optimise_dm_cc"] = 0
+    state["optimise_ofr"] = 1
+    state["optimise_dm_cc"] = 1
 
     return state
 
@@ -168,13 +174,15 @@ def write_ammendments(state):
         push_boundary("flange_outer_radius", -1.15)
         return data
 
-    # todo: injector filmcooling + element placement?
+    # TODO: injector filmcooling + element placement?
 
     extra = {
         "operating_conditions": {
             "Thrust": state["Thrust"],
             "P_cc": state["P0_cc"],
             "P_exit": state["P_exit"],
+            "Pr_IPA": state["Pr_fu"],
+            "T_IPA": state["T_fu0"],
             "mdot_LOx": state["dm_ox"],
             "mdot_IPA": state["dm_fu"],
         },
@@ -187,10 +195,15 @@ def write_ammendments(state):
             "phi_conv": state["phi_conv"],
             "phi_div": state["phi_div"],
             "phi_exit": state["phi_exit"],
-            "th_iw": state["th_iw"],
-            "th_chnl": state["th_chnl"],
-            "wi_chnl": state["wi_chnl"],
+            "helix_angle": state["helix_angle"],
+            "th_iw": state["th_iw"] * 1e3,
+            "no_web": state["no_chnl"],
+            "th_web": state["th_chnl"] * 1e3,
+            "psi_web": math.cos(state["helix_angle"])*state["wi_chnl"] * 1e3,
         },
+        "material": {
+            "roughness_depth": state["eps_chnl"],
+        }
     }
     with open(paths.ROOT / "../config/ammendments.json", "w") as f:
         json.dump(extra, f, indent=4)
