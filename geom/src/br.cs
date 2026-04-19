@@ -306,24 +306,24 @@ public static partial class Br {
     public static Vec3 floor(Vec3 a) => new(floor(a.X), floor(a.Y), floor(a.Z));
     public static Vec3 ceil(Vec3 a)  => new(ceil(a.X), ceil(a.Y), ceil(a.Z));
 
-    public static bool nearto(float a, float b, float rtol=5e-5f,
-            float atol=1e-6f) {
+    public static bool nearto(float a, float b, float rtol=5e-6f,
+            float atol=1e-7f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.
             return false;
         return mag(a - b) <= (atol + rtol*mag(b));
     }
-    public static bool nearto(Vec2 a, Vec2 b, float rtol=5e-5f,
-            float atol=1e-6f) {
+    public static bool nearto(Vec2 a, Vec2 b, float rtol=5e-6f,
+            float atol=1e-7f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.
             return false;
         return mag(a - b) <= (atol + rtol*mag(b));
     }
-    public static bool nearto(Vec3 a, Vec3 b, float rtol=5e-5f,
-            float atol=1e-6f) {
+    public static bool nearto(Vec3 a, Vec3 b, float rtol=5e-6f,
+            float atol=1e-7f) {
         if (a == b) // for infs.
             return true;
         if (isnan(a) || isnan(b)) // for nans.

@@ -11,6 +11,10 @@ namespace br {
 
 public static class Polygon {
 
+    public static bool closeto(float a, float b) => mag(a - b) <= 0.0001f;
+    public static bool closeto(Vec2 a, Vec2 b)   => mag(a - b) <= 0.0001f;
+    public static bool closeto(Vec3 a, Vec3 b)   => mag(a - b) <= 0.0001f;
+
     public static float area(in Slice<Vec2> vertices, bool signed=false) {
         int N = numel(vertices);
         float A = 0f;
@@ -51,7 +55,7 @@ public static class Polygon {
         for (int i=0; i<N; ++i) {
             Vec2 v = vertices[i];
             for (int j=i + 1; j<N; ++j) {
-                if (nearto(v, vertices[j], rtol: 0f, atol: 0.0001f)) {
+                if (closeto(v, vertices[j])) {
                     why = $"duplicate vertices: {vecstr(v)}";
                     return false;
                 }
@@ -218,7 +222,7 @@ public static class Polygon {
             Vec2 a = vertices[i];
             Vec2 b = vertices[(i + 1) % numel(vertices)];
             ell[i] = mag(a - b);
-            assert(!nearzero(ell[i]), "zero length edge");
+            assert(!closeto(ell[i], 0f), "zero length edge");
             Ell += ell[i];
         }
         float interval = closed
@@ -270,15 +274,15 @@ public static class Polygon {
         float mag_ba = mag(a - b);
         float mag_bc = mag(c - b);
         // Points too close.
-        assert(!nearzero(mag_ba));
-        assert(!nearzero(mag_bc));
+        assert(!closeto(mag_ba, 0f));
+        assert(!closeto(mag_bc, 0f));
         Vec2 BA = (a - b) / mag_ba;
         Vec2 BC = (c - b) / mag_bc;
         float beta = argbeta(BA, BC);
         // Insanely sharp point.
-        assert(!nearzero(beta));
+        assert(!closeto(beta, 0f));
         // Already a straight line.
-        if (nearto(abs(beta), PI))
+        if (closeto(abs(beta), PI))
             return;
         // Find the two points which will be joined by a circular arc.
         float ell = FR / tan(0.5f*beta);
@@ -341,7 +345,7 @@ public static class Polygon {
         for (int i=0; i<numel(vertices) - 1; /* nuthin */) {
             Vec2 a = vertices[i];
             Vec2 b = vertices[i + 1];
-            if (nearto(a, b))
+            if (closeto(1.5f*mag(a - b), 0f))
                 vertices.RemoveAt(i);
             else
                 ++i;
@@ -371,7 +375,7 @@ public static class Polygon {
 
     public static List<Vec3> circle(int no, float r, float theta0, float z)
         // i guess close enough to python list comprehension?
-        => circle(no, r, theta0).Select((p) => rejxy(p, z)).ToList();
+        => [..circle(no, r, theta0).Select((p) => rejxy(p, z))];
 
     public static List<Vec3> circle(Slice<int> no, Slice<float> r,
             Slice<float> theta0, Slice<float> z) {
