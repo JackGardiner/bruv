@@ -158,6 +158,10 @@ f64 nusselt_dittus_boelter(f64 Re, f64 Pr, i32 is_heating) {
     return 0.023 * pow(Re, 0.8) * pow(Pr, n);
 }
 
+f64 nusselt_sieder_tate(f64 Re, f64 Pr, f64 mu_bulk, f64 mu_wall) {
+    return 0.027 * pow(Re, 0.8) * cbrt(Pr) * pow(mu_bulk/mu_wall, 0.14);
+}
+
 
 f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma) {
     // Find M s.t.:

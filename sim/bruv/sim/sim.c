@@ -209,16 +209,16 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         f64 P_c = stns[i].P_c;
         assert(T_c > 0.0, "nonphysical property, T_c: %g", T_c);
         assert(P_c > 0.0, "nonphysical property, P_c: %g", P_c);
-        f64 ethanol_P_c = min(max(P_c, 1.001*ETHANOL_MIN_P), 0.999*ETHANOL_MAX_P);
-        f64 ethanol_T_c = min(max(T_c, 1.001*ETHANOL_MIN_T), 0.999*ethanol_max_T(ethanol_P_c));
-        possible_system &= (ethanol_P_c == P_c) && (ethanol_T_c == T_c);
+        f64 ipa_P_c = min(max(P_c, 1.001*IPA_MIN_P), 0.999*IPA_MAX_P);
+        f64 ipa_T_c = min(max(T_c, 1.001*IPA_MIN_T), 0.999*ipa_max_T(ipa_P_c));
+        possible_system &= (ipa_P_c == P_c) && (ipa_T_c == T_c);
         f64 A_c = s->wi_chnl*s->th_chnl // ~approx as rectangle.
                 * s->no_chnl;
         f64 HD_c = 2.0*s->wi_chnl*s->th_chnl/(s->wi_chnl + s->th_chnl);
-        f64 rho_c = ethanol_rho(ethanol_T_c, ethanol_P_c);
-        f64 cp_c = ethanol_cp(ethanol_T_c, ethanol_P_c);
-        f64 mu_c = ethanol_mu(ethanol_T_c, ethanol_P_c);
-        f64 k_c = ethanol_k(ethanol_T_c, ethanol_P_c);
+        f64 rho_c = ipa_rho(ipa_T_c, ipa_P_c);
+        f64 cp_c = ipa_cp(ipa_T_c, ipa_P_c);
+        f64 mu_c = ipa_mu(ipa_T_c, ipa_P_c);
+        f64 k_c = ipa_k(ipa_T_c, ipa_P_c);
         assert(rho_c > 0.0, "nonphysical property, rho_c: %g", rho_c);
         assert(cp_c > 0.0, "nonphysical property, cp_c: %g", cp_c);
         assert(mu_c > 0.0, "nonphysical property, mu_c: %g", mu_c);
@@ -254,30 +254,26 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
             // Bartz equation for convection coefficient.
             f64 h_g; {
-                // Bartz uses throat properties?
+                // Use properties evauluated at the eckert temperature.
+                f64 T_gw = 0.5*T_wg + 0.28*T0_g + 0.22*adiabatic_T_wg;
+                f64 M_gw = mach_for_temperature(T_gw / T0_g, fit_gamma);
                 // upstream curvature?
                 f64 Rcurvature_tht = 1.5*cnt->R_tht;
-                f64 bartz_cp_g = cea_sample(fit_cp, 1.0);
-                f64 bartz_mu_g = cea_sample(fit_mu, 1.0);
-                f64 bartz_Pr_g = cea_sample(fit_Pr, 1.0);
-                f64 bartz_gamma_g = cea_sample(fit_gamma, 1.0);
+                f64 bartz_gamma_g = cea_sample(fit_gamma, M_gw);
+                f64 bartz_cp_g = cea_sample(fit_cp, M_gw);
+                f64 bartz_mu_g = cea_sample(fit_mu, M_gw);
+                f64 bartz_Pr_g = cea_sample(fit_Pr, M_gw);
                 f64 bartz_y1M22_g = 0.5*(bartz_gamma_g - 1.0)*sqed(M_g);
-                // Empirical correction for mu at the wall.
-                f64 T_gw = 0.5*T_wg + 0.28*T0_g + 0.22*adiabatic_T_wg;
-                bartz_mu_g = viscosity_from_power_law(T_gw, T_g, bartz_mu_g,
-                        VISCOSITY_DFLT_PL_EXPONENT);
                 f64 w = 0.6; // common estimate.
-                f64 base = 0.026
-                         * pow(bartz_mu_g, 0.2)
-                         * bartz_cp_g
-                         * pow(bartz_Pr_g, -0.6)
-                         * pow(dm_g/s->A_tht, 0.8)
-                         * pow(0.5/Rcurvature_tht/cnt->R_tht, 0.1)
-                         * pow(s->A_tht/A_g, 0.9);
-                f64 sigma = pow(0.5*T_wg/T0_g*(1.0 + bartz_y1M22_g) + 0.5,
-                                0.2*w - 0.8)
-                          * pow(1.0 + bartz_y1M22_g, -0.2*w);
-                h_g = base * sigma;
+                h_g = 0.026
+                    * pow(bartz_mu_g, 0.2)
+                    * bartz_cp_g
+                    * pow(bartz_Pr_g, -0.6)
+                    * pow(dm_g/s->A_tht, 0.8)
+                    * pow(0.5/Rcurvature_tht/cnt->R_tht, 0.1)
+                    * pow(s->A_tht/A_g, 0.9)
+                    * pow(0.5*T_wg/T0_g*(1.0 + bartz_y1M22_g) + 0.5, 0.2*w - 0.8)
+                    * pow(1.0 + bartz_y1M22_g, -0.2*w);
             }
 
             // Convection between boundary layer and wall.
