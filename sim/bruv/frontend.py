@@ -35,13 +35,20 @@ def get_interpretation():
     interp.append("phi_div", interp.F64, OUT)
     interp.append("phi_exit", interp.F64, OUT)
 
-    interp.append("ofr", interp.F64, IN)
-    interp.append("dm_cc", interp.F64, IN)
+    interp.append("helix_angle", interp.F64, IN)
+    interp.append("th_iw", interp.F64, IN)
+    interp.append("no_chnl", interp.I64, IN)
+    interp.append("th_chnl", interp.F64, IN)
+    interp.append("wi_chnl", interp.F64, IN)
+    interp.append("T_fu0", interp.F64, IN)
+
+    interp.append("ofr", interp.F64, IN | OUT)
+    interp.append("dm_cc", interp.F64, IN | OUT)
     interp.append("dm_ox", interp.F64, OUT)
     interp.append("dm_fu", interp.F64, OUT)
     interp.append("P_exit", interp.F64, IN)
-    interp.append("T0_cc", interp.F64, OUT)
     interp.append("P0_cc", interp.F64, IN)
+    interp.append("T0_cc", interp.F64, OUT)
     interp.append("rho0_cc", interp.F64, OUT)
     interp.append("gamma_tht", interp.F64, OUT)
     interp.append("Mw_tht", interp.F64, OUT)
@@ -52,14 +59,18 @@ def get_interpretation():
     interp.append("out_count", interp.I64, IN)
     interp.append("out_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_r", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_M", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_T", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_P", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_rho", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_gamma", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_cp", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_mu", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_Pr", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_M_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_P_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_rho_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_gamma_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_cp_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_mu_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Pr_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_P_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_wg", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_wc", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("target_Thrust", interp.F64, IN)
     interp.append("optimise_ofr", interp.I64, IN)
@@ -79,6 +90,13 @@ def get_state(interp):
     state["NLF"] = config["chamber"]["NLF"]
     state["phi_conv"] = config["chamber"]["phi_conv"]
 
+    state["helix_angle"] = config["chamber"]["helix_angle"]
+    state["th_iw"] = config["chamber"]["th_iw"] * 1e-3
+    state["no_chnl"] = config["chamber"]["no_web"]
+    state["th_chnl"] = 1.5e-3
+    state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.5e-3
+    state["T_fu0"] = 15.0 + 273.15
+
     dm_ox = config["operating_conditions"]["mdot_LOx"]
     dm_fu = config["operating_conditions"]["mdot_IPA"]
     state["ofr"] = dm_ox / dm_fu
@@ -87,20 +105,25 @@ def get_state(interp):
     state["P0_cc"] = config["operating_conditions"]["P_cc"]
 
     state["out_count"] = 10000
-    state["out_z"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_r"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_M"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_T"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_P"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_rho"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_gamma"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_cp"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_mu"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
-    state["out_Pr"] = np.empty(shape=(state["out_count"],), dtype=np.float64)
+    new_out = lambda: np.empty(shape=(state["out_count"],), dtype=np.float64)
+    state["out_z"] = new_out()
+    state["out_r"] = new_out()
+    state["out_M_g"] = new_out()
+    state["out_T_g"] = new_out()
+    state["out_P_g"] = new_out()
+    state["out_rho_g"] = new_out()
+    state["out_gamma_g"] = new_out()
+    state["out_cp_g"] = new_out()
+    state["out_mu_g"] = new_out()
+    state["out_Pr_g"] = new_out()
+    state["out_T_c"] = new_out()
+    state["out_P_c"] = new_out()
+    state["out_T_wg"] = new_out()
+    state["out_T_wc"] = new_out()
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
-    state["optimise_ofr"] = 1
-    state["optimise_dm_cc"] = 1
+    state["optimise_ofr"] = 0
+    state["optimise_dm_cc"] = 0
 
     return state
 
@@ -160,6 +183,9 @@ def write_ammendments(state):
             "phi_conv": state["phi_conv"],
             "phi_div": state["phi_div"],
             "phi_exit": state["phi_exit"],
+            "th_iw": state["th_iw"],
+            "th_chnl": state["th_chnl"],
+            "wi_chnl": state["wi_chnl"],
         },
     }
     with open(paths.ROOT / "../config/ammendments.json", "w") as f:
@@ -170,6 +196,7 @@ def write_ammendments(state):
 def now_this_is_bruv():
     interp = get_interpretation()
     state = get_state(interp)
+    print(state)
 
     @contextmanager
     def time_me(label):
@@ -190,43 +217,62 @@ def now_this_is_bruv():
 
     z = state["out_z"].view(state["out_count"])
     r = state["out_r"].view(state["out_count"])
-    M = state["out_M"].view(state["out_count"])
-    T = state["out_T"].view(state["out_count"])
-    P = state["out_P"].view(state["out_count"])
-    rho = state["out_rho"].view(state["out_count"])
-    gamma = state["out_gamma"].view(state["out_count"])
-    cp = state["out_cp"].view(state["out_count"])
-    mu = state["out_mu"].view(state["out_count"])
-    Pr = state["out_Pr"].view(state["out_count"])
+    M_g = state["out_M_g"].view(state["out_count"])
+    T_g = state["out_T_g"].view(state["out_count"])
+    P_g = state["out_P_g"].view(state["out_count"])
+    rho_g = state["out_rho_g"].view(state["out_count"])
+    gamma_g = state["out_gamma_g"].view(state["out_count"])
+    cp_g = state["out_cp_g"].view(state["out_count"])
+    mu_g = state["out_mu_g"].view(state["out_count"])
+    Pr_g = state["out_Pr_g"].view(state["out_count"])
+    T_c = state["out_T_c"].view(state["out_count"])
+    P_c = state["out_P_c"].view(state["out_count"])
+    T_wg = state["out_T_wg"].view(state["out_count"])
+    T_wc = state["out_T_wc"].view(state["out_count"])
     win = geez.new_window()
 
     _, axes = win.new_plots(rows=2, cols=3)
     axes[0,0].set_aspect(1.0)
     axes[0,0].plot(z*1e3, r*1e3)
     axes[0,0].set_title("contour [mm]")
-    axes[0,1].plot(z*1e3, M)
-    axes[0,1].set_title("mach number")
-    axes[0,2].plot(z*1e3, gamma)
-    axes[0,2].set_title("gamma")
-    axes[1,0].plot(z*1e3, T)
-    axes[1,0].set_title("temperature [K]")
-    axes[1,1].plot(z*1e3, P*1e-6)
-    axes[1,1].set_title("pressure [MPa]")
-    axes[1,2].plot(z*1e3, rho)
-    axes[1,2].set_title("density [kg/m3]")
+    axes[1,0].plot(z*1e3, M_g)
+    axes[1,0].set_title("mach number")
+    axes[0,1].plot(z*1e3, T_g)
+    axes[0,1].set_title("temperature [K]")
+    axes[1,1].plot(z*1e3, P_g*1e-5)
+    axes[1,1].set_title("pressure [bar]")
+    axes[0,2].plot(z*1e3, rho_g)
+    axes[0,2].set_title("density [kg/m3]")
+    axes[1,2].plot(z*1e3, gamma_g)
+    axes[1,2].set_title("gamma")
 
     _, axes = win.new_plots(rows=2, cols=3)
     axes[0,0].set_aspect(1.0)
     axes[0,0].plot(z*1e3, r*1e3)
     axes[0,0].set_title("contour [mm]")
-    axes[0,1].plot(z*1e3, M)
-    axes[0,1].set_title("mach number")
-    axes[1,0].plot(z*1e3, cp)
-    axes[1,0].set_title("specific heat [J/kg/K]")
-    axes[1,1].plot(z*1e3, mu)
+    axes[1,0].plot(z*1e3, M_g)
+    axes[1,0].set_title("mach number")
+    axes[0,1].plot(z*1e3, cp_g)
+    axes[0,1].set_title("specific heat [J/kg/K]")
+    axes[1,1].plot(z*1e3, mu_g)
     axes[1,1].set_title("viscosity [Pa*s]")
-    axes[1,2].plot(z*1e3, Pr)
-    axes[1,2].set_title("prandtl")
+    axes[0,2].plot(z*1e3, Pr_g)
+    axes[0,2].set_title("prandtl")
+
+    _, axes = win.new_plots(rows=2, cols=3)
+    axes[0,0].set_aspect(1.0)
+    axes[0,0].plot(z*1e3, r*1e3)
+    axes[0,0].set_title("contour [mm]")
+    axes[1,0].plot(z*1e3, M_g)
+    axes[1,0].set_title("mach number")
+    axes[0,1].plot(z*1e3, T_c)
+    axes[0,1].set_title("coolant temperature [K]")
+    axes[1,1].plot(z*1e3, T_wg)
+    axes[1,1].set_title("wall gas temperature [K]")
+    axes[0,2].plot(z*1e3, P_c*1e-5)
+    axes[0,2].set_title("coolant pressure [bar]")
+    axes[1,2].plot(z*1e3, T_wc)
+    axes[1,2].set_title("wall coolant temperature [K]")
 
     return 0
 

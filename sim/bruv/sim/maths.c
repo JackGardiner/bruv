@@ -77,6 +77,140 @@ i32 isallinf_vec3(vec3 x) { return eq(abs(x), inf(x)); }
 i32 isallinf_vec4(vec4 x) { return eq(abs(x), inf(x)); }
 
 
+i8 xchg_i8(i8* rstr x, i32 newx) {
+    i8 old = *x;
+    *x = newx;
+    return old;
+}
+i16 xchg_i16(i16* rstr x, i32 newx) {
+    i16 old = *x;
+    *x = newx;
+    return old;
+}
+i32 xchg_i32(i32* rstr x, i32 newx) {
+    i32 old = *x;
+    *x = newx;
+    return old;
+}
+i64 xchg_i64(i64* rstr x, i64 newx) {
+    i64 old = *x;
+    *x = newx;
+    return old;
+}
+u8 xchg_u8(u8* rstr x, u32 newx) {
+    u8 old = *x;
+    *x = newx;
+    return old;
+}
+u16 xchg_u16(u16* rstr x, u32 newx) {
+    u16 old = *x;
+    *x = newx;
+    return old;
+}
+u32 xchg_u32(u32* rstr x, u32 newx) {
+    u32 old = *x;
+    *x = newx;
+    return old;
+}
+u64 xchg_u64(u64* rstr x, u64 newx) {
+    u64 old = *x;
+    *x = newx;
+    return old;
+}
+f32 xchg_f32(f32* rstr x, f32 newx) {
+    f32 old = *x;
+    *x = newx;
+    return old;
+}
+f64 xchg_f64(f64* rstr x, f64 newx) {
+    f64 old = *x;
+    *x = newx;
+    return old;
+}
+vec2 xchg_vec2(vec2* rstr x, vec2 newx) {
+    vec2 old = *x;
+    *x = newx;
+    return old;
+}
+vec3 xchg_vec3(vec3* rstr x, vec3 newx) {
+    vec3 old = *x;
+    *x = newx;
+    return old;
+}
+vec4 xchg_vec4(vec4* rstr x, vec4 newx) {
+    vec4 old = *x;
+    *x = newx;
+    return old;
+}
+
+
+u8 iterstep_i8(i8* rstr x, i32 newx) {
+    i8 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u16 iterstep_i16(i16* rstr x, i32 newx) {
+    i16 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u32 iterstep_i32(i32* rstr x, i32 newx) {
+    i32 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u64 iterstep_i64(i64* rstr x, i64 newx) {
+    i64 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u8 iterstep_u8(u8* rstr x, u32 newx) {
+    u8 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u16 iterstep_u16(u16* rstr x, u32 newx) {
+    u16 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u32 iterstep_u32(u32* rstr x, u32 newx) {
+    u32 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+u64 iterstep_u64(u64* rstr x, u64 newx) {
+    u64 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+f32 iterstep_f32(f32* rstr x, f32 newx) {
+    f32 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+f64 iterstep_f64(f64* rstr x, f64 newx) {
+    f64 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+vec2 iterstep_vec2(vec2* rstr x, vec2 newx) {
+    vec2 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+vec3 iterstep_vec3(vec3* rstr x, vec3 newx) {
+    vec3 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+vec4 iterstep_vec4(vec4* rstr x, vec4 newx) {
+    vec4 old = abs(*x - newx);
+    *x = newx;
+    return old;
+}
+
+
 
 // =========================================================================== //
 // = ABS/MIN/MAX/MOD ========================================================= //

@@ -4,6 +4,13 @@
 #include "maths.h"
 
 
+// function of pressure to avoid gas+super critical regions.
+f64 ipa_max_T(f64 P) {
+    f64 T = 18.75*P + 417.5;
+    return min(500.0, T);
+}
+
+
 #define IPA_2DLOOKUP() do {                                                     \
         f64 x = T;                                                              \
         f64 y = P*1e-6;                                                         \
