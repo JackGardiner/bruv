@@ -1022,10 +1022,11 @@ public class Chamber : TPIAP.Pea {
         Polygon.fillet(neg, numel(neg) - 2, FR_b, divisions: divisions_b);
 
         // Note that this fillet has made the polygon variable-length, so
-        // resample it to a fixed amount.
-        List<Vec2> wall = neg[.. (^divisions_b)];
+        // resample it to a fixed amount. +1 to stop points being too close to
+        // each other.
+        List<Vec2> wall = neg[.. ^(divisions_b + 1)];
         wall = Polygon.resample(wall, divisions_wall);
-        neg = [..wall, ..neg[(^divisions_b) ..]];
+        neg = [..wall, ..neg[^divisions_b ..]];
 
         // Fixed-count fillet for the outer corner.
         Polygon.fillet(neg, numel(neg) - 1, FR_c, divisions: divisions_c,
