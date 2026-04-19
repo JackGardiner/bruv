@@ -49,15 +49,10 @@ public static class Polygon {
 
         // Reject duplicate points.
         for (int i=0; i<N; ++i) {
-            int i1 = (i + 1) % N;
-            Vec2 a = vertices[i];
-            if (nearto(a, vertices[i1])) {
-                why = $"duplicate vertices: {vecstr(a)}";
-                return false;
-            }
+            Vec2 v = vertices[i];
             for (int j=i + 1; j<N; ++j) {
-                if (nearto(a, vertices[j])) {
-                    why = $"duplicate vertices: {vecstr(a)}";
+                if (nearto(v, vertices[j], rtol: 0f, atol: 0.0001f)) {
+                    why = $"duplicate vertices: {vecstr(v)}";
                     return false;
                 }
             }

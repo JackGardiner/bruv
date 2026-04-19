@@ -828,7 +828,7 @@ public class Chamber : TPIAP.Pea {
 
                 float curr_wi1 = wi1 - 2f*max(0f, z - z1_chnl - th_chnl);
                 float curr_wi0 = lerp(0f, wi0, invlerp(0f, wi1, curr_wi1));
-                if (curr_wi0 < 1e-3f || curr_wi1 < 1e-3f)
+                if (min(curr_wi0, curr_wi1) < 0.01f)
                     break;
 
                 frames.Add(z*uZ3);
