@@ -13,8 +13,11 @@ import matplotlib
 from .. import paths
 from .. import geez
 from ..geez import new_figure, new_plots, new_window, no_window
+
 from .cea import *
-from .chemical import *
+from .ipa import *
+from .ethanol import *
+
 from .ratpoly import *
 from .space import *
 
@@ -124,7 +127,7 @@ def cea_AEAT_for(P, ofr, M_lerp_1_to_exit):
     return isentropic_A_on_Astar(1 + (M_exit - 1)*M_lerp_1_to_exit, gamma_tht)
 
 CEA_M_lowm = 0.1
-CEA_M_midm = 0.3
+CEA_M_midm = 0.9
 def cea(name, P, ofr):
     if name.startswith("lowm_"):
         AEAT = cea_AEAT_for(P, ofr, CEA_M_lowm)
@@ -293,7 +296,7 @@ def ipa_masker(T, P):
         B = 417.5
         max_T = A*P + B
     return T <= max_T
-ipa_masker.as_string = "x < 18.75 * y + 417.5"
+ipa_masker.as_string = "x <= 18.75 * y + 410.6"
 
 def ipa_approximation(our_name, ipa_name, **kwargs):
     f = lambda *args: IPA[ipa_name](*args)
@@ -314,6 +317,33 @@ find_ipa_mu = ipa_approximation("mu", "mu", spacing=1.15, blitz=2.0,
         pidxs=[0, 1, 3, 4, 6], qidxs=[0, 3, 6])
 find_ipa_k = ipa_approximation("k", "k", blitz=0.0,
         pidxs=[0], qidxs=[0, 1, 2, 3])
+
+
+
+
+@Masker
+def ethanol_masker(T, P):
+    A = 16.5
+    B = 416.5
+    max_T = A*P + B
+    return T <= max_T
+ethanol_masker.as_string = "x <= 16.5 * y + 409.9"
+
+def ethanol_approximation(our_name, ethanol_name, **kwargs):
+    f = lambda *args: Ethanol[ethanol_name](*args)
+    surf = lambda: Surfspace(f, 250.0, 500.0, 2.0, 7.0, N0=200,
+            masker=ethanol_masker)
+    if "extra_reqs" not in kwargs:
+        kwargs["extra_reqs"] = []
+    kwargs["extra_reqs"] = list(kwargs["extra_reqs"])
+    kwargs["extra_reqs"].append(ethanol_masker.as_string)
+    return find_approximation(surf, "Ethanol", our_name, **kwargs)
+
+
+find_ethanol_rho = ethanol_approximation("rho", "rho")
+find_ethanol_cp = ethanol_approximation("cp", "Cp")
+find_ethanol_mu = ethanol_approximation("mu", "mu")
+find_ethanol_k = ethanol_approximation("k", "k")
 
 
 
@@ -346,7 +376,7 @@ def cea_compare_along(X_name, Y_name, approx):
     P0_ccs = np.linspace(1, 5, 5)
     ofrs = np.linspace(1.0, 3.0, 8)
     P0_ccs = np.linspace(3.3, 3.7, 3)
-    ofrs = np.linspace(1.56, 1.96, 3)
+    ofrs = np.linspace(1.2, 2.0, 6)
 
     cmap = matplotlib.cm.get_cmap("tab10", len(ofrs))
 
@@ -732,11 +762,16 @@ def _run():
     find_ipa_mu(what="approximate")
     find_ipa_k(what="approximate")
 
+    find_ethanol_rho(what="approximate")
+    find_ethanol_cp(what="approximate")
+    find_ethanol_mu(what="approximate")
+    find_ethanol_k(what="approximate")
+
 
 
 def run(view=True, save=False):
     global peep_window
-    with CEA.configure("LOx", "IPA"), IPA.configure():
+    with CEA.configure("LOx", "IPA"), IPA.configure(), Ethanol.configure():
         with geez.instance(view, save):
             # stoud redirect nested to not capture meta output.
             with paths.splice_stdout(paths.APPROXIMATOR_OUTPUT, view, save):

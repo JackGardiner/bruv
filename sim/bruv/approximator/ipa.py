@@ -1,5 +1,5 @@
 """
-thermo.Chemical lookups.
+thermo.Chemical isopropanol lookups.
 """
 
 import contextlib

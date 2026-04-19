@@ -1,7 +1,7 @@
 #pragma once
 #include "br.h"
 
-// thermo.Chemical approximations.
+// thermo.Chemical isopropanol approximations.
 
 #define IPA_MIN_T (250.0)
 f64 ipa_max_T(f64 P);

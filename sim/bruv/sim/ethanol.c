@@ -1,17 +1,17 @@
-#include "ipa.h"
+#include "ethanol.h"
 
 #include "assertion.h"
 #include "maths.h"
 
 
 // function of pressure to avoid gas+super critical regions.
-f64 ipa_max_T(f64 P) {
-    f64 T = 18.75e-6*P + 410.6;
+f64 ethanol_max_T(f64 P) {
+    f64 T = 16.5e-6*P + 409.9;
     return min(500.0, T);
 }
 
 
-#define IPA_2DLOOKUP() do {                                                     \
+#define ETHANOL_2DLOOKUP() do {                                                 \
         f64 x = T;                                                              \
         f64 y = P*1e-6;                                                         \
         assert(XLO <= x && x <= XHI, "approximation input oob: x=%g", x);       \
@@ -37,72 +37,72 @@ f64 ipa_max_T(f64 P) {
         return v;                                                               \
     } while (0)
 
-f64 ipa_rho(f64 T, f64 P) {
+f64 ethanol_rho(f64 T, f64 P) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.366% */
-    /*   rel 0.458% */
+    /*   abs 0.131% */
+    /*   rel 0.177% */
     /* also requires: */
-    /*   x <= 18.75 * y + 410.6 */
+    /*   x <= 16.5 * y + 409.9 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
     const f64 YHI = 7.0;
     enum { XLEN = 80,
            YLEN = 80, };
-    #include "tbl/ipa_rho.i"
-    IPA_2DLOOKUP();
+    #include "tbl/ethanol_rho.i"
+    ETHANOL_2DLOOKUP();
 }
 
-f64 ipa_cp(f64 T, f64 P) {
+f64 ethanol_cp(f64 T, f64 P) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.00939% */
-    /*   rel 0.0072% */
+    /*   abs 1.24% */
+    /*   rel 1.66% */
     /* also requires: */
-    /*   x <= 18.75 * y + 410.6 */
+    /*   x <= 16.5 * y + 409.9 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
     const f64 YHI = 7.0;
     enum { XLEN = 80,
            YLEN = 80, };
-    #include "tbl/ipa_cp.i"
-    IPA_2DLOOKUP();
+    #include "tbl/ethanol_cp.i"
+    ETHANOL_2DLOOKUP();
 }
 
-f64 ipa_mu(f64 T, f64 P) {
+f64 ethanol_mu(f64 T, f64 P) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.239% */
-    /*   rel 0.222% */
+    /*   abs 0.161% */
+    /*   rel 0.0925% */
     /* also requires: */
-    /*   x <= 18.75 * y + 410.6 */
+    /*   x <= 16.5 * y + 409.9 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
     const f64 YHI = 7.0;
     enum { XLEN = 80,
            YLEN = 80, };
-    #include "tbl/ipa_mu.i"
-    IPA_2DLOOKUP();
+    #include "tbl/ethanol_mu.i"
+    ETHANOL_2DLOOKUP();
 }
 
-f64 ipa_k(f64 T, f64 P) {
+f64 ethanol_k(f64 T, f64 P) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.000662% */
-    /*   rel 0.00209% */
+    /*   abs 0.0629% */
+    /*   rel 0.183% */
     /* also requires: */
-    /*   x <= 18.75 * y + 410.6 */
+    /*   x <= 16.5 * y + 409.9 */
     const f64 XLO = 250.0;
     const f64 XHI = 500.0;
     const f64 YLO = 2.0;
     const f64 YHI = 7.0;
     enum { XLEN = 80,
            YLEN = 80, };
-    #include "tbl/ipa_k.i"
-    IPA_2DLOOKUP();
+    #include "tbl/ethanol_k.i"
+    ETHANOL_2DLOOKUP();
 }
 
-#undef IPA_2DLOOKUP
+#undef ETHANOL_2DLOOKUP

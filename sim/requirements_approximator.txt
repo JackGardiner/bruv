@@ -1,6 +1,7 @@
 -r requirements.txt
 
-scipy
 CEA_Wrap
-thermo
 chemical
+CoolProp
+scipy
+thermo

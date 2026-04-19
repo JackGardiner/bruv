@@ -93,13 +93,13 @@ f64 isentropic_A_on_Astar(f64 M, const SpecificHeatRatio* shr) {
 }
 
 f64 isentropic_T_on_T0(f64 M, const SpecificHeatRatio* shr) {
-    return 1.0 / (1.0 + (shr->y - 1.0)/2.0 * sqed(M));
+    return 1.0 / (1.0 + 0.5 * (shr->y - 1.0) * sqed(M));
 }
 f64 isentropic_P_on_P0(f64 M, const SpecificHeatRatio* shr) {
-    return pow(1.0 + (shr->y - 1.0)/2.0 * sqed(M), shr->y/(1.0 - shr->y));
+    return pow(1.0 + 0.5 * (shr->y - 1.0) * sqed(M), shr->y/(1.0 - shr->y));
 }
 f64 isentropic_rho_on_rho0(f64 M, const SpecificHeatRatio* shr) {
-    return pow(1.0 + (shr->y - 1.0)/2.0 * sqed(M), 1.0/(1.0 - shr->y));
+    return pow(1.0 + 0.5 * (shr->y - 1.0) * sqed(M), 1.0/(1.0 - shr->y));
 }
 
 f64 get_y1M22(f64 M, const SpecificHeatRatio* shr) {
@@ -139,9 +139,10 @@ f64 friction_factor_colebrook(f64 Re, f64 D, f64 eps) {
     f64 ff = friction_factor_haaland(Re, D, eps); // guess.
     for (i32 iter=0; /* true */; ++iter) {
         enum { MAX_ITERS = 100 };
-        f64 x = -2.0*LOG10TWO*log2(eps/3.71*D) + 2.52/(Re*sqrt(ff));
+        f64 x = -2.0*LOG10TWO*log2(eps/D/3.71 + 2.52/Re/sqrt(ff));
         if (iterstep(&ff, 1.0 / sqed(x)) < 1e-8)
             break;
+        assert(iter < MAX_ITERS, "failed to converge");
     }
     return ff;
 }
@@ -155,4 +156,23 @@ f64 nusselt_gnielinski(f64 Re, f64 Pr, f64 ff) {
 f64 nusselt_dittus_boelter(f64 Re, f64 Pr, i32 is_heating) {
     f64 n = (is_heating) ? 0.4 : 0.3;
     return 0.023 * pow(Re, 0.8) * pow(Pr, n);
+}
+
+
+f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma) {
+    // Find M s.t.:
+    //  T_on_T0 = 1 / (1 + (gamma - 1)/2 * M^2)
+    // However gamma is non-constant. Rearrange for M:
+    //  M = sqrt(2/(gamma - 1) * (1/T_on_T0 - 1))
+    // A classic for fixed point iteration.
+    f64 M = 1.0; // guess.
+    for (i32 iter=0; /* true */; ++iter) {
+        enum { MAX_ITERS = 100 };
+        f64 gamma = cea_sample(fit_gamma, M);
+        f64 new_M = sqrt(2.0 / (gamma - 1.0) * (1.0/T_on_T0 - 1.0));
+        if (iterstep(&M, new_M) < 1e-5)
+            break;
+        assert(iter < MAX_ITERS, "failed to converge");
+    }
+    return M;
 }

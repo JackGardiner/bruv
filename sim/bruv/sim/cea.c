@@ -141,10 +141,10 @@ f64 cea_gamma_lowm(f64 P0_cc, f64 ofr) {
 f64 cea_gamma_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0111% */
-    /*   rel 0.114% */
+    /*   abs 0.0764% */
+    /*   rel 0.717% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.9) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -221,10 +221,10 @@ f64 cea_cp_lowm(f64 P0_cc, f64 ofr) {
 f64 cea_cp_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0988% */
-    /*   rel 0.0544% */
+    /*   abs 1.57% */
+    /*   rel 0.686% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.9) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -301,10 +301,10 @@ f64 cea_mu_lowm(f64 P0_cc, f64 ofr) {
 f64 cea_mu_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0127% */
-    /*   rel 0.0267% */
+    /*   abs 0.0496% */
+    /*   rel 0.0402% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.9) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -381,10 +381,10 @@ f64 cea_Pr_lowm(f64 P0_cc, f64 ofr) {
 f64 cea_Pr_midm(f64 P0_cc, f64 ofr) {
     /* evenly-spaced flattened (C-ordered) 2D LUT */
     /* max error of: */
-    /*   abs 0.0636% */
-    /*   rel 0.277% */
+    /*   abs 0.469% */
+    /*   rel 1.71% */
     /* also requires: */
-    /*   'M_midm' as: lerp(1, M_exit, 0.3) */
+    /*   'M_midm' as: lerp(1, M_exit, 0.9) */
     const f64 XLO = 1.0;
     const f64 XHI = 5.0;
     const f64 YLO = 1.0;
@@ -422,7 +422,7 @@ f64 cea_sample(const ceaFit* fit, f64 M) {
 
 #define cea_make_fit(name) do {                                 \
         f64 M_lowm = 0.9 + 0.1*M_exit;                          \
-        f64 M_midm = 0.7 + 0.3*M_exit;                          \
+        f64 M_midm = 0.1 + 0.9*M_exit;                          \
         f64 value_cc = GLUE(cea_, name, _cc)(P0_cc, ofr);       \
         f64 value_tht = GLUE(cea_, name, _tht)(P0_cc, ofr);     \
         f64 value_lowm = GLUE(cea_, name, _lowm)(P0_cc, ofr);   \

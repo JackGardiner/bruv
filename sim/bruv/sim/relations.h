@@ -53,3 +53,6 @@ f64 friction_factor_colebrook(f64 Re, f64 D, f64 eps);
 
 f64 nusselt_gnielinski(f64 Re, f64 Pr, f64 ff);
 f64 nusselt_dittus_boelter(f64 Re, f64 Pr, i32 is_heating);
+
+
+f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma);

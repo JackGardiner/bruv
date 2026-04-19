@@ -40,6 +40,7 @@ def get_interpretation():
     interp.append("no_chnl", interp.I64, IN)
     interp.append("th_chnl", interp.F64, IN)
     interp.append("wi_chnl", interp.F64, IN)
+    interp.append("eps_chnl", interp.F64, IN)
     interp.append("T_fu0", interp.F64, IN)
 
     interp.append("ofr", interp.F64, IN | OUT)
@@ -93,9 +94,12 @@ def get_state(interp):
     state["helix_angle"] = config["chamber"]["helix_angle"]
     state["th_iw"] = config["chamber"]["th_iw"] * 1e-3
     state["no_chnl"] = config["chamber"]["no_web"]
+    state["th_chnl"] = config["chamber"]["th_web"]
+    state["eps_chnl"] = config["material"]["roughness_depth"]
     state["th_chnl"] = 1.5e-3
     state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.5e-3
-    state["T_fu0"] = 15.0 + 273.15
+    state["eps_chnl"] = 0.0
+    state["T_fu0"] = 25.0 + 273.15
 
     dm_ox = config["operating_conditions"]["mdot_LOx"]
     dm_fu = config["operating_conditions"]["mdot_IPA"]

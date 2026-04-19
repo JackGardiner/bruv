@@ -5,6 +5,7 @@
 
 #include "cea.h"
 #include "contour.h"
+#include "ethanol.h"
 #include "ipa.h"
 #include "optim.h"
 #include "relations.h"
@@ -70,6 +71,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     assert(s->th_iw > 0.0, "invalid input: th_iw=%g", s->th_iw);
     assert(s->th_chnl > 0.0, "invalid input: th_chnl=%g", s->th_chnl);
     assert(s->wi_chnl > 0.0, "invalid input: wi_chnl=%g", s->wi_chnl);
+    assert(s->eps_chnl >= 0.0, "invalid input: eps_chnl=%g", s->eps_chnl);
     assert(s->T_fu0 > 0.0, "invalid input: T_fu0=%g", s->T_fu0);
 
     assert(s->ofr > 0.0, "invalid input: ofr=%g", s->ofr);
@@ -168,14 +170,14 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         f64 P_c;
     } Station;
 
-    i32 N = 1000;
+    i32 N = 5000;
     Station* stns = malloc(N * sizeof(Station));
 
     stns[N - 1] = (Station){
         .T_wg = NAN,
         .T_wc = NAN,
         .T_c = s->T_fu0,
-        .P_c = 60e5,
+        .P_c = 45e5,
     };
     // March from nozzle exit to injector face.
     for (i32 i=N - 1; i>0; --i) {
@@ -186,6 +188,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
         // Combustion gas properties:
         f64 dm_g = s->dm_cc;
+        f64 T0_g = s->T0_cc;
         f64 A_g = PI*sqed(rA);
         SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
         f64 M_g;
@@ -193,7 +196,6 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
                 s->gamma_tht /* good guess */);
         f64 y1M22_g = get_y1M22(M_g, shr_g);
         f64 T_g = s->T0_cc * isentropicx_T_on_T0(y1M22_g, shr_g);
-        assert(T_g > 0.0, "nonphysical property, T_g: %g", T_g);
         f64 cp_g = cea_sample(fit_cp, M_g);
         f64 mu_g = cea_sample(fit_mu, M_g);
         f64 Pr_g = cea_sample(fit_Pr, M_g);
@@ -201,23 +203,22 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         assert(mu_g > 0.0, "nonphysical property, mu_g: %g", mu_g);
         assert(Pr_g > 0.0, "nonphysical property, Pr_g: %g", Pr_g);
         f64 cbrt_Pr_g = cbrt(Pr_g);
-        (void)cbrt_Pr_g;
 
         // Coolant properties:
         f64 T_c = stns[i].T_c;
         f64 P_c = stns[i].P_c;
         assert(T_c > 0.0, "nonphysical property, T_c: %g", T_c);
         assert(P_c > 0.0, "nonphysical property, P_c: %g", P_c);
-        f64 ipa_P_c = min(max(P_c, IPA_MIN_P), IPA_MAX_P);
-        f64 ipa_T_c = min(max(T_c, IPA_MIN_T), ipa_max_T(ipa_P_c));
-        possible_system &= (ipa_P_c == P_c) && (ipa_T_c == T_c);
+        f64 ethanol_P_c = min(max(P_c, 1.001*ETHANOL_MIN_P), 0.999*ETHANOL_MAX_P);
+        f64 ethanol_T_c = min(max(T_c, 1.001*ETHANOL_MIN_T), 0.999*ethanol_max_T(ethanol_P_c));
+        possible_system &= (ethanol_P_c == P_c) && (ethanol_T_c == T_c);
         f64 A_c = s->wi_chnl*s->th_chnl // ~approx as rectangle.
                 * s->no_chnl;
         f64 HD_c = 2.0*s->wi_chnl*s->th_chnl/(s->wi_chnl + s->th_chnl);
-        f64 rho_c = ipa_rho(ipa_T_c, ipa_P_c);
-        f64 cp_c = ipa_cp(ipa_T_c, ipa_P_c);
-        f64 mu_c = ipa_mu(ipa_T_c, ipa_P_c);
-        f64 k_c = ipa_k(ipa_T_c, ipa_P_c);
+        f64 rho_c = ethanol_rho(ethanol_T_c, ethanol_P_c);
+        f64 cp_c = ethanol_cp(ethanol_T_c, ethanol_P_c);
+        f64 mu_c = ethanol_mu(ethanol_T_c, ethanol_P_c);
+        f64 k_c = ethanol_k(ethanol_T_c, ethanol_P_c);
         assert(rho_c > 0.0, "nonphysical property, rho_c: %g", rho_c);
         assert(cp_c > 0.0, "nonphysical property, cp_c: %g", cp_c);
         assert(mu_c > 0.0, "nonphysical property, mu_c: %g", mu_c);
@@ -227,8 +228,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         f64 vel_c = G_c/rho_c;
         f64 Re_c = G_c*HD_c/mu_c;
         f64 Pr_c = cp_c*mu_c/k_c;
-        f64 eps_c = 20e-6;
-        f64 ff_c = friction_factor_colebrook(Re_c, HD_c, eps_c);
+        f64 ff_c = friction_factor_colebrook(Re_c, HD_c, s->eps_chnl);
         f64 Nu_c = nusselt_dittus_boelter(Re_c, Pr_c, 1);
         f64 h_c = Nu_c*k_c/HD_c;
         assert(ff_c > 0.0, "nonphysical property, ff_c: %g", ff_c);
@@ -240,7 +240,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
         f64 q;
         f64 T_wg = 0.2*T_c + 0.8*T_g; // initial guess.
         f64 T_wc = 0.8*T_c + 0.2*T_g; // initial guess.
-        // note a high initial guess helps prevent a huge (mis)step upwards.
+        // note a far initial guess helps prevent a huge (mis)step further.
         for (i32 iter=0; /* true */; ++iter) {
             enum { MAX_ITERS = 1000 };
 
@@ -252,27 +252,33 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             // Adiabatic wall temperature.
             f64 adiabatic_T_wg = T_g * (1.0 + cbrt_Pr_g*y1M22_g);
 
-            // Empirical correction for mu at the wall.
-            f64 mu_gw; {
-                f64 T_gw = 0.5*(T_wg + T_g) + 0.22*(adiabatic_T_wg - T_g);
-                mu_gw = viscosity_from_power_law(T_gw, T_g, mu_g,
-                        VISCOSITY_DFLT_PL_EXPONENT);
-            }
-
             // Bartz equation for convection coefficient.
-            f64 Rcurvature_tht = (0.5*0.382 + 0.5*1.5)*cnt->R_tht;
-            // average of upstream and downstream curvature?
-            f64 bartz_w = 0.6; // common estimate.
-            f64 bartz_base = 0.026
-                           * pow(mu_gw, 0.2)
-                           * cp_g
-                           * pow(Pr_g, -0.6)
-                           * pow(dm_g/s->A_tht, 0.8)
-                           * pow(2.0*cnt->R_tht/Rcurvature_tht, 0.1)
-                           * pow(s->A_tht/A_g, 0.9);
-            f64 bartz_sigma = pow(0.5*T_wg/T_g + 0.5, 0.2*bartz_w - 0.8)
-                            * pow(1.0 + y1M22_g, -0.2*bartz_w);
-            f64 h_g = bartz_base * bartz_sigma;
+            f64 h_g; {
+                // Bartz uses throat properties?
+                // upstream curvature?
+                f64 Rcurvature_tht = 1.5*cnt->R_tht;
+                f64 bartz_cp_g = cea_sample(fit_cp, 1.0);
+                f64 bartz_mu_g = cea_sample(fit_mu, 1.0);
+                f64 bartz_Pr_g = cea_sample(fit_Pr, 1.0);
+                f64 bartz_gamma_g = cea_sample(fit_gamma, 1.0);
+                f64 bartz_y1M22_g = 0.5*(bartz_gamma_g - 1.0)*sqed(M_g);
+                // Empirical correction for mu at the wall.
+                f64 T_gw = 0.5*T_wg + 0.28*T0_g + 0.22*adiabatic_T_wg;
+                bartz_mu_g = viscosity_from_power_law(T_gw, T_g, bartz_mu_g,
+                        VISCOSITY_DFLT_PL_EXPONENT);
+                f64 w = 0.6; // common estimate.
+                f64 base = 0.026
+                         * pow(bartz_mu_g, 0.2)
+                         * bartz_cp_g
+                         * pow(bartz_Pr_g, -0.6)
+                         * pow(dm_g/s->A_tht, 0.8)
+                         * pow(0.5/Rcurvature_tht/cnt->R_tht, 0.1)
+                         * pow(s->A_tht/A_g, 0.9);
+                f64 sigma = pow(0.5*T_wg/T0_g*(1.0 + bartz_y1M22_g) + 0.5,
+                                0.2*w - 0.8)
+                          * pow(1.0 + bartz_y1M22_g, -0.2*w);
+                h_g = base * sigma;
+            }
 
             // Convection between boundary layer and wall.
             f64 q_convective = h_g * (adiabatic_T_wg - T_wg);
@@ -284,7 +290,6 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             f64 emissivity_g = 0.15; // common for combustion products.
             f64 q_radiative = emissivity_g * STEFAN_BOLTZMAN_CONSTANT
                             * (sqed(sqed(T_g)) - sqed(sqed(T_wg)));
-            // TODO: wall emissivity?
             assert(q_radiative >= 0.0,
                     "coolant should not heat cc gases, q_radiative=%g",
                     q_radiative);
@@ -299,16 +304,16 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             f64 eta_web; {
                 f64 term = s->th_chnl * sqrt(h_c / k_iw / wi_web);
                 f64 exp_twoterm = exp2(LOG2E*2.0*term);
-                f64 tanh_term = (1.0 - 1.0/exp_twoterm)
-                              / (1.0 + 1.0/exp_twoterm);
+                f64 tanh_term = (exp_twoterm - 1.0)
+                              / (exp_twoterm + 1.0);
                 eta_web = tanh_term / term;
             }
 
             // Cylindrical conductor resistance.
-            f64 Rth_iw = rA * LOG2E*log2(1.0 + s->th_iw/rA) / k_iw;
+            f64 Rth_iw = rA * LN2*log2(1.0 + s->th_iw/rA) / k_iw;
             // Fin + convective resistance.
-            f64 Rth_c = TWOPI*rA / h_c / s->no_chnl
-                      / (s->wi_chnl + 2.0*eta_web*s->th_chnl)
+            f64 Rth_c = TWOPI*rA / h_c
+                      / s->no_chnl / (s->wi_chnl + 2.0*eta_web*s->th_chnl)
                       * cos_helix;
 
             // Heat balance to find wall temperatures at each side.
@@ -316,11 +321,16 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
             f64 new_T_wc = T_c + q*Rth_c;
             f64 diff_T_wg = iterstep(&T_wg, new_T_wg);
             f64 diff_T_wc = iterstep(&T_wc, new_T_wc);
-            if (max(diff_T_wg, diff_T_wc) < 1e-2)
+            if (max(diff_T_wg, diff_T_wc) < 1e-4)
                 break;
-            possible_system &= (iter < MAX_ITERS);
-            if (iter >= MAX_ITERS)
+
+            if (iter >= MAX_ITERS) {
+                possible_system = 0;
+                T_wg = NAN;
+                T_wc = NAN;
+                q = 8e3; // guess to try wrangle ok data.
                 break;
+            }
         }
         possible_system &= (T_wg < T_g) || nearto(T_wg, T_g);
         possible_system &= (T_wc > T_c) || nearto(T_wc, T_c);
