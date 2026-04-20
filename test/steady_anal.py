@@ -1701,6 +1701,20 @@ def write_optimization_overview_plots(
 	rs_base = work[(work["sample_type"] == "RS") & (work["sample_index"] < NEW_SAMPLE_INDEX_MIN)].copy()
 	rs_new  = work[(work["sample_type"] == "RS") & (work["sample_index"] >= NEW_SAMPLE_INDEX_MIN)].copy().sort_values("sample_index")
 
+	# Fallback injector element count for cases where one stage has missing theory fields.
+	n_elem_fallback = 12
+	for cfg in stage_cfg.values():
+		target = cfg["target"]
+		theory_col = cfg["theory_col"]
+		if theory_col not in rs_new.columns or target is None or pd.isna(target):
+			continue
+		th = pd.to_numeric(rs_new[theory_col], errors="coerce").dropna()
+		if th.empty:
+			continue
+		cand = max(1, round(float(target) / float(th.mean())))
+		n_elem_fallback = int(cand)
+		break
+
 	# Pre-compute transfer ratio and per-element info per stage
 	stage_meta: dict[str, dict] = {}
 	for stage_key, cfg in stage_cfg.items():
@@ -1723,6 +1737,9 @@ def write_optimization_overview_plots(
 		if target is not None and not pd.isna(target) and not th_rn.empty:
 			n_elem    = max(1, round(target / float(th_rn.mean())))
 			target_pe = target / n_elem
+		elif target is not None and not pd.isna(target):
+			n_elem    = n_elem_fallback
+			target_pe = target / n_elem
 		else:
 			n_elem    = 1
 			target_pe = target
@@ -1734,7 +1751,7 @@ def write_optimization_overview_plots(
 		}
 
 	# ------------------------------------------------------------------ Figure 1
-	fig1, axes1 = plt.subplots(2, 2, figsize=(14, 12))
+	fig1, axes1 = plt.subplots(1, 2, figsize=(14, 6))
 
 	for col_idx, (stage_key, cfg) in enumerate(stage_cfg.items()):
 		meta       = stage_meta.get(stage_key, {})
@@ -1742,80 +1759,18 @@ def write_optimization_overview_plots(
 		exp_col    = cfg["exp_col"]
 		theory_col = cfg["theory_col"]
 		target     = cfg["target"]
-		ax_par     = axes1[0, col_idx]
-		ax_ratio   = axes1[1, col_idx]
+		ax_ratio   = axes1[col_idx]
+		is_ipa_side = stage_key == "stage2_ipa"
+		rs_new_plot = rs_new[rs_new["sample_index"] >= NEW_FAMILY4_INDEX_MIN].copy() if is_ipa_side else rs_new
 
 		if not meta or exp_col not in work.columns or theory_col not in work.columns:
-			ax_par.axis("off"); ax_ratio.axis("off")
+			ax_ratio.axis("off")
 			continue
 
 		k_cu_mean = meta["k_cu_mean"]
 		k_rb_mean = meta["k_rb_mean"]
 		transfer  = meta["transfer"]
 		target_pe = meta["target_pe"]
-
-		# -- Parity plot --
-		all_theory = pd.concat([
-			pd.to_numeric(copper[theory_col],  errors="coerce"),
-			pd.to_numeric(rs_base[theory_col], errors="coerce"),
-			pd.to_numeric(rs_new[theory_col],  errors="coerce"),
-		]).dropna()
-		all_exp = pd.concat([
-			pd.to_numeric(copper[exp_col],  errors="coerce"),
-			pd.to_numeric(rs_base[exp_col], errors="coerce"),
-			pd.to_numeric(rs_new[exp_col],  errors="coerce"),
-		]).dropna()
-		if all_theory.empty or all_exp.empty:
-			ax_par.axis("off"); ax_ratio.axis("off")
-			continue
-
-		t_min = min(float(all_theory.min()), float(all_exp.min())) * 0.85
-		t_max = max(float(all_theory.max()), float(all_exp.max())) * 1.1
-		x_ref = np.linspace(t_min, t_max, 300)
-
-		ax_par.plot(x_ref, x_ref, "k-",  lw=1.0, alpha=0.4, label="y = x  (Bazarov perfect)")
-		if not pd.isna(k_cu_mean):
-			ax_par.plot(x_ref, k_cu_mean * x_ref, "--", color=cfg["color_s"],  lw=1.6,
-						label=f"K_copper = {k_cu_mean:.3f}")
-		if not pd.isna(k_rb_mean):
-			ax_par.plot(x_ref, k_rb_mean * x_ref, "--", color=cfg["color_rb"], lw=1.6,
-						label=f"K_resin_base = {k_rb_mean:.3f}")
-
-		# Scatter per group
-		def _scatter(df, color, marker, label):
-			th = pd.to_numeric(df[theory_col], errors="coerce")
-			ex = pd.to_numeric(df[exp_col],    errors="coerce")
-			mask = th.notna() & ex.notna()
-			if mask.any():
-				ax_par.scatter(th[mask], ex[mask], color=color, marker=marker,
-							   s=75, zorder=5, label=label)
-
-		_scatter(copper,  cfg["color_s"],  "o", f"Copper / S  (n={len(copper)})")
-		_scatter(rs_base, cfg["color_rb"], "s", f"Resin baseline / RS0–{NEW_SAMPLE_INDEX_MIN-1}  (n={len(rs_base)})")
-
-		# RS new by family — distinct color/marker (includes Family 4 RS18+)
-		for fam_label, fam_group, fam_color, fam_marker in split_sample_groups_by_recency(rs_new):
-			th = pd.to_numeric(fam_group[theory_col], errors="coerce")
-			ex = pd.to_numeric(fam_group[exp_col], errors="coerce")
-			mask = th.notna() & ex.notna()
-			if not mask.any():
-				continue
-			ax_par.scatter(th[mask], ex[mask], color=fam_color, marker=fam_marker, s=90, zorder=6,
-						   label=f"{fam_label}  (n={int(mask.sum())})")
-			for _, row in fam_group.iterrows():
-				th_v = float(pd.to_numeric(row.get(theory_col, np.nan), errors="coerce"))
-				ex_v = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
-				if pd.isna(th_v) or pd.isna(ex_v):
-					continue
-				ax_par.annotate(format_sample_id_from_row(row), (th_v, ex_v), xytext=(5, 4),
-						textcoords="offset points", fontsize=7.5, color=fam_color)
-
-		ax_par.set_xlabel("Bazarov theory mdot  (kg/s, N-element total)")
-		ax_par.set_ylabel("Actual mdot, single element  (kg/s)")
-		ax_par.set_title(f"{stage_name}: Bazarov parity")
-		ax_par.grid(True, alpha=0.3)
-		ax_par.legend(fontsize=7.5)
-
 		# -- pred_copper / target_pe vs K_total = K_corr * K_extra --
 		if pd.isna(transfer) or target_pe is None or pd.isna(target_pe):
 			ax_ratio.axis("off")
@@ -1823,7 +1778,7 @@ def write_optimization_overview_plots(
 
 		k_corr_col = cfg["k_corr_col"]
 		kt_vals, ratio_vals, si_vals = [], [], []
-		for _, row in rs_new.iterrows():
+		for _, row in rs_new_plot.iterrows():
 			ex_v     = float(pd.to_numeric(row.get(exp_col,     np.nan), errors="coerce"))
 			ke_v     = float(pd.to_numeric(row.get(KEXTRA_COL,  np.nan), errors="coerce")) if KEXTRA_COL in row.index else np.nan
 			kcorr_v  = float(pd.to_numeric(row.get(k_corr_col,  np.nan), errors="coerce")) if k_corr_col in row.index else np.nan
@@ -1836,7 +1791,7 @@ def write_optimization_overview_plots(
 
 		if kt_vals:
 			# Plot RS new by family on the convergence ratio panel as well.
-			for fam_label, fam_group, fam_color, fam_marker in split_sample_groups_by_recency(rs_new):
+			for fam_label, fam_group, fam_color, fam_marker in split_sample_groups_by_recency(rs_new_plot):
 				fam_kt, fam_ratio, fam_si = [], [], []
 				for _, row in fam_group.iterrows():
 					ex_v    = float(pd.to_numeric(row.get(exp_col,    np.nan), errors="coerce"))
@@ -1875,15 +1830,6 @@ def write_optimization_overview_plots(
 										 linestyle="-.", label=f"Interpolated K_total* = {k_opt:.3f}")
 
 		ax_ratio.axhline(1.0, color="red", lw=2.0, linestyle="-", label="Target  (ratio = 1.0)")
-
-		# New K_corr nominal and sweep band
-		nk = (new_k_corr or {}).get(stage_key)
-		if nk:
-			k_nom = nk["k_total_new_nominal"]  # K_corr_new × 1.0
-			ax_ratio.axvline(k_nom, color="green", lw=1.8, linestyle="--",
-							 label=f"New nominal K_total = {k_nom:.3f}  (K_corr_new × 1.0)")
-			ax_ratio.axvspan(k_nom * 0.8, k_nom * 1.2, alpha=0.10, color="green",
-							 label="New sweep band  (K_extra 0.8–1.2)")
 
 		ax_ratio.set_xlabel("K_total  =  K_corr × K_extra  (Bazarov input)")
 		ax_ratio.set_ylabel("pred_copper_per_elem / target_per_elem")
@@ -1987,16 +1933,6 @@ def write_optimization_overview_plots(
 
 	ax_funnel.axhline(1.0, color="red", lw=2.0, linestyle="-",
 					  label="Target  (pred = copper target)")
-
-	# New nominal and sweep bands per stage
-	for stage_key, cfg in stage_cfg.items():
-		nk = (new_k_corr or {}).get(stage_key)
-		if not nk:
-			continue
-		k_nom = nk["k_total_new_nominal"]
-		ax_funnel.axvline(k_nom, color=cfg["color_sweep"], lw=1.4, linestyle="--", alpha=0.8,
-						  label=f"{cfg['stage_name']} new nominal = {k_nom:.3f}")
-		ax_funnel.axvspan(k_nom * 0.8, k_nom * 1.2, alpha=0.07, color=cfg["color_sweep"])
 
 	ax_funnel.set_xlabel("K_total  =  K_corr × K_extra  (Bazarov input)")
 	ax_funnel.set_ylabel("pred_copper_per_elem / target_per_elem")

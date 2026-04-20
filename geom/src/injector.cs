@@ -7,6 +7,7 @@ using Vec3 = System.Numerics.Vector3;
 
 using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
+using BBox3 = PicoGK.BBox3;
 
 
 /* INEJCTOR ELEMENT DESIGN, BI-SWIRL COAXIAL.
@@ -100,12 +101,16 @@ public class InjectorElement {
     // public float Kmdot_2 { get; init; } = 3.277f;
 
     /* round 4 skull emoji */
-    public float Kmdot_1 { get; init; } = 1.320f;
-    public float Kmdot_2 { get; init; } = 1.460f;
+    // public float Kmdot_1 { get; init; } = 1.320f;
+    // public float Kmdot_2 { get; init; } = 1.460f;
+
+    /* final */
+    public float Kmdot_1 { get; init; } = 1.341f;
+    public float Kmdot_2 { get; init; } = 1.518f;
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
-    public int no_il2 { get; init; } = 3;
+    public int no_il2 { get; init; } = 4;
 
     // Coefficients of nozzle opening: IR_ch/IR_nz
     // reasonable bounds: idx?
@@ -1462,6 +1467,34 @@ public class Injector : TPIAP.Pea {
         return vox;
     }
 
+    protected void write_volumes_report(ManiVol mani_vol, float vol_inlet_mm3) {
+        // Compute manifold volumes from voxel masks.
+        mani_vol.volume_entire.CalculateProperties(out float vol_entire_mm3,
+                                                   out BBox3 _);
+        mani_vol.volume_only_lower.CalculateProperties(out float vol_lower_mm3,
+                                                       out BBox3 _);
+
+        // LOx manifold = upper region (entire - lower)
+        float vol_lox_mani_mm3 = vol_entire_mm3 - vol_lower_mm3;
+
+        // IPA manifold = lower region
+        float vol_ipa_mani_mm3 = vol_lower_mm3;
+
+        // Write volumes report in mL (mm³ * 1e-3 = mL)
+        var lines = new List<string> {
+            $"Injector Manifold Volumes Report",
+            $"=================================",
+            $"",
+            $"LOx Manifold Volume:        {vol_lox_mani_mm3*1e-3:F2} mL ({vol_lox_mani_mm3:F0} mm³)",
+            $"",
+            $"IPA Manifold Volume:        {vol_ipa_mani_mm3*1e-3:F2} mL ({vol_ipa_mani_mm3:F0} mm³)",
+            $"",
+            $"Total Combined Volume:      {(vol_lox_mani_mm3 + vol_ipa_mani_mm3)*1e-3:F2} mL",
+            $"",
+        };
+
+        File.WriteAllLines(fromroot("exports/volumes-report.txt"), lines);
+    }
 
     protected void voxels_gussets(Geez.Cycle key, in ManiVol mani_vol,
             out Voxels pos, out Voxels neg) {
@@ -1785,6 +1818,10 @@ public class Injector : TPIAP.Pea {
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
         voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
                 out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
+
+        // Compute inlet manifold volume right after creation, before voxels are modified
+        neg_ports.CalculateProperties(out float vol_inlet_ports_mm3, out _);
+
         part.step("created ports.");
 
         part.add(ref flange, key_flange);
@@ -1866,18 +1903,9 @@ public class Injector : TPIAP.Pea {
         part.substep("added base plate.");
         part.add(ref supports, key_supports);
         part.substep("added supports.");
-        part.add(ref pos_elements);
-        part.substep("added injector elements.");
 
         part.step("added plate material.");
 
-
-        if (neg_film_cooling != null) {
-            part.sub(ref neg_film_cooling);
-            part.substep("subtracted film cooling holes.");
-        } else {
-            part.substep("skipping film cooling holes (not printed).");
-        }
         part.sub(ref neg_bolt_hole);
         part.substep("subtracted mating bolt hole.");
         part.sub(ref neg_bolt_clearance);
@@ -1894,8 +1922,6 @@ public class Injector : TPIAP.Pea {
         part.substep("subtracted igniter void (2/2).");
         part.sub(ref neg_ports);
         part.substep("subtracted port voids (2/2).");
-        part.sub(ref neg_elements, key_elements);
-        part.substep("subtracted injector elements.");
         if (neg_ipa_inlet_breakout != null) {
             part.sub(ref neg_ipa_inlet_breakout, key_ipa_inlet_breakout);
             part.substep("subtracted IPA inlet breakout.");
@@ -1905,6 +1931,20 @@ public class Injector : TPIAP.Pea {
 
         part.step("removed voids.");
 
+        part.add(ref pos_elements);
+        part.substep("added injector elements.");
+
+        part.sub(ref neg_elements, key_elements);
+        part.substep("subtracted injector elements.");
+
+
+        if (neg_film_cooling != null) {
+            part.sub(ref neg_film_cooling);
+            part.substep("subtracted film cooling holes.");
+        } else {
+            part.substep("skipping film cooling holes (not printed).");
+        }
+
         part.voxels.BoolSubtract(new Rod(
             new(-extend_base_by*uZ3),
             -3f*EXTRA,
@@ -1913,6 +1953,9 @@ public class Injector : TPIAP.Pea {
         part.substep("clipped bottom.", view_part: true);
 
         part.step("finished.");
+
+        // Write volumes report with pre-computed inlet volume
+        write_volumes_report(mani_vol, vol_inlet_ports_mm3);
 
         return part.voxels;
     }

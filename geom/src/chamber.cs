@@ -985,10 +985,10 @@ public class Chamber : TPIAP.Pea {
         */
         float FR_b = 1.5f;
         float FR_c = 2f;
-        int divisions_wall = DIVISIONS/20;
-        int divisions_b = max(6, DIVISIONS/60);
-        int divisions_c = max(6, DIVISIONS/100);
-        int divisions_A = max(6, DIVISIONS/80);
+        int divisions_wall = max(5, DIVISIONS/60);
+        int divisions_b = max(5, DIVISIONS/180);
+        int divisions_c = max(5, DIVISIONS/300);
+        int divisions_A = max(5, DIVISIONS/240);
 
         // Get the contour hugging the outer wall.
         neg = new(2*divisions_wall);
@@ -1451,8 +1451,10 @@ public class Chamber : TPIAP.Pea {
                 img.fix_unimelb_lmao();
 
             at = at.transz(-0.5f * wi/img.aspect_x_on_y);
-            vox.BoolAdd(img.voxels_on_cyl(true, at.rotxy(rot), R, Lr, wi * scale,
-                which: ImageSignedDist.WIDTH));
+            Voxels v = img.voxels_on_cyl(true, at.rotxy(rot), R, Lr,
+                        wi * scale, which: ImageSignedDist.WIDTH);
+            v = new(new Mesh(v)); // try to fix :))
+            vox.BoolAdd(v);
             at = at.transz(-0.5f * wi/img.aspect_x_on_y);
             key.voxels(vox);
 
@@ -1485,6 +1487,23 @@ public class Chamber : TPIAP.Pea {
         }
     }
 
+    protected void write_volumes_report(float vol_inlet_mm3, float vol_chnl_mm3) {
+        // Write volumes report in mL (mm³ * 1e-3 = mL)
+        var lines = new List<string> {
+            $"Chamber Manifold Volumes Report",
+            $"===============================",
+            $"",
+            $"IPA Inlet Manifold Volume:  {vol_inlet_mm3*1e-3:F2} mL ({vol_inlet_mm3:F0} mm³)",
+            $"",
+            $"Cooling Channel Volume:     {vol_chnl_mm3*1e-3:F2} mL ({vol_chnl_mm3:F0} mm³)",
+            $"",
+            $"Total Combined Volume:      {(vol_inlet_mm3 + vol_chnl_mm3)*1e-3:F2} mL",
+            $"",
+        };
+
+        File.WriteAllLines(fromroot("exports/chamber-volumes-report.txt"), lines);
+    }
+
 
 
     /* pea interface: */
@@ -1512,12 +1531,18 @@ public class Chamber : TPIAP.Pea {
 
         Geez.Cycle key_chnl = new(colour: COLOUR_GREEN);
         Voxels? chnl = voxels_chnl(key_chnl);
+
+
         part.step("created channels.");
 
         Geez.Cycle key_mani = new(colour: COLOUR_BLUE);
         Voxels? neg_mani = voxels_neg_mani(key_mani, out Frame inlet);
         Voxels? pos_mani = voxels_pos_mani(inlet);
         part.step("created manifold.");
+
+        // Compute volumes right after creation, before voxels are modified
+        neg_mani.CalculateProperties(out float vol_inlet_mm3, out _);
+        chnl.CalculateProperties(out float vol_chnl_mm3, out _);
 
         Geez.Cycle key_tc = new(colour: COLOUR_PINK);
         voxels_tc(key_tc, out Voxels? neg_tc, out Voxels? pos_tc);
@@ -1592,6 +1617,9 @@ public class Chamber : TPIAP.Pea {
             part.substep("skipping part fillet (filletless requested).");
         }
 
+        // PLEASE
+        part.voxels = new(new Mesh(part.voxels));
+
         part.step("partial clean up.");
 
         part.sub(ref gas, key_gas);
@@ -1625,6 +1653,9 @@ public class Chamber : TPIAP.Pea {
 
         part.step("finished.");
 
+        // Write volumes report with pre-computed manifold and channel volumes
+        write_volumes_report(vol_inlet_mm3, vol_chnl_mm3);
+
         return part.voxels;
     }
 
@@ -1649,25 +1680,28 @@ public class Chamber : TPIAP.Pea {
         f1 = f1.transy(-5f, false);
         f1 = f1.transx(50f);
         f1 = f1.cyclecw();
+        f1 = f1.swing(new (), new (0f, 0f, 1f), PI, false);
 
         Frame f2 = new(fromcyl(pm.r_bolt, 3*TWOPI/pm.no_bolt, 0f));
         f2 = f2.transx(-f2.pos.X, false);
         f2 = f2.transz(-EXTRA, false);
         f2 = f2.cycleccw();
         f2 = f2.flipyz();
-
+        f2 = f2.swing(new (), new (0f, 0f, 1f), PI, false);
 
         Bar cube1 = new Bar(f1, 100f, 350f, 80f);
         cube1 = cube1.at_edge(Bar.X1_Y0);
-        Geez.bar(cube1);
+        // Geez.bar(cube1);
 
         Bar cube2 = new Bar(f2, 50f, 100f, 80f);
         cube2 = cube2.at_edge(Bar.X1_Y0);
-        Geez.bar(cube2);
+        // Geez.bar(cube2);
 
         print("created cutting cubes.");
 
-        Voxels inner = voxels_cnt_filled(th_iw + th_chnl + 0.05f, true, false);
+
+        Voxels inner = voxels_cnt_filled(th_iw + th_chnl - 1.5f*VOXEL_SIZE, true,
+                false);
         print("created filled channels.");
 
         Voxels outer = part.voxDuplicate();

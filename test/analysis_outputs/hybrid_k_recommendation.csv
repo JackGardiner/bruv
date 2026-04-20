@@ -1,0 +1,3 @@
+stage,data_scope,n_samples,fit_slope,fit_intercept,fit_r2,ideal_k_extra
+Stage 1 (LOX),RS8+ (all),9,3.2896921423387635e-17,0.10436266999999998,,0.8437134666314535
+Stage 2 (IPA),RS18+ (Family 4),0,,,,
