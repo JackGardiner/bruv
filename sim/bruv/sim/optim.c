@@ -77,11 +77,24 @@ f64 opt_run1D(opt_cost_f cost, void* rstr user, i64 count, void* rstr tmp,
         f64* rstr best_cost) {
 
     f64 phi0 = 0.5*(philo + phihi); // first best (init to guess).
-    f64 phi1 = phi0; // second best.
-    f64 phi2 = phi0; // third best.
+    f64 phi1 = philo; // second best.
+    f64 phi2 = phihi; // third best.
     f64 f0 = get_1D_cost(phi0);
-    f64 f1 = f0;
-    f64 f2 = f0;
+    f64 f1 = get_1D_cost(phi1);
+    f64 f2 = get_1D_cost(phi2);
+
+    if (f2 < f1) {
+        swap(phi1, phi2);
+        swap(f1, f2);
+    }
+    if (f1 < f0) {
+        swap(phi0, phi1);
+        swap(f0, f1);
+    }
+    if (f2 < f1) {
+        swap(phi1, phi2);
+        swap(f1, f2);
+    }
 
     f64 Dphi = 0.0; // step size.
     f64 Dphi_baseline = 0.0; // kiiinda prev step size.

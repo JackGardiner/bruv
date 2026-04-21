@@ -21,8 +21,7 @@ f64 CuCr1Zr_pois(f64 T) {
     return 0.38;
 }
 
-f64 CuCr1Zr_k(f64 T) {
-    (void)T;
+f64 CuCr1Zr_k(void) {
     return 320.0; // cheeky constant.
 }
 

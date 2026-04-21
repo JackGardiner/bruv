@@ -12,7 +12,13 @@ typedef struct stressStation {
         f64 SF;
     } startup;
     struct {
-        f64 sigma;
+        f64 sigmah_pressure;
+        f64 sigmah_thermal;
+        f64 sigmah_bending;
+        f64 sigmah;
+        f64 sigmam;
+        f64 sigma_vm;
+        f64 Ys;
         f64 SF;
     } firing;
 } stressStation;

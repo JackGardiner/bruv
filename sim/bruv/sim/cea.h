@@ -39,6 +39,7 @@ f64 cea_Pr_exit(f64 P0_cc, f64 ofr);
 // chamber/nozzle.
 
 typedef struct ceaFit {
+    f64 M_exit;
     f64 value_cc;
     f64 a;
     f64 b;

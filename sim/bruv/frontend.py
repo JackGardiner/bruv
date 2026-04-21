@@ -36,12 +36,17 @@ def get_interpretation():
     interp.append("phi_div", interp.F64, OUT)
     interp.append("phi_exit", interp.F64, OUT)
 
-    interp.append("helix_angle", interp.F64, IN)
-    interp.append("th_iw", interp.F64, IN)
-    interp.append("th_ow", interp.F64, IN)
+    interp.append("helix_angle", interp.F64, IN | OUT)
+    interp.append("th_pdms", interp.F64, IN)
+    interp.append("k_pdms", interp.F64, IN)
+    interp.append("th_iw", interp.F64, IN | OUT)
+    interp.append("th_ow", interp.F64, IN | OUT)
     interp.append("no_chnl", interp.I64, IN)
-    interp.append("th_chnl", interp.F64, IN)
-    interp.append("wi_chnl", interp.F64, IN)
+    interp.append("th_chnl", interp.F64, IN | OUT)
+    interp.append("prop_chnl", interp.F64, IN | OUT)
+    interp.append("wi_web", interp.F64, OUT)
+    interp.append("wi_chnl", interp.F64, OUT)
+    interp.append("psi_chnl", interp.F64, OUT)
     interp.append("eps_chnl", interp.F64, IN)
     interp.append("Pr_fu", interp.F64, IN)
     interp.append("T_fu0", interp.F64, IN)
@@ -55,6 +60,7 @@ def get_interpretation():
     interp.append("dm_fu", interp.F64, OUT)
     interp.append("P_exit", interp.F64, IN)
     interp.append("M_exit", interp.F64, OUT)
+    interp.append("gamma_exit", interp.F64, OUT)
     interp.append("P0_cc", interp.F64, IN)
     interp.append("T0_cc", interp.F64, OUT)
     interp.append("rho0_cc", interp.F64, OUT)
@@ -63,6 +69,9 @@ def get_interpretation():
     interp.append("Isp", interp.F64, OUT)
     interp.append("Thrust", interp.F64, OUT)
     interp.append("efficiency", interp.F64, OUT)
+
+    interp.append("min_SF", interp.F64, OUT)
+    interp.append("possible_system", interp.I64, OUT)
 
     interp.append("out_count", interp.I64, IN)
     interp.append("out_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
@@ -77,14 +86,37 @@ def get_interpretation():
     interp.append("out_Pr_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_P_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_gw", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_T_pdms", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_wg", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_wc", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_q", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_h_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_h_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_vel_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_rho_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_ff_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Re_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Pr_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_startup_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
-    interp.append("out_firing_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigmah_pressure", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigmah_thermal", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigmah_bending", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigmah", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigmam", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_sigma_vm", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Ys", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_xtra", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("target_Thrust", interp.F64, IN)
     interp.append("optimise_ofr", interp.I64, IN)
     interp.append("optimise_dm_cc", interp.I64, IN)
+    interp.append("optimise_helix_angle", interp.I64, IN)
+    interp.append("optimise_th_iw", interp.I64, IN)
+    interp.append("optimise_th_ow", interp.I64, IN)
+    interp.append("optimise_th_chnl", interp.I64, IN)
+    interp.append("optimise_prop_chnl", interp.I64, IN)
 
     interp.finalise()
     return interp
@@ -100,23 +132,22 @@ def get_state(interp):
     state["NLF"] = config["chamber"]["NLF"]
     state["phi_conv"] = config["chamber"]["phi_conv"]
 
-    state["helix_angle"] = config["chamber"]["helix_angle"]
-    state["th_iw"] = config["chamber"]["th_iw"] * 1e-3
-    state["th_ow"] = config["chamber"]["th_ow"] * 1e-3
-    state["no_chnl"] = config["chamber"]["no_web"]
-    state["th_chnl"] = config["chamber"]["th_web"]
-    state["eps_chnl"] = config["material"]["roughness_depth"]
-    state["th_iw"] = 1.0e-3
-    state["th_chnl"] = 1.0e-3
-    state["wi_chnl"] = 2*3.14159265358979323*17.6e-3/32 - 1.0e-3
-    # state["wi_chnl"] = 1.75e-3
+    state["helix_angle"] = math.radians(30)
+    state["th_pdms"] = 30e-6
+    state["k_pdms"] = 1.3
+    state["th_iw"] = 1.4e-3
+    state["th_ow"] = 3.5e-3
+    state["no_chnl"] = 40
+    state["th_chnl"] = 1.5e-3
+    state["prop_chnl"] = 0.6
+    state["eps_chnl"] = 135e-6
     state["Pr_fu"] = config["operating_conditions"]["Pr_IPA"]
     state["T_fu0"] = config["operating_conditions"]["T_IPA"]
 
     dm_ox = config["operating_conditions"]["mdot_LOx"]
     dm_fu = config["operating_conditions"]["mdot_IPA"]
-    state["ofr"] = dm_ox / dm_fu
-    state["dm_cc"] = dm_ox + dm_fu
+    state["ofr"] = 1.4
+    state["dm_cc"] = 2.043526890761635
     state["P_exit"] = config["operating_conditions"]["P_exit"]
     state["P0_cc"] = config["operating_conditions"]["P_cc"]
 
@@ -134,14 +165,37 @@ def get_state(interp):
     state["out_Pr_g"] = new_out()
     state["out_T_c"] = new_out()
     state["out_P_c"] = new_out()
+    state["out_T_gw"] = new_out()
+    state["out_T_pdms"] = new_out()
     state["out_T_wg"] = new_out()
     state["out_T_wc"] = new_out()
+    state["out_q"] = new_out()
+    state["out_h_g"] = new_out()
+    state["out_h_c"] = new_out()
+    state["out_vel_c"] = new_out()
+    state["out_rho_c"] = new_out()
+    state["out_ff_c"] = new_out()
+    state["out_Re_c"] = new_out()
+    state["out_Pr_c"] = new_out()
     state["out_startup_SF"] = new_out()
-    state["out_firing_SF"] = new_out()
+    state["out_sigmah_pressure"] = new_out()
+    state["out_sigmah_thermal"] = new_out()
+    state["out_sigmah_bending"] = new_out()
+    state["out_sigmah"] = new_out()
+    state["out_sigmam"] = new_out()
+    state["out_sigma_vm"] = new_out()
+    state["out_Ys"] = new_out()
+    state["out_SF"] = new_out()
+    state["out_xtra"] = new_out()
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
     state["optimise_ofr"] = 0
     state["optimise_dm_cc"] = 0
+    state["optimise_helix_angle"] = 0
+    state["optimise_th_iw"] = 0
+    state["optimise_th_ow"] = 0
+    state["optimise_th_chnl"] = 0
+    state["optimise_prop_chnl"] = 0
 
     return state
 
@@ -210,9 +264,6 @@ def write_ammendments(state):
             "th_web": state["th_chnl"] * 1e3,
             "psi_web": math.cos(state["helix_angle"])*state["wi_chnl"] * 1e3,
         },
-        "material": {
-            "roughness_depth": state["eps_chnl"],
-        }
     }
     with open(paths.ROOT / "../config/ammendments.json", "w") as f:
         json.dump(extra, f, indent=4)
@@ -241,69 +292,164 @@ def now_this_is_bruv():
     print(state)
     write_ammendments(state)
 
-    z = state["out_z"].view(state["out_count"])
-    r = state["out_r"].view(state["out_count"])
-    M_g = state["out_M_g"].view(state["out_count"])
-    T_g = state["out_T_g"].view(state["out_count"])
-    P_g = state["out_P_g"].view(state["out_count"])
-    rho_g = state["out_rho_g"].view(state["out_count"])
-    gamma_g = state["out_gamma_g"].view(state["out_count"])
-    cp_g = state["out_cp_g"].view(state["out_count"])
-    mu_g = state["out_mu_g"].view(state["out_count"])
-    Pr_g = state["out_Pr_g"].view(state["out_count"])
-    T_c = state["out_T_c"].view(state["out_count"])
-    P_c = state["out_P_c"].view(state["out_count"])
-    T_wg = state["out_T_wg"].view(state["out_count"])
-    T_wc = state["out_T_wc"].view(state["out_count"])
-    startup_SF = state["out_startup_SF"].view(state["out_count"])
-    firing_SF = state["out_firing_SF"].view(state["out_count"])
+    get_out = lambda s: state[f"out_{s}"].view(state["out_count"])
+    plot_me(get_out)
+
+    return 0
+
+
+
+
+
+def plot_me(get_out):
+    g = get_out
+    z = 1e3*g("z")
+
+
     win = geez.new_window()
 
     _, axes = win.new_plots(rows=2, cols=3)
     axes[0,0].set_aspect(1.0)
-    axes[0,0].plot(z*1e3, r*1e3)
+    axes[0,0].plot(z, get_out("r")*1e3)
     axes[0,0].set_title("contour [mm]")
-    axes[1,0].plot(z*1e3, M_g)
+    axes[1,0].plot(z, get_out("M_g"))
     axes[1,0].set_title("mach number")
-    axes[0,1].plot(z*1e3, T_g)
+    axes[0,1].plot(z, get_out("T_g"))
     axes[0,1].set_title("temperature [K]")
-    axes[1,1].plot(z*1e3, P_g*1e-5)
+    axes[1,1].plot(z, get_out("P_g")*1e-5)
     axes[1,1].set_title("pressure [bar]")
-    axes[0,2].plot(z*1e3, rho_g)
+    axes[0,2].plot(z, get_out("rho_g"))
     axes[0,2].set_title("density [kg/m3]")
-    axes[1,2].plot(z*1e3, gamma_g)
+    axes[1,2].plot(z, get_out("gamma_g"))
     axes[1,2].set_title("gamma")
 
     _, axes = win.new_plots(rows=2, cols=3)
     axes[0,0].set_aspect(1.0)
-    axes[0,0].plot(z*1e3, r*1e3)
+    axes[0,0].plot(z, get_out("r")*1e3)
     axes[0,0].set_title("contour [mm]")
-    axes[1,0].plot(z*1e3, M_g)
+    axes[1,0].plot(z, get_out("M_g"))
     axes[1,0].set_title("mach number")
-    axes[0,1].plot(z*1e3, cp_g)
+    axes[0,1].plot(z, get_out("cp_g"))
     axes[0,1].set_title("specific heat [J/kg/K]")
-    axes[1,1].plot(z*1e3, mu_g)
+    axes[1,1].plot(z, get_out("mu_g"))
     axes[1,1].set_title("viscosity [Pa*s]")
-    axes[0,2].plot(z*1e3, Pr_g)
+    axes[0,2].plot(z, get_out("Pr_g"))
     axes[0,2].set_title("prandtl")
 
     _, axes = win.new_plots(rows=2, cols=3)
-    axes[0,0].set_aspect(1.0)
-    axes[0,0].plot(z*1e3, r*1e3)
-    axes[0,0].set_title("contour [mm]")
-    axes[1,0].plot(z*1e3, M_g)
-    axes[1,0].set_title("mach number")
-    axes[0,1].plot(z*1e3, T_c)
-    axes[0,1].set_title("coolant temperature [K]")
-    axes[1,1].plot(z*1e3, P_c*1e-5)
-    axes[1,1].set_title("coolant pressure [bar]")
-    axes[0,2].plot(z*1e3, T_wg, label="gas-side")
-    axes[0,2].plot(z*1e3, T_wc, label="coolant-side")
-    axes[0,2].set_title("wall temperature [K]")
-    axes[1,2].plot(z*1e3, firing_SF)
-    axes[1,2].set_title("firing SF")
+    axes[0,0].plot(z, get_out("T_gw"), label="gas-ish")
+    axes[0,0].plot(z, get_out("T_pdms"), "--", label="pdms surface")
+    axes[0,0].plot(z, get_out("T_wg"), label="wall gas-side")
+    axes[0,0].plot(z, get_out("T_wc"), label="wall coolant-side")
+    ax_q = axes[0,0].twinx()
+    ax_q.plot(z, get_out("q")*1e-6, "-.", color="black", label="heat flux")
+    axes[0,0].set_title("temperature / heat flux [K / MW]")
+    axes[1,0].plot(z, get_out("h_g"), label="gas")
+    axes[1,0].plot(z, get_out("h_c"), label="coolant")
+    axes[1,0].set_title("convection coefficients")
+    axes[0,1].plot(z, get_out("Re_c"))
+    axes[0,1].set_title("reynolds number")
+    axes[1,1].plot(z, get_out("SF"))
+    axes[1,1].set_title("SF")
+    axes[0,2].plot(z, get_out("T_c"))
+    axes[0,2].set_title("coolant temperature [K]")
+    axes[1,2].plot(z, get_out("P_c")*1e-5)
+    axes[1,2].set_title("coolant pressure [bar]")
 
-    return 0
+
+
+    fig, axes = geez.new_plots("thermal", rows=2, cols=3,
+            fig_kw=dict(figsize=(13, 7)))
+    ax_Tw, ax_q, ax_h, ax_PT, ax_rv, ax_re = axes.flat
+
+    KW = dict(lw=1.6)
+
+    # ── Re ────────────────────────────────────────────────────────────────────────
+    ax_re.plot(z, g("Re_c"), color="steelblue", **KW)
+    ax_re.set_title("Reynolds number")
+    ax_re.set_xlabel("z [mm]"); ax_re.set_ylabel("Re [–]")
+    ax_re.grid(alpha=0.4)
+
+    # ── T & P  (twin) ─────────────────────────────────────────────────────────────
+    ax_PT2 = ax_PT.twinx()
+    ax_PT.plot(z, g("T_c"),  color="crimson",     label="T_c", **KW)
+    ax_PT2.plot(z, g("P_c")*1e-5, color="saddlebrown", label="P_c", **KW)
+    ax_PT.set_title("Fluid temperature & pressure")
+    ax_PT.set_xlabel("z [mm]"); ax_PT.set_ylabel("T [K]", color="crimson")
+    ax_PT2.set_ylabel("P [bar]", color="saddlebrown")
+    ax_PT.tick_params(axis="y", colors="crimson")
+    ax_PT2.tick_params(axis="y", colors="saddlebrown")
+    lines = ax_PT.get_lines() + ax_PT2.get_lines()
+    ax_PT.legend(lines, [l.get_label() for l in lines], loc="center right")
+    ax_PT.grid(alpha=0.4)
+
+    # ── rho & vel  (twin) ─────────────────────────────────────────────────────────
+    ax_rv2 = ax_rv.twinx()
+    ax_rv.plot(z, g("rho_c"),  color="mediumpurple", label="rho_c", **KW)
+    ax_rv2.plot(z, g("vel_c"), color="seagreen",     label="vel_c", **KW)
+    ax_rv.set_title("Fluid density & velocity")
+    ax_rv.set_xlabel("z [mm]"); ax_rv.set_ylabel("ρ [kg m⁻³]", color="mediumpurple")
+    ax_rv2.set_ylabel("v [m s⁻¹]", color="seagreen")
+    ax_rv.tick_params(axis="y", colors="mediumpurple")
+    ax_rv2.tick_params(axis="y", colors="seagreen")
+    lines = ax_rv.get_lines() + ax_rv2.get_lines()
+    ax_rv.legend(lines, [l.get_label() for l in lines], loc="best")
+    ax_rv.grid(alpha=0.4)
+
+    # ── Wall temperatures ─────────────────────────────────────────────────────────
+    ax_Tw.plot(z, g("T_wg"),   color="tomato",       label="T_wg",   **KW)
+    ax_Tw.plot(z, g("T_wc"),   color="royalblue",    label="T_wc",   **KW)
+    ax_Tw.plot(z, g("T_pdms"), color="mediumorchid", label="T_pdms", **KW)
+    ax_Tw.set_title("Wall & coating temperatures")
+    ax_Tw.set_xlabel("z [mm]"); ax_Tw.set_ylabel("T [K]")
+    ax_Tw.legend(); ax_Tw.grid(alpha=0.4)
+
+    # ── Convection coefficients ───────────────────────────────────────────────────
+    ax_h.plot(z, g("h_g"), color="tomato",    label="h_g", **KW)
+    ax_h.plot(z, g("h_c"), color="royalblue", label="h_c", **KW)
+    ax_h.set_title("Convection coefficients")
+    ax_h.set_xlabel("z [mm]"); ax_h.set_ylabel("h [W m⁻² K⁻¹]")
+    ax_h.legend(); ax_h.grid(alpha=0.4)
+
+    # ── Heat flux ─────────────────────────────────────────────────────────────────
+    ax_q.plot(z, g("q")*1e-6, color="goldenrod", **KW)
+    ax_q.set_title("Heat flux")
+    ax_q.set_xlabel("z [mm]"); ax_q.set_ylabel("q [MW m⁻²]")
+    ax_q.grid(alpha=0.4)
+
+
+
+    fig, axes = geez.new_plots("structural", rows=1, cols=3,
+            fig_kw=dict(figsize=(13, 4)))
+    ax_comp, ax_res, ax_SF = axes.flat
+
+    KW = dict(lw=1.6)
+
+    # ── Hoop stress components ────────────────────────────────────────────────────
+    ax_comp.plot(z, 1e-6*g("sigmah_pressure"), color="steelblue",  label=r"$\sigma_{h,pressure}$",       **KW)
+    ax_comp.plot(z, 1e-6*g("sigmah_thermal"),  color="crimson",    label=r"$\sigma_{h,thermal}$",       **KW)
+    ax_comp.plot(z, 1e-6*g("sigmah_bending"),  color="darkorange", label=r"$\sigma_{h,bending}$",       **KW)
+    ax_comp.plot(z, 1e-6*g("sigmah"),          color="black",      label=r"$\sigma_{h,total}$", lw=2, ls="--")
+    ax_comp.set_title("Hoop stress components")
+    ax_comp.set_xlabel("z [mm]"); ax_comp.set_ylabel(r"$\sigma$ [MPa]")
+    ax_comp.legend(); ax_comp.grid(alpha=0.4)
+
+    # ── Resultant stresses + yield strength ───────────────────────────────────────
+    ax_res.plot(z, 1e-6*g("sigmah"),   color="steelblue", label=r"$\sigma_h$",    **KW)
+    ax_res.plot(z, 1e-6*g("sigmam"),   color="seagreen",  label=r"$\sigma_m$",    **KW)
+    ax_res.plot(z, 1e-6*g("sigma_vm"), color="crimson",   label=r"$\sigma_{vm}$", **KW)
+    ax_res.plot(z, 1e-6*g("Ys"),       color="black",     label=r"$Y_s$", lw=2, ls="--")
+    ax_res.set_title(r"Resultant stresses \& yield strength")
+    ax_res.set_xlabel("z [mm]"); ax_res.set_ylabel(r"$\sigma$ [MPa]")
+    ax_res.legend(); ax_res.grid(alpha=0.4)
+
+    # ── Safety factor ─────────────────────────────────────────────────────────────
+    ax_SF.plot(z, g("SF"), color="blue", **KW)
+    ax_SF.axhline(1.0, color="red", lw=1.2, ls="--")
+    ax_SF.set_title("Safety factor")
+    ax_SF.set_xlabel("z [mm]"); ax_SF.set_ylabel("SF [-]")
+    ax_SF.grid(alpha=0.4)
+
 
 
 def run():

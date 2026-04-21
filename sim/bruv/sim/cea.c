@@ -417,6 +417,19 @@ f64 cea_Pr_exit(f64 P0_cc, f64 ofr) {
 f64 cea_sample(const ceaFit* fit, f64 M) {
     if (M < 1.0)
         return lerp(fit->value_cc, fit->a + fit->b + fit->c + fit->d, M);
+    if (M > fit->M_exit) {
+        f64 M_midm = 0.1 + 0.9*fit->M_exit;
+        f64 value_midm = (((fit->a)*M_midm
+                          + fit->b)*M_midm
+                          + fit->c)*M_midm
+                          + fit->d;
+        f64 value_exit = (((fit->a)*fit->M_exit
+                          + fit->b)*fit->M_exit
+                          + fit->c)*fit->M_exit
+                          + fit->d;
+        f64 dvaluedm = (value_exit - value_midm) / (fit->M_exit - M_midm);
+        return dvaluedm*(M - fit->M_exit) + value_exit;
+    }
     return ((fit->a*M + fit->b)*M + fit->c)*M + fit->d;
 }
 
@@ -434,6 +447,7 @@ f64 cea_sample(const ceaFit* fit, f64 M) {
                 M_midm, value_midm,                             \
                 M_exit, value_exit                              \
             );                                                  \
+        fit->M_exit = M_exit;                                   \
         fit->value_cc = value_cc;                               \
     } while (0)
 void cea_fit_gamma(ceaFit* fit, f64 P0_cc, f64 ofr, f64 M_exit) {

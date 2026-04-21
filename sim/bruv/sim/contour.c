@@ -148,13 +148,20 @@ The contour is made from the following sections:
 */
 
 Contour* init_cnt(Contour* cnt, f64 R_cc, f64 L_cc, f64 A_tht, f64 AEAT, f64 NLF,
-        f64 phi_conv) {
+        f64 phi_conv, f64 th_iw, f64 helix_angle, f64 th_chnl, i64 no_chnl,
+        f64 prop_chnl) {
 
     cnt->R_tht = sqrt(A_tht/PI);
     cnt->R_exit = cnt->R_tht * sqrt(AEAT);
     cnt->phi_conv = phi_conv;
     cnt->phi_div = nzl_phi_div(AEAT, NLF);
     cnt->phi_exit = nzl_phi_exit(AEAT, NLF);
+
+    cnt->th_iw = th_iw;
+    cnt->helix_angle = helix_angle;
+    cnt->th_chnl = th_chnl;
+    cnt->no_chnl = (f64)no_chnl;
+    cnt->prop_chnl = prop_chnl;
 
     cnt->R_conv = 1.5*cnt->R_tht;
     cnt->tan_phi_conv = tan(phi_conv);
@@ -199,24 +206,25 @@ Contour* init_cnt(Contour* cnt, f64 R_cc, f64 L_cc, f64 A_tht, f64 AEAT, f64 NLF
     cnt->z_exit = cnt->z6;
 
     // Check realisable nozzle.
+    cnt->possible = 1;
 
-    assert(cnt->z0 < cnt->z1, "z0=%f, z1=%f", cnt->z0, cnt->z1);
-    assert(cnt->z1 < cnt->z2, "z1=%f, z2=%f", cnt->z1, cnt->z2);
-    assert(cnt->z2 < cnt->z3, "z2=%f, z3=%f", cnt->z2, cnt->z3);
-    assert(cnt->z3 < cnt->z4, "z3=%f, z4=%f", cnt->z3, cnt->z4);
-    assert(cnt->z4 < cnt->z5, "z4=%f, z5=%f", cnt->z4, cnt->z5);
-    assert(cnt->z5 < cnt->z6, "z5=%f, z6=%f", cnt->z5, cnt->z6);
-    assert(zP > cnt->z5, "zP=%f, z5=%f", zP, cnt->z5);
-    assert(zP < cnt->z6, "zP=%f, z6=%f", zP, cnt->z6);
+    cnt->possible &= (cnt->z0 < cnt->z1);
+    cnt->possible &= (cnt->z1 < cnt->z2);
+    cnt->possible &= (cnt->z2 < cnt->z3);
+    cnt->possible &= (cnt->z3 < cnt->z4);
+    cnt->possible &= (cnt->z4 < cnt->z5);
+    cnt->possible &= (cnt->z5 < cnt->z6);
+    cnt->possible &= (zP > cnt->z5);
+    cnt->possible &= (zP < cnt->z6);
 
-    assert(nearto(cnt->r0, cnt->r1), "r0=%f, r1=%f", cnt->r0, cnt->r1);
-    assert(cnt->r1 > cnt->r2, "r1=%f, r2=%f", cnt->r1, cnt->r2);
-    assert(cnt->r2 > cnt->r3, "r2=%f, r3=%f", cnt->r2, cnt->r3);
-    assert(cnt->r3 > cnt->r4, "r3=%f, r4=%f", cnt->r3, cnt->r4);
-    assert(cnt->r4 < cnt->r5, "r4=%f, r5=%f", cnt->r4, cnt->r5);
-    assert(cnt->r5 < cnt->r6, "r5=%f, r6=%f", cnt->r5, cnt->r6);
-    assert(rP > cnt->r5, "rP=%f, r5=%f", rP, cnt->r5);
-    assert(rP < cnt->r6, "rP=%f, r6=%f", rP, cnt->r6);
+    cnt->possible &= (nearto(cnt->r0, cnt->r1));
+    cnt->possible &= (cnt->r1 > cnt->r2);
+    cnt->possible &= (cnt->r2 > cnt->r3);
+    cnt->possible &= (cnt->r3 > cnt->r4);
+    cnt->possible &= (cnt->r4 < cnt->r5);
+    cnt->possible &= (cnt->r5 < cnt->r6);
+    cnt->possible &= (rP > cnt->r5);
+    cnt->possible &= (rP < cnt->r6);
 
     return cnt;
 }
@@ -279,6 +287,39 @@ f64 cnt_r(const Contour* cnt, f64 z) {
     }
     return cnt->r6;
 }
+
+f64 cnt_th_iw(const Contour* cnt, f64 z) {
+    (void)z;
+    return cnt->th_iw;
+}
+f64 cnt_helix_angle(const Contour* cnt, f64 z) {
+    (void)z;
+    f64 helix = cnt->helix_angle;
+    return helix;
+}
+
+f64 cnt_th_chnl(const Contour* cnt, f64 z) {
+    f64 th = cnt->th_chnl;
+    f64 z_tht = cnt->z_tht;
+    return (z > z_tht) ? lerp(0.7*th, th, invlerp(z_tht, cnt->z_exit, z))
+         : (z > cnt->z1) ? 0.7*th
+         : (z > 0.5*cnt->z1) ? lerp(0.7*th, th, invlerp(cnt->z1, cnt->z1*0.5, z))
+         : th;
+}
+
+f64 cnt_wi_web(const Contour* cnt, f64 z) {
+    f64 r = cnt_r(cnt, z) + cnt->th_iw + 0.5*cnt_th_chnl(cnt, z);
+    return TWOPI*r/cnt->no_chnl * (1.0 - cnt->prop_chnl);
+}
+f64 cnt_wi_chnl(const Contour* cnt, f64 z) {
+    f64 r = cnt_r(cnt, z) + cnt->th_iw + 0.5*cnt_th_chnl(cnt, z);
+    return TWOPI*r/cnt->no_chnl * cnt->prop_chnl;
+}
+
+f64 cnt_psi_chnl(const Contour* cnt, f64 z) {
+    return cnt_wi_chnl(cnt, z) * cos(cnt_helix_angle(cnt, z));
+}
+
 
 f64 cnt_V_subsonic(const Contour* cnt) {
     f64 V = 0.0;

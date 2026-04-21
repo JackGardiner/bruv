@@ -135,10 +135,10 @@ f64 friction_factor_haaland(f64 Re, f64 D, f64 eps) {
 f64 friction_factor_colebrook(f64 Re, f64 D, f64 eps) {
     if (eps == 0.0)
         return 1.0/sqed(1.82*LOG10TWO*log2(Re) - 1.64);
-
+    assert(Re > 2300.0, "non-turbulent flow: Re=%g", Re);
     f64 ff = friction_factor_haaland(Re, D, eps); // guess.
     for (i32 iter=0; /* true */; ++iter) {
-        enum { MAX_ITERS = 100 };
+        enum { MAX_ITERS = 1000 };
         f64 x = -2.0*LOG10TWO*log2(eps/D/3.71 + 2.52/Re/sqrt(ff));
         if (iterstep(&ff, 1.0 / sqed(x)) < 1e-8)
             break;
@@ -169,6 +169,8 @@ f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma) {
     // However gamma is non-constant. Rearrange for M:
     //  M = sqrt(2/(gamma - 1) * (1/T_on_T0 - 1))
     // A classic for fixed point iteration.
+    assert(0.0 <= T_on_T0 && T_on_T0 <= 1.0, "invalid input: T_on_T0=%g",
+            T_on_T0);
     f64 M = 1.0; // guess.
     for (i32 iter=0; /* true */; ++iter) {
         enum { MAX_ITERS = 100 };

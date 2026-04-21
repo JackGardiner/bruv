@@ -52,12 +52,14 @@ void stress_sim(const simState* s, const Contour* cnt,
         f64 Rm = r;
         f64 Rh = (nearzero(d2rdz)) ? INF
                : cbed(sqrt(1.0 + sqed(drdz))) / abs(d2rdz);
+        (void)Rm;
+        (void)Rh;
 
         SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
         f64 M_g;
         isentropic_shr_M(shr_g, &M_g, z < cnt->z_tht, sqed(r/cnt->R_tht),
                 fit_gamma, s->gamma_tht /* good guess */);
-        f64 P_g = isentropic_P_on_P0(M_g, shr_g);
+        f64 P_g = s->P0_cc * isentropic_P_on_P0(M_g, shr_g);
 
         f64 P_c;
         f64 T_wg;
@@ -71,11 +73,11 @@ void stress_sim(const simState* s, const Contour* cnt,
             T_wc = lerp(thermal_stns[k].T_wc, thermal_stns[k + 1].T_wc, t);
         }
 
-        f64 th_iw = s->th_iw;
+        f64 th_iw = cnt_th_iw(cnt, z);
         f64 th_ow = s->th_ow;
-        f64 th_chnl = s->th_chnl;
-        f64 wi_chnl = s->wi_chnl;
-        f64 wi_web = TWOPI*(r + th_iw + 0.5*th_chnl)/s->no_chnl - wi_chnl;
+        f64 th_chnl = cnt_th_chnl(cnt, z);
+        f64 wi_chnl = cnt_wi_chnl(cnt, z);
+        f64 wi_web = cnt_wi_web(cnt, z);
 
 
         // Firstly do start-up with only coolant pressure (assume pressure drop
@@ -88,48 +90,28 @@ void stress_sim(const simState* s, const Contour* cnt,
             stns[i].startup.SF = Ys / stns[i].startup.sigma;
         }
 
-
-        // Now do during combustion.
-        {
-            f64 Ys = CuCr1Zr_Ys(T_wg);
-            f64 E = CuCr1Zr_E(T_wg);
-            f64 pois = CuCr1Zr_E(T_wg);
-            f64 alpha = CuCr1Zr_alpha(T_wg);
-
-            f64 th_eff = th_iw + th_ow + wi_web*th_chnl/(wi_web + wi_chnl);
-
-            f64 sigmam_pressure = P_g*Rm/th_eff*0.5;
-            f64 sigmah_pressure = P_g*Rm/th_eff*(1.0 - 0.5*Rh/Rm);
-            f64 sigmah_bending = 0.5*(P_c - P_g)*sqed(wi_chnl/th_iw);
-            f64 sigma_thermal = -E*alpha*(T_wg - T_wc)*0.5/(1.0 - pois);
-
-            f64 sigmah = sigmah_pressure - sigmah_bending + sigma_thermal;
-            f64 sigmam = sigmam_pressure + sigma_thermal;
-            f64 sigmar = -P_g;
-
-            stns[i].firing.sigma = sqrt(0.5*(sqed(sigmah - sigmam)
-                                           + sqed(sigmam - sigmar)
-                                           + sqed(sigmar - sigmah)));
-            stns[i].firing.SF = Ys / stns[i].firing.sigma;
-        }
-
         {
             f64 th_eff = th_iw + th_ow + wi_web*th_chnl/(wi_web + wi_chnl);
             f64 Ys = CuCr1Zr_Ys(T_wg);
             f64 E = CuCr1Zr_E(T_wg);
-            f64 pois = CuCr1Zr_E(T_wg);
+            f64 pois = CuCr1Zr_pois(T_wg);
             f64 alpha = CuCr1Zr_alpha(T_wg);
 
             f64 sigmah_pressure = P_g*r/th_eff;
             f64 sigmah_thermal = E*alpha*(T_wg - T_wc)*0.5/(1.0 - pois);
             f64 sigmah_bending = 0.5*(P_c - P_g)*sqed(wi_chnl/th_iw);
+            f64 sigmah = sigmah_bending + sigmah_thermal + sigmah_pressure;
             f64 sigmam = E*alpha*(T_wg - T_wc);
 
-            f64 sigmah = sigmah_bending + sigmah_thermal + sigmah_pressure;
-
-            stns[i].firing.sigma = sqrt(sqed(sigmah) + sqed(sigmam)
-                                      - sigmah*sigmam);
-            stns[i].firing.SF = Ys / stns[i].firing.sigma;
+            stns[i].firing.sigmah_pressure = sigmah_pressure;
+            stns[i].firing.sigmah_thermal = sigmah_thermal;
+            stns[i].firing.sigmah_bending = sigmah_bending;
+            stns[i].firing.sigmah = sigmah;
+            stns[i].firing.sigmam = sigmam;
+            stns[i].firing.sigma_vm = sqrt(sqed(sigmah) + sqed(sigmam)
+                                         - sigmah*sigmam);
+            stns[i].firing.Ys = Ys;
+            stns[i].firing.SF = Ys / stns[i].firing.sigma_vm;
         }
     }
 }
