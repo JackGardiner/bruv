@@ -694,11 +694,11 @@ public class Chamber : TPIAP.Pea {
     }
 
     protected Voxels voxels_cnt_filled(float max_off, bool widened,
-            bool extra=true, bool add_channels=true) {
+            bool extra=true, bool add_channels=true, float maxz=NAN) {
         List<Vec2> V = new(DIVISIONS + 2);
         float zlo = -extend_base_by;
-        float zhi = z_exit;
-        if (extra) {
+        float zhi = ifnan(maxz, z_exit);
+        if (extra && isnan(maxz)) {
             zlo -= EXTRA;
             zhi += EXTRA;
         }
@@ -755,7 +755,8 @@ public class Chamber : TPIAP.Pea {
     }
 
     protected Voxels voxels_outer(Geez.Cycle key) {
-        Voxels vox = voxels_cnt_filled(th_iw + th_ow, true);
+        Voxels vox = voxels_cnt_filled(th_iw + th_ow, true,
+                maxz: z_exit - th_omani);
         // channel thickness implicitly added by cnt_filled.
         key.voxels(vox);
         return vox;
