@@ -924,6 +924,8 @@ public class Injector : TPIAP.Pea {
     public Tapping tap_CCPT => new(portsize_CCPT, printable_dmls)
             { extra_length = 2f };
 
+    public required float theta0_CCPTbrk { get; init; }
+
 
     protected const float EXTRA = 6f;
 
@@ -1408,11 +1410,7 @@ public class Injector : TPIAP.Pea {
 
         // Dont let them clip real geom.
         breakouts_outer.BoolSubtract(pos - neg);
-        neg.BoolIntersect(new Rod(
-            new(),
-            z_LOxinlet, // just big.
-            pm.flange_outer_radius
-        ));
+        neg.IntersectImplicit(new Space(new(), 0f, +INF));
         key.voxels(neg);
 
         neg.BoolAdd(breakouts_outer);
@@ -1730,14 +1728,31 @@ public class Injector : TPIAP.Pea {
         if (printable_dmls) {
             neg.IntersectImplicit(new Space(
                 new(),
-                -breakout_elements_z,
+                0f,
                 +INF
             ));
             neg_no_tap.IntersectImplicit(new Space(
                 new(),
-                -breakout_elements_z,
+                0f,
                 +INF
             ));
+
+            Vec3 p = pos_CCPT * uXY3;
+            Frame at = Frame.cyl_axial(p).rotxy(theta0_CCPTbrk);
+            List<Vec2> V0 = Polygon.circle(
+                Polygon.full_res_divs(TWOPI*0.5f*D_CCPTh),
+                0.5f*D_CCPTh
+            );
+            Breakout bo = new(V0
+                , Lz: breakout_elements_z
+                , Lx: pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
+                    - mag(p) + EXTRA
+                , D1: breakout_D
+                , FR: filletless ? 0f : 0.5f
+            );
+            Voxels breakout = bo.at(at);
+            neg.BoolAdd(breakout);
+            neg_no_tap.BoolAdd(breakout);
         }
 
         key <<= Geez.group(keys);

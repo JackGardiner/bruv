@@ -76,10 +76,10 @@
         "D_tc": 1.5
     },
     "injector": {
-        "no_injg": [4, 8],
-        "r_injg": [17.0, 34.0],
-        "theta0_injg": [0.0, 0.39269908169872414],
-        "theta0_injbrkg": [0.22, 0.0],
+        "no_injg": [3, 6],
+        "r_injg": [17.0, 32.0],
+        "theta0_injg": [1.5707963267948966, 0.0],
+        "theta0_injbrkg": [0.3, 0.4],
 
         "D_fc": 1.0,
         "no_fcg": [30],
@@ -137,7 +137,8 @@
         "th_LOxinleth": 4.0,
         "th_LOxPTh": 1.5,
         "th_IPAPTh": 1.5,
-        "th_CCPTh": 1.5
+        "th_CCPTh": 1.5,
+        "theta0_CCPTbrk": 0.4
     },
     "printer": {
         "name": "Nikon SLM280 2.0",
