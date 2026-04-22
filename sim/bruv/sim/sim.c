@@ -58,6 +58,10 @@ c_IH sim_interpretation_hash(void) {
 // = SIMULATION ============================================================== //
 // =========================================================================== //
 
+static void sim_full_outputs(simState* rstr s, const Contour* cnt,
+        const thermalStation* thermal_stns, i32 thermal_N,
+        const stressStation* stress_stns, i32 stress_N);
+
 static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Input validation. */
@@ -157,15 +161,14 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     /* Post-construction tweaks. */
 
     s->efficiency = cos(s->phi_exit) // divergent exhaust.
-                  * 0.97 // estimated viscous losses.
-                  * 0.99; // estimated combustion losses.
+                  * 0.9; // estimated viscous+combustion losses.
     s->Isp *= s->efficiency;
     s->Thrust *= s->efficiency;
 
 
     /* Thermals. */
 
-    i32 thermal_N = 300;
+    i32 thermal_N = 500;
     thermalStation* thermal_stns = malloc(thermal_N * sizeof(thermalStation));
 
     // Set target fuel injector pressure.
@@ -174,7 +177,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     s->P_fu0 = s->P_fu1 + 5e5;
     // Fixed point iterate to dial in ipa manifold pressure.
     for (i32 iter=0; /* true */; ++iter) {
-        enum { MAX_ITERS = 50 };
+        enum { MAX_ITERS = 20 };
 
         i32 possible = thermal_sim(s, cnt, thermal_stns, thermal_N);
         f64 T_fu1 = thermal_stns[0].T_c;
@@ -203,153 +206,168 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     /* Outputs */
 
-    if (full_output && s->out_count > 0) {
+    if (!full_output || s->out_count <= 0)
+        return;
 
-        assert(s->out_count > 20, "output contour array is too small (%lld)",
-                s->out_count);
-        assert(s->out_z, "null output array: out_z");
-        assert(s->out_r, "null output array: out_r");
-        assert(s->out_M_g, "null output array: out_M_g");
-        assert(s->out_T_g, "null output array: out_T_g");
-        assert(s->out_P_g, "null output array: out_P_g");
-        assert(s->out_rho_g, "null output array: out_rho_g");
-        assert(s->out_gamma_g, "null output array: out_gamma_g");
-        assert(s->out_cp_g, "null output array: out_cp_g");
-        assert(s->out_mu_g, "null output array: out_mu_g");
-        assert(s->out_Pr_g, "null output array: out_Pr_g");
-        assert(s->out_T_c, "null output array: out_T_c");
-        assert(s->out_P_c, "null output array: out_P_c");
-        assert(s->out_T_gw, "null output array: out_T_gw");
-        assert(s->out_T_pdms, "null output array: out_T_pdms");
-        assert(s->out_T_wg, "null output array: out_T_wg");
-        assert(s->out_T_wc, "null output array: out_T_wc");
-        assert(s->out_q, "null output array: out_q");
-        assert(s->out_h_g, "null output array: out_h_g");
-        assert(s->out_h_c, "null output array: out_h_c");
-        assert(s->out_vel_c, "null output array: out_vel_c");
-        assert(s->out_rho_c, "null output array: out_rho_c");
-        assert(s->out_ff_c, "null output array: out_ff_c");
-        assert(s->out_Re_c, "null output array: out_Re_c");
-        assert(s->out_Pr_c, "null output array: out_Pr_c");
-        assert(s->out_startup_SF, "null output array: out_startup_SF");
-        assert(s->out_sigmah_pressure, "null output array: out_sigmah_pressure");
-        assert(s->out_sigmah_thermal, "null output array: out_sigmah_thermal");
-        assert(s->out_sigmah_bending, "null output array: out_sigmah_bending");
-        assert(s->out_sigmah, "null output array: out_sigmah");
-        assert(s->out_sigmam, "null output array: out_sigmam");
-        assert(s->out_sigma_vm, "null output array: out_sigma_vm");
-        assert(s->out_Ys, "null output array: out_Ys");
-        assert(s->out_SF, "null output array: out_SF");
-        assert(s->out_xtra, "null output array: out_xtra");
+    sim_full_outputs(s, cnt, thermal_stns, thermal_N, stress_stns, stress_N);
+}
 
-
-
-
-
-
-
-
-        ceaFit* fit_gamma = &(ceaFit){0};
-        ceaFit* fit_cp = &(ceaFit){0};
-        ceaFit* fit_mu = &(ceaFit){0};
-        ceaFit* fit_Pr = &(ceaFit){0};
-        cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, s->M_exit);
-        cea_fit_cp(fit_cp, s->P0_cc, s->ofr, s->M_exit);
-        cea_fit_mu(fit_mu, s->P0_cc, s->ofr, s->M_exit);
-        cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, s->M_exit);
-
-        for (i64 i=0; i<s->out_count; ++i) {
-            f64 z = lerpidx(0.0, cnt->z_exit, i, s->out_count);
-            f64 r = cnt_r(cnt, z);
-            f64 A_on_Astar = sqed(r) / sqed(cnt->R_tht);
-            SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
-            f64 M_g;
-            isentropic_shr_M(shr_g, &M_g, z < cnt->z_tht, A_on_Astar, fit_gamma,
-                    s->gamma_tht /* good guess */);
-            f64 y1M22 = get_y1M22(M_g, shr_g);
-            f64 T_g = s->T0_cc * isentropicx_T_on_T0(y1M22, shr_g);
-            f64 P_g = s->P0_cc * isentropicx_P_on_P0(y1M22, shr_g);
-            f64 rho_g = s->rho0_cc * isentropicx_rho_on_rho0(y1M22, shr_g);
-            f64 cp_g = cea_sample(fit_cp, M_g);
-            f64 mu_g = cea_sample(fit_mu, M_g);
-            f64 Pr_g = cea_sample(fit_Pr, M_g);
+static void sim_full_outputs(simState* rstr s, const Contour* cnt,
+        const thermalStation* thermal_stns, i32 thermal_N,
+        const stressStation* stress_stns, i32 stress_N) {
+    assert(s->out_count > 20, "output array is too small (%lld)", s->out_count);
+    assert(s->out_z, "null output array: out_z");
+    assert(s->out_r, "null output array: out_r");
+    assert(s->out_M_g, "null output array: out_M_g");
+    assert(s->out_T_g, "null output array: out_T_g");
+    assert(s->out_P_g, "null output array: out_P_g");
+    assert(s->out_rho_g, "null output array: out_rho_g");
+    assert(s->out_gamma_g, "null output array: out_gamma_g");
+    assert(s->out_cp_g, "null output array: out_cp_g");
+    assert(s->out_mu_g, "null output array: out_mu_g");
+    assert(s->out_Pr_g, "null output array: out_Pr_g");
+    assert(s->out_T_c, "null output array: out_T_c");
+    assert(s->out_P_c, "null output array: out_P_c");
+    assert(s->out_T_gw, "null output array: out_T_gw");
+    assert(s->out_T_pdms, "null output array: out_T_pdms");
+    assert(s->out_T_wg, "null output array: out_T_wg");
+    assert(s->out_T_wc, "null output array: out_T_wc");
+    assert(s->out_q, "null output array: out_q");
+    assert(s->out_h_g, "null output array: out_h_g");
+    assert(s->out_h_c, "null output array: out_h_c");
+    assert(s->out_vel_c, "null output array: out_vel_c");
+    assert(s->out_rho_c, "null output array: out_rho_c");
+    assert(s->out_ff_c, "null output array: out_ff_c");
+    assert(s->out_Re_c, "null output array: out_Re_c");
+    assert(s->out_Pr_c, "null output array: out_Pr_c");
+    assert(s->out_startup_SF, "null output array: out_startup_SF");
+    assert(s->out_sigmah_pressure, "null output array: out_sigmah_pressure");
+    assert(s->out_sigmah_thermal, "null output array: out_sigmah_thermal");
+    assert(s->out_sigmah_bending, "null output array: out_sigmah_bending");
+    assert(s->out_sigmah, "null output array: out_sigmah");
+    assert(s->out_sigmam, "null output array: out_sigmam");
+    assert(s->out_sigma_vm, "null output array: out_sigma_vm");
+    assert(s->out_Ys, "null output array: out_Ys");
+    assert(s->out_SF, "null output array: out_SF");
+    assert(s->out_xtra, "null output array: out_xtra");
 
 
-            s->out_z[i] = z;
-            s->out_r[i] = r;
-            s->out_M_g[i] = M_g;
-            s->out_T_g[i] = T_g;
-            s->out_P_g[i] = P_g;
-            s->out_rho_g[i] = rho_g;
-            s->out_gamma_g[i] = shr_g->y;
-            s->out_cp_g[i] = cp_g;
-            s->out_mu_g[i] = mu_g;
-            s->out_Pr_g[i] = Pr_g;
-            {
-                f64 t = z / cnt->z_exit;
-                t *= thermal_N - 1;
-                i32 k = min(max((i32)t, 0), thermal_N - 2);
-                t -= k;
-                typeof(thermal_stns) stns = thermal_stns;
-                s->out_T_c[i] = lerp(stns[k].T_c, stns[k + 1].T_c, t);
-                s->out_P_c[i] = lerp(stns[k].P_c, stns[k + 1].P_c, t);
-                s->out_T_gw[i] = lerp(stns[k].T_gw, stns[k + 1].T_gw, t);
-                s->out_T_pdms[i] = lerp(stns[k].T_pdms, stns[k + 1].T_pdms, t);
-                s->out_T_wg[i] = lerp(stns[k].T_wg, stns[k + 1].T_wg, t);
-                s->out_T_wc[i] = lerp(stns[k].T_wc, stns[k + 1].T_wc, t);
-                s->out_q[i] = lerp(stns[k].q, stns[k + 1].q, t);
-                s->out_h_g[i] = lerp(stns[k].h_g, stns[k + 1].h_g, t);
-                s->out_h_c[i] = lerp(stns[k].h_c, stns[k + 1].h_c, t);
-                s->out_vel_c[i] = lerp(stns[k].vel_c, stns[k + 1].vel_c, t);
-                s->out_rho_c[i] = lerp(stns[k].rho_c, stns[k + 1].rho_c, t);
-                s->out_ff_c[i] = lerp(stns[k].ff_c, stns[k + 1].ff_c, t);
-                s->out_Re_c[i] = lerp(stns[k].Re_c, stns[k + 1].Re_c, t);
-                s->out_Pr_c[i] = lerp(stns[k].Pr_c, stns[k + 1].Pr_c, t);
-                s->out_xtra[i] = lerp(stns[k].xtra, stns[k + 1].xtra, t);
-            }
-            {
-                f64 t = z / cnt->z_exit;
-                t *= stress_N - 1;
-                i32 k = min(max((i32)t, 0), stress_N - 2);
-                t -= k;
-                typeof(stress_stns) stns = stress_stns;
-                s->out_startup_SF[i] = lerp(stns[k].startup.SF,
-                        stns[k + 1].startup.SF, t);
-                s->out_sigmah_pressure[i] = lerp(
-                        stns[k].firing.sigmah_pressure,
-                        stns[k + 1].firing.sigmah_pressure,
-                        t);
-                s->out_sigmah_thermal[i] = lerp(
-                        stns[k].firing.sigmah_thermal,
-                        stns[k + 1].firing.sigmah_thermal,
-                        t);
-                s->out_sigmah_bending[i] = lerp(
-                        stns[k].firing.sigmah_bending,
-                        stns[k + 1].firing.sigmah_bending,
-                        t);
-                s->out_sigmah[i] = lerp(
-                        stns[k].firing.sigmah,
-                        stns[k + 1].firing.sigmah,
-                        t);
-                s->out_sigmam[i] = lerp(
-                        stns[k].firing.sigmam,
-                        stns[k + 1].firing.sigmam,
-                        t);
-                s->out_sigma_vm[i] = lerp(
-                        stns[k].firing.sigma_vm,
-                        stns[k + 1].firing.sigma_vm,
-                        t);
-                s->out_Ys[i] = lerp(
-                        stns[k].firing.Ys,
-                        stns[k + 1].firing.Ys,
-                        t);
-                s->out_SF[i] = lerp(
-                        stns[k].firing.SF,
-                        stns[k + 1].firing.SF,
-                        t);
+    assert(s->export_count > 20, "export array is too small (%lld)",
+            s->export_count);
+    assert(s->export_z, "null export array: export_z");
+    assert(s->export_helix_angle, "null export array: export_helix_angle");
+    assert(s->export_th_chnl, "null export array: export_th_chnl");
+    assert(s->export_psi_chnl, "null export array: export_psi_chnl");
 
-            }
+
+    ceaFit* fit_gamma = &(ceaFit){0};
+    ceaFit* fit_cp = &(ceaFit){0};
+    ceaFit* fit_mu = &(ceaFit){0};
+    ceaFit* fit_Pr = &(ceaFit){0};
+    cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, s->M_exit);
+    cea_fit_cp(fit_cp, s->P0_cc, s->ofr, s->M_exit);
+    cea_fit_mu(fit_mu, s->P0_cc, s->ofr, s->M_exit);
+    cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, s->M_exit);
+
+    for (i64 i=0; i<s->out_count; ++i) {
+        f64 z = lerpidx(0.0, cnt->z_exit, i, s->out_count);
+        f64 r = cnt_r(cnt, z);
+        f64 A_on_Astar = sqed(r) / sqed(cnt->R_tht);
+        SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
+        f64 M_g;
+        isentropic_shr_M(shr_g, &M_g, z < cnt->z_tht, A_on_Astar, fit_gamma,
+                s->gamma_tht /* good guess */);
+        f64 y1M22 = get_y1M22(M_g, shr_g);
+        f64 T_g = s->T0_cc * isentropicx_T_on_T0(y1M22, shr_g);
+        f64 P_g = s->P0_cc * isentropicx_P_on_P0(y1M22, shr_g);
+        f64 rho_g = s->rho0_cc * isentropicx_rho_on_rho0(y1M22, shr_g);
+        f64 cp_g = cea_sample(fit_cp, M_g);
+        f64 mu_g = cea_sample(fit_mu, M_g);
+        f64 Pr_g = cea_sample(fit_Pr, M_g);
+
+
+        s->out_z[i] = z;
+        s->out_r[i] = r;
+        s->out_M_g[i] = M_g;
+        s->out_T_g[i] = T_g;
+        s->out_P_g[i] = P_g;
+        s->out_rho_g[i] = rho_g;
+        s->out_gamma_g[i] = shr_g->y;
+        s->out_cp_g[i] = cp_g;
+        s->out_mu_g[i] = mu_g;
+        s->out_Pr_g[i] = Pr_g;
+        {
+            f64 t = z / cnt->z_exit;
+            t *= thermal_N - 1;
+            i32 k = min(max((i32)t, 0), thermal_N - 2);
+            t -= k;
+            typeof(thermal_stns) stns = thermal_stns;
+            s->out_T_c[i] = lerp(stns[k].T_c, stns[k + 1].T_c, t);
+            s->out_P_c[i] = lerp(stns[k].P_c, stns[k + 1].P_c, t);
+            s->out_T_gw[i] = lerp(stns[k].T_gw, stns[k + 1].T_gw, t);
+            s->out_T_pdms[i] = lerp(stns[k].T_pdms, stns[k + 1].T_pdms, t);
+            s->out_T_wg[i] = lerp(stns[k].T_wg, stns[k + 1].T_wg, t);
+            s->out_T_wc[i] = lerp(stns[k].T_wc, stns[k + 1].T_wc, t);
+            s->out_q[i] = lerp(stns[k].q, stns[k + 1].q, t);
+            s->out_h_g[i] = lerp(stns[k].h_g, stns[k + 1].h_g, t);
+            s->out_h_c[i] = lerp(stns[k].h_c, stns[k + 1].h_c, t);
+            s->out_vel_c[i] = lerp(stns[k].vel_c, stns[k + 1].vel_c, t);
+            s->out_rho_c[i] = lerp(stns[k].rho_c, stns[k + 1].rho_c, t);
+            s->out_ff_c[i] = lerp(stns[k].ff_c, stns[k + 1].ff_c, t);
+            s->out_Re_c[i] = lerp(stns[k].Re_c, stns[k + 1].Re_c, t);
+            s->out_Pr_c[i] = lerp(stns[k].Pr_c, stns[k + 1].Pr_c, t);
+            s->out_xtra[i] = lerp(stns[k].xtra, stns[k + 1].xtra, t);
         }
+        {
+            f64 t = z / cnt->z_exit;
+            t *= stress_N - 1;
+            i32 k = min(max((i32)t, 0), stress_N - 2);
+            t -= k;
+            typeof(stress_stns) stns = stress_stns;
+            s->out_startup_SF[i] = lerp(stns[k].startup.SF,
+                    stns[k + 1].startup.SF, t);
+            s->out_sigmah_pressure[i] = lerp(
+                    stns[k].firing.sigmah_pressure,
+                    stns[k + 1].firing.sigmah_pressure,
+                    t);
+            s->out_sigmah_thermal[i] = lerp(
+                    stns[k].firing.sigmah_thermal,
+                    stns[k + 1].firing.sigmah_thermal,
+                    t);
+            s->out_sigmah_bending[i] = lerp(
+                    stns[k].firing.sigmah_bending,
+                    stns[k + 1].firing.sigmah_bending,
+                    t);
+            s->out_sigmah[i] = lerp(
+                    stns[k].firing.sigmah,
+                    stns[k + 1].firing.sigmah,
+                    t);
+            s->out_sigmam[i] = lerp(
+                    stns[k].firing.sigmam,
+                    stns[k + 1].firing.sigmam,
+                    t);
+            s->out_sigma_vm[i] = lerp(
+                    stns[k].firing.sigma_vm,
+                    stns[k + 1].firing.sigma_vm,
+                    t);
+            s->out_Ys[i] = lerp(
+                    stns[k].firing.Ys,
+                    stns[k + 1].firing.Ys,
+                    t);
+            s->out_SF[i] = lerp(
+                    stns[k].firing.SF,
+                    stns[k + 1].firing.SF,
+                    t);
+        }
+    }
+
+
+    for (i64 i=0; i<s->export_count; ++i) {
+        f64 z = lerpidx(0.0, cnt->z_exit, i, s->export_count);
+        s->export_z[i] = z;
+        s->export_helix_angle[i] = cnt_helix_angle(cnt, z);
+        s->export_th_chnl[i] = cnt_th_chnl(cnt, z);
+        s->export_psi_chnl[i] = cnt_psi_chnl(cnt, z);
     }
 }
 
@@ -425,7 +443,7 @@ static f64 sim_cost(const f64* rstr params, void* rstr user) {
     simState* s = u->s;
     sim_ulate(s, NO_FULL_OUTPUT);
     f64 cost = 0.0;
-    cost += sqed(s->Thrust - s->target_Thrust); // thrust target.
+    cost += 1e2*sqed(s->Thrust - s->target_Thrust); // thrust target.
     cost -= sqed(s->Isp); // higher Isp = goated.
     // safety for everyone.
     cost += (s->min_SF < 1.0)

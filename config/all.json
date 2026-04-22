@@ -19,49 +19,44 @@
     "part_mating": {
         "R_cc": 45.0,
 
-        "Mr_chnl": 60.0,
+        "Mr_chnl": 55.5,
         "max_th_chnl": 3.0,
 
-        "IR_Ioring": 52.5,
-        "OR_Ioring": 55.5,
-        "IR_Ooring": 64.5,
-        "OR_Ooring": 67.5,
+        "IR_Ioring": 48.0,
+        "OR_Ioring": 51.0,
+        "IR_Ooring": 60.0,
+        "OR_Ooring": 63.0,
         "Lz_Ioring": 2.0,
         "Lz_Ooring": 2.0,
 
         "no_bolt": 8,
-        "r_bolt": 76.0,
+        "r_bolt": 71.0,
         "D_bolt": 6.3,
         "D_washer": 12.5,
 
+        "flange_outer_radius": 73.0,
         "thickness_around_bolt": 6.0,
         "flange_thickness_cc": 7.0,
         "flange_thickness_inj": 7.0,
-        "flange_outer_radius": 78.0,
+
         "concave_fillet_radius": 3.0,
         "convex_fillet_radius": 0.7
     },
     "chamber": {
-        "L_cc": 100.0,
+        "L_cc": 90.0,
 
-        "AEAT": 5.2,
-        "R_tht": 23.0,
+        "AEAT": 5.461837207867982,
+        "R_tht": 17.89946990284392,
 
         "NLF": 1.0,
         "phi_conv": -0.6108652381980153,
-        "phi_div": 0.4027190692943012,
-        "phi_exit": 0.220523450546912,
+        "phi_div": 0.3509677827937431,
+        "phi_exit": 0.13673396913887806,
 
-        "th_iw": 1.5,
-        "th_ow": 2.5,
+        "th_iw": 1.4,
+        "th_ow": 3.5,
 
-        "helix_angle": 0.5235987755982988,
-
-        "no_web": 32,
-        "th_web": 2.0,
-        "psi_web": 1.5,
-
-        "FR_chnl": 0.4,
+        "FR_chnl": 0.2,
 
         "th_imani": 1.5,
         "th_omani": 2.5,

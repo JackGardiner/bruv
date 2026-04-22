@@ -66,6 +66,11 @@ public static partial class Br {
         (b, a) = (a, b);
         // oh damn i didnt know u could do that.
     }
+    public static float iterstep(ref float x, float newx) {
+        float diff = abs(x - newx);
+        x = newx;
+        return diff;
+    }
 
     /* bit tricks. */
     public static bool isset(int x, int mask) => (x & mask) == mask;

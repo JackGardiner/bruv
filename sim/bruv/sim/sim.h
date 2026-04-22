@@ -93,6 +93,12 @@
     X(out_SF, f64*, C_INPUT | C_OUTPUT_DATA)                    \
     X(out_xtra, f64*, C_INPUT | C_OUTPUT_DATA)                  \
                                                                 \
+    X(export_count, i64, C_INPUT)                               \
+    X(export_z, f64*, C_INPUT | C_OUTPUT_DATA)                  \
+    X(export_helix_angle, f64*, C_INPUT | C_OUTPUT_DATA)        \
+    X(export_th_chnl, f64*, C_INPUT | C_OUTPUT_DATA)            \
+    X(export_psi_chnl, f64*, C_INPUT | C_OUTPUT_DATA)           \
+                                                                \
     X(target_Thrust, f64, C_INPUT)                              \
     X(optimise_ofr, i64, C_INPUT)                               \
     X(optimise_dm_cc, i64, C_INPUT)                             \

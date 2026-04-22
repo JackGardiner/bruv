@@ -1467,33 +1467,37 @@ public class Injector : TPIAP.Pea {
         return vox;
     }
 
-    protected void write_volumes_report(ManiVol mani_vol, float vol_inlet_mm3) {
+    protected void write_volumes_report(ManiVol mani_vol, float vol_inlet) {
         // Compute manifold volumes from voxel masks.
-        mani_vol.volume_entire.CalculateProperties(out float vol_entire_mm3,
-                                                   out BBox3 _);
-        mani_vol.volume_only_lower.CalculateProperties(out float vol_lower_mm3,
-                                                       out BBox3 _);
+        mani_vol.volume_entire.CalculateProperties(out float vol_entire,
+                                                   out _);
+        mani_vol.volume_only_lower.CalculateProperties(out float vol_lower,
+                                                       out _);
 
         // LOx manifold = upper region (entire - lower)
-        float vol_lox_mani_mm3 = vol_entire_mm3 - vol_lower_mm3;
+        float vol_lox_mani = vol_entire - vol_lower;
 
         // IPA manifold = lower region
-        float vol_ipa_mani_mm3 = vol_lower_mm3;
+        float vol_ipa_mani = vol_lower;
 
-        // Write volumes report in mL (mm³ * 1e-3 = mL)
+        // Write volumes report in mL (mm^3 = 1000 mL)
         var lines = new List<string> {
             $"Injector Manifold Volumes Report",
-            $"=================================",
+            $"================================",
             $"",
-            $"LOx Manifold Volume:        {vol_lox_mani_mm3*1e-3:F2} mL ({vol_lox_mani_mm3:F0} mm³)",
+            $"LOx Manifold Volume:    "
+                + $"{vol_lox_mani*1e-3:F2} mL ({vol_lox_mani:F0} mm³)",
             $"",
-            $"IPA Manifold Volume:        {vol_ipa_mani_mm3*1e-3:F2} mL ({vol_ipa_mani_mm3:F0} mm³)",
+            $"IPA Manifold Volume:    "
+                + $"{vol_ipa_mani*1e-3:F2} mL ({vol_ipa_mani:F0} mm³)",
             $"",
-            $"Total Combined Volume:      {(vol_lox_mani_mm3 + vol_ipa_mani_mm3)*1e-3:F2} mL",
+            $"Total Combined Volume:  "
+                + $"{(vol_lox_mani + vol_ipa_mani)*1e-3:F2} mL",
             $"",
         };
 
-        File.WriteAllLines(fromroot("exports/volumes-report.txt"), lines);
+        string path = fromroot("exports/injector-volumes-report.txt");
+        File.WriteAllLines(path, lines);
     }
 
     protected void voxels_gussets(Geez.Cycle key, in ManiVol mani_vol,
@@ -1756,7 +1760,6 @@ public class Injector : TPIAP.Pea {
         if (!take_screenshots)
             part.screenshotta = null;
 
-        Geez.bar(new(new(), 1e-3f, 140f), divide_x: 5, divide_y: 5, divide_z: 1);
 
         // Create the part.
 
@@ -1819,8 +1822,9 @@ public class Injector : TPIAP.Pea {
         voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
                 out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
 
-        // Compute inlet manifold volume right after creation, before voxels are modified
-        neg_ports.CalculateProperties(out float vol_inlet_ports_mm3, out _);
+        // Compute inlet manifold volume right after creation, before voxels are
+        // modified
+        neg_ports.CalculateProperties(out float vol_inlet_ports, out _);
 
         part.step("created ports.");
 
@@ -1931,12 +1935,11 @@ public class Injector : TPIAP.Pea {
 
         part.step("removed voids.");
 
+
         part.add(ref pos_elements);
         part.substep("added injector elements.");
-
         part.sub(ref neg_elements, key_elements);
-        part.substep("subtracted injector elements.");
-
+        part.substep("subtracted injector element voids.");
 
         if (neg_film_cooling != null) {
             part.sub(ref neg_film_cooling);
@@ -1944,6 +1947,9 @@ public class Injector : TPIAP.Pea {
         } else {
             part.substep("skipping film cooling holes (not printed).");
         }
+
+        part.step("merged injectors + film cooling.");
+
 
         part.voxels.BoolSubtract(new Rod(
             new(-extend_base_by*uZ3),
@@ -1955,7 +1961,7 @@ public class Injector : TPIAP.Pea {
         part.step("finished.");
 
         // Write volumes report with pre-computed inlet volume
-        write_volumes_report(mani_vol, vol_inlet_ports_mm3);
+        write_volumes_report(mani_vol, vol_inlet_ports);
 
         return part.voxels;
     }

@@ -109,6 +109,12 @@ def get_interpretation():
     interp.append("out_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_xtra", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
+    interp.append("export_count", interp.I64, IN)
+    interp.append("export_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("export_helix_angle", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("export_th_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("export_psi_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+
     interp.append("target_Thrust", interp.F64, IN)
     interp.append("optimise_ofr", interp.I64, IN)
     interp.append("optimise_dm_cc", interp.I64, IN)
@@ -151,7 +157,7 @@ def get_state(interp):
     state["P_exit"] = config["operating_conditions"]["P_exit"]
     state["P0_cc"] = config["operating_conditions"]["P_cc"]
 
-    state["out_count"] = 10000
+    state["out_count"] = 1000
     new_out = lambda: np.empty(shape=(state["out_count"],), dtype=np.float64)
     state["out_z"] = new_out()
     state["out_r"] = new_out()
@@ -188,9 +194,17 @@ def get_state(interp):
     state["out_SF"] = new_out()
     state["out_xtra"] = new_out()
 
+    state["export_count"] = 3000
+    new_export = lambda: np.empty(shape=(state["export_count"],),
+            dtype=np.float64)
+    state["export_z"] = new_export()
+    state["export_helix_angle"] = new_export()
+    state["export_th_chnl"] = new_export()
+    state["export_psi_chnl"] = new_export()
+
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
     state["optimise_ofr"] = 0
-    state["optimise_dm_cc"] = 0
+    state["optimise_dm_cc"] = 1
     state["optimise_helix_angle"] = 0
     state["optimise_th_iw"] = 0
     state["optimise_th_ow"] = 0
@@ -251,23 +265,53 @@ def write_ammendments(state):
         "part_mating": part_mating(),
         "chamber": {
             "L_cc": state["L_cc"] * 1e3,
-            "R_tht": state["R_tht"] * 1e3,
             "AEAT": state["AEAT"],
+            "R_tht": state["R_tht"] * 1e3,
             "NLF": state["NLF"],
             "phi_conv": state["phi_conv"],
             "phi_div": state["phi_div"],
             "phi_exit": state["phi_exit"],
-            "helix_angle": state["helix_angle"],
             "th_iw": state["th_iw"] * 1e3,
             "th_ow": state["th_ow"] * 1e3,
-            "no_web": state["no_chnl"],
-            "th_web": state["th_chnl"] * 1e3,
-            "psi_web": math.cos(state["helix_angle"])*state["wi_chnl"] * 1e3,
         },
     }
     with open(paths.ROOT / "../config/ammendments.json", "w") as f:
         json.dump(extra, f, indent=4)
         f.write("\n") # trailing newline smile
+
+
+    def channels():
+        get_export = lambda s: state[f"export_{s}"].view(state["export_count"])
+
+        z = 1e3*get_export("z")
+        helix_angle = get_export("helix_angle")
+        th = 1e3*get_export("th_chnl")
+        psi = 1e3*get_export("psi_chnl")
+
+        # trim superfluous values.
+        mask = np.zeros(len(z), dtype=bool)
+        mask[0] = mask[-1] = True  # always keep endpoints
+        for Y in (helix_angle, th, psi):
+            mask[1:-1] |= (Y[:-2] != Y[2:])
+        z = z[mask]
+        helix_angle = helix_angle[mask]
+        th = th[mask]
+        psi = psi[mask]
+
+        return {
+            "channels": {
+                "no": state["no_chnl"],
+                "z": z.tolist(),
+                "helix_angle": helix_angle.tolist(),
+                "th": th.tolist(),
+                "psi": psi.tolist(),
+            }
+        }
+
+    with open(paths.ROOT / "../config/channels.json", "w") as f:
+        json.dump(channels(), f, indent=None)
+        f.write("\n") # trailing newline double smile
+
 
 
 def now_this_is_bruv():
@@ -308,7 +352,8 @@ def plot_me(get_out):
 
     win = geez.new_window()
 
-    _, axes = win.new_plots(rows=2, cols=3)
+    _, axes = win.new_plots(rows=2, cols=3,
+            fig_kw=dict(figsize=(13, 7)))
     axes[0,0].set_aspect(1.0)
     axes[0,0].plot(z, get_out("r")*1e3)
     axes[0,0].set_title("contour [mm]")
@@ -323,7 +368,8 @@ def plot_me(get_out):
     axes[1,2].plot(z, get_out("gamma_g"))
     axes[1,2].set_title("gamma")
 
-    _, axes = win.new_plots(rows=2, cols=3)
+    _, axes = win.new_plots(rows=2, cols=3,
+            fig_kw=dict(figsize=(13, 7)))
     axes[0,0].set_aspect(1.0)
     axes[0,0].plot(z, get_out("r")*1e3)
     axes[0,0].set_title("contour [mm]")
@@ -336,7 +382,8 @@ def plot_me(get_out):
     axes[0,2].plot(z, get_out("Pr_g"))
     axes[0,2].set_title("prandtl")
 
-    _, axes = win.new_plots(rows=2, cols=3)
+    _, axes = win.new_plots(rows=2, cols=3,
+            fig_kw=dict(figsize=(13, 7)))
     axes[0,0].plot(z, get_out("T_gw"), label="gas-ish")
     axes[0,0].plot(z, get_out("T_pdms"), "--", label="pdms surface")
     axes[0,0].plot(z, get_out("T_wg"), label="wall gas-side")
@@ -367,7 +414,7 @@ def plot_me(get_out):
     # ── Re ────────────────────────────────────────────────────────────────────────
     ax_re.plot(z, g("Re_c"), color="steelblue", **KW)
     ax_re.set_title("Reynolds number")
-    ax_re.set_xlabel("z [mm]"); ax_re.set_ylabel("Re [–]")
+    ax_re.set_xlabel("z [mm]"); ax_re.set_ylabel("Re [-]")
     ax_re.grid(alpha=0.4)
 
     # ── T & P  (twin) ─────────────────────────────────────────────────────────────
