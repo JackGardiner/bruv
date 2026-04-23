@@ -145,8 +145,8 @@ public static class TwoPeasInAPod {
             var max_phi = config.get<float>("printer/max_print_angle");
             if (!config.has("chamber/phi_mani"))
                 config.set("chamber/phi_mani", max_phi);
-            if (!config.has("chamber/phi_inlet"))
-                config.set("chamber/phi_inlet", max_phi);
+            if (!config.has("chamber/phi_inletsprt"))
+                config.set("chamber/phi_inletsprt", max_phi);
             if (!config.has("chamber/phi_wid"))
                 config.set("chamber/phi_wid", -max_phi);
             if (!config.has("chamber/phi_fixt"))

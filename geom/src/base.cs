@@ -7,6 +7,7 @@ using Voxels = PicoGK.Voxels;
 using Mesh = PicoGK.Mesh;
 using IImplicit = PicoGK.IImplicit;
 using BBox3 = PicoGK.BBox3;
+using Triangle = PicoGK.Triangle;
 
 using Colour = PicoGK.ColorFloat;
 using Image = PicoGK.Image;
@@ -1462,15 +1463,29 @@ public class ImageSignedDist {
     }
 
     private static bool[,] make_mask(Image img, int scale, int xextra,
-            int yextra, float threshold, bool invert, bool flipx, bool flipy) {
+            int yextra, float threshold, bool invert, bool flipx, bool flipy,
+            Rot rot) {
         int W = img.nWidth;
         int H = img.nHeight;
+        if (rot != Rot.NONE)
+            swap(ref W, ref H);
 
         bool[,] mask = new bool[scale*(W + 2*xextra), scale*(H + 2*yextra)];
         for (int x=0; x<W; ++x) {
             for (int y=0; y<H; ++y) {
-                Colour col = img.clrValue(flipx ? W - 1 - x : x,
-                                          flipy ? H - 1 - y : y);
+                int imgx = x;
+                int imgy = y;
+                if (rot == Rot.CW) {
+                    swap(ref imgx, ref imgy);
+                    imgx = img.nWidth - 1 - imgx;
+                } else if (rot == Rot.CCW) {
+                    swap(ref imgx, ref imgy);
+                    imgy = img.nHeight - 1 - imgy;
+                }
+                imgx = flipx ? img.nWidth - 1 - imgx : imgx;
+                imgy = flipy ? img.nHeight - 1 - imgy : imgy;
+                Colour col = img.clrValue(imgx, imgy);
+
                 float grey = 0.2126f*col.R + 0.7152f*col.G + 0.0722f*col.B;
                 grey *= col.A;
                 bool on = invert == (grey < threshold);
@@ -1501,6 +1516,14 @@ public class ImageSignedDist {
 
 
 
+    public enum Rot {
+        NONE,
+        CW,
+        CCW,
+    }
+    public const Rot CW = Rot.CW;
+    public const Rot CCW = Rot.CCW;
+
     private float[,] sda;
     private int scale { get; }
     private int xextra { get; }
@@ -1511,20 +1534,23 @@ public class ImageSignedDist {
 
     // loads tga image from the given path, expecting (0,0) to be bottom-left.
     public ImageSignedDist(in string path, int scale=1, float threshold=0.5f,
-            bool invert=false, bool flipx=false, bool flipy=false) {
+            bool invert=false, bool flipx=false, bool flipy=false,
+            Rot rot=Rot.NONE) {
         assert(scale >= 1);
         assert(xextra >= 0);
         assert(yextra >= 0);
         TgaIo.LoadTga(path, out Image img);
         this.width  = img.nWidth;
         this.height = img.nHeight;
+        if (rot != Rot.NONE)
+            (this.width, this.height) = (this.height, this.width);
         this.scale = scale;
         // choose extra s.t. an image spanning a quarter of a circle may be
         // sampled anywhere on the circle (aka up to 1.5x away).
         this.xextra = scale * 16 * width / 10;
         this.yextra = scale * 16 * height / 10;
         bool[,] mask = make_mask(img, scale, xextra, yextra, threshold, invert,
-                flipx, flipy);
+                flipx, flipy, rot);
         this.sda = make_sda(mask);
     }
 
@@ -1802,6 +1828,97 @@ public class ImageSignedDist {
             );
             return new SDFfilled(sdf).voxels(bbox);
         }
+    }
+
+
+
+    public Voxels voxels_on_cone(Cone cone, float th, float outwards=0f,
+            float circum_offset=0f) {
+        assert(cone.isfilled);
+        float phi = cone.phi;
+        float offset_on_cone;
+        float offset_on_axis;
+        if (nearzero(phi)) {
+            offset_on_cone = 0f;
+            offset_on_axis = 0f;
+        } else {
+            offset_on_cone = 0.5f*(cone.r0 + cone.r1) / sin(phi);
+            offset_on_axis = 0.5f*(cone.r0 + cone.r1) / tan(phi);
+        }
+        float length_on_cone = mag(cone.r0*uY2 - new Vec2(cone.Lz, cone.r1));
+
+        // Make image flat at origin.
+        SDFfunction sdf = sdf_on_plane(
+            out BBox3 bbox,
+            new(),
+            th,
+            length_on_cone,
+            WhichLength.WIDTH
+        );
+        Mesh mesh = new(new SDFfilled(sdf).voxels(bbox));
+
+        float circum = bbox.vecSize().Y;
+
+        // Map it onto a cone which has its tip at the origin.
+        Vec3 map_to_cone(Vec3 p) {
+            if (nearzero(phi)) {
+                // is not a cone innit.
+                float r = cone.r0;
+
+                float theta = p.Y / r;
+                float t = p.Z + outwards;
+                return new Vec3(
+                    (r + t)*cos(theta),
+                    (r + t)*sin(theta),
+                    -p.X
+                );
+            } else {
+                float alpha = abs(phi);
+                float ell = abs(offset_on_cone);
+
+                p.X += ell;
+                float rho = magxy(p);
+                float theta = argxy(p);
+                float t = p.Z + outwards;
+                Vec3 q = new(
+                    (rho*sin(alpha) + t*cos(alpha))*cos(theta/sin(alpha)),
+                    (rho*sin(alpha) + t*cos(alpha))*sin(theta/sin(alpha)),
+                    rho*cos(alpha) - t*sin(alpha)
+                );
+                if (!nearzero(circum_offset)) {
+                    float R = magxy(q);
+                    float newy = q.Y + circum_offset;
+                    q = new Vec3(nonhypot(R, newy), newy, q.Z);
+                }
+                return q;
+            }
+        }
+
+        List<Vec3> V = new(mesh.nVertexCount());
+        for (int i=0; i<mesh.nVertexCount(); ++i) {
+            Vec3 v = mesh.vecVertexAt(i);
+            if (!nearzero(phi) && phi > 0f)
+                v.X = -v.X;
+            v = map_to_cone(v);
+            if (!nearzero(phi) && phi < 0f)
+                v.Z = -v.Z;
+            V.Add(v);
+        }
+        Mesh tmp = new();
+        tmp.AddVertices(V, out _);
+        for (int i=0; i<mesh.nTriangleCount(); ++i) {
+            Triangle t = mesh.oTriangleAt(i);
+            tmp.nAddTriangle(t);
+        }
+        mesh = tmp;
+
+        // Move onto the correctly positioned cone.
+        Transformer moveme = new Transformer()
+                .to_local(new Frame(offset_on_axis * uZ3))
+                .to_global(cone.centre);
+        mesh = moveme.mesh(mesh);
+
+        return new(mesh);
     }
 
 

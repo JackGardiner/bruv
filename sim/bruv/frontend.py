@@ -153,7 +153,7 @@ def get_state(interp):
     dm_ox = config["operating_conditions"]["mdot_LOx"]
     dm_fu = config["operating_conditions"]["mdot_IPA"]
     state["ofr"] = 1.4
-    state["dm_cc"] = 2.043526890761635
+    state["dm_cc"] = 2.152551267131888
     state["P_exit"] = config["operating_conditions"]["P_exit"]
     state["P0_cc"] = config["operating_conditions"]["P_cc"]
 
@@ -204,7 +204,7 @@ def get_state(interp):
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
     state["optimise_ofr"] = 0
-    state["optimise_dm_cc"] = 1
+    state["optimise_dm_cc"] = 0
     state["optimise_helix_angle"] = 0
     state["optimise_th_iw"] = 0
     state["optimise_th_ow"] = 0

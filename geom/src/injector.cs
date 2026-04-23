@@ -1088,7 +1088,9 @@ public class Injector : TPIAP.Pea {
         // - IPA void
         // - lower manifold roof
         // Note this is shifted up by a voxel or so.
-        public required Voxels volume_only_lower { get; init; }
+        public required Voxels volume_only_lower_up { get; init; }
+        // Note this is shifted down by a voxel or so.
+        public required Voxels volume_only_lower_down { get; init; }
     }
 
     protected Voxels voxels_manifold(Geez.Cycle key, out ManiVol vol) {
@@ -1120,7 +1122,8 @@ public class Injector : TPIAP.Pea {
         // wall creation loop).
         Voxels volume_entire = A.lengthed(EXTRA, 0f).transz(1.5f*VOXEL_SIZE);
         volume_entire.BoolSubtract(B.transz(1.5f*VOXEL_SIZE));
-        Voxels volume_only_lower = volume_entire.voxDuplicate();
+        Voxels volume_only_lower_up = volume_entire.voxDuplicate();
+        Voxels volume_only_lower_down = volume_entire.voxDuplicate();
 
 
         // Make dividing lox-ipa boundary.
@@ -1134,7 +1137,9 @@ public class Injector : TPIAP.Pea {
             keys.Add(Geez.mesh(this_pos));
             pos.BoolAdd(new(this_pos));
             neg.BoolAdd((Voxels)this_neg);
-            volume_only_lower.BoolSubtract(this_neg.transz(-1.5f*VOXEL_SIZE));
+            volume_only_lower_up.BoolSubtract(this_neg.transz(1.5f*VOXEL_SIZE));
+            volume_only_lower_down.BoolSubtract(this_neg.transz(
+                    -1.5f*VOXEL_SIZE));
         }
         key <<= Geez.group(keys);
 
@@ -1145,7 +1150,8 @@ public class Injector : TPIAP.Pea {
             peak=peak,
             th=th_omw,
             volume_entire=volume_entire,
-            volume_only_lower=volume_only_lower,
+            volume_only_lower_up=volume_only_lower_up,
+            volume_only_lower_down=volume_only_lower_down,
         };
 
 
@@ -1469,7 +1475,7 @@ public class Injector : TPIAP.Pea {
         // Compute manifold volumes from voxel masks.
         mani_vol.volume_entire.CalculateProperties(out float vol_entire,
                                                    out _);
-        mani_vol.volume_only_lower.CalculateProperties(out float vol_lower,
+        mani_vol.volume_only_lower_down.CalculateProperties(out float vol_lower,
                                                        out _);
 
         // LOx manifold = upper region (entire - lower)
@@ -1712,12 +1718,12 @@ public class Injector : TPIAP.Pea {
         Voxels underneath = new Rod(new(), -3f*EXTRA, pm.flange_outer_radius);
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
                 sub_pos: underneath + mani_vol.volume_entire,
-                sub_neg: underneath + mani_vol.volume_only_lower);
+                sub_neg: underneath + mani_vol.volume_only_lower_up);
         portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh,
                 sub_pos: underneath + mani_vol.volume_entire,
-                sub_neg: underneath + mani_vol.volume_only_lower);
+                sub_neg: underneath + mani_vol.volume_only_lower_up);
         portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh,
-                sub_pos: underneath + mani_vol.volume_only_lower,
+                sub_pos: underneath + mani_vol.volume_only_lower_down,
                 sub_neg: underneath + volume_plate);
         portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh);
 
