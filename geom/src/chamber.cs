@@ -1442,14 +1442,14 @@ public class Chamber : TPIAP.Pea {
             float inset = 1f;
             float th0 = th_iw + th_chnl[z0] + th_ow;
             float th1 = th_iw + th_chnl[z1] + th_ow;
-            float r0 = cnt_radius_at(z0, th0, false);
-            float r1 = cnt_radius_at(z1, th1, false);
+            float r0 = cnt_radius_at(z0, th0, true);
+            float r1 = cnt_radius_at(z1, th1, true);
             float phi = atan((r1 - r0) / (z1 - z0));
 
             z0 -= th0*sin(phi);
             z1 -= th1*sin(phi);
-            r0 = cnt_radius_at(z0, th0, false);
-            r1 = cnt_radius_at(z1, th1, false);
+            r0 = cnt_radius_at(z0, th0, true);
+            r1 = cnt_radius_at(z1, th1, true);
 
             Cone cone = new(new(z0*uZ3), z1 - z0, r0, r1);
             cone = cone.rotxy(theta_inlet - PI_2 + theta0);
@@ -1460,14 +1460,13 @@ public class Chamber : TPIAP.Pea {
             keys.Add(Geez.voxels(vox));
         }
 
-        // add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
-        //         z0: cnt_z2, z1: cnt_z3, extra: 0.1f, circum_offset: -2.0f);
-        // add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
-        //         z0: cnt_z1 - 56f, z1: cnt_z1 - 11f, extra: 0.1f, circum_offset: -2.0f,
-        //         theta0: -PI_2);
+        add(fromroot("assets/jbs_pirate.tga"), invert: true, flipy: true,
+                rot: ImageSignedDist.CCW,
+                z0: cnt_wid_z2, z1: cnt_wid_z3 - 3f, theta0: PI_2 + PI/8f);
+
         add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
-                z0: cnt_z1 - 58f, z1: cnt_z1 - 9f, extra: 0.1f, circum_offset: -1.0f,
-                theta0: -0.33f);
+                z0: cnt_z1 - 58f, z1: cnt_z1 - 9f, extra: 0.1f,
+                circum_offset: -1.0f, theta0: -0.33f);
         add(fromroot("assets/unimelb_ccw.tga"), unimelb: true, flipy: true,
                 rot: ImageSignedDist.CCW,
                 z0: cnt_z1 - 26f, z1: cnt_z1 - 1f, extra: 0.1f,
@@ -1476,6 +1475,10 @@ public class Chamber : TPIAP.Pea {
                 rot: ImageSignedDist.CCW,
                 z0: cnt_z1 - 66f, z1: cnt_z1 - 41f, extra: 0.1f,
                 theta0: 0.33f);
+
+        add(fromroot("assets/jbs.tga"), invert: true, flipy: true,
+                z0: cnt_z1 - 63f, z1: cnt_z1 - 8f,
+                theta0: -PI);
 
         key <<= Geez.group(keys);
         return vox;

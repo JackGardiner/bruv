@@ -250,22 +250,25 @@ def write_ammendments(state):
         push_boundary("flange_outer_radius", -1.15)
         return data
 
-    # TODO: element placement?
-    dm_fc = 0.10 * state["dm_fu"]
+    # TODO: element+fc placement?
 
-    dP_ipa = state["P_fu1"] - state["P0_cc"]
+    mprop_fc = 0.15
+    dm_fc = mprop_fc * state["dm_fu"]
+    DP_ipa = state["P_fu1"] - state["P0_cc"]
+    rho_fu1 = state["out_rho_c"].view(state["out_count"])[0]
 
-    min_hole_diam = 0.4e-3 # reasonable minimum hole diameter for post-machining
-    min_hole_area = math.pi * (0.5*min_hole_diam)**2
+    min_hole_diam = 0.5e-3 # reasonable minimum hole diameter for post-machining
+    min_hole_area = math.pi/4 * min_hole_diam**2
     Cd_fc = 0.65 # discharge coefficient
-    A_fc_tot = dm_fc / (Cd_fc * math.sqrt(2*state["out_rho_c"].view(state["out_count"])[0]*dP_ipa))
+    A_fc_tot = dm_fc / Cd_fc / math.sqrt(2*rho_fu1*DP_ipa)
     no_fc = max(1, int(A_fc_tot / min_hole_area))
     A_fc = A_fc_tot / no_fc
     D_fc = 2.0 * math.sqrt(A_fc / math.pi)
 
-    rhoipa = state["out_rho_c"].view(state["out_count"])[0]
-
-    print(f"with mdot = {state['dm_fu']:.4f} kg/s,\n rho0_cc = {rhoipa},\n need {no_fc} film cooling holes of diameter {D_fc*1e3:.2f} mm")
+    print(f"film cooling")
+    print(f"     mdot: {dm_fc:.4f} kg/s ({int(100*mprop_fc)}%)")
+    print(f"  rho_fu1: {rho_fu1:.1f} kg/m3")
+    print(f"    holes: {no_fc}X {D_fc*1e3:.2f} mm (diam.)")
 
     extra = {
         "operating_conditions": {
