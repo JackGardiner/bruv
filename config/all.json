@@ -69,6 +69,8 @@
         "theta_inlet": 1.5707963267948966,
         "th_inlet": 4.5,
         "FR_inlet": 5.0,
+        "phi_inlet": 2.2689280275926285,
+        "phi_inletsprt": 0.6981317007977318,
 
         "no_tc": 6,
         "portsize_tc": "G1/8",

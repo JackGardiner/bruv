@@ -201,9 +201,9 @@ public class Chamber : TPIAP.Pea {
     public required float phi_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float FR_inlet { get; init; }
-    public Tapping tap_inlet => new(portsize_inlet, printable_dmls)
-            { threaded_length = 15f };
+    public Tapping tap_inlet => new(portsize_inlet, printable_dmls);
     public float ell_inlet => tap_inlet.straight_length + 0.8f*FR_inlet;
+    public required float phi_inletsprt { get; init; }
 
     public required int no_tc { get; init; }
     public required string portsize_tc { get; init; }
@@ -1028,6 +1028,7 @@ public class Chamber : TPIAP.Pea {
 
         // Place the inlet s.t. its top point coincides with c.
         float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
+        inlet = c + normalise(b - c)*Dell;
     }
 
     protected void points_mani(float theta, out List<Vec2> neg,
@@ -1075,7 +1076,7 @@ public class Chamber : TPIAP.Pea {
         inlet = new(
             fromzr(inlet_zr, theta),
             fromcyl(1f, theta + PI_2, 0f),
-            fromsph(1f, theta, phi_mani + PI_2)
+            fromsph(1f, theta, phi_inlet)
         );
     }
 
@@ -1178,15 +1179,16 @@ public class Chamber : TPIAP.Pea {
             )));
         }
 
-        float zextra = 2.5f;
-        float inlet_R = tap_inlet.major_radius + th_inlet;
+        float zextra = EXTRA + 2.5f;
+        Flats inlet_flats = new(tap_inlet, th_inlet){
+            Lz = ell_inlet + zextra,
+            flats_Lz = INF,
+        };
+        float inlet_R = inlet_flats.r;
         Frame inlet_end = inlet.transz(ell_inlet);
         // +z = +normal, +x = +circum
 
-        vox.BoolAdd(new Flats(tap_inlet, th_inlet){
-            Lz = ell_inlet + zextra,
-            flats_Lz = INF,
-        }.at(inlet_end));
+        vox.BoolAdd(inlet_flats.at(inlet_end));
 
         if (!filletless) {
             Voxels mask = new Rod(
@@ -1207,13 +1209,14 @@ public class Chamber : TPIAP.Pea {
          .at_edge(Bar.X0_Y0));
         // Flange connection.
         float th = 4.5f;
-        Frame bottom_tip = inlet_end.transy(-inlet_R * SQRT2 + th);
-        bottom_tip = bottom_tip.rotyz(phi_inlet + PI_2 - argphi(inlet_end.Z));
+        Frame bottom_tip = inlet_end.transy(-inlet_R * SQRT2 + 0.5f*th);
+        bottom_tip = bottom_tip.rotyz(PI_2 + phi_inletsprt
+                                    - argphi(bottom_tip.Z));
         vox.BoolAdd(new Bar(
             bottom_tip,
             th,
-            (magxy(bottom_tip.pos) - R_tht)/sin(phi_inlet),
-            -ell_inlet
+            (magxy(bottom_tip.pos) - R_tht)/sin(phi_inletsprt),
+            -magxy(bottom_tip.pos)
         ).at_face(Bar.Y0));
         vox.BoolSubtract(new Bar(
             bottom_tip,
