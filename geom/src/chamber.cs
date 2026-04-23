@@ -94,7 +94,7 @@ public class Chamber : TPIAP.Pea {
         { // Setup "top" of channel to be the base of the triangular-ish opening.
             // guess then simple fixed-point iteration.
             float f(float z) => z_exit - th_omani
-                              - 1f
+                              - 0.5f
                               - 0.5f*wi_chnl(z)
                               - th_chnl[z];
             z1_chnl = f(z_exit);
@@ -203,6 +203,7 @@ public class Chamber : TPIAP.Pea {
     public required float FR_inlet { get; init; }
     public Tapping tap_inlet => new(portsize_inlet, printable_dmls)
             { threaded_length = 15f };
+    public float ell_inlet => tap_inlet.straight_length + 0.8f*FR_inlet;
 
     public required int no_tc { get; init; }
     public required string portsize_tc { get; init; }
@@ -1027,7 +1028,6 @@ public class Chamber : TPIAP.Pea {
 
         // Place the inlet s.t. its top point coincides with c.
         float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
-        inlet = c + normalise(b - c)*Dell;
     }
 
     protected void points_mani(float theta, out List<Vec2> neg,
@@ -1122,8 +1122,7 @@ public class Chamber : TPIAP.Pea {
             FR_inlet + 2*EXTRA,
             SQRT2*tap_inlet.major_diameter + EXTRA)
         );
-        Frame inlet_out = inlet.transz(tap_inlet.threaded_length
-                                     + 0.8f*FR_inlet);
+        Frame inlet_out = inlet.transz(ell_inlet);
         vox.BoolAdd(tap_inlet.at(inlet_out));
         key.cycle(Geez.voxels(vox));
 
@@ -1155,7 +1154,7 @@ public class Chamber : TPIAP.Pea {
             List<Vec2> points = [new(z_exit, R_tht)];
             points.Add(new(
                 points[^1].X,
-                R_exit + th_iw + th_chnl[z1_chnl] + th_omani + 15f
+                round(R_exit + th_iw + th_chnl[z1_chnl] + th_omani + 15f)
             ));
             points.Add(points[^1] - uX2*14f);
             points.Add(
@@ -1180,13 +1179,12 @@ public class Chamber : TPIAP.Pea {
         }
 
         float zextra = 2.5f;
-        float inlet_Lz = tap_inlet.threaded_length + 0.8f*FR_inlet;
         float inlet_R = tap_inlet.major_radius + th_inlet;
-        Frame inlet_end = inlet.transz(inlet_Lz);
+        Frame inlet_end = inlet.transz(ell_inlet);
         // +z = +normal, +x = +circum
 
         vox.BoolAdd(new Flats(tap_inlet, th_inlet){
-            Lz = inlet_Lz + zextra,
+            Lz = ell_inlet + zextra,
             flats_Lz = INF,
         }.at(inlet_end));
 
@@ -1203,7 +1201,7 @@ public class Chamber : TPIAP.Pea {
         // Diamond underneath.
         vox.BoolAdd(new Bar(
             inlet_end.rotxy(PI_4),
-            -inlet_Lz,
+            -ell_inlet,
             inlet_R
         ).extended(zextra, Extend.DOWN)
          .at_edge(Bar.X0_Y0));
@@ -1215,11 +1213,11 @@ public class Chamber : TPIAP.Pea {
             bottom_tip,
             th,
             (magxy(bottom_tip.pos) - R_tht)/sin(phi_inlet),
-            -inlet_Lz
+            -ell_inlet
         ).at_face(Bar.Y0));
         vox.BoolSubtract(new Bar(
             bottom_tip,
-            inlet_Lz,
+            ell_inlet,
             4f*th
         ));
 
@@ -1421,36 +1419,54 @@ public class Chamber : TPIAP.Pea {
     protected Voxels? voxels_branding(Geez.Cycle key) {
         using var __ = key.like();
 
-        if (VOXEL_SIZE > 0.5)
+        if (VOXEL_SIZE > 0.5f)
             return null;
 
-        float wi = 26f;
-        float Lr = 0.6f;
-        float Lr_inset = 0.4f;
-        float R = cnt_r1 + th_iw + th_chnl[cnt_z1] + th_ow - Lr_inset;
-        Lr += Lr_inset;
-
-        Frame at = new Frame(cnt_z1*uZ3).rotxy(theta_inlet - PI_2);
         Voxels vox = new();
-        void add(string path, float rot=0f, float scale=1f, bool unimelb=false) {
-            ImageSignedDist img = new(path, flipy: true);
+
+        List<Geez.Key> keys = [];
+        void add(string path, float z0, float z1, float extra=0f,
+                float theta0=0f, float circum_offset=0f, bool invert=false,
+                bool flipx=false, bool flipy=false,
+                ImageSignedDist.Rot rot=ImageSignedDist.Rot.NONE,
+                bool unimelb=false) {
+            ImageSignedDist img = new(path, invert: invert, flipx: flipx,
+                    flipy: flipy, rot: rot);
             if (unimelb)
                 img.fix_unimelb_lmao();
 
-            at = at.transz(-0.5f * wi/img.aspect_x_on_y);
-            Voxels v = img.voxels_on_cyl(true, at.rotxy(rot), R, Lr,
-                        wi * scale, which: ImageSignedDist.WIDTH);
-            v = new(new Mesh(v)); // try to fix :))
-            vox.BoolAdd(v);
-            at = at.transz(-0.5f * wi/img.aspect_x_on_y);
-            key.voxels(vox);
+            float th = 0.5f;
+            float inset = 1f;
+            float th0 = th_iw + th_chnl[z0] + th_ow;
+            float th1 = th_iw + th_chnl[z1] + th_ow;
+            float r0 = cnt_radius_at(z0, th0, false);
+            float r1 = cnt_radius_at(z1, th1, false);
+            float phi = atan((r1 - r0) / (z1 - z0));
 
-            at = at.transz(-0.17f*wi);
+            z0 -= th0*sin(phi);
+            z1 -= th1*sin(phi);
+            r0 = cnt_radius_at(z0, th0, false);
+            r1 = cnt_radius_at(z1, th1, false);
+
+            Cone cone = new(new(z0*uZ3), z1 - z0, r0, r1);
+            cone = cone.rotxy(theta_inlet - PI_2 + theta0);
+            cone = cone.lengthed(cone.Lz*extra, cone.Lz*extra);
+            vox.BoolAdd(img.voxels_on_cone(cone, th + inset, -inset,
+                    circum_offset: circum_offset));
+            keys.Add(Geez.cone(cone));
+            keys.Add(Geez.voxels(vox));
         }
 
-        add(fromroot("assets/unimelb_ccw.tga"), unimelb: true);
-        add(fromroot("assets/csiro_ccw.tga"), scale: 0.92f);
+        add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
+                z0: cnt_z2, z1: cnt_z3, extra: 0.1f, circum_offset: -2.0f);
+        add(fromroot("assets/unimelb_ccw.tga"), unimelb: true, flipy: true,
+                rot: ImageSignedDist.CCW,
+                z0: cnt_z1 - 26f, z1: cnt_z1 - 1f, extra: 0.1f);
+        add(fromroot("assets/csiro_ccw.tga"), flipy: true,
+                rot: ImageSignedDist.CCW,
+                z0: cnt_z1 - 66f, z1: cnt_z1 - 41f, extra: 0.1f);
 
+        key <<= Geez.group(keys);
         return vox;
     }
 
@@ -1582,11 +1598,7 @@ public class Chamber : TPIAP.Pea {
 
         part.step($"added outer componenets.");
 
-        part.voxels.BoolSubtract(new Rod(
-            new Frame(z_exit*uZ3),
-            2f*EXTRA,
-            cnt_r6 + th_iw + th_chnl[z_exit] + th_ow + 2f*EXTRA
-        ));
+        part.voxels.IntersectImplicit(new Space(new(), -INF, z_exit));
         part.substep("clipped top excess.", view_part: true);
 
         part.sub(ref neg_bolt_clearance, keepme: true);
@@ -1630,11 +1642,7 @@ public class Chamber : TPIAP.Pea {
             part.substep("no branding to add.");
         }
 
-        part.voxels.BoolIntersect(new Rod(
-            new(),
-            z_exit,
-            pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt + 2f*EXTRA
-        ).extended(extend_base_by, Extend.DOWN));
+        part.voxels.IntersectImplicit(new Space(new(), -extend_base_by, z_exit));
         part.substep("clipped bottom excess.", view_part: true);
 
         part.step("finished.");
@@ -1802,21 +1810,39 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Tapping tap = new("Rc1/8");
-        Studding stud = new("Rc1/8");
-        tap.right_handed = false;
-        stud.right_handed = false;
+        // Vec3 coneme(Vec3 p, float alpha, float ell) {
+        //     p.X += ell;
+        //     float rho = magxy(p);
+        //     float theta = argxy(p);
+        //     float t = p.Z;
+        //     return new(
+        //         (rho*sin(alpha) + t*cos(alpha))*cos(theta/sin(alpha)),
+        //         (rho*sin(alpha) + t*cos(alpha))*sin(theta/sin(alpha)),
+        //         t*sin(alpha) - rho*cos(alpha)
+        //     );
+        // }
 
-        Frame frame = new();
+        // List<Vec3> points = [];
+        // for (float x=-1f; x<1.01f; x+=0.2f)
+        // for (float y=-1f; y<1.01f; y+=0.2f)
+        // for (float z=0f; z<0.11f; z+=0.0333f)
+        //     points.Add(new(x,y,z));
 
-        Geez.threads(tap, frame);
-        Geez.threads(stud, frame.transz(-tap.threaded_length + tap.gauge_length
-                     + stud.threaded_length - stud.gauge_length));
-        Voxels hole = new Bar(new(), -30f, 30f);
-        hole.BoolSubtract(tap.at(frame, extra: 3f));
-        hole.BoolIntersect(new Bar(new(), -40f, 40f).at_face(Bar.Y1));
-        Geez.voxels(hole, COLOUR_RED);
-        Geez.voxels(stud.at(frame, tap, extra: 3f), COLOUR_BLUE);
+        // Geez.points(points, COLOUR_RED, COLOUR_BLUE, r: 0.06f);
+        // Geez.points(points.Select((p)=>coneme(p, PI_4, 2f)).ToList(), COLOUR_RED, COLOUR_BLUE, r: 0.06f);
+
+        Geez.frame(new(), size: 1f);
+        Cone c1 = new(new Frame().rotyz(PI/3f), 8f, 6f, 6f);
+        Cone c2 = new(new Frame().rotyz(PI/3f).transz(8f), 8f, 6f, 10f);
+        Geez.cone(c1);
+        Geez.cone(c2);
+
+        ImageSignedDist img = new(fromroot("assets/slinky.tga"),
+                invert: true, flipy: true);
+        Voxels v1 = img.voxels_on_cone(c1, 0.5f);
+        Geez.voxels(v1);
+        Voxels v2 = img.voxels_on_cone(c2, 0.3f);
+        Geez.voxels(v2);
     }
 
 
