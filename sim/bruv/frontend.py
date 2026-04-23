@@ -250,7 +250,22 @@ def write_ammendments(state):
         push_boundary("flange_outer_radius", -1.15)
         return data
 
-    # TODO: injector filmcooling + element placement?
+    # TODO: element placement?
+    dm_fc = 0.10 * state["dm_fu"]
+
+    dP_ipa = state["P_fu1"] - state["P0_cc"]
+
+    min_hole_diam = 0.4e-3 # reasonable minimum hole diameter for post-machining
+    min_hole_area = math.pi * (0.5*min_hole_diam)**2
+    Cd_fc = 0.65 # discharge coefficient
+    A_fc_tot = dm_fc / (Cd_fc * math.sqrt(2*state["out_rho_c"].view(state["out_count"])[0]*dP_ipa))
+    no_fc = max(1, int(A_fc_tot / min_hole_area))
+    A_fc = A_fc_tot / no_fc
+    D_fc = 2.0 * math.sqrt(A_fc / math.pi)
+
+    rhoipa = state["out_rho_c"].view(state["out_count"])[0]
+
+    print(f"with mdot = {state['dm_fu']:.4f} kg/s,\n rho0_cc = {rhoipa},\n need {no_fc} film cooling holes of diameter {D_fc*1e3:.2f} mm")
 
     extra = {
         "operating_conditions": {
@@ -273,6 +288,11 @@ def write_ammendments(state):
             "phi_exit": state["phi_exit"],
             "th_iw": state["th_iw"] * 1e3,
             "th_ow": state["th_ow"] * 1e3,
+        },
+        "injector" : {
+            "D_fc": D_fc * 1e3,
+            "no_fcg": [no_fc],
+            "theta0_fcg": [0.0]
         },
     }
     with open(paths.ROOT / "../config/ammendments.json", "w") as f:
