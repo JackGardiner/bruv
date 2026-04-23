@@ -289,8 +289,10 @@ f64 cnt_r(const Contour* cnt, f64 z) {
 }
 
 f64 cnt_th_iw(const Contour* cnt, f64 z) {
-    (void)z;
-    return cnt->th_iw;
+    f64 prop = 1.0;
+    if (z > cnt->z_tht)
+        prop *= lerp(1.0, 1.5, invlerp(cnt->z_tht, cnt->z_exit, z));
+    return cnt->th_iw * prop;
 }
 f64 cnt_helix_angle(const Contour* cnt, f64 z) {
     (void)z;
@@ -309,10 +311,15 @@ f64 cnt_th_chnl(const Contour* cnt, f64 z) {
 
 f64 cnt_wi_web(const Contour* cnt, f64 z) {
     f64 r = cnt_r(cnt, z) + cnt->th_iw + 0.5*cnt_th_chnl(cnt, z);
-    return TWOPI*r/cnt->no_chnl * (1.0 - cnt->prop_chnl);
+    f64 wi = TWOPI*r/cnt->no_chnl - cnt_wi_chnl(cnt, z);
+    assert(wi > 0.0, "z=%g", z);
+    return wi;
 }
 f64 cnt_wi_chnl(const Contour* cnt, f64 z) {
     f64 r = cnt_r(cnt, z) + cnt->th_iw + 0.5*cnt_th_chnl(cnt, z);
+    // f64 prop = cnt->prop_chnl;
+    // if (z > cnt->z_tht)
+    //     prop *= lerp(1, 0.5, invlerp(cnt->z_tht, cnt->z_exit, z));
     return TWOPI*r/cnt->no_chnl * cnt->prop_chnl;
 }
 

@@ -20,6 +20,7 @@
     X(phi_div, f64, C_OUTPUT)                                   \
     X(phi_exit, f64, C_OUTPUT)                                  \
                                                                 \
+    X(prop_fc, f64, C_INPUT)                                    \
     X(helix_angle, f64, C_INPUT | C_OUTPUT)                     \
     X(th_pdms, f64, C_INPUT)                                    \
     X(k_pdms, f64, C_INPUT)                                     \
@@ -82,6 +83,8 @@
     X(out_ff_c, f64*, C_INPUT | C_OUTPUT_DATA)                  \
     X(out_Re_c, f64*, C_INPUT | C_OUTPUT_DATA)                  \
     X(out_Pr_c, f64*, C_INPUT | C_OUTPUT_DATA)                  \
+    X(out_startup_sigma, f64*, C_INPUT | C_OUTPUT_DATA)         \
+    X(out_startup_Ys, f64*, C_INPUT | C_OUTPUT_DATA)            \
     X(out_startup_SF, f64*, C_INPUT | C_OUTPUT_DATA)            \
     X(out_sigmah_pressure, f64*, C_INPUT | C_OUTPUT_DATA)       \
     X(out_sigmah_thermal, f64*, C_INPUT | C_OUTPUT_DATA)        \
@@ -98,6 +101,7 @@
     X(export_helix_angle, f64*, C_INPUT | C_OUTPUT_DATA)        \
     X(export_th_chnl, f64*, C_INPUT | C_OUTPUT_DATA)            \
     X(export_psi_chnl, f64*, C_INPUT | C_OUTPUT_DATA)           \
+    X(export_th_iw, f64*, C_INPUT | C_OUTPUT_DATA)              \
                                                                 \
     X(target_Thrust, f64, C_INPUT)                              \
     X(optimise_ofr, i64, C_INPUT)                               \

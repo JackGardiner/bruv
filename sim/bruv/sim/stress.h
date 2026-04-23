@@ -9,6 +9,7 @@
 typedef struct stressStation {
     struct {
         f64 sigma;
+        f64 Ys;
         f64 SF;
     } startup;
     struct {

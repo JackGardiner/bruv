@@ -74,6 +74,7 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     assert(-PI_2 <= s->phi_conv && s->phi_conv < 0.0,
                 "invalid input: phi_conv=%g", s->phi_conv);
 
+    assert(s->prop_fc >= 0.0, "invalid input: prop_fc=%g", s->prop_fc);
     assert(0.0 <= s->helix_angle && s->helix_angle < PI_2,
             "invalid input: helix_angle=%g", s->helix_angle);
     assert(s->th_pdms > 0.0, "invalid input: th_pdms=%g", s->th_pdms);
@@ -240,6 +241,8 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
     assert(s->out_ff_c, "null output array: out_ff_c");
     assert(s->out_Re_c, "null output array: out_Re_c");
     assert(s->out_Pr_c, "null output array: out_Pr_c");
+    assert(s->out_startup_sigma, "null output array: out_startup_sigma");
+    assert(s->out_startup_Ys, "null output array: out_startup_Ys");
     assert(s->out_startup_SF, "null output array: out_startup_SF");
     assert(s->out_sigmah_pressure, "null output array: out_sigmah_pressure");
     assert(s->out_sigmah_thermal, "null output array: out_sigmah_thermal");
@@ -258,6 +261,7 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
     assert(s->export_helix_angle, "null export array: export_helix_angle");
     assert(s->export_th_chnl, "null export array: export_th_chnl");
     assert(s->export_psi_chnl, "null export array: export_psi_chnl");
+    assert(s->export_th_iw, "null export array: export_th_iw");
 
 
     ceaFit* fit_gamma = &(ceaFit){0};
@@ -324,40 +328,61 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
             i32 k = min(max((i32)t, 0), stress_N - 2);
             t -= k;
             typeof(stress_stns) stns = stress_stns;
-            s->out_startup_SF[i] = lerp(stns[k].startup.SF,
-                    stns[k + 1].startup.SF, t);
+            s->out_startup_sigma[i] = lerp(
+                    stns[k].startup.sigma,
+                    stns[k + 1].startup.sigma,
+                    t
+                );
+            s->out_startup_Ys[i] = lerp(
+                    stns[k].startup.Ys,
+                    stns[k + 1].startup.Ys,
+                    t
+                );
+            s->out_startup_SF[i] = lerp(
+                    stns[k].startup.SF,
+                    stns[k + 1].startup.SF,
+                    t
+                );
             s->out_sigmah_pressure[i] = lerp(
                     stns[k].firing.sigmah_pressure,
                     stns[k + 1].firing.sigmah_pressure,
-                    t);
+                    t
+                );
             s->out_sigmah_thermal[i] = lerp(
                     stns[k].firing.sigmah_thermal,
                     stns[k + 1].firing.sigmah_thermal,
-                    t);
+                    t
+                );
             s->out_sigmah_bending[i] = lerp(
                     stns[k].firing.sigmah_bending,
                     stns[k + 1].firing.sigmah_bending,
-                    t);
+                    t
+                );
             s->out_sigmah[i] = lerp(
                     stns[k].firing.sigmah,
                     stns[k + 1].firing.sigmah,
-                    t);
+                    t
+                );
             s->out_sigmam[i] = lerp(
                     stns[k].firing.sigmam,
                     stns[k + 1].firing.sigmam,
-                    t);
+                    t
+                );
             s->out_sigma_vm[i] = lerp(
                     stns[k].firing.sigma_vm,
                     stns[k + 1].firing.sigma_vm,
-                    t);
+                    t
+                );
             s->out_Ys[i] = lerp(
                     stns[k].firing.Ys,
                     stns[k + 1].firing.Ys,
-                    t);
+                    t
+                );
             s->out_SF[i] = lerp(
                     stns[k].firing.SF,
                     stns[k + 1].firing.SF,
-                    t);
+                    t
+                );
         }
     }
 
@@ -368,6 +393,7 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
         s->export_helix_angle[i] = cnt_helix_angle(cnt, z);
         s->export_th_chnl[i] = cnt_th_chnl(cnt, z);
         s->export_psi_chnl[i] = cnt_psi_chnl(cnt, z);
+        s->export_th_iw[i] = cnt_th_iw(cnt, z);
     }
 }
 

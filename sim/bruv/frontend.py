@@ -36,6 +36,7 @@ def get_interpretation():
     interp.append("phi_div", interp.F64, OUT)
     interp.append("phi_exit", interp.F64, OUT)
 
+    interp.append("prop_fc", interp.F64, IN)
     interp.append("helix_angle", interp.F64, IN | OUT)
     interp.append("th_pdms", interp.F64, IN)
     interp.append("k_pdms", interp.F64, IN)
@@ -98,6 +99,8 @@ def get_interpretation():
     interp.append("out_ff_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_Re_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_Pr_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_startup_sigma", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_startup_Ys", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_startup_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_sigmah_pressure", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_sigmah_thermal", interp.PTR_F64, IN | interp.OUTPUT_DATA)
@@ -114,6 +117,7 @@ def get_interpretation():
     interp.append("export_helix_angle", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("export_th_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("export_psi_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("export_th_iw", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("target_Thrust", interp.F64, IN)
     interp.append("optimise_ofr", interp.I64, IN)
@@ -138,10 +142,11 @@ def get_state(interp):
     state["NLF"] = config["chamber"]["NLF"]
     state["phi_conv"] = config["chamber"]["phi_conv"]
 
+    state["prop_fc"] = 0.15
     state["helix_angle"] = math.radians(30)
     state["th_pdms"] = 30e-6
     state["k_pdms"] = 1.3
-    state["th_iw"] = 1.4e-3
+    state["th_iw"] = 1.1e-3
     state["th_ow"] = 3.5e-3
     state["no_chnl"] = 40
     state["th_chnl"] = 1.5e-3
@@ -183,6 +188,8 @@ def get_state(interp):
     state["out_ff_c"] = new_out()
     state["out_Re_c"] = new_out()
     state["out_Pr_c"] = new_out()
+    state["out_startup_sigma"] = new_out()
+    state["out_startup_Ys"] = new_out()
     state["out_startup_SF"] = new_out()
     state["out_sigmah_pressure"] = new_out()
     state["out_sigmah_thermal"] = new_out()
@@ -201,6 +208,7 @@ def get_state(interp):
     state["export_helix_angle"] = new_export()
     state["export_th_chnl"] = new_export()
     state["export_psi_chnl"] = new_export()
+    state["export_th_iw"] = new_export()
 
     state["target_Thrust"] = config["operating_conditions"]["Thrust"]
     state["optimise_ofr"] = 0
@@ -252,7 +260,7 @@ def write_ammendments(state):
 
     # TODO: element+fc placement?
 
-    mprop_fc = 0.15
+    mprop_fc = state["prop_fc"]
     dm_fc = mprop_fc * state["dm_fu"]
     DP_ipa = state["P_fu1"] - state["P0_cc"]
     rho_fu1 = state["out_rho_c"].view(state["out_count"])[0]
@@ -289,7 +297,6 @@ def write_ammendments(state):
             "phi_conv": state["phi_conv"],
             "phi_div": state["phi_div"],
             "phi_exit": state["phi_exit"],
-            "th_iw": state["th_iw"] * 1e3,
             "th_ow": state["th_ow"] * 1e3,
         },
         "injector" : {
@@ -303,36 +310,50 @@ def write_ammendments(state):
         f.write("\n") # trailing newline smile
 
 
-    def channels():
+    def chamber():
         get_export = lambda s: state[f"export_{s}"].view(state["export_count"])
 
         z = 1e3*get_export("z")
         helix_angle = get_export("helix_angle")
-        th = 1e3*get_export("th_chnl")
-        psi = 1e3*get_export("psi_chnl")
-
+        th_chnl = 1e3*get_export("th_chnl")
+        psi_chnl = 1e3*get_export("psi_chnl")
         # trim superfluous values.
         mask = np.zeros(len(z), dtype=bool)
-        mask[0] = mask[-1] = True  # always keep endpoints
-        for Y in (helix_angle, th, psi):
+        mask[0] = mask[-1] = True # always keep endpoints
+        for Y in (helix_angle, th_chnl, psi_chnl):
             mask[1:-1] |= (Y[:-2] != Y[2:])
         z = z[mask]
         helix_angle = helix_angle[mask]
-        th = th[mask]
-        psi = psi[mask]
-
-        return {
-            "channels": {
-                "no": state["no_chnl"],
-                "z": z.tolist(),
-                "helix_angle": helix_angle.tolist(),
-                "th": th.tolist(),
-                "psi": psi.tolist(),
-            }
+        th_chnl = th_chnl[mask]
+        psi_chnl = psi_chnl[mask]
+        channels = {
+            "no": state["no_chnl"],
+            "z": z.tolist(),
+            "helix_angle": helix_angle.tolist(),
+            "th": th_chnl.tolist(),
+            "psi": psi_chnl.tolist(),
         }
 
-    with open(paths.ROOT / "../config/channels.json", "w") as f:
-        json.dump(channels(), f, indent=None)
+        z = 1e3*get_export("z")
+        th_iw = 1e3*get_export("th_iw")
+        mask = np.zeros(len(z), dtype=bool)
+        mask[0] = mask[-1] = True
+        for Y in (th_iw,):
+            mask[1:-1] |= (Y[:-2] != Y[2:])
+        z = z[mask]
+        th_iw = th_iw[mask]
+        inner_wall = {
+            "z": z.tolist(),
+            "th": th_iw.tolist(),
+        }
+
+        return {
+            "channels": channels,
+            "inner_wall": inner_wall,
+        }
+
+    with open(paths.ROOT / "../config/chamber.json", "w") as f:
+        json.dump(chamber(), f, indent=None)
         f.write("\n") # trailing newline double smile
 
 
@@ -499,7 +520,7 @@ def plot_me(get_out):
     ax_comp.plot(z, 1e-6*g("sigmah_pressure"), color="steelblue",  label=r"$\sigma_{h,pressure}$",       **KW)
     ax_comp.plot(z, 1e-6*g("sigmah_thermal"),  color="crimson",    label=r"$\sigma_{h,thermal}$",       **KW)
     ax_comp.plot(z, 1e-6*g("sigmah_bending"),  color="darkorange", label=r"$\sigma_{h,bending}$",       **KW)
-    ax_comp.plot(z, 1e-6*g("sigmah"),          color="black",      label=r"$\sigma_{h,total}$", lw=2, ls="--")
+    ax_comp.plot(z, 1e-6*g("sigmah"),          color="grey",      label=r"$\sigma_{h,total}$", lw=2, ls="--")
     ax_comp.set_title("Hoop stress components")
     ax_comp.set_xlabel("z [mm]"); ax_comp.set_ylabel(r"$\sigma$ [MPa]")
     ax_comp.legend(); ax_comp.grid(alpha=0.4)
@@ -515,6 +536,29 @@ def plot_me(get_out):
 
     # ── Safety factor ─────────────────────────────────────────────────────────────
     ax_SF.plot(z, g("SF"), color="blue", **KW)
+    ax_SF.axhline(1.0, color="red", lw=1.2, ls="--")
+    ax_SF.set_title("Safety factor")
+    ax_SF.set_xlabel("z [mm]"); ax_SF.set_ylabel("SF [-]")
+    ax_SF.grid(alpha=0.4)
+
+
+
+
+    fig, axes = geez.new_plots("startup_structural", rows=1, cols=2,
+            fig_kw=dict(figsize=(13, 4)))
+    ax_comp, ax_SF = axes.flat
+
+    KW = dict(lw=1.6)
+
+    # ── Hoop stress components ────────────────────────────────────────────────────
+    ax_comp.plot(z, 1e-6*g("startup_sigma"),  color="darkorange", label=r"$\sigma_{h,bending}$",       **KW)
+    ax_comp.plot(z, 1e-6*g("startup_Ys"),             color="black",     label=r"$Y_s$", lw=2, ls="--")
+    ax_comp.set_title("Hoop stress components")
+    ax_comp.set_xlabel("z [mm]"); ax_comp.set_ylabel(r"$\sigma$ [MPa]")
+    ax_comp.legend(); ax_comp.grid(alpha=0.4)
+
+    # ── Safety factor ─────────────────────────────────────────────────────────────
+    ax_SF.plot(z, g("startup_SF"), color="blue", **KW)
     ax_SF.axhline(1.0, color="red", lw=1.2, ls="--")
     ax_SF.set_title("Safety factor")
     ax_SF.set_xlabel("z [mm]"); ax_SF.set_ylabel("SF [-]")

@@ -94,7 +94,7 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
         assert(cp_c > 0.0, "nonphysical property, cp_c: %g", cp_c);
         assert(mu_c > 0.0, "nonphysical property, mu_c: %g", mu_c);
         assert(k_c > 0.0, "nonphysical property, k_c: %g", k_c);
-        f64 dm_c = s->dm_fu * 1.1 /* TODO: film cooling */;
+        f64 dm_c = s->dm_fu * (1.0 + s->prop_fc);
         f64 G_c = dm_c/A_c;
         f64 vel_c = G_c/rho_c;
         f64 Re_c = G_c*HD_c/mu_c;
@@ -117,8 +117,7 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
             f64 A_coeff = 0.37;
             f64 a = 2.0 * Vg_Vd / f_friction;
             f64 b = Vg_Vd - 1.0;
-            /* TODO: film cooling */;
-            f64 dm_film = 0.1 * s->dm_fu;
+            f64 dm_film = s->prop_fc * s->dm_fu;
             f64 GcGg = dm_film / (dm_film + dm_g);
             f64 protected_T; {
                 f64 b_term  = pow(b, cpv_film/cp_g);

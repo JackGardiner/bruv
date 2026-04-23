@@ -86,7 +86,8 @@ void stress_sim(const simState* s, const Contour* cnt,
             f64 T = 20.0 + 273.15;
             f64 Ys = CuCr1Zr_Ys(T);
 
-            stns[i].startup.sigma = 0.5*P_c*sqed(wi_chnl/min(th_iw, th_ow));
+            stns[i].startup.sigma = 0.5*P_c*sqed(wi_chnl/th_iw);
+            stns[i].startup.Ys = Ys;
             stns[i].startup.SF = Ys / stns[i].startup.sigma;
         }
 
