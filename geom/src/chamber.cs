@@ -1456,18 +1456,26 @@ public class Chamber : TPIAP.Pea {
             cone = cone.lengthed(cone.Lz*extra, cone.Lz*extra);
             vox.BoolAdd(img.voxels_on_cone(cone, th + inset, -inset,
                     circum_offset: circum_offset));
-            keys.Add(Geez.cone(cone));
+            // keys.Add(Geez.cone(cone));
             keys.Add(Geez.voxels(vox));
         }
 
+        // add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
+        //         z0: cnt_z2, z1: cnt_z3, extra: 0.1f, circum_offset: -2.0f);
+        // add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
+        //         z0: cnt_z1 - 56f, z1: cnt_z1 - 11f, extra: 0.1f, circum_offset: -2.0f,
+        //         theta0: -PI_2);
         add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
-                z0: cnt_z2, z1: cnt_z3, extra: 0.1f, circum_offset: -2.0f);
+                z0: cnt_z1 - 58f, z1: cnt_z1 - 9f, extra: 0.1f, circum_offset: -1.0f,
+                theta0: -0.33f);
         add(fromroot("assets/unimelb_ccw.tga"), unimelb: true, flipy: true,
                 rot: ImageSignedDist.CCW,
-                z0: cnt_z1 - 26f, z1: cnt_z1 - 1f, extra: 0.1f);
+                z0: cnt_z1 - 26f, z1: cnt_z1 - 1f, extra: 0.1f,
+                theta0: 0.33f);
         add(fromroot("assets/csiro_ccw.tga"), flipy: true,
                 rot: ImageSignedDist.CCW,
-                z0: cnt_z1 - 66f, z1: cnt_z1 - 41f, extra: 0.1f);
+                z0: cnt_z1 - 66f, z1: cnt_z1 - 41f, extra: 0.1f,
+                theta0: 0.33f);
 
         key <<= Geez.group(keys);
         return vox;
@@ -1813,39 +1821,26 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        // Vec3 coneme(Vec3 p, float alpha, float ell) {
-        //     p.X += ell;
-        //     float rho = magxy(p);
-        //     float theta = argxy(p);
-        //     float t = p.Z;
-        //     return new(
-        //         (rho*sin(alpha) + t*cos(alpha))*cos(theta/sin(alpha)),
-        //         (rho*sin(alpha) + t*cos(alpha))*sin(theta/sin(alpha)),
-        //         t*sin(alpha) - rho*cos(alpha)
-        //     );
-        // }
-
-        // List<Vec3> points = [];
-        // for (float x=-1f; x<1.01f; x+=0.2f)
-        // for (float y=-1f; y<1.01f; y+=0.2f)
-        // for (float z=0f; z<0.11f; z+=0.0333f)
-        //     points.Add(new(x,y,z));
-
-        // Geez.points(points, COLOUR_RED, COLOUR_BLUE, r: 0.06f);
-        // Geez.points(points.Select((p)=>coneme(p, PI_4, 2f)).ToList(), COLOUR_RED, COLOUR_BLUE, r: 0.06f);
-
         Geez.frame(new(), size: 1f);
         Cone c1 = new(new Frame().rotyz(PI/3f), 8f, 6f, 6f);
         Cone c2 = new(new Frame().rotyz(PI/3f).transz(8f), 8f, 6f, 10f);
+        Cone c3 = new(new Frame().rotyz(PI/3f).transz(16f), 12f, 12f, 5f);
         Geez.cone(c1);
         Geez.cone(c2);
+        Geez.cone(c3);
 
-        ImageSignedDist img = new(fromroot("assets/slinky.tga"),
-                invert: true, flipy: true);
-        Voxels v1 = img.voxels_on_cone(c1, 0.5f);
+        ImageSignedDist img1 = new(fromroot("assets/J.tga"),
+                invert: true, flipy: true, rot: ImageSignedDist.Rot.CCW);
+        Voxels v1 = img1.voxels_on_cone(c1, 0.5f);
+        ImageSignedDist img2 = new(fromroot("assets/B.tga"),
+                invert: true, flipy: true, rot: ImageSignedDist.Rot.CCW);
+        Voxels v2 = img2.voxels_on_cone(c2, 0.3f);
+        ImageSignedDist img3 = new(fromroot("assets/S.tga"),
+                invert: true, flipy: true, rot: ImageSignedDist.Rot.CCW);
+        Voxels v3 = img3.voxels_on_cone(c3, 0.3f);
         Geez.voxels(v1);
-        Voxels v2 = img.voxels_on_cone(c2, 0.3f);
         Geez.voxels(v2);
+        Geez.voxels(v3);
     }
 
 
