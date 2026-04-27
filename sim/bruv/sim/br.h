@@ -608,7 +608,7 @@ vec4 fp_from_bits_vec4(i32x4 i);
 //      pointers.
 // - If `a` is a string literal, the count includes the null-terminator.
 // - Always returns >0.
-#define numel(x...) ( sizeof((x)) / sizeof(*(x)) )
+#define numel(x...) ( sizeof(objof(x)) / sizeof(*objof(x)) )
 
 
 

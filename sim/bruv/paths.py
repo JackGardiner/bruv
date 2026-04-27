@@ -245,6 +245,11 @@ APPROXIMATOR_OUTPUT = OUT / "approximator.txt"
 APPROXIMATOR_FIGS = OUT / "approximator_figs"
 APPROXIMATOR_TBLS = OUT / "tbl"
 
+DECI_EXE    = OUT / "deci.exe"
+DECI_PREPRO = OUT / "deci.i"
+DECI_DISAS  = OUT / "deci.s"
+DECI_OBJ    = OUT / "deci.o"
+
 
 PATHS_PY = BRUV / "paths.py"
 BUILD_PY = BRUV / "build.py"

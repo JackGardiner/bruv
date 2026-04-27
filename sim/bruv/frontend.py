@@ -155,8 +155,6 @@ def get_state(interp):
     state["Pr_fu"] = config["operating_conditions"]["Pr_IPA"]
     state["T_fu0"] = config["operating_conditions"]["T_IPA"]
 
-    dm_ox = config["operating_conditions"]["mdot_LOx"]
-    dm_fu = config["operating_conditions"]["mdot_IPA"]
     state["ofr"] = 1.4
     state["dm_cc"] = 2.152551267131888
     state["P_exit"] = config["operating_conditions"]["P_exit"]

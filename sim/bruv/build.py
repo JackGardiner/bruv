@@ -128,7 +128,14 @@ def _needa_bridge(deps, built): # same deal as _needa_sim
 
 
 
-def _gcc_cmd(extra_args=()):
+def _gcc_cmd(extra_args=(), out_paths=None, dynamic_lib=True):
+    if out_paths is None:
+        out_paths = {
+            "final": paths.SIM_LIB,
+            "prepro": paths.SIM_PREPRO,
+            "disas": paths.SIM_DISAS,
+            "obj": paths.SIM_OBJ,
+        }
 
     # gcc args used for compiling.
     comp_args = [
@@ -234,34 +241,37 @@ def _gcc_cmd(extra_args=()):
         "-fno-fp-int-builtin-inexact", # ngl ion get it.
     ]
 
-    # gcc args used for linking.
-    if sys.platform == "win32":
-        link_args = [
-            "-shared",
-            # need stubs for dyn linking on windows.
-            f"-Wl,--out-implib,{paths.SIM_STUBS}",
-        ]
-    elif sys.platform == "darwin":
-        link_args = [
-            "-dynamiclib",
-        ]
+    if dynamic_lib:
+        # gcc args used for linking.
+        if sys.platform == "win32":
+            link_args = [
+                "-shared",
+                # need stubs for dyn linking on windows.
+                f"-Wl,--out-implib,{paths.SIM_STUBS}",
+            ]
+        elif sys.platform == "darwin":
+            link_args = [
+                "-dynamiclib",
+            ]
+        else:
+            link_args = [
+                "-shared",
+            ]
     else:
-        link_args = [
-            "-shared",
-        ]
+        link_args = []
 
     # gcc args used for extra (pattern kinda breaks down here).
     extra_args = [arg.strip() for arg in extra_args if arg.strip()]
 
     # Default to compile+link.
     directive = []
-    out = paths.SIM_LIB
+    out = out_paths["final"]
 
     # Check for alternative directives.
     DIRECTIVE_ARGS = {
-        "-E": paths.SIM_PREPRO,
-        "-S": paths.SIM_DISAS,
-        "-c": paths.SIM_OBJ,
+        "-E": out_paths["prepro"],
+        "-S": out_paths["disas"],
+        "-c": out_paths["obj"],
     }
     given_directives = {arg: (arg in extra_args) for arg in DIRECTIVE_ARGS}
     extra_args = [arg for arg in extra_args if arg not in DIRECTIVE_ARGS]

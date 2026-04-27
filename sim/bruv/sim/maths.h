@@ -141,6 +141,13 @@
 // - `x` must be >=0.
 #define ispow2(x) ( (x) != 0 && ((x) & ((x) - 1)) == 0 )
 
+// Returns `x` rounded up to the next power-of-2.
+#define uptopow2(x) ( choose_int_1_(uptopow2, (x)) )
+i32 uptopow2_i32(i32 x);
+i64 uptopow2_i64(i64 x);
+u32 uptopow2_u32(u32 x);
+u64 uptopow2_u64(u64 x);
+
 
 // Returns the bits of `x` after circularly rotating `n` bits up/to the left.
 // - `n` may be zero, negative, and may exceed the number of bits in `x` (with
@@ -1135,6 +1142,19 @@ vec3 quat_apply(quat q, vec3 v);
         , genuinely_vec3: GLUE2(f, _vec3)   \
         ,           vec4: GLUE2(f, _vec4)   \
     ) (a)
+
+#define choose_int_1_(f, a)                 \
+    generic(a                               \
+        ,             i8: GLUE2(f, _i32)    \
+        ,            i16: GLUE2(f, _i32)    \
+        ,            i32: GLUE2(f, _i32)    \
+        ,            i64: GLUE2(f, _i64)    \
+        ,             u8: GLUE2(f, _u32)    \
+        ,            u16: GLUE2(f, _u32)    \
+        ,            u32: GLUE2(f, _u32)    \
+        ,            u64: GLUE2(f, _u64)    \
+    ) (a)
+
 
 #define choose_fp_1_(f, a)                  \
     generic(distinguish_vec3(a)             \
