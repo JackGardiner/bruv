@@ -6,37 +6,6 @@
 
 
 
-typedef f32 mat3[9]; // row-major 3x3 matrix.
-
-static f32 det3(mat3 m) {
-    return m[0] * (m[4]*m[8] - m[5]*m[7])
-         - m[1] * (m[3]*m[8] - m[5]*m[6])
-         + m[2] * (m[3]*m[7] - m[4]*m[6]);
-}
-
-static vec3 solve3x3(mat3 A, f32 B[3]) {
-    f32 det = det3(A);
-    if (abs(det) < 1e-6f)
-        return v3NAN;
-    mat3 Ax = {
-        B[0], A[1], A[2],
-        B[1], A[4], A[5],
-        B[2], A[7], A[8],
-    };
-    mat3 Ay = {
-        A[0], B[0], A[2],
-        A[3], B[1], A[5],
-        A[6], B[2], A[8],
-    };
-    mat3 Az = {
-        A[0], A[1], B[0],
-        A[3], A[4], B[1],
-        A[6], A[7], B[2],
-    };
-    return vec3(det3(Ax)/det, det3(Ay)/det, det3(Az)/det);
-}
-
-
 
 
 
@@ -45,9 +14,9 @@ static vec3 solve3x3(mat3 A, f32 B[3]) {
 //  [     q4  q5  q6  ]
 //  [         q7  q8  ]
 //  [             q9  ]
-typedef f32 Quadric[10];
+typedef f64 Quadric[10];
 
-typedef struct __attribute__((__aligned__(16))) Vertex  {
+typedef struct __attribute__((__aligned__(16))) Vertex {
     // Coordinates.
     union {
         /* coord-wise: */
@@ -66,7 +35,7 @@ typedef struct __attribute__((__aligned__(16))) Vertex  {
     // In current neighbour set?
     i32 in_neighbours;
 
-    i32 _; // padding.
+    i32 _[3]; // padding.
 } Vertex;
 
 
@@ -87,34 +56,89 @@ typedef struct __attribute__((__aligned__(16))) Tri {
 } Tri;
 
 
+
+typedef f64 mat3[9]; // row-major 3x3 matrix.
+
+static f64 det3(mat3 m) {
+    return m[0] * (m[4]*m[8] - m[5]*m[7])
+         - m[1] * (m[3]*m[8] - m[5]*m[6])
+         + m[2] * (m[3]*m[7] - m[4]*m[6]);
+}
+
+static void solve3x3(mat3 A, f64 B[rstr 3], f64 out[rstr 3]) {
+    f64 det = det3(A);
+    if (abs(det) < 1e-12) {
+        out[0] = NAN;
+        out[1] = NAN;
+        out[2] = NAN;
+        return;
+    }
+    mat3 Ax = {
+        B[0], A[1], A[2],
+        B[1], A[4], A[5],
+        B[2], A[7], A[8],
+    };
+    mat3 Ay = {
+        A[0], B[0], A[2],
+        A[3], B[1], A[5],
+        A[6], B[2], A[8],
+    };
+    mat3 Az = {
+        A[0], A[1], B[0],
+        A[3], A[4], B[1],
+        A[6], A[7], B[2],
+    };
+    out[0] = det3(Ax)/det;
+    out[1] = det3(Ay)/det;
+    out[2] = det3(Az)/det;
+}
+
 static void compute_quadric(Vertex* V, Tri* t) {
-    vec3 a = vec3_from_array(V[t->a].v);
-    vec3 b = vec3_from_array(V[t->b].v);
-    vec3 c = vec3_from_array(V[t->c].v);
+    f64 a[3] = {
+        V[t->a].x,
+        V[t->a].y,
+        V[t->a].z,
+    };
+    f64 b[3] = {
+        V[t->b].x,
+        V[t->b].y,
+        V[t->b].z,
+    };
+    f64 c[3] = {
+        V[t->c].x,
+        V[t->c].y,
+        V[t->c].z,
+    };
 
-    vec3 normal = cross(b - a, c - a);
-    f32 normal_mag = mag(normal);
-    if (nearzero(normal_mag))
+    f64 n[3] = {
+        (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+        (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+    };
+    f64 nn = n[0]*n[0] + n[1]*n[1] + n[2]*n[2];
+    if (abs(nn) < 1e-14)
         return; // leave quadric unchanged.
-    normal /= normal_mag;
+    f64 nmag = sqrt(nn);
+    n[0] /= nmag;
+    n[1] /= nmag;
+    n[2] /= nmag;
 
-    f32 d = -dot(normal, a);
-    vec4 p = vec4(normal, d);
+    f64 d = -(n[0]*a[0] + n[1]*a[1] + n[2]*a[2]);
 
     Quadric q;
-    q[0] = p[0]*p[0];
-    q[1] = p[0]*p[1];
-    q[2] = p[0]*p[2];
-    q[3] = p[0]*p[3];
+    q[0] = (f64)(n[0]*n[0]);
+    q[1] = (f64)(n[0]*n[1]);
+    q[2] = (f64)(n[0]*n[2]);
+    q[3] = (f64)(n[0]*d);
 
-    q[4] = p[1]*p[1];
-    q[5] = p[1]*p[2];
-    q[6] = p[1]*p[3];
+    q[4] = (f64)(n[1]*n[1]);
+    q[5] = (f64)(n[1]*n[2]);
+    q[6] = (f64)(n[1]*d);
 
-    q[7] = p[2]*p[2];
-    q[8] = p[2]*p[3];
+    q[7] = (f64)(n[2]*n[2]);
+    q[8] = (f64)(n[2]*d);
 
-    q[9] = p[3]*p[3];
+    q[9] = (f64)(   d*d);
 
     for (i32 i=0; i<numel(Quadric); ++i)
         V[t->a].q[i] += q[i];
@@ -124,7 +148,15 @@ static void compute_quadric(Vertex* V, Tri* t) {
         V[t->c].q[i] += q[i];
 }
 
-static vec4 optimal_collapse(const Vertex* V, i32 n, i32 m) {
+static f64 quadric_cost(Quadric q, f64 v[3]) {
+    f64 c = q[0]*v[0]*v[0] + 2*q[1]*v[0]*v[1] + 2*q[2]*v[0]*v[2] + 2*q[3]*v[0]
+                           +   q[4]*v[1]*v[1] + 2*q[5]*v[1]*v[2] + 2*q[6]*v[1]
+                                              +   q[7]*v[2]*v[2] + 2*q[8]*v[2]
+                                                                 +   q[9];
+    return max(0.0, c);
+}
+
+static f64 optimal_collapse(const Vertex* V, i32 n, i32 m, f32 vbar[rstr 3]) {
     // Find resultant quadric.
     Quadric q;
     for (i32 i=0; i<numel(Quadric); ++i)
@@ -136,26 +168,56 @@ static vec4 optimal_collapse(const Vertex* V, i32 n, i32 m) {
         q[1], q[4], q[5],
         q[2], q[5], q[7],
     };
-    f32 B[3] = {
+    f64 B[3] = {
         -q[3], -q[6], -q[8],
     };
-    vec3 v = solve3x3(A, B);
-    if (isnan(v)) {
-        v = vec3(
-            0.5f*(V[n].x + V[m].x),
-            0.5f*(V[n].y + V[m].y),
-            0.5f*(V[n].z + V[m].z)
-        );
+    f64 v[3];
+    solve3x3(A, B, v);
+
+    // If matrix is singular, pick the best of a few options.
+    if (isnan(v[0]) || isnan(v[1]) || isnan(v[2])) {
+        f64 v0[3] = {
+            V[n].x,
+            V[n].y,
+            V[n].z,
+        };
+        f64 v1[3] = {
+            0.5*V[n].x + 0.5*V[m].x,
+            0.5*V[n].y + 0.5*V[m].y,
+            0.5*V[n].z + 0.5*V[m].z,
+        };
+        f64 v2[3] = {
+            V[m].x,
+            V[m].y,
+            V[m].z,
+        };
+        f64 c0 = quadric_cost(q, v0);
+        f64 c1 = quadric_cost(q, v1);
+        f64 c2 = quadric_cost(q, v2);
+        if (c0 < min(c1, c2)) {
+            vbar[0] = v0[0];
+            vbar[1] = v0[1];
+            vbar[2] = v0[2];
+            return c0;
+        }
+        if (c2 < min(c0, c1)) {
+            vbar[0] = v2[0];
+            vbar[1] = v2[1];
+            vbar[2] = v2[2];
+            return c2;
+        }
+        vbar[0] = v1[0];
+        vbar[1] = v1[1];
+        vbar[2] = v1[2];
+        return c1;
     }
 
-    // Evaluate the quadric error at vbar:
-    f32 c = q[0]*v[0]*v[0] + 2*q[1]*v[0]*v[1] + 2*q[2]*v[0]*v[2] + 2*q[3]*v[0]
-                           +   q[4]*v[1]*v[1] + 2*q[5]*v[1]*v[2] + 2*q[6]*v[1]
-                                              +   q[7]*v[2]*v[2] + 2*q[8]*v[2]
-                                                                 +   q[9];
-
-    // Package return.
-    return vec4(v, c);
+    // Evaluate the quadric error at vbar.
+    vbar[0] = v[0];
+    vbar[1] = v[1];
+    vbar[2] = v[2];
+    f64 c = quadric_cost(q, v);
+    return c;
 }
 
 
@@ -216,7 +278,7 @@ typedef struct EdgeSet {
 } EdgeSet;
 
 
-UNUSED static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
+static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
     assert(ispow2(cap), "invalid capacity");
     i64 size = sizeof(SEdge) * cap;
     s->bkts = malloc(size);
@@ -229,13 +291,29 @@ UNUSED static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
         *out_size = size;
 }
 
+static void edgeset_free(EdgeSet* s) {
+    free(s->bkts);
+    s->bkts = NULL;
+    s->cap = 0;
+    s->count = 0;
+}
+
 UNUSED static void edgeset_clear(EdgeSet* s) {
     i64 size = sizeof(SEdge) * s->cap;
     memset(s->bkts, 0, size);
     s->count = 0;
 }
 
-UNUSED static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
+static i32 edgeset_get(const EdgeSet* s, i32 i, i32* rstr n, i32* rstr m) {
+    SEdge* edge = s->bkts + i;
+    if (sedge_secret(edge) == 0)
+        return 0;
+    *n = sedge_n(edge);
+    *m = sedge_m(edge);
+    return 1;
+}
+
+static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
     u64 key_hash = sedge_hash(n, m);
     i32 idx = key_hash & (s->cap - 1);
     i32 dist = 1;
@@ -249,7 +327,7 @@ UNUSED static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
     return -1;
 }
 
-UNUSED static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
+static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
     assert(s->count * 8 < s->cap * 7, "too full");
     SEdge* bkt = &(SEdge){0};
 
@@ -292,6 +370,86 @@ UNUSED static void edgeset_remove(EdgeSet* s, i32 idx) {
     }
     --s->count;
 }
+
+
+
+
+static i32 count_edges(const Tri* T, i32 Tcount) {
+    EdgeSet* edgeset = &(EdgeSet){0};
+    edgeset_init(edgeset, uptopow2(4*Tcount), NULL);
+
+    i32 Ecount = 0;
+    for (i32 t=0; t<Tcount; ++t) {
+        if (T[t].dead)
+            continue;
+        for (i32 i=0; i<3; ++i) {
+            i32 n = min(T[t].i[i % 3], T[t].i[(i + 1) % 3]);
+            i32 m = max(T[t].i[i % 3], T[t].i[(i + 1) % 3]);
+
+            if (edgeset_find(edgeset, n, m) >= 0)
+                continue;
+            edgeset_add(edgeset, n, m);
+            ++Ecount;
+        }
+    }
+
+    edgeset_free(edgeset);
+    return Ecount;
+}
+
+
+
+
+
+
+static i32 is_closed_mani(const Tri* T, i32 Tcount, i32 Ecount) {
+    EdgeSet* edgeset0 = &(EdgeSet){0};
+    EdgeSet* edgeset1 = &(EdgeSet){0};
+    edgeset_init(edgeset0, uptopow2(Ecount + Ecount/2), NULL);
+    edgeset_init(edgeset1, uptopow2(Ecount + Ecount/2), NULL);
+
+    for (i32 t=0; t<Tcount; ++t) {
+        if (T[t].dead)
+            continue;
+        for (i32 i=0; i<3; ++i) {
+            i32 n = min(T[t].i[i], T[t].i[(i + 1) % 3]);
+            i32 m = max(T[t].i[i], T[t].i[(i + 1) % 3]);
+
+            if (edgeset_find(edgeset0, n, m) < 0) {
+                edgeset_add(edgeset0, n, m);
+                continue;
+            }
+            if (edgeset_find(edgeset1, n, m) < 0) {
+                edgeset_add(edgeset1, n, m);
+                continue;
+            }
+            edgeset_free(edgeset0);
+            edgeset_free(edgeset1);
+            return 0; // non-manifold.
+        }
+    }
+
+    for (i32 i=0; i<edgeset0->cap; ++i) {
+        i32 n, m;
+        if (!edgeset_get(edgeset0, i, &n, &m))
+            continue;
+        if (edgeset_find(edgeset1, n, m) >= 0)
+            continue;
+        edgeset_free(edgeset0);
+        edgeset_free(edgeset1);
+        return 0; // non-watertight.
+    }
+
+    edgeset_free(edgeset0);
+    edgeset_free(edgeset1);
+    return 1;
+}
+
+
+
+
+
+
 
 
 typedef struct Neighbours {
@@ -438,7 +596,7 @@ static void indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
             swap(*bkt, i->bkts[idx]);
 
         i32 dist = hindex_secret(bkt);
-        assert(dist < lobits(SEDGE_COUNT_SECRET) - 1, "too clumped?");
+        assert(dist < lobits(HINDEX_COUNT_SECRET) - 1, "too clumped?");
         hindex_set_secret(bkt, dist + 1);
         idx = (idx + 1) & (i->cap - 1);
     }
@@ -468,7 +626,7 @@ static void indexer_remove(HeapqIndexer* i, i32 idx) {
 
 
 typedef struct HEdge {
-    f32 cost;
+    f64 cost;
     i32 n;
     i32 m;
 } HEdge;
@@ -601,6 +759,62 @@ static void heapq_remove(Heapq* h, i32 n, i32 m) {
 
 
 
+static i32 heapq_check(const Heapq* h) {
+
+    // Validate heap ordering.
+    for (i32 i=1; i<h->count; ++i) {
+        i32 p = heapq_parent(i);
+        if (heapq_lt(h->data + i, h->data + p))
+            return -1;
+    }
+
+    // Check indexer and Robin Hood invariants.
+    i32 idxr_count = 0;
+    for (i32 i=0; i<h->idxr.cap; ++i) {
+        const HIndex* bkt = h->idxr.bkts + i;
+        i32 secret = hindex_secret(bkt);
+        if (secret == 0)
+            continue;
+
+        ++idxr_count;
+
+        i32 n = hindex_n(bkt);
+        i32 m = hindex_m(bkt);
+        i32 idx = bkt->idx;
+
+        if (idx < 0 || idx >= h->count)
+            return -2;
+        if (h->data[idx].n != n || h->data[idx].m != m)
+            return -3;
+
+        // Check Robin Hood distance.
+        u64 ideal_idx = hindex_hash(n, m) & (h->idxr.cap - 1);
+        i32 expected_secret = ((i - ideal_idx) & (h->idxr.cap - 1)) + 1;
+        if (secret != expected_secret)
+            return -4;
+    }
+
+    if (idxr_count != h->idxr.count)
+        return -5;
+
+    // Check indexer is complete.
+    for (i32 i=0; i<h->count; ++i) {
+        i32 n = h->data[i].n;
+        i32 m = h->data[i].m;
+
+        i32 idxr_i = indexer_find(&h->idxr, n, m);
+        if (idxr_i < 0)
+            return -6;
+        if (h->idxr.bkts[idxr_i].idx != i)
+            return -7;
+    }
+
+    // Cheeky great success.
+    return 0;
+}
+
+
+
 
 // wrap in structs to prevent compiler thinking they're aliasing.
 typedef struct AdjTri { i32 _; } AdjTri;
@@ -694,6 +908,115 @@ static void adj_append(Adj* a, i32 add_it_here, i32 add_this) {
         v = adj_entry_next(a, v);
     i32 size = a->off[v + 1]._ - a->off[v]._;
     a->tri[a->off[v]._ + size - 1]._ = add_this;
+}
+
+
+typedef struct AdjIter {
+    Adj* a;
+    i32 v;
+    i32 i;
+    i32 count;
+} AdjIter;
+
+#define adj_iter(a, v) ( adj_iter_impl(&(AdjIter){0}, (a), (v)) )
+static AdjIter* adj_iter_impl(AdjIter* i, Adj* a, i32 v) {
+    i->a = a;
+    i->v = v;
+    i->i = 0;
+    i->count = adj_entry_count(a, v);
+    if (i->count <= 0)
+        i->v = -1; // instant end.
+    return i;
+}
+
+static i32 adj_end(AdjIter* i) {
+    return (i->v <= 0);
+}
+
+static void adj_next(AdjIter* i) {
+    assert(i->v >= 0, "dangling iter");
+    ++i->i;
+    while (i->i >= i->count) {
+        i->v = adj_entry_next(i->a, i->v);
+        if (i->v < 0)
+            return;
+        i->i = 0;
+        i->count = adj_entry_count(i->a, i->v);
+    }
+}
+
+static i32 adj_t(AdjIter* i) {
+    assert(i->v >= 0, "dangling iter");
+    return adj_entry_at(i->a, i->v, i->i);
+}
+
+#define adj_iterate(adj, start, itervar)                \
+        AdjIter* itervar = adj_iter((adj), (start));    \
+        !adj_end(itervar);                              \
+        adj_next(itervar)
+
+
+
+
+// Returns 1 if collapsing edge (n->m, merged at vbar) would flip any surviving
+// triangle, 0 if the collapse is geometrically safe.
+static i32 collapse_flips_triangle(const Vertex* V, const Tri* T, Adj* adj,
+        i32 n, i32 m, vec3 vbar) {
+
+    // We only need to inspect triangles adjacent to m, because those are
+    // the ones whose vertex `m` will move to `vbar`. Triangles only touching
+    // `n` already have `n` at its current position, which stays fixed for
+    // this flip test (n will be moved to vbar too, but its current neighbours
+    // have already been validated in a previous step - we re-validate them
+    // here as well to be safe).
+    //
+    // Walk the full adjacency chain for both n and m.
+    for (i32 root=0; root<2; ++root) {
+        i32 start = (root == 0) ? m : n;
+
+        for (adj_iterate(adj, start, it)) {
+            i32 t = adj_t(it);
+            if (T[t].dead)
+                continue;
+
+            // Triangles containing both are being killed.
+            i32 has_n = (T[t].a == n || T[t].b == n || T[t].c == n);
+            i32 has_m = (T[t].a == m || T[t].b == m || T[t].c == m);
+            if (has_n && has_m)
+                continue;
+
+            i32 moving = has_m ? m : n; // the vertex that will become vbar
+
+            // Collect the three current positions.
+            vec3 p[3];
+            for (i32 j=0; j<3; ++j)
+                p[j] = vec3_from_array(V[T[t].i[j]].v);
+
+            // Compute old normal.
+            vec3 old_normal = cross(p[1] - p[0], p[2] - p[0]);
+            f32 old_mag = mag(old_normal);
+            if (old_mag < 1e-7f)
+                continue;
+            old_normal /= old_mag;
+
+            // Substitute the moving vertex with vbar.
+            vec3 q[3];
+            for (i32 j=0; j<3; ++j)
+                q[j] = (T[t].i[j] == moving) ? vbar : p[j];
+
+            // Compute new normal.
+            vec3 new_normal = cross(q[1] - q[0], q[2] - q[0]);
+            f32 new_mag = mag(new_normal);
+            if (new_mag < 1e-7f)
+                return 1; // stop degen triangles.
+            new_normal /= new_mag;
+
+            // Check angle between normals.
+            if (dot(old_normal, new_normal) < 0.1f)
+                return 1;
+        }
+    }
+    return 0;
 }
 
 
@@ -1041,9 +1364,9 @@ static const char* subparse_i64(const char* s, i64* out) {
         return NULL;
 
     i32 has_digits = 0;
-    i32 sign = 0;
+    i32 sign = 1;
     if (*s == '-') {
-        sign = 1;
+        sign = -1;
         ++s;
     } else if (*s == '+') {
         ++s;
@@ -1168,15 +1491,19 @@ i32 main(i32 argc, char** argv) {
     Tri* T = mesh.T;
     i32 Vcount = mesh.Vcount;
     i32 Tcount = mesh.Tcount;
-    i32 Ecount = Vcount + Tcount - 2; // eulers formula for a closed shape.
+    i32 Ecount = count_edges(T, Tcount);
+    i32 closed_mani = is_closed_mani(T, Tcount, Ecount);
+
+    assert(closed_mani, "input mesh must be a closed manifold");
 
     printf("\n--- mesh stats (input) ---");
     printf("\nvertex count  = "); print_numba(Vcount, 0);
     printf("\ntri count     = "); print_numba(Tcount, 0);
     printf("\nedge count    = "); print_numba(Ecount, 0);
+    printf("\neuler char.   = %3d", Vcount - Ecount + Tcount);
+    printf("\nclosed mani.  = %3d", closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(Tcount), 1);
     printf("\n");
-
 
     printf("\n--- allocations ---");
     i64 size_vertex = Vcount * sizeof(Vertex);
@@ -1198,7 +1525,7 @@ i32 main(i32 argc, char** argv) {
     Heapq* heap = &(Heapq){0};
     i64 size_heap_bkts;
     i64 size_heap_idxr;
-    heapq_init(heap, Ecount, &size_heap_bkts, &size_heap_idxr);
+    heapq_init(heap, min(3*Tcount, 3*Vcount), &size_heap_bkts, &size_heap_idxr);
     printf("\nheap bkts   = "); print_numba(size_heap_bkts, 1);
     printf("\nheap idxr   = "); print_numba(size_heap_idxr, 1);
 
@@ -1206,7 +1533,7 @@ i32 main(i32 argc, char** argv) {
     // Setup neighbours set.
     Neighbours* neighbours = &(Neighbours){0};
     i64 size_neighbours;
-    neighbours_init(neighbours, 100 * 1000, &size_neighbours);
+    neighbours_init(neighbours, max(1000, Ecount/10), &size_neighbours);
     printf("\nneighbours  = "); print_numba(size_neighbours, 1);
 
 
@@ -1239,8 +1566,8 @@ i32 main(i32 argc, char** argv) {
         for (i32 i=0; i<3; ++i) {
             i32 n = min(T[t].i[i], T[t].i[(i + 1) % 3]);
             i32 m = max(T[t].i[i], T[t].i[(i + 1) % 3]);
-            vec4 vbar_cost = optimal_collapse(V, n, m);
-            HEdge edge = { vbar_cost[3], n, m };
+            f64 cost = optimal_collapse(V, n, m, (f32[3]){0});
+            HEdge edge = { cost, n, m };
             heapq_push(heap, &edge);
         }
     }
@@ -1275,13 +1602,20 @@ i32 main(i32 argc, char** argv) {
         if (V[n].dead || V[m].dead)
             continue;
 
-        vec4 vbar_cost = optimal_collapse(V, n, m);
+        f32 vbar[3];
+        (void)optimal_collapse(V, n, m, vbar);
+
+
+        // If this would flip a triangle, dont do it.
+        if (collapse_flips_triangle(V, T, adj, n, m, vec3_from_array(vbar)))
+            continue;
+
 
         // Overwrite index `n` with the new optimal position and mark `m` dead.
 
-        V[n].x = vbar_cost[0];
-        V[n].y = vbar_cost[1];
-        V[n].z = vbar_cost[2];
+        V[n].x = vbar[0];
+        V[n].y = vbar[1];
+        V[n].z = vbar[2];
         for (i32 i=0; i<numel(Quadric); ++i)
             V[n].q[i] += V[m].q[i];
 
@@ -1289,33 +1623,30 @@ i32 main(i32 argc, char** argv) {
 
         // Kill faces containing both `n` and `m`, and update faces containing
         // `m` to point to `n`.
-        for (i32 adj_v = m; adj_v >= 0; adj_v = adj_entry_next(adj, adj_v)) {
-            i32 entry_count = adj_entry_count(adj, adj_v);
-            for (i32 i=0; i<entry_count; ++i) {
-                i32 t = adj_entry_at(adj, adj_v, i);
-                if (T[t].dead)
-                    continue;
+        for (adj_iterate(adj, m, it)) {
+            i32 t = adj_t(it);
+            if (T[t].dead)
+                continue;
 
-                // Contains both, kill.
-                if (n == T[t].a || n == T[t].b || n == T[t].c) {
-                    T[t].dead = 1;
-                    --active;
-                }
-                // Else point to `n`.
-                else {
-                    for (i32 j=0; j<3; ++j) {
-                        if (T[t].i[j] == m) {
-                            T[t].i[j] = n;
-                            i32 jj = (j + 1) % 3;
-                            i32 jjj = (j + 2) % 3;
-                            i32 nn = min(m, T[t].i[jj]);
-                            i32 mm = max(m, T[t].i[jj]);
-                            heapq_remove(heap, nn, mm);
-                            nn = min(m, T[t].i[jjj]);
-                            mm = max(m, T[t].i[jjj]);
-                            heapq_remove(heap, nn, mm);
-                            break;
-                        }
+            // Contains both, kill.
+            if (n == T[t].a || n == T[t].b || n == T[t].c) {
+                T[t].dead = 1;
+                --active;
+            }
+            // Else point to `n`.
+            else {
+                for (i32 j=0; j<3; ++j) {
+                    if (T[t].i[j] == m) {
+                        T[t].i[j] = n;
+                        i32 jj = (j + 1) % 3;
+                        i32 jjj = (j + 2) % 3;
+                        i32 nn = min(m, T[t].i[jj]);
+                        i32 mm = max(m, T[t].i[jj]);
+                        heapq_remove(heap, nn, mm);
+                        nn = min(m, T[t].i[jjj]);
+                        mm = max(m, T[t].i[jjj]);
+                        heapq_remove(heap, nn, mm);
+                        break;
                     }
                 }
             }
@@ -1327,21 +1658,18 @@ i32 main(i32 argc, char** argv) {
 
         // Recompute edges touching `n`.
 
-        for (i32 adj_v = n; adj_v >= 0; adj_v = adj_entry_next(adj, adj_v)) {
-            i32 entry_count = adj_entry_count(adj, adj_v);
-            for (i32 i=0; i<entry_count; ++i) {
-                i32 t = adj_entry_at(adj, adj_v, i);
-                if (T[t].dead)
-                    continue;
+        for (adj_iterate(adj, n, it)) {
+            i32 t = adj_t(it);
+            if (T[t].dead)
+                continue;
 
-                for (i32 j=0; j<3; ++j) {
-                    i32 v = T[t].i[j];
-                    if (V[v].dead)
-                        continue;
-                    if (v == n)
-                        continue;
-                    neighbours_add(neighbours, V, v);
-                }
+            for (i32 j=0; j<3; ++j) {
+                i32 v = T[t].i[j];
+                if (V[v].dead)
+                    continue;
+                if (v == n)
+                    continue;
+                neighbours_add(neighbours, V, v);
             }
         }
 
@@ -1349,8 +1677,8 @@ i32 main(i32 argc, char** argv) {
             i32 neighbour = neighbours_pop(neighbours, V);
             i32 nn = min(n, neighbour);
             i32 mm = max(n, neighbour);
-            vec4 vbar_cost = optimal_collapse(V, nn, mm);
-            HEdge edge = { vbar_cost[3], nn, mm };
+            f64 cost = optimal_collapse(V, nn, mm, (f32[3]){0});
+            HEdge edge = { cost, nn, mm };
             heapq_push(heap, &edge);
         }
     }
@@ -1360,12 +1688,14 @@ i32 main(i32 argc, char** argv) {
     for (i32 v=0; v<Vcount; ++v)
         new_Vcount += !V[v].dead;
     i32 new_Tcount = active; // we "happened" to already be tracking it.
-    i32 new_Ecount = new_Vcount + new_Tcount - 2;
+    i32 new_Ecount = count_edges(T, Tcount);
 
     printf("\n--- mesh stats (output) ---");
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
+    printf("\neuler char.   = %3d", new_Vcount - new_Ecount + new_Tcount);
+    printf("\nclosed mani.  = %3d", is_closed_mani(T, Tcount, new_Ecount));
     printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
     printf("\n               (%6.2f %% )", file_size_percent);

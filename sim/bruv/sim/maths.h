@@ -810,7 +810,7 @@ vec2 normalise_vec2(vec2 v);
 vec3 normalise_vec3(vec3 v);
 vec4 normalise_vec4(vec4 v);
 // Specialisation of `normalise` to return zero if `v` is zero.
-#define normalise_nonzero(v) ( choose_fp_1_(normalise_nonzero_, (v)) )
+#define normalise_nonzero(v) ( choose_fp_1_(normalise_nonzero, (v)) )
 f64 normalise_nonzero_f64(f64 v);
 f32 normalise_nonzero_f32(f32 v);
 vec2 normalise_nonzero_vec2(vec2 v);
