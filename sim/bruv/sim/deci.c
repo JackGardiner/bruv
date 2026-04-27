@@ -63,11 +63,15 @@ typedef struct __attribute__((__aligned__(16))) Vertex  {
     i32 dead;
     // Quadric.
     Quadric q;
-    f32 __[2]; // padding.
+    // In current neighbour set?
+    i32 in_neighbours;
+
+    i32 _; // padding.
 } Vertex;
 
 
 typedef struct __attribute__((__aligned__(16))) Tri {
+    // Three vertex indices.
     union {
         /* vertex-wise: */
         struct {
@@ -78,6 +82,7 @@ typedef struct __attribute__((__aligned__(16))) Tri {
         /* arrayed: */
         i32 i[3];
     };
+    // Is active?
     i32 dead;
 } Tri;
 
@@ -211,7 +216,7 @@ typedef struct EdgeSet {
 } EdgeSet;
 
 
-static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
+UNUSED static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
     assert(ispow2(cap), "invalid capacity");
     i64 size = sizeof(SEdge) * cap;
     s->bkts = malloc(size);
@@ -224,13 +229,13 @@ static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
         *out_size = size;
 }
 
-static void edgeset_clear(EdgeSet* s) {
+UNUSED static void edgeset_clear(EdgeSet* s) {
     i64 size = sizeof(SEdge) * s->cap;
     memset(s->bkts, 0, size);
     s->count = 0;
 }
 
-static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
+UNUSED static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
     u64 key_hash = sedge_hash(n, m);
     i32 idx = key_hash & (s->cap - 1);
     i32 dist = 1;
@@ -244,7 +249,7 @@ static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
     return -1;
 }
 
-static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
+UNUSED static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
     assert(s->count * 8 < s->cap * 7, "too full");
     SEdge* bkt = &(SEdge){0};
 
@@ -293,33 +298,32 @@ typedef struct Neighbours {
     i32* v;
     i32 cap;
     i32 count;
-    EdgeSet edgeset;
 } Neighbours;
 
-static void neighbours_init(Neighbours* n, i32 cap, i64* rstr out_list_size,
-        i64* rstr out_set_size) {
+static void neighbours_init(Neighbours* n, i32 cap, i64* rstr out_size) {
     i64 size = sizeof(*n->v) * cap;
     n->v = malloc(size);
     assert(n->v, "allocation failure");
     n->cap = cap;
     n->count = 0;
-    edgeset_init(&n->edgeset, 2*cap, out_set_size);
 
-    if (out_list_size)
-        *out_list_size = size;
+    if (out_size)
+        *out_size = size;
 }
 
-static void neighbours_clear(Neighbours* n) {
-    n->count = 0;
-    edgeset_clear(&n->edgeset);
-}
-
-static void neighbours_add(Neighbours* n, i32 v) {
+static void neighbours_add(Neighbours* n, Vertex* V, i32 v) {
     assert(n->count < n->cap, "full neighbours");
-    if (edgeset_find(&n->edgeset, v, 0) >= 0)
+    if (V[v].in_neighbours)
         return;
-    edgeset_add(&n->edgeset, v, 0);
+    V[v].in_neighbours = 1;
     n->v[n->count++] = v;
+}
+
+static i32 neighbours_pop(Neighbours* n, Vertex* V) {
+    assert(n->count > 0, "empty neighbours");
+    i32 v = n->v[--n->count];
+    V[v].in_neighbours = 0;
+    return v;
 }
 
 
@@ -575,6 +579,27 @@ static void heapq_pop(Heapq* h, HEdge* out) {
     }
 }
 
+static void heapq_remove(Heapq* h, i32 n, i32 m) {
+    i32 idxr_i = indexer_find(&h->idxr, n, m);
+    if (idxr_i < 0) // ignore if not present.
+        return;
+
+    i32 i = h->idxr.bkts[idxr_i].idx;
+    indexer_remove(&h->idxr, idxr_i);
+
+    --h->count;
+    if (i < h->count) {
+        h->data[i] = h->data[h->count];
+
+        i32 idxr_j = indexer_find(&h->idxr, h->data[i].n, h->data[i].m);
+        assert(idxr_j >= 0, "not in idxr?");
+        h->idxr.bkts[idxr_j].idx = i;
+        heapq_sift_up(h, i);
+        heapq_sift_down(h, i);
+    }
+}
+
+
 
 
 // wrap in structs to prevent compiler thinking they're aliasing.
@@ -675,19 +700,19 @@ static void adj_append(Adj* a, i32 add_it_here, i32 add_this) {
 
 
 
-typedef struct EntryPoint {
+typedef struct InternedPoint {
     f32 x;
     f32 y;
     f32 z;
     i32 idx; // index into V. <0 if empty.
-} EntryPoint;
+} InternedPoint;
 
 typedef struct Mesh {
     Vertex* V;
     Tri* T;
     i32 Vcount;
     i32 Tcount;
-    EntryPoint* pset;
+    InternedPoint* pset;
     u64 pset_cap;
 } Mesh;
 
@@ -724,7 +749,7 @@ static i32 point_intern(Mesh* m, f32 x, f32 y, f32 z) {
         h = (h + 1) & (m->pset_cap - 1);
     }
     i32 idx = m->Vcount++;
-    m->pset[h] = (EntryPoint){ x, y, z, idx };
+    m->pset[h] = (InternedPoint){ x, y, z, idx };
     memset(m->V + idx, 0, sizeof(Vertex));
     m->V[idx].x = x;
     m->V[idx].y = y;
@@ -742,7 +767,11 @@ typedef struct STLTriangle {
 
 enum { STL_TRI_SIZE = 50 };
 
-static void read_stl(Mesh* m, const char* path) {
+static i64 stl_size(i32 Tcount) {
+    return 84 + ((i64)50) * Tcount;
+}
+
+static void read_stl(Mesh* m, const char* rstr path) {
     FILE* f = fopen(path, "rb");
     assert(f, "file open failure");
 
@@ -757,7 +786,7 @@ static void read_stl(Mesh* m, const char* path) {
     m->pset_cap = 1;
     while (m->pset_cap < 6*m->Tcount) // worst-case 50% loading.
         m->pset_cap <<= 1;
-    m->pset = malloc(sizeof(EntryPoint) * m->pset_cap);
+    m->pset = malloc(sizeof(InternedPoint) * m->pset_cap);
     assert(m->pset, "allocation failure");
 
     // Initialise vertex set to empty.
@@ -804,7 +833,7 @@ static void read_stl(Mesh* m, const char* path) {
 }
 
 
-static void write_stl(const Mesh* m, const char* path) {
+static void write_stl(const Mesh* m, const char* rstr path) {
     FILE* f = fopen(path, "wb");
     assert(f, "file open failure");
 
@@ -854,6 +883,124 @@ static void write_stl(const Mesh* m, const char* path) {
 
 
 
+enum { TIMER_STRING_SIZE = 2+1+2+1+2+1+1 };
+static void timer_string(char* rstr buf, f64 seconds) {
+    i32 sec = (i32)seconds;
+    i32 h = sec / 3600;
+    i32 m = (sec % 3600) / 60;
+    i32 s = sec % 60;
+    i32 ms = (i32)(seconds * 1e3) % 1000;
+    if (h > 99) {
+        h = 99;
+        m = 59;
+        s = 59;
+        ms = 999;
+    }
+    sprintf(buf, "%02d:%02d:%02d.%01d", h, m, s, ms / 100);
+}
+
+#ifndef __WIN32__
+static void timer_init(void) { /* nothing */ }
+static f64 timer_now(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (f64)ts.tv_sec + 1e-9 * (f64)ts.tv_nsec;
+}
+#else
+// windows function expose without the import cause fuck that.
+__declspec(dllimport) i32 __stdcall QueryPerformanceCounter(i64* count);
+__declspec(dllimport) i32 __stdcall QueryPerformanceFrequency(i64* freq);
+static f64 timer_frequency_;
+static void timer_init(void) {
+    i64 freq;
+    assert(QueryPerformanceFrequency(&freq), "failed");
+    timer_frequency_ = (f64)freq;
+}
+static f64 timer_now(void) {
+    i64 count;
+    assert(QueryPerformanceCounter(&count), "failed");
+    return (f64)count / timer_frequency_;
+}
+#endif
+
+
+
+
+typedef struct ProgressBar {
+    f64 start_time;
+    i32 total;
+    i32 freq;
+    i32 last;
+} ProgressBar;
+
+enum { PROGRESS_BAR_WIDTH = 20 };
+
+static void progressbar_init(ProgressBar* pb, i32 total, i32 touchpoints) {
+    pb->start_time = timer_now();
+    pb->total = total;
+    pb->freq = max(1, (i32)(total / (f64)touchpoints));
+    pb->last = -1;
+}
+
+static void progressbar_update(ProgressBar* pb, i32 curr) {
+    if ((curr % pb->freq) != 0)
+        return;
+    if (curr == pb->last)
+        return;
+    pb->last = curr;
+    assert(curr <= pb->total, "progress bar overflow");
+
+    f64 elapsed = timer_now() - pb->start_time;
+    f64 percent = (f64)curr / pb->total;
+    i32 pos = (i32)(PROGRESS_BAR_WIDTH * percent);
+
+    // Calculate ETA.
+    f64 eta = 0.0;
+    if (curr > 0) {
+        f64 rate = (elapsed > 0.0) ? curr / elapsed : +INF;
+        eta = (rate > 0.0) ? pb->total / rate : +INF;
+    }
+
+    char elapsed_str[TIMER_STRING_SIZE + 1];
+    char eta_str[TIMER_STRING_SIZE + 1];
+    timer_string(elapsed_str, elapsed);
+    timer_string(eta_str, eta);
+
+    // Print the bar.
+    printf("\r[");
+    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i) {
+        if (i < pos)
+            putchar('=');
+        else if (i == pos)
+            putchar('>');
+        else
+            putchar(' ');
+    }
+
+    printf("] %5.1f%% | elapsed: %s | eta: %s", 100.0*percent, elapsed_str,
+            eta_str);
+    fflush(stdout);
+}
+
+static void progressbar_finish(ProgressBar* pb) {
+    f64 elapsed = timer_now() - pb->start_time;
+    char elapsed_str[TIMER_STRING_SIZE + 1];
+    timer_string(elapsed_str, elapsed);
+
+    printf("\r[");
+    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i)
+        putchar('=');
+
+    printf("] 100.0%% | elapsed: %s        ", elapsed_str);
+    for (i32 i=0; i<TIMER_STRING_SIZE; ++i)
+        putchar(' ');
+
+    printf("\n");
+    fflush(stdout);
+}
+
+
+
 static void print_numba(i64 value, i32 use_binary) {
     const char* suffixes[] = {"", "k", "M", "G", "T"};
     f64 base = use_binary ? 1024.0 : 1000.0;
@@ -875,6 +1022,106 @@ static void print_numba(i64 value, i32 use_binary) {
         printf("B");
 }
 
+static i32 is_space(char c) {
+    return c == ' '
+        || c == '\t'
+        || c == '\n'
+        || c == '\r'
+        || c == '\v'
+        || c == '\f';
+}
+static i32 is_digit(char c) {
+    return '0' <= c && c <= '9';
+}
+
+static const char* subparse_i64(const char* s, i64* out) {
+    *out = 0;
+
+    if (!s || *s == '\0')
+        return NULL;
+
+    i32 has_digits = 0;
+    i32 sign = 0;
+    if (*s == '-') {
+        sign = 1;
+        ++s;
+    } else if (*s == '+') {
+        ++s;
+    }
+    for (; *s != '\0' && is_digit(*s); ++s) {
+        i32 digit = *s - '0';
+        if (mul_overflow(*out, *out, 10))
+            return NULL;
+        *out *= 10;
+        if (add_overflow(*out, *out, digit))
+            return NULL;
+        *out += digit;
+        has_digits = 1;
+    }
+
+    if (!has_digits)
+        return NULL;
+
+    if (mul_overflow(*out, *out, sign))
+        return 0;
+    *out *= sign;
+
+    return s;
+}
+
+static f64 parse_f64(const char* s) {
+    if (!s || *s == '\0')
+        return NAN;
+
+    while (is_space(*s))
+        ++s;
+
+    i32 has_digits = 0;
+    i32 has_dot = 0;
+
+    f64 value = 0.0;
+    f64 divisor = 1.0;
+    f64 sci = 1.0;
+
+    for (; *s != '\0' && !is_space(*s); ++s) {
+        if (is_digit(*s)) {
+            i32 digit = *s - '0';
+            if (!has_dot) {
+                value *= 10.0;
+                value += digit;
+            } else {
+                divisor *= 10.0;
+                value += digit / divisor;
+            }
+            has_digits = 1;
+        } else if (*s == '.') {
+            if (has_dot)
+                return NAN;
+            has_dot = 1;
+        } else if (*s == 'e' || *s == 'E') {
+            i64 exp;
+            s = subparse_i64(s + 1, &exp);
+            if (!s)
+                return NAN;
+            sci = pow(10.0, exp);
+            break;
+        } else
+            return NAN;
+    }
+    while (is_space(*s))
+        ++s;
+    if (*s != '\0')
+        return NAN;
+
+    if (!has_digits)
+        return NAN;
+
+    value *= sci;
+
+    // allow inf returns.
+    return value;
+}
+
 
 __attribute((__hot__))
 i32 main(i32 argc, char** argv);
@@ -882,21 +1129,41 @@ i32 main(i32 argc, char** argv) {
     if (assertion_has_failed()) {
         const char* msg = assertion_message();
         msg += numel("ERROR, ") - 1;
-        printf("error: %s\n", msg);
+        printf("\nerror: %s\n", msg);
         return 1;
     }
 
-    assert(argc == 3, "usage: deci <input.stl> <output.stl>");
-    printf("decimating mesh...\n");
-    printf("   in: %s\n", argv[1]);
-    printf("  out: %s\n", argv[2]);
+    timer_init();
 
-    const f32 CUTOFF_COST = 1e-3f;
+
+    assert(argc == 4 || argc == 5,
+            "usage: deci <input.stl> <output.stl> <final size proportion> "
+                        "[max cutoff cost]");
+    const char* path_in = argv[1];
+    const char* path_out = argv[2];
+    f64 reduction = parse_f64(argv[3]);
+    assert(notnan(reduction), "failed to parse final size");
+    assert(0.0 < reduction && reduction < 1.0, "invalid final size "
+                                               "(must be >0 and <1)");
+    f64 cutoff_cost = (argc > 4) ? parse_f64(argv[4]) : +INF;
+    assert(notnan(cutoff_cost), "failed to parse cutoff cost");
+
+    printf("decimating mesh...\n");
+    if (isinf(cutoff_cost)) {
+        printf("         in: %s\n", path_in);
+        printf("        out: %s\n", path_out);
+        printf("  reduction: %.2f %%\n", 100.0*reduction);
+    } else {
+        printf("           in: %s\n", path_in);
+        printf("          out: %s\n", path_out);
+        printf("    reduction: %.2f %%\n", 100.0*reduction);
+        printf("  cutoff cost: %.4g\n", cutoff_cost);
+    }
 
 
     // Read da mesh.
     Mesh mesh;
-    read_stl(&mesh, argv[1]);
+    read_stl(&mesh, path_in);
     Vertex* V = mesh.V;
     Tri* T = mesh.T;
     i32 Vcount = mesh.Vcount;
@@ -907,14 +1174,15 @@ i32 main(i32 argc, char** argv) {
     printf("\nvertex count  = "); print_numba(Vcount, 0);
     printf("\ntri count     = "); print_numba(Tcount, 0);
     printf("\nedge count    = "); print_numba(Ecount, 0);
+    printf("\nfile size     = "); print_numba(stl_size(Tcount), 1);
     printf("\n");
 
 
     printf("\n--- allocations ---");
     i64 size_vertex = Vcount * sizeof(Vertex);
     i64 size_index = Tcount * sizeof(Tri);
-    printf("\nvertex           = "); print_numba(size_vertex, 1);
-    printf("\nindex            = "); print_numba(size_index, 1);
+    printf("\nvertex      = "); print_numba(size_vertex, 1);
+    printf("\nindex       = "); print_numba(size_index, 1);
 
 
     // Setup adjacency lists.
@@ -922,67 +1190,81 @@ i32 main(i32 argc, char** argv) {
     i64 size_adj_tri;
     i64 size_adj_off;
     adj_init(adj, T, Vcount, Tcount, &size_adj_tri, &size_adj_off);
-    printf("\nadj tri          = "); print_numba(size_adj_tri, 1);
-    printf("\nadj off          = "); print_numba(size_adj_off, 1);
+    printf("\nadj tri     = "); print_numba(size_adj_tri, 1);
+    printf("\nadj off     = "); print_numba(size_adj_off, 1);
 
 
     // Setup edge heap.
     Heapq* heap = &(Heapq){0};
     i64 size_heap_bkts;
     i64 size_heap_idxr;
-    heapq_init(heap, 2*Ecount, &size_heap_bkts, &size_heap_idxr);
-    printf("\nheap bkts        = "); print_numba(size_heap_bkts, 1);
-    printf("\nheap idxr        = "); print_numba(size_heap_idxr, 1);
+    heapq_init(heap, Ecount, &size_heap_bkts, &size_heap_idxr);
+    printf("\nheap bkts   = "); print_numba(size_heap_bkts, 1);
+    printf("\nheap idxr   = "); print_numba(size_heap_idxr, 1);
 
 
     // Setup neighbours set.
     Neighbours* neighbours = &(Neighbours){0};
-    i64 size_neighbours_list;
-    i64 size_neighbours_set;
-    neighbours_init(neighbours, 65536, &size_neighbours_list,
-            &size_neighbours_set);
-    printf("\nneighbours list  = "); print_numba(size_neighbours_list, 1);
-    printf("\nneighbours set   = "); print_numba(size_neighbours_set, 1);
+    i64 size_neighbours;
+    neighbours_init(neighbours, 100 * 1000, &size_neighbours);
+    printf("\nneighbours  = "); print_numba(size_neighbours, 1);
 
 
 
-    printf("\nTOTAL            = "); print_numba((i64)0
+    printf("\nTOTAL       = "); print_numba((i64)0
         + size_vertex + size_index
         + size_adj_tri + size_adj_off
         + size_heap_bkts + size_heap_idxr
-        + size_neighbours_list + size_neighbours_set
+        + size_neighbours
         , 1);
     printf("\n");
-    printf("\nallocations complete.\n");
 
-    printf("\ninitial edge pass...\n");
 
     // Compute initial quadrics.
-    for (i32 i=0; i<Tcount; ++i)
-        compute_quadric(V, T + i);
+    printf("\ninitial quadrics:\n");
+    ProgressBar* pb_quadrics = &(ProgressBar){0};
+    progressbar_init(pb_quadrics, Tcount, 10);
+    for (i32 t=0; t<Tcount; ++t) {
+        progressbar_update(pb_quadrics, t);
+        compute_quadric(V, T + t);
+    }
+    progressbar_finish(pb_quadrics);
 
     // Find cost of all edges.
-    for (i32 i=0; i<Tcount; ++i) {
-        for (i32 j=0; j<3; ++j) {
-            i32 n = min(T[i].i[j], T[i].i[(j + 1) % 3]);
-            i32 m = max(T[i].i[j], T[i].i[(j + 1) % 3]);
+    printf("\ninitial edge costs:\n");
+    ProgressBar* pb_initial_edge = &(ProgressBar){0};
+    progressbar_init(pb_initial_edge, Tcount, 10);
+    for (i32 t=0; t<Tcount; ++t) {
+        progressbar_update(pb_initial_edge, t);
+        for (i32 i=0; i<3; ++i) {
+            i32 n = min(T[t].i[i], T[t].i[(i + 1) % 3]);
+            i32 m = max(T[t].i[i], T[t].i[(i + 1) % 3]);
             vec4 vbar_cost = optimal_collapse(V, n, m);
             HEdge edge = { vbar_cost[3], n, m };
             heapq_push(heap, &edge);
         }
     }
+    progressbar_finish(pb_initial_edge);
 
-    printf("popping edges...\n");
 
     // Pop edges.
-    i32 limit = max(1, Tcount / 20);
+    i32 limit = max(3 /* closed solid */, Tcount * reduction);
     i32 active = Tcount;
+    printf("\nprimary edge popping:\n");
+
+    ProgressBar* pb_edge = &(ProgressBar){0};
+    // https://www.desmos.com/calculator/8xkwvol4j6
+    i32 pb_edge_touchpoints = (i32)(1.0 + 0.36332*sqrt((f64)(active - limit)));
+    pb_edge_touchpoints = min(max(pb_edge_touchpoints, 5), 300);
+    progressbar_init(pb_edge, active - limit, pb_edge_touchpoints);
     while ((active > limit) && (heap->count > 0)) {
+        progressbar_update(pb_edge, Tcount - active);
+
         HEdge edge;
 
         // Peep first.
         edge = heap->data[0];
-        if (edge.cost > CUTOFF_COST)
+        if (edge.cost > cutoff_cost)
             break;
 
         // Pop now.
@@ -1022,8 +1304,18 @@ i32 main(i32 argc, char** argv) {
                 // Else point to `n`.
                 else {
                     for (i32 j=0; j<3; ++j) {
-                        if (T[t].i[j] == m)
+                        if (T[t].i[j] == m) {
                             T[t].i[j] = n;
+                            i32 jj = (j + 1) % 3;
+                            i32 jjj = (j + 2) % 3;
+                            i32 nn = min(m, T[t].i[jj]);
+                            i32 mm = max(m, T[t].i[jj]);
+                            heapq_remove(heap, nn, mm);
+                            nn = min(m, T[t].i[jjj]);
+                            mm = max(m, T[t].i[jjj]);
+                            heapq_remove(heap, nn, mm);
+                            break;
+                        }
                     }
                 }
             }
@@ -1035,7 +1327,6 @@ i32 main(i32 argc, char** argv) {
 
         // Recompute edges touching `n`.
 
-        neighbours_clear(neighbours);
         for (i32 adj_v = n; adj_v >= 0; adj_v = adj_entry_next(adj, adj_v)) {
             i32 entry_count = adj_entry_count(adj, adj_v);
             for (i32 i=0; i<entry_count; ++i) {
@@ -1049,37 +1340,38 @@ i32 main(i32 argc, char** argv) {
                         continue;
                     if (v == n)
                         continue;
-                    neighbours_add(neighbours, v);
+                    neighbours_add(neighbours, V, v);
                 }
             }
         }
 
-        for (i32 i=0; i<neighbours->count; ++i) {
-            i32 nn = min(n, neighbours->v[i]);
-            i32 mm = max(n, neighbours->v[i]);
+        while (neighbours->count > 0) {
+            i32 neighbour = neighbours_pop(neighbours, V);
+            i32 nn = min(n, neighbour);
+            i32 mm = max(n, neighbour);
             vec4 vbar_cost = optimal_collapse(V, nn, mm);
             HEdge edge = { vbar_cost[3], nn, mm };
             heapq_push(heap, &edge);
         }
     }
+    progressbar_finish(pb_edge);
 
     i32 new_Vcount = 0;
     for (i32 v=0; v<Vcount; ++v)
         new_Vcount += !V[v].dead;
-    i32 new_Tcount = 0;
-    for (i32 t=0; t<Tcount; ++t)
-        new_Tcount += !T[t].dead;
+    i32 new_Tcount = active; // we "happened" to already be tracking it.
     i32 new_Ecount = new_Vcount + new_Tcount - 2;
 
     printf("\n--- mesh stats (output) ---");
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
-    printf("\nfinal size    = "); print_numba(84 + ((i64)50)*new_Tcount, 1);
-    printf("\n               (  %.2f %% )", new_Tcount * 100.0 / Tcount);
+    printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
+    f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
+    printf("\n               (%6.2f %% )", file_size_percent);
     printf("\n");
 
-    write_stl(&mesh, argv[2]);
+    write_stl(&mesh, path_out);
 
     return 0;
 }

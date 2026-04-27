@@ -334,6 +334,23 @@ vec3 iterstep_vec3(vec3* rstr x, vec3 newx);
 vec4 iterstep_vec4(vec4* rstr x, vec4 newx);
 
 
+// Returns 1 if the genuine value of `a + b` would not fit within an integer of
+// `typeof(T)`, 0 otherwise.
+#define add_overflow(T, a, b) \
+        ( (i32)!!__builtin_add_overflow_p((a), (b), (typeof(T))0) )
+
+// Returns 1 if the genuine value of `a - b` would not fit within an integer of
+// `typeof(T)`, 0 otherwise.
+#define sub_overflow(T, a, b) \
+        ( (i32)!!__builtin_sub_overflow_p((a), (b), (typeof(T))0) )
+
+// Returns 1 if the genuine value of `a * b` would not fit within an integer of
+// `typeof(T)`, 0 otherwise.
+#define mul_overflow(T, a, b) \
+        ( (i32)!!__builtin_mul_overflow_p((a), (b), (typeof(T))0) )
+
+
+
 
 // ========================= //
 //      ABS/MIN/MAX/MOD      //
