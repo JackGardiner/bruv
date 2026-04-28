@@ -233,7 +233,8 @@ public class Chamber : TPIAP.Pea {
 
     protected const float EXTRA = 10f; // trimmed at some point.
 
-    protected float extend_base_by => printable_dmls ? 20f : 0f;
+    protected const float facing_stock = 20f;
+    protected float extend_base_by => printable_dmls ? facing_stock : 0f;
 
 
     /*
@@ -1544,6 +1545,94 @@ public class Chamber : TPIAP.Pea {
         ]);
     }
 
+    protected void write_manufacturing_report(Frame inlet) {
+        Tapping tap_in = new(portsize_inlet, false) { extra_length = 2f };
+        Tapping tap_tc_ = new(portsize_tc,   false) { extra_length = 2f };
+
+        string mm(float v)   => $"{v:F2} mm";
+        string diam(float v) => $"D{v:F2} mm";
+        string deg(float v)  => $"{v:F1}°";
+        float todeg(float rad) => rad * 180f / PI;
+
+        string thread_desc(string portsize, Tapping tap) {
+            string sz = portsize.Split(' ')[0];
+            return $"{sz}  (major D {diam(tap.major_diameter)}, "
+                 + $"bore D {diam(tap.bore_diameter)}, "
+                 + $"depth {mm(tap.straight_length)})";
+        }
+
+        List<Vec3> tc_points = points_tc();
+
+        var lines = new List<string>();
+        lines.Add("CHAMBER MANUFACTURING REPORT");
+        lines.Add("============================");
+        lines.Add("");
+        lines.Add("All dimensions in mm. Angles in degrees, measured CCW from +X.");
+        lines.Add("Datum:  Z = 0  - injector mating face.");
+        lines.Add("        Z+ direction - toward nozzle exit.");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- FACING ---");
+        lines.Add($"  Facing stock (build-plate to design face):  {mm(facing_stock)}");
+        lines.Add($"  Remove this material from the build-plate face to reach Z=0.");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- MATING FLANGE BOLT HOLES ---");
+        lines.Add($"  Qty:              {pm.no_bolt}");
+        lines.Add($"  PCD:              {diam(2f * pm.r_bolt)}  (radius {mm(pm.r_bolt)})");
+        lines.Add($"  Bore diameter:    {diam(pm.D_bolt)}  (clearance, through flange)");
+        lines.Add($"  Flange thickness: {mm(pm.flange_thickness_cc)}");
+        lines.Add($"  Angular spacing:  {deg(360f / pm.no_bolt)}");
+        lines.Add($"  Hole positions (X, Y):");
+        for (int i = 0; i < pm.no_bolt; ++i) {
+            float theta = i * TWOPI / pm.no_bolt;
+            float x = pm.r_bolt * cos(theta);
+            float y = pm.r_bolt * sin(theta);
+            lines.Add($"    Bolt {i+1:D2}:  ({x:+0.00;-0.00}, {y:+0.00;-0.00}) mm"
+                    + $"  [{deg(todeg(theta))}]");
+        }
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- GAS-SIDE INTERNAL GEOMETRY ---");
+        lines.Add($"  (Reference only - contour defined by computed profile)");
+        lines.Add($"  Chamber bore:     {diam(2f * pm.R_cc)}  (r = {mm(pm.R_cc)})");
+        lines.Add($"  Chamber Z range:  Z = 0 to Z = {mm(L_cc)}");
+        lines.Add($"  Throat D:         {diam(2f * R_tht)}  (r = {mm(R_tht)})");
+        lines.Add($"  Throat Z:         Z = {mm(z_tht)}");
+        lines.Add($"  Nozzle exit D:    {diam(2f * R_exit)}  (r = {mm(R_exit)})");
+        lines.Add($"  Nozzle exit Z:    Z = {mm(z_exit)}");
+        lines.Add($"  Area ratio (AEAT):{AEAT:F3}");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- COOLANT INLET PORT ---");
+        lines.Add($"  Thread:           {thread_desc(portsize_inlet, tap_in)}");
+        lines.Add($"  Angular position: {deg(todeg(theta_inlet))}  from +X axis");
+        lines.Add($"  Port centre (X, Y, Z): ({inlet.pos.X:+0.00;-0.00}, {inlet.pos.Y:+0.00;-0.00},"
+                + $" {inlet.pos.Z:+0.00;-0.00}) mm");
+        lines.Add($"  Radial offset:    {mm(magxy(inlet.pos))}  (from centreline)");
+        lines.Add($"  Port incline:     {deg(todeg(phi_inlet))}  from radial plane");
+        lines.Add($"  Wall thickness:   {mm(th_inlet)}");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- THERMOCOUPLE PORTS ---");
+        lines.Add($"  Thread:     {thread_desc(portsize_tc, tap_tc_)}");
+        lines.Add($"  Bore ID:    {diam(D_tc)}  (printed hole)");
+        lines.Add($"  Qty:        {no_tc}  (evenly spaced along channel path)");
+        lines.Add($"  Wall thickness: {mm(th_tc)}");
+        lines.Add($"  Port centres (X, Y, Z):");
+        for (int i = 0; i < numel(tc_points); ++i) {
+            Vec3 p = tc_points[i];
+            float r = magxy(p);
+            float theta = todeg(argxy(p));
+            lines.Add($"    TC {i+1:D2}:  ({p.X:+0.00;-0.00}, {p.Y:+0.00;-0.00}, {p.Z:+0.00;-0.00}) mm"
+                    + $"  r = {mm(r)}, θ = {deg(theta)}");
+        }
+        lines.Add("");
+
+        File.WriteAllLines(fromroot("exports/chamber-manufacturing-report.txt"),
+                lines);
+    }
+
 
 
     /* pea interface: */
@@ -1685,6 +1774,7 @@ public class Chamber : TPIAP.Pea {
 
         // Write volumes report with pre-computed manifold and channel volumes.
         write_volumes_report(vol_inlet, vol_chnl);
+        write_manufacturing_report(inlet);
 
         return part.voxels;
     }
