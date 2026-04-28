@@ -7,6 +7,323 @@
 
 
 
+enum { TIMER_STRING_SIZE = 2+1+2+1+2+1+1 };
+static void timer_string(char* rstr buf, f64 seconds) {
+    i32 sec = (i32)seconds;
+    i32 h = sec / 3600;
+    i32 m = (sec % 3600) / 60;
+    i32 s = sec % 60;
+    i32 ms = (i32)(seconds * 1e3) % 1000;
+    if (h > 99) {
+        h = 99;
+        m = 59;
+        s = 59;
+        ms = 999;
+    }
+    sprintf(buf, "%02d:%02d:%02d.%01d", h, m, s, ms / 100);
+}
+
+#ifndef __WIN32__
+static void timer_init(void) { /* nothing */ }
+static f64 timer_now(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (f64)ts.tv_sec + 1e-9 * (f64)ts.tv_nsec;
+}
+#else
+// windows function expose without the import cause fuck that.
+__declspec(dllimport) i32 __stdcall QueryPerformanceCounter(i64* count);
+__declspec(dllimport) i32 __stdcall QueryPerformanceFrequency(i64* freq);
+static f64 timer_frequency_;
+static void timer_init(void) {
+    i64 freq;
+    assert(QueryPerformanceFrequency(&freq), "failed");
+    timer_frequency_ = (f64)freq;
+}
+static f64 timer_now(void) {
+    i64 count;
+    assert(QueryPerformanceCounter(&count), "failed");
+    return (f64)count / timer_frequency_;
+}
+#endif
+
+
+
+
+typedef struct ProgressBar {
+    f64 start_time;
+    i32 total;
+    i32 freq;
+    i32 last;
+} ProgressBar;
+
+enum { PROGRESS_BAR_WIDTH = 20 };
+
+static void progressbar_init(ProgressBar* pb, i32 total, i32 touchpoints) {
+    pb->start_time = timer_now();
+    pb->total = total;
+    pb->freq = max(1, (i32)(total / (f64)touchpoints));
+    pb->last = -1;
+}
+
+static void progressbar_update(ProgressBar* pb, i32 curr) {
+    if ((curr % pb->freq) != 0)
+        return;
+    if (curr == pb->last)
+        return;
+    pb->last = curr;
+    assert(curr <= pb->total, "progress bar overflow");
+
+    f64 elapsed = timer_now() - pb->start_time;
+    f64 percent = (f64)curr / pb->total;
+    i32 pos = (i32)(PROGRESS_BAR_WIDTH * percent);
+
+    // Calculate ETA.
+    f64 eta = 0.0;
+    if (curr > 0) {
+        f64 rate = (elapsed > 0.0) ? curr / elapsed : +INF;
+        eta = (rate > 0.0) ? pb->total / rate : +INF;
+    }
+
+    char elapsed_str[TIMER_STRING_SIZE + 1];
+    char eta_str[TIMER_STRING_SIZE + 1];
+    timer_string(elapsed_str, elapsed);
+    timer_string(eta_str, eta);
+
+    // Print the bar.
+    printf("\r[");
+    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i) {
+        if (i < pos)
+            putchar('=');
+        else if (i == pos)
+            putchar('>');
+        else
+            putchar(' ');
+    }
+
+    printf("] %5.1f%% | elapsed %s | eta %s", 100.0*percent, elapsed_str,
+            eta_str);
+    fflush(stdout);
+}
+
+static void progressbar_finish(ProgressBar* pb) {
+    f64 elapsed = timer_now() - pb->start_time;
+    char elapsed_str[TIMER_STRING_SIZE + 1];
+    timer_string(elapsed_str, elapsed);
+
+    printf("\r[");
+    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i)
+        putchar('=');
+
+    printf("] 100.0%% | elapsed %s           ", elapsed_str);
+    for (i32 i=0; i<TIMER_STRING_SIZE; ++i)
+        putchar(' ');
+
+    printf("\n");
+    fflush(stdout);
+}
+
+
+
+#define DECI_DO_TELEMETRY 1
+
+typedef struct ZoneCounter {
+    f64 total_time;
+    u64 hit_count;
+    const char* label;
+} ZoneCounter;
+
+enum {
+    ZONE_DECIMATE,
+    ZONE_PROGRESS_BAR,
+    ZONE_HEAP_POP,
+    ZONE_OPTIMAL_COLLAPSE,
+    ZONE_COLLAPSE_WOULD_TEAR,
+    ZONE_COLLAPSE_WOULD_FLIP,
+    ZONE_COLLAPSE,
+    ZONE_TRI_UPDATE,
+    ZONE_TRI_SHIFT,
+    ZONE_ADJ_APPEND,
+    ZONE_NEIGHBOUR_FIND,
+    ZONE_NEIGHBOUR_RECOMPUTE,
+    ZONE_COUNT
+};
+static ZoneCounter telemetry[ZONE_COUNT] = {
+    [ZONE_DECIMATE]             = {0.0, 0, "decimate"},
+    [ZONE_PROGRESS_BAR]         = {0.0, 0, "  progress bar"},
+    [ZONE_HEAP_POP]             = {0.0, 0, "  heap pop"},
+    [ZONE_OPTIMAL_COLLAPSE]     = {0.0, 0, "  optimal collapse"},
+    [ZONE_COLLAPSE_WOULD_TEAR]  = {0.0, 0, "  collapse would tear"},
+    [ZONE_COLLAPSE_WOULD_FLIP]  = {0.0, 0, "  collapse would flip"},
+    [ZONE_COLLAPSE]             = {0.0, 0, "  collapse"},
+    [ZONE_TRI_UPDATE]           = {0.0, 0, "  tri update"},
+    [ZONE_TRI_SHIFT]            = {0.0, 0, "    tri shift"},
+    [ZONE_ADJ_APPEND]           = {0.0, 0, "  adj append"},
+    [ZONE_NEIGHBOUR_FIND]       = {0.0, 0, "  neighbour find"},
+    [ZONE_NEIGHBOUR_RECOMPUTE]  = {0.0, 0, "  neighbour recompute"},
+};
+
+#if DECI_DO_TELEMETRY
+#define TIME_ZONE(zone)                                         \
+    for (f64 _start=timer_now(), _once = 1;                     \
+         _once;                                                 \
+         telemetry[(zone)].total_time += timer_now()-_start,    \
+         telemetry[(zone)].hit_count++,                         \
+         _once = 0)
+#else
+#define TIME_ZONE(zone) for (i32 _once=1; _once; _once=0)
+#endif
+
+static void report_telemetry(void) {
+  #if !DECI_DO_TELEMETRY
+    return;
+  #endif
+
+    printf("\n--- performance report ---\n");
+    printf("%-22s | %s | %s | %s\n", "zone", "total [s]", "ave. [us]", "share");
+    printf("-------------------------------------------------------\n");
+
+    f64 grand_total = telemetry[ZONE_DECIMATE].total_time;
+    for (i32 i=0; i<ZONE_COUNT; ++i) {
+        ZoneCounter* z = telemetry + i;
+        f64 avg_ms = (z->total_time / z->hit_count) * 1.0e6;
+        f64 share = (z->total_time / grand_total) * 100.0;
+
+        if (z->hit_count > 1) {
+            printf("%-22s | %9.4f | %9.4f | %5.1f%%\n", z->label, z->total_time,
+                    avg_ms, share);
+        } else {
+            printf("%-22s | %9.4f |         - | %5.1f%%\n", z->label,
+                    z->total_time, share);
+        }
+    }
+}
+
+
+
+static void print_numba(i64 value, i32 use_binary) {
+    const char* suffixes[] = {"", "k", "M", "G", "T"};
+    f64 base = use_binary ? 1024.0 : 1000.0;
+    f64 val = (f64)value;
+    i32 i = 0;
+    while (val >= base && i < numel(suffixes) - 1) {
+        val /= base;
+        i++;
+    }
+    if (i == 0)
+        printf("%lld", value);
+    else if (val < 10.0)
+        printf("  %.2f %s", val, suffixes[i]);
+    else if (val < 100.0)
+        printf(" %.1f  %s", val, suffixes[i]);
+    else
+        printf("%.1f  %s", val, suffixes[i]);
+    if (use_binary)
+        printf("B");
+}
+
+static i32 is_space(char c) {
+    return c == ' '
+        || c == '\t'
+        || c == '\n'
+        || c == '\r'
+        || c == '\v'
+        || c == '\f';
+}
+static i32 is_digit(char c) {
+    return '0' <= c && c <= '9';
+}
+
+static const char* subparse_i64(const char* s, i64* out) {
+    *out = 0;
+
+    if (!s || *s == '\0')
+        return NULL;
+
+    i32 has_digits = 0;
+    i32 sign = 1;
+    if (*s == '-') {
+        sign = -1;
+        ++s;
+    } else if (*s == '+') {
+        ++s;
+    }
+    for (; *s != '\0' && is_digit(*s); ++s) {
+        i32 digit = *s - '0';
+        if (mul_overflow(*out, *out, 10))
+            return NULL;
+        *out *= 10;
+        if (add_overflow(*out, *out, digit))
+            return NULL;
+        *out += digit;
+        has_digits = 1;
+    }
+
+    if (!has_digits)
+        return NULL;
+
+    if (mul_overflow(*out, *out, sign))
+        return 0;
+    *out *= sign;
+
+    return s;
+}
+
+static f64 parse_f64(const char* s) {
+    if (!s || *s == '\0')
+        return NAN;
+
+    while (is_space(*s))
+        ++s;
+
+    i32 has_digits = 0;
+    i32 has_dot = 0;
+
+    f64 value = 0.0;
+    f64 divisor = 1.0;
+    f64 sci = 1.0;
+
+    for (; *s != '\0' && !is_space(*s); ++s) {
+        if (is_digit(*s)) {
+            i32 digit = *s - '0';
+            if (!has_dot) {
+                value *= 10.0;
+                value += digit;
+            } else {
+                divisor *= 10.0;
+                value += digit / divisor;
+            }
+            has_digits = 1;
+        } else if (*s == '.') {
+            if (has_dot)
+                return NAN;
+            has_dot = 1;
+        } else if (*s == 'e' || *s == 'E') {
+            i64 exp;
+            s = subparse_i64(s + 1, &exp);
+            if (!s)
+                return NAN;
+            sci = pow(10.0, exp);
+            break;
+        } else
+            return NAN;
+    }
+    while (is_space(*s))
+        ++s;
+    if (*s != '\0')
+        return NAN;
+
+    if (!has_digits)
+        return NAN;
+
+    value *= sci;
+
+    // allow inf returns.
+    return value;
+}
+
+
+
 
 
 // 4x4 symmetric matrix:
@@ -469,7 +786,7 @@ static void neighbours_init(Neighbours* n, i32 cap, i64* rstr out_size) {
         *out_size = size;
 }
 
-static void neighbours_add(Neighbours* n, Vertex* V, i32 v) {
+static void neighbours_push(Neighbours* n, Vertex* V, i32 v) {
     assert(n->count < n->cap, "full neighbours");
     if (V[v].in_neighbours)
         return;
@@ -580,7 +897,7 @@ static i32 indexer_find(const HeapqIndexer* i, i32 n, i32 m) {
     return -1;
 }
 
-static void indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
+static i32 indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
     assert(i->count * 8 < i->cap * 7, "too full");
     HIndex* bkt = &(HIndex){0};
 
@@ -590,10 +907,14 @@ static void indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
     bkt->idx = index;
 
     i32 idx = hindex_hash(n, m) & (i->cap - 1);
+    i32 at = -1;
 
     while (hindex_secret(i->bkts + idx)) {
-        if (hindex_secret(bkt) > hindex_secret(i->bkts + idx))
+        if (hindex_secret(bkt) > hindex_secret(i->bkts + idx)) {
             swap(*bkt, i->bkts[idx]);
+            if (at < 0)
+                at = idx;
+        }
 
         i32 dist = hindex_secret(bkt);
         assert(dist < lobits(HINDEX_COUNT_SECRET) - 1, "too clumped?");
@@ -602,7 +923,11 @@ static void indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
     }
 
     i->bkts[idx] = *bkt;
+    if (at < 0)
+        at = idx;
+
     ++i->count;
+    return at;
 }
 
 static void indexer_remove(HeapqIndexer* i, i32 idx) {
@@ -645,26 +970,21 @@ static i32 heapq_lt(const HEdge* a, const HEdge* b) {
     return a->cost < b->cost;
 }
 
-static void heapq_swap(Heapq* h, i32 i, i32 j) {
-    swap(h->data[i], h->data[j]);
-
-    i32 idxr_i = indexer_find(&h->idxr, h->data[i].n, h->data[i].m);
+static void heapq_swap(Heapq* h, i32 i, i32 j, i32 idxr_i) {
     i32 idxr_j = indexer_find(&h->idxr, h->data[j].n, h->data[j].m);
-    assert(idxr_i >= 0, "not in idxr?");
-    assert(idxr_j >= 0, "not in idxr?");
-
-    h->idxr.bkts[idxr_i].idx = i;
-    h->idxr.bkts[idxr_j].idx = j;
+    swap(h->data[i], h->data[j]);
+    h->idxr.bkts[idxr_i].idx = j;
+    h->idxr.bkts[idxr_j].idx = i;
 }
 
-static void heapq_sift_up(Heapq* h, i32 i) {
+static void heapq_sift_up(Heapq* h, i32 i, i32 idxr_i) {
     while (i > 0 && heapq_lt(h->data + i, h->data + heapq_parent(i))) {
-        heapq_swap(h, i, heapq_parent(i));
+        heapq_swap(h, i, heapq_parent(i), idxr_i);
         i = heapq_parent(i);
     }
 }
 
-static void heapq_sift_down(Heapq* h, i32 i) {
+static void heapq_sift_down(Heapq* h, i32 i, i32 idxr_i) {
     for (;;) {
         i32 smallest = i;
         i32 l = heapq_left_child(i);
@@ -678,7 +998,7 @@ static void heapq_sift_down(Heapq* h, i32 i) {
         if (smallest == i)
             break;
 
-        heapq_swap(h, i, smallest);
+        heapq_swap(h, i, smallest, idxr_i);
         i = smallest;
         // loop.
     }
@@ -711,14 +1031,14 @@ static void heapq_push(Heapq* h, const HEdge* edge) {
     if (idxr_i >= 0) {
         i32 i = h->idxr.bkts[idxr_i].idx;
         h->data[i].cost = edge->cost;
-        heapq_sift_up(h, i);
-        heapq_sift_down(h, i);
+        heapq_sift_up(h, i, idxr_i);
+        heapq_sift_down(h, i, idxr_i);
     } else {
         assert(h->count < h->maxcount, "heap overflow");
         i32 i = h->count++;
         h->data[i] = *edge;
-        indexer_add(&h->idxr, edge->n, edge->m, i);
-        heapq_sift_up(h, i);
+        idxr_i = indexer_add(&h->idxr, edge->n, edge->m, i);
+        heapq_sift_up(h, i, idxr_i);
     }
 }
 
@@ -733,7 +1053,7 @@ static void heapq_pop(Heapq* h, HEdge* out) {
     if (h->count > 0) {
         i32 idxr_j = indexer_find(&h->idxr, h->data[0].n, h->data[0].m);
         h->idxr.bkts[idxr_j].idx = 0;
-        heapq_sift_down(h, 0);
+        heapq_sift_down(h, 0, idxr_j);
     }
 }
 
@@ -748,18 +1068,19 @@ static void heapq_remove(Heapq* h, i32 n, i32 m) {
     --h->count;
     if (i < h->count) {
         h->data[i] = h->data[h->count];
-
-        i32 idxr_j = indexer_find(&h->idxr, h->data[i].n, h->data[i].m);
-        assert(idxr_j >= 0, "not in idxr?");
-        h->idxr.bkts[idxr_j].idx = i;
-        heapq_sift_up(h, i);
-        heapq_sift_down(h, i);
+        idxr_i = indexer_find(&h->idxr, h->data[i].n, h->data[i].m);
+        assert(idxr_i >= 0, "not in idxr?");
+        h->idxr.bkts[idxr_i].idx = i;
+        heapq_sift_up(h, i, idxr_i);
+        // note this is kinda dodge bc `idxr_i` may not be correct now but in the
+        // case that it is incorrect it means sift down will do nothing smile.
+        heapq_sift_down(h, i, idxr_i);
     }
 }
 
 
 
-static i32 heapq_check(const Heapq* h) {
+UNUSED static i32 heapq_check(const Heapq* h) {
 
     // Validate heap ordering.
     for (i32 i=1; i<h->count; ++i) {
@@ -960,7 +1281,7 @@ static i32 adj_t(AdjIter* i) {
 
 // Returns 1 if collapsing edge (n->m, merged at vbar) would flip any surviving
 // triangle, 0 if the collapse is geometrically safe.
-static i32 collapse_flips_triangle(const Vertex* V, const Tri* T, Adj* adj,
+static i32 collapse_would_flip(const Vertex* V, const Tri* T, Adj* adj,
         i32 n, i32 m, vec3 vbar) {
 
     // We only need to inspect triangles adjacent to m, because those are
@@ -1021,6 +1342,101 @@ static i32 collapse_flips_triangle(const Vertex* V, const Tri* T, Adj* adj,
 
 
 
+
+// Returns 1 if collapsing edge (n,m) would violate the link condition (unsafe,
+// would create a non-manifold mesh or change topology). Returns 0 if the
+// collapse is topologically valid.
+static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb,
+        i32 n, i32 m) {
+
+    // Walk n's 1-ring, tagging them and recording the third vertex of every
+    // triangle containing BOTH n and m.
+
+    i32 edge_link[2]; // manifold has at-most 2.
+    i32 edge_link_count = 0;
+    i32 shared_faces = 0;
+
+    for (adj_iterate(adj, n, it)) {
+        i32 t = adj_t(it);
+        if (T[t].dead)
+            continue;
+
+        i32 has_m = (T[t].a == m || T[t].b == m || T[t].c == m);
+        if (has_m)
+            ++shared_faces;
+
+        for (i32 i=0; i<3; ++i) {
+            i32 v = T[t].i[i];
+            if (V[v].dead)
+                continue;
+            if (v == n || v == m)
+                continue;
+
+            neighbours_push(nb, V, v); // tags via in_neighbours, deduplicates
+
+            if (has_m) {
+                // v is the third vertex of a shared face: record it.
+                i32 dup = 0;
+                for (i32 k=0; k<edge_link_count; ++k) {
+                    if (edge_link[k] == v) {
+                        dup = 1;
+                        break;
+                    }
+                }
+                if (!dup) {
+                    assert(edge_link_count < numel(edge_link),
+                            "non-manifold input?");
+                    edge_link[edge_link_count++] = v;
+                }
+            }
+        }
+    }
+
+    // Should never happen (i.e. no edge from n to m) but might as well.
+    if (shared_faces == 0) {
+        while (nb->count > 0)
+            neighbours_pop(nb, V);
+        return 1;
+    }
+
+    // Now walk m's 1-ring. Every vertex that appears in both rings (i.e. is
+    // tagged) needs to be one of the recorded edge-link vertices.
+
+    i32 safe = 1;
+    for (adj_iterate(adj, m, it)) {
+        i32 t = adj_t(it);
+        if (T[t].dead)
+            continue;
+
+        for (i32 i=0; i<3; ++i) {
+            i32 v = T[t].i[i];
+            if (V[v].dead)
+                continue;
+            if (v == n || v == m)
+                continue;
+            if (!V[v].in_neighbours) // not in n's 1-ring.
+                continue;
+
+            // `v` is shared. Verify it is an edge-link vertex.
+            i32 in_edge_link = 0;
+            for (i32 k=0; k<edge_link_count; ++k) {
+                if (edge_link[k] == v) {
+                    in_edge_link = 1;
+                    break;
+                }
+            }
+            if (!in_edge_link)
+                safe = 0;
+
+            // Manual untag to prevent double-counting.
+            V[v].in_neighbours = 0;
+        }
+    }
+
+    while (nb->count > 0)
+        neighbours_pop(nb, V);
+    return !safe;
+}
 
 
 typedef struct InternedPoint {
@@ -1095,6 +1511,8 @@ static i64 stl_size(i32 Tcount) {
 }
 
 static void read_stl(Mesh* m, const char* rstr path) {
+    printf("\n--- reading stl ---\n");
+
     FILE* f = fopen(path, "rb");
     assert(f, "file open failure");
 
@@ -1120,14 +1538,17 @@ static void read_stl(Mesh* m, const char* rstr path) {
     // Read all triangles.
     STLTriangle tri;
     i32 t = 0;
+    ProgressBar* pb = &(ProgressBar){0};
+    progressbar_init(pb, m->Tcount, 20);
     while (t < m->Tcount) {
+        progressbar_update(pb, t);
         if (fread(&tri, STL_TRI_SIZE, 1, f) < 1)
             break;
         vec3 a = vec3_from_array(tri.a);
         vec3 b = vec3_from_array(tri.b);
         vec3 c = vec3_from_array(tri.c);
         vec3 normal = cross(b - a, c - a); // ccw normal.
-        if (mag(normal) < 1e-6f)
+        if (mag(normal) < 1e-7f)
             continue;
         vec3 stl_normal = vec3_from_array(tri.normal);
         if (dot(normal, stl_normal) < 0)
@@ -1143,6 +1564,7 @@ static void read_stl(Mesh* m, const char* rstr path) {
         m->T[t].dead = 0;
         ++t;
     }
+    progressbar_finish(pb);
     m->Tcount = t;
 
     free(m->pset);
@@ -1157,6 +1579,8 @@ static void read_stl(Mesh* m, const char* rstr path) {
 
 
 static void write_stl(const Mesh* m, const char* rstr path) {
+    printf("\n--- writing stl ---\n");
+
     FILE* f = fopen(path, "wb");
     assert(f, "file open failure");
 
@@ -1167,17 +1591,20 @@ static void write_stl(const Mesh* m, const char* rstr path) {
     i32 count = 0;
     for (i32 t=0; t<m->Tcount; ++t)
         count += !m->T[t].dead;
-
     fwrite(&count, sizeof(count), 1, f);
+
+    ProgressBar* pb = &(ProgressBar){0};
+    progressbar_init(pb, m->Tcount, 20);
     for (i32 t=0; t<m->Tcount; ++t) {
+        progressbar_update(pb, t);
         if (m->T[t].dead)
             continue;
         Vertex* va = m->V + m->T[t].a;
         Vertex* vb = m->V + m->T[t].b;
         Vertex* vc = m->V + m->T[t].c;
-        assert(!va->dead, "what");
-        assert(!vb->dead, "what");
-        assert(!vc->dead, "what");
+        assert(!va->dead, "dead vertex in alive tri");
+        assert(!vb->dead, "dead vertex in alive tri");
+        assert(!vc->dead, "dead vertex in alive tri");
         vec3 a = vec3_from_array(va->v);
         vec3 b = vec3_from_array(vb->v);
         vec3 c = vec3_from_array(vc->v);
@@ -1200,250 +1627,12 @@ static void write_stl(const Mesh* m, const char* rstr path) {
         tri.attr = 0;
         fwrite(&tri, STL_TRI_SIZE, 1, f);
     }
+    progressbar_finish(pb);
 
     fclose(f);
 }
 
 
-
-enum { TIMER_STRING_SIZE = 2+1+2+1+2+1+1 };
-static void timer_string(char* rstr buf, f64 seconds) {
-    i32 sec = (i32)seconds;
-    i32 h = sec / 3600;
-    i32 m = (sec % 3600) / 60;
-    i32 s = sec % 60;
-    i32 ms = (i32)(seconds * 1e3) % 1000;
-    if (h > 99) {
-        h = 99;
-        m = 59;
-        s = 59;
-        ms = 999;
-    }
-    sprintf(buf, "%02d:%02d:%02d.%01d", h, m, s, ms / 100);
-}
-
-#ifndef __WIN32__
-static void timer_init(void) { /* nothing */ }
-static f64 timer_now(void) {
-    struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
-    return (f64)ts.tv_sec + 1e-9 * (f64)ts.tv_nsec;
-}
-#else
-// windows function expose without the import cause fuck that.
-__declspec(dllimport) i32 __stdcall QueryPerformanceCounter(i64* count);
-__declspec(dllimport) i32 __stdcall QueryPerformanceFrequency(i64* freq);
-static f64 timer_frequency_;
-static void timer_init(void) {
-    i64 freq;
-    assert(QueryPerformanceFrequency(&freq), "failed");
-    timer_frequency_ = (f64)freq;
-}
-static f64 timer_now(void) {
-    i64 count;
-    assert(QueryPerformanceCounter(&count), "failed");
-    return (f64)count / timer_frequency_;
-}
-#endif
-
-
-
-
-typedef struct ProgressBar {
-    f64 start_time;
-    i32 total;
-    i32 freq;
-    i32 last;
-} ProgressBar;
-
-enum { PROGRESS_BAR_WIDTH = 20 };
-
-static void progressbar_init(ProgressBar* pb, i32 total, i32 touchpoints) {
-    pb->start_time = timer_now();
-    pb->total = total;
-    pb->freq = max(1, (i32)(total / (f64)touchpoints));
-    pb->last = -1;
-}
-
-static void progressbar_update(ProgressBar* pb, i32 curr) {
-    if ((curr % pb->freq) != 0)
-        return;
-    if (curr == pb->last)
-        return;
-    pb->last = curr;
-    assert(curr <= pb->total, "progress bar overflow");
-
-    f64 elapsed = timer_now() - pb->start_time;
-    f64 percent = (f64)curr / pb->total;
-    i32 pos = (i32)(PROGRESS_BAR_WIDTH * percent);
-
-    // Calculate ETA.
-    f64 eta = 0.0;
-    if (curr > 0) {
-        f64 rate = (elapsed > 0.0) ? curr / elapsed : +INF;
-        eta = (rate > 0.0) ? pb->total / rate : +INF;
-    }
-
-    char elapsed_str[TIMER_STRING_SIZE + 1];
-    char eta_str[TIMER_STRING_SIZE + 1];
-    timer_string(elapsed_str, elapsed);
-    timer_string(eta_str, eta);
-
-    // Print the bar.
-    printf("\r[");
-    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i) {
-        if (i < pos)
-            putchar('=');
-        else if (i == pos)
-            putchar('>');
-        else
-            putchar(' ');
-    }
-
-    printf("] %5.1f%% | elapsed: %s | eta: %s", 100.0*percent, elapsed_str,
-            eta_str);
-    fflush(stdout);
-}
-
-static void progressbar_finish(ProgressBar* pb) {
-    f64 elapsed = timer_now() - pb->start_time;
-    char elapsed_str[TIMER_STRING_SIZE + 1];
-    timer_string(elapsed_str, elapsed);
-
-    printf("\r[");
-    for (i32 i=0; i<PROGRESS_BAR_WIDTH; ++i)
-        putchar('=');
-
-    printf("] 100.0%% | elapsed: %s        ", elapsed_str);
-    for (i32 i=0; i<TIMER_STRING_SIZE; ++i)
-        putchar(' ');
-
-    printf("\n");
-    fflush(stdout);
-}
-
-
-
-static void print_numba(i64 value, i32 use_binary) {
-    const char* suffixes[] = {"", "k", "M", "G", "T"};
-    f64 base = use_binary ? 1024.0 : 1000.0;
-    f64 val = (f64)value;
-    i32 i = 0;
-    while (val >= base && i < numel(suffixes) - 1) {
-        val /= base;
-        i++;
-    }
-    if (i == 0)
-        printf("%lld", value);
-    else if (val < 10.0)
-        printf("  %.2f %s", val, suffixes[i]);
-    else if (val < 100.0)
-        printf(" %.1f  %s", val, suffixes[i]);
-    else
-        printf("%.1f  %s", val, suffixes[i]);
-    if (use_binary)
-        printf("B");
-}
-
-static i32 is_space(char c) {
-    return c == ' '
-        || c == '\t'
-        || c == '\n'
-        || c == '\r'
-        || c == '\v'
-        || c == '\f';
-}
-static i32 is_digit(char c) {
-    return '0' <= c && c <= '9';
-}
-
-static const char* subparse_i64(const char* s, i64* out) {
-    *out = 0;
-
-    if (!s || *s == '\0')
-        return NULL;
-
-    i32 has_digits = 0;
-    i32 sign = 1;
-    if (*s == '-') {
-        sign = -1;
-        ++s;
-    } else if (*s == '+') {
-        ++s;
-    }
-    for (; *s != '\0' && is_digit(*s); ++s) {
-        i32 digit = *s - '0';
-        if (mul_overflow(*out, *out, 10))
-            return NULL;
-        *out *= 10;
-        if (add_overflow(*out, *out, digit))
-            return NULL;
-        *out += digit;
-        has_digits = 1;
-    }
-
-    if (!has_digits)
-        return NULL;
-
-    if (mul_overflow(*out, *out, sign))
-        return 0;
-    *out *= sign;
-
-    return s;
-}
-
-static f64 parse_f64(const char* s) {
-    if (!s || *s == '\0')
-        return NAN;
-
-    while (is_space(*s))
-        ++s;
-
-    i32 has_digits = 0;
-    i32 has_dot = 0;
-
-    f64 value = 0.0;
-    f64 divisor = 1.0;
-    f64 sci = 1.0;
-
-    for (; *s != '\0' && !is_space(*s); ++s) {
-        if (is_digit(*s)) {
-            i32 digit = *s - '0';
-            if (!has_dot) {
-                value *= 10.0;
-                value += digit;
-            } else {
-                divisor *= 10.0;
-                value += digit / divisor;
-            }
-            has_digits = 1;
-        } else if (*s == '.') {
-            if (has_dot)
-                return NAN;
-            has_dot = 1;
-        } else if (*s == 'e' || *s == 'E') {
-            i64 exp;
-            s = subparse_i64(s + 1, &exp);
-            if (!s)
-                return NAN;
-            sci = pow(10.0, exp);
-            break;
-        } else
-            return NAN;
-    }
-    while (is_space(*s))
-        ++s;
-    if (*s != '\0')
-        return NAN;
-
-    if (!has_digits)
-        return NAN;
-
-    value *= sci;
-
-    // allow inf returns.
-    return value;
-}
 
 
 __attribute((__hot__))
@@ -1471,16 +1660,16 @@ i32 main(i32 argc, char** argv) {
     f64 cutoff_cost = (argc > 4) ? parse_f64(argv[4]) : +INF;
     assert(notnan(cutoff_cost), "failed to parse cutoff cost");
 
-    printf("decimating mesh...\n");
+    printf("--- DECI ---\n");
     if (isinf(cutoff_cost)) {
-        printf("         in: %s\n", path_in);
-        printf("        out: %s\n", path_out);
-        printf("  reduction: %.2f %%\n", 100.0*reduction);
+        printf("in         = %s\n", path_in);
+        printf("out        = %s\n", path_out);
+        printf("reduction  = %.2f %%\n", 100.0*reduction);
     } else {
-        printf("           in: %s\n", path_in);
-        printf("          out: %s\n", path_out);
-        printf("    reduction: %.2f %%\n", 100.0*reduction);
-        printf("  cutoff cost: %.4g\n", cutoff_cost);
+        printf("in           = %s\n", path_in);
+        printf("out          = %s\n", path_out);
+        printf("reduction    = %.2f %%\n", 100.0*reduction);
+        printf("cutoff cost  = %.4g\n", cutoff_cost);
     }
 
 
@@ -1533,7 +1722,10 @@ i32 main(i32 argc, char** argv) {
     // Setup neighbours set.
     Neighbours* neighbours = &(Neighbours){0};
     i64 size_neighbours;
-    neighbours_init(neighbours, max(1000, Ecount/10), &size_neighbours);
+    neighbours_init(neighbours, Ecount, &size_neighbours);
+    // Note this ^ is a huuuuge oversize in everything except the absolute worst-
+    // case but its fine since it wont be physically backed (its just contiguous
+    // array space) to in reality its dynamically upsized-only by the os.
     printf("\nneighbours  = "); print_numba(size_neighbours, 1);
 
 
@@ -1548,7 +1740,7 @@ i32 main(i32 argc, char** argv) {
 
 
     // Compute initial quadrics.
-    printf("\ninitial quadrics:\n");
+    printf("\n--- initial quadrics ---\n");
     ProgressBar* pb_quadrics = &(ProgressBar){0};
     progressbar_init(pb_quadrics, Tcount, 10);
     for (i32 t=0; t<Tcount; ++t) {
@@ -1558,9 +1750,9 @@ i32 main(i32 argc, char** argv) {
     progressbar_finish(pb_quadrics);
 
     // Find cost of all edges.
-    printf("\ninitial edge costs:\n");
+    printf("\n--- initial edge costs ---\n");
     ProgressBar* pb_initial_edge = &(ProgressBar){0};
-    progressbar_init(pb_initial_edge, Tcount, 10);
+    progressbar_init(pb_initial_edge, Tcount, 30);
     for (i32 t=0; t<Tcount; ++t) {
         progressbar_update(pb_initial_edge, t);
         for (i32 i=0; i<3; ++i) {
@@ -1577,15 +1769,17 @@ i32 main(i32 argc, char** argv) {
     // Pop edges.
     i32 limit = max(3 /* closed solid */, Tcount * reduction);
     i32 active = Tcount;
-    printf("\nprimary edge popping:\n");
+    printf("\n--- decimating ---\n");
 
-    ProgressBar* pb_edge = &(ProgressBar){0};
+    ProgressBar* pb_deci = &(ProgressBar){0};
     // https://www.desmos.com/calculator/8xkwvol4j6
-    i32 pb_edge_touchpoints = (i32)(1.0 + 0.36332*sqrt((f64)(active - limit)));
-    pb_edge_touchpoints = min(max(pb_edge_touchpoints, 5), 300);
-    progressbar_init(pb_edge, active - limit, pb_edge_touchpoints);
+    i32 pb_deci_touchpoints = (i32)(1.0 + 0.2*sqrt((f64)(active - limit)));
+    pb_deci_touchpoints = min(max(pb_deci_touchpoints, 5), 300);
+    progressbar_init(pb_deci, active - limit, pb_deci_touchpoints);
+    TIME_ZONE(ZONE_DECIMATE)
     while ((active > limit) && (heap->count > 0)) {
-        progressbar_update(pb_edge, Tcount - active);
+        TIME_ZONE(ZONE_PROGRESS_BAR)
+            progressbar_update(pb_deci, Tcount - active);
 
         HEdge edge;
 
@@ -1595,34 +1789,46 @@ i32 main(i32 argc, char** argv) {
             break;
 
         // Pop now.
-        heapq_pop(heap, &edge);
+        TIME_ZONE(ZONE_HEAP_POP)
+            heapq_pop(heap, &edge);
         i32 n = edge.n;
         i32 m = edge.m;
 
         if (V[n].dead || V[m].dead)
-            continue;
+            goto NEXT;
+
+
+        // If this would open the manifold, dont do it.
+        TIME_ZONE(ZONE_COLLAPSE_WOULD_TEAR)
+        if (collapse_would_tear(V, T, adj, neighbours, n, m))
+            goto NEXT;
+
 
         f32 vbar[3];
-        (void)optimal_collapse(V, n, m, vbar);
+        TIME_ZONE(ZONE_OPTIMAL_COLLAPSE)
+            (void)optimal_collapse(V, n, m, vbar);
 
 
         // If this would flip a triangle, dont do it.
-        if (collapse_flips_triangle(V, T, adj, n, m, vec3_from_array(vbar)))
-            continue;
+        TIME_ZONE(ZONE_COLLAPSE_WOULD_FLIP)
+        if (collapse_would_flip(V, T, adj, n, m, vec3_from_array(vbar)))
+            goto NEXT;
 
 
         // Overwrite index `n` with the new optimal position and mark `m` dead.
+        TIME_ZONE(ZONE_COLLAPSE) {
+            V[n].x = vbar[0];
+            V[n].y = vbar[1];
+            V[n].z = vbar[2];
+            for (i32 i=0; i<numel(Quadric); ++i)
+                V[n].q[i] += V[m].q[i];
 
-        V[n].x = vbar[0];
-        V[n].y = vbar[1];
-        V[n].z = vbar[2];
-        for (i32 i=0; i<numel(Quadric); ++i)
-            V[n].q[i] += V[m].q[i];
-
-        V[m].dead = 1;
+            V[m].dead = 1;
+        }
 
         // Kill faces containing both `n` and `m`, and update faces containing
         // `m` to point to `n`.
+        TIME_ZONE(ZONE_TRI_UPDATE)
         for (adj_iterate(adj, m, it)) {
             i32 t = adj_t(it);
             if (T[t].dead)
@@ -1635,6 +1841,7 @@ i32 main(i32 argc, char** argv) {
             }
             // Else point to `n`.
             else {
+                TIME_ZONE(ZONE_TRI_SHIFT)
                 for (i32 j=0; j<3; ++j) {
                     if (T[t].i[j] == m) {
                         T[t].i[j] = n;
@@ -1646,18 +1853,20 @@ i32 main(i32 argc, char** argv) {
                         nn = min(m, T[t].i[jjj]);
                         mm = max(m, T[t].i[jjj]);
                         heapq_remove(heap, nn, mm);
-                        break;
+                        // break;
                     }
                 }
             }
         }
 
         // Move all `m`'s adjacencies to `n`.
-        adj_append(adj, n, m);
+        TIME_ZONE(ZONE_ADJ_APPEND)
+            adj_append(adj, n, m);
 
 
         // Recompute edges touching `n`.
 
+        TIME_ZONE(ZONE_NEIGHBOUR_FIND)
         for (adj_iterate(adj, n, it)) {
             i32 t = adj_t(it);
             if (T[t].dead)
@@ -1669,10 +1878,11 @@ i32 main(i32 argc, char** argv) {
                     continue;
                 if (v == n)
                     continue;
-                neighbours_add(neighbours, V, v);
+                neighbours_push(neighbours, V, v);
             }
         }
 
+        TIME_ZONE(ZONE_NEIGHBOUR_RECOMPUTE)
         while (neighbours->count > 0) {
             i32 neighbour = neighbours_pop(neighbours, V);
             i32 nn = min(n, neighbour);
@@ -1681,27 +1891,32 @@ i32 main(i32 argc, char** argv) {
             HEdge edge = { cost, nn, mm };
             heapq_push(heap, &edge);
         }
+
+      NEXT:;
     }
-    progressbar_finish(pb_edge);
+    progressbar_finish(pb_deci);
+
+    report_telemetry();
+
+    write_stl(&mesh, path_out);
 
     i32 new_Vcount = 0;
     for (i32 v=0; v<Vcount; ++v)
         new_Vcount += !V[v].dead;
     i32 new_Tcount = active; // we "happened" to already be tracking it.
     i32 new_Ecount = count_edges(T, Tcount);
+    i32 new_closed_mani = is_closed_mani(T, Tcount, new_Ecount);
 
     printf("\n--- mesh stats (output) ---");
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
     printf("\neuler char.   = %3d", new_Vcount - new_Ecount + new_Tcount);
-    printf("\nclosed mani.  = %3d", is_closed_mani(T, Tcount, new_Ecount));
+    printf("\nclosed mani.  = %3d", new_closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
     printf("\n               (%6.2f %% )", file_size_percent);
     printf("\n");
-
-    write_stl(&mesh, path_out);
 
     return 0;
 }
