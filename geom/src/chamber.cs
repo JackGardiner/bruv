@@ -1534,10 +1534,10 @@ public class Chamber : TPIAP.Pea {
             $"===============================",
             $"",
             $"IPA Inlet Manifold Volume:  "
-                + $"{vol_inlet*1e-3:F2} mL ({vol_inlet:F0} mm³)",
+                + $"{vol_inlet*1e-3:F2} mL ({vol_inlet:F0} mm^3)",
             $"",
             $"Cooling Channel Volume:     "
-                + $"{vol_chnl*1e-3:F2} mL ({vol_chnl:F0} mm³)",
+                + $"{vol_chnl*1e-3:F2} mL ({vol_chnl:F0} mm^3)",
             $"",
             $"Total Combined Volume:      "
                 + $"{(vol_inlet + vol_chnl)*1e-3:F2} mL",
@@ -1551,7 +1551,7 @@ public class Chamber : TPIAP.Pea {
 
         string mm(float v)   => $"{v:F2} mm";
         string diam(float v) => $"D{v:F2} mm";
-        string deg(float v)  => $"{v:F1}°";
+        string deg(float v)  => $"{v:F1} deg";
         float todeg(float rad) => rad * 180f / PI;
 
         string thread_desc(string portsize, Tapping tap) {
@@ -1625,7 +1625,7 @@ public class Chamber : TPIAP.Pea {
             float r = magxy(p);
             float theta = todeg(argxy(p));
             lines.Add($"    TC {i+1:D2}:  ({p.X:+0.00;-0.00}, {p.Y:+0.00;-0.00}, {p.Z:+0.00;-0.00}) mm"
-                    + $"  r = {mm(r)}, θ = {deg(theta)}");
+                    + $"  r = {mm(r)}, theta = {deg(theta)}");
         }
         lines.Add("");
 
@@ -1795,12 +1795,13 @@ public class Chamber : TPIAP.Pea {
             uY3,
             uZ3
         );
-        f1 = f1.rotzx(torad(90f - 22f));
+        f1 = f1.rotzx(torad(90f - 14f));
         f1 = f1.transz(-75f, false);
         f1 = f1.transy(-5f, false);
         f1 = f1.transx(50f);
         f1 = f1.cyclecw();
         f1 = f1.swing(new (), new (0f, 0f, 1f), PI, false);
+        // f1 = f1.transy(-10f, false);
 
         Frame f2 = new(fromcyl(pm.r_bolt, 3*TWOPI/pm.no_bolt, 0f));
         f2 = f2.transx(-f2.pos.X, false);
@@ -1808,14 +1809,28 @@ public class Chamber : TPIAP.Pea {
         f2 = f2.cycleccw();
         f2 = f2.flipyz();
         f2 = f2.swing(new (), new (0f, 0f, 1f), PI, false);
+        f2 = f2.transy(8f, false);
+        // f2 = f2.rotxy(torad(-15f), false);
+
+        Frame f3 = new(fromcyl(pm.r_bolt, 7*TWOPI/pm.no_bolt, 0f));
+        f3 = f3.rotxy(torad(90f-5f), false);
+        f3 = f3.cycleccw();
 
         Bar cube1 = new Bar(f1, 100f, 350f, 80f);
         cube1 = cube1.at_edge(Bar.X1_Y0);
-        // Geez.bar(cube1);
+        Geez.bar(cube1);
 
-        Bar cube2 = new Bar(f2, 50f, 100f, 80f);
+        Bar cube2 = new Bar(f2, 50f, 100f, 11f);
         cube2 = cube2.at_edge(Bar.X1_Y0);
-        // Geez.bar(cube2);
+        Geez.bar(cube2);
+
+        Bar cube3 = new Bar(f3, 80f, 100f, -30f);
+        cube3 = cube3.at_edge(Bar.Y1);
+        Geez.bar(cube3);
+
+        Geez.frame(f1);
+        Geez.frame(f2);
+        Geez.frame(f3, 20f);
 
         print("created cutting cubes.");
 
@@ -1829,13 +1844,14 @@ public class Chamber : TPIAP.Pea {
         outer.BoolSubtract(inner);
         Voxels tmp = (Voxels)cube1;
         tmp.BoolAdd(cube2);
+        tmp.BoolAdd(cube3);
         outer.BoolIntersect(tmp);
         Geez.voxels(outer);
         print("made scissors.");
 
         Voxels cutted = part - outer;
         Geez.voxels(cutted);
-        Geez.remove(Geez.recent(4, 1));
+        // Geez.remove(Geez.recent(4, 1));
         print("finished.");
         print();
 
