@@ -268,26 +268,27 @@ public class InjectorSample : TPIAP.Pea {
             7,
         ];
         Frame get_at(int i) {
-            if (!printable_dmls)
-                return new(i*60*uX3);
-            // or try to stack nicely:
-            assert(N == 8);
+            return new((i*60*uX3));
+            // if (!printable_dmls)
+            //     return new(i*60*uX3);
+            // // or try to stack nicely:
+            // assert(N == 8);
 
-            i = remap[i];
-            float x0 = -buildplate.Lx/4f - buildplate.Lx/10f;
-            float y0 = -buildplate.Ly/2f + buildplate.Ly/8f;
-            if (i >= 4)
-                x0 += buildplate.Lx/2f;
-            Vec3 point = new(
-                x0 + (i % 2) * buildplate.Lx/5f,
-                y0 + (i % 4) * buildplate.Ly/4f,
-                0f
-            );
-            point += rejxy(corrections[i]);
-            Frame at = new(point);
-            if (i % 2 != 0)
-                at = at.rotxy(PI);
-            return at;
+            // i = remap[i];
+            // float x0 = -buildplate.Lx/4f - buildplate.Lx/10f;
+            // float y0 = -buildplate.Ly/2f + buildplate.Ly/8f;
+            // if (i >= 4)
+            //     x0 += buildplate.Lx/2f;
+            // Vec3 point = new(
+            //     x0 + (i % 2) * buildplate.Lx/5f,
+            //     y0 + (i % 4) * buildplate.Ly/4f,
+            //     0f
+            // );
+            // point += rejxy(corrections[i]);
+            // Frame at = new(point);
+            // if (i % 2 != 0)
+            //     at = at.rotxy(PI);
+            // return at;
         }
 
         Voxels all = new();

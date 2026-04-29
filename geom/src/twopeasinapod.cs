@@ -206,14 +206,8 @@ public static class TwoPeasInAPod {
                     elements.Add(e);
                 }
 
-                config.set("sample/index_offset", 18);
-       /* 18 */ setup(("Kmdot_extra", 0.7f));
-       /* 19 */ setup(("Kmdot_extra", 0.8f));
-       /* 20 */ setup(("Kmdot_extra", 0.9f));
-       /* 21 */ setup(("Kmdot_extra", 1.0f));
-       /* 22 */ setup(("Kmdot_extra", 1.1f));
-       /* 23 */ setup(("Kmdot_extra", 1.2f));
-       /* 24 */ setup(("Kmdot_extra", 1.3f));
+                config.set("sample/index_offset", 26);
+       /* 26 */ setup(("Kmdot_extra", 1f));
 
                 config.set("sample/elements", elements);
 
