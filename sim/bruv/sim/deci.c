@@ -52,21 +52,21 @@ static f64 timer_now(void) {
 
 typedef struct ProgressBar {
     f64 start_time;
-    i32 total;
-    i32 freq;
-    i32 last;
+    i64 total;
+    i64 freq;
+    i64 last;
 } ProgressBar;
 
 enum { PROGRESS_BAR_WIDTH = 20 };
 
-static void progressbar_init(ProgressBar* pb, i32 total, i32 touchpoints) {
+static void progressbar_init(ProgressBar* pb, i64 total, i64 touchpoints) {
     pb->start_time = timer_now();
     pb->total = total;
-    pb->freq = max(1, (i32)(total / (f64)touchpoints));
+    pb->freq = max(1, (i64)(total / (f64)touchpoints));
     pb->last = -1;
 }
 
-static void progressbar_update(ProgressBar* pb, i32 curr) {
+static void progressbar_update(ProgressBar* pb, i64 curr) {
     if ((curr % pb->freq) != 0)
         return;
     if (curr == pb->last)
@@ -129,7 +129,7 @@ static void progressbar_finish(ProgressBar* pb) {
 
 typedef struct ZoneCounter {
     f64 total_time;
-    u64 hit_count;
+    i64 hit_count;
     const char* label;
 } ZoneCounter;
 
@@ -346,6 +346,11 @@ static f64 parse_f64(const char* s) {
 //  [             q9  ]
 typedef f64 Quadric[10];
 
+// Is active?
+#define DEAD ((u32)0x1)
+// In current neighbours set?
+#define IN_NEIGHBOURS ((u32)0x2)
+
 typedef struct __attribute__((__aligned__(16))) Vertex {
     // Coordinates.
     union {
@@ -358,14 +363,10 @@ typedef struct __attribute__((__aligned__(16))) Vertex {
         /* arrayed: */
         f32 v[3];
     };
-    // Is active?
-    i32 dead;
+    // DEAD and IN_NEIGHBOURS flags.
+    u32 flags;
     // Quadric.
     Quadric q;
-    // In current neighbour set?
-    i32 in_neighbours;
-
-    i32 _[3]; // padding.
 } Vertex;
 
 
@@ -605,12 +606,12 @@ static u64 sedge_hash(i32 n, i32 m) {
 typedef struct EdgeSet {
     // Robin hood hashtable.
     SEdge* bkts;
-    i32 cap;
-    i32 count;
+    i64 cap;
+    i64 count;
 } EdgeSet;
 
 
-static void edgeset_init(EdgeSet* s, i32 cap, i64* rstr out_size) {
+static void edgeset_init(EdgeSet* s, i64 cap, i64* rstr out_size) {
     assert(ispow2(cap), "invalid capacity");
     i64 size = sizeof(SEdge) * cap;
     s->bkts = malloc(size);
@@ -636,7 +637,7 @@ UNUSED static void edgeset_clear(EdgeSet* s) {
     s->count = 0;
 }
 
-static i32 edgeset_get(const EdgeSet* s, i32 i, i32* rstr n, i32* rstr m) {
+static i32 edgeset_get(const EdgeSet* s, i64 i, i32* rstr n, i32* rstr m) {
     SEdge* edge = s->bkts + i;
     if (sedge_secret(edge) == 0)
         return 0;
@@ -645,9 +646,9 @@ static i32 edgeset_get(const EdgeSet* s, i32 i, i32* rstr n, i32* rstr m) {
     return 1;
 }
 
-static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
+static i64 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
     u64 key_hash = sedge_hash(n, m);
-    i32 idx = key_hash & (s->cap - 1);
+    i64 idx = key_hash & (s->cap - 1);
     i32 dist = 1;
 
     while (dist <= sedge_secret(s->bkts + idx)) {
@@ -667,7 +668,7 @@ static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
     sedge_set_n(bkt, n);
     sedge_set_m(bkt, m);
 
-    i32 idx = sedge_hash(n, m) & (s->cap - 1);
+    i64 idx = sedge_hash(n, m) & (s->cap - 1);
 
     while (sedge_secret(s->bkts + idx)) {
         if (sedge_secret(bkt) > sedge_secret(s->bkts + idx))
@@ -683,11 +684,11 @@ static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
     ++s->count;
 }
 
-UNUSED static void edgeset_remove(EdgeSet* s, i32 idx) {
+UNUSED static void edgeset_remove(EdgeSet* s, i64 idx) {
     assert(s->count > 0, "empty");
     // Robin hood backward shift deletion.
     for (;;) {
-        i32 next = (idx + 1) & (s->cap - 1);
+        i64 next = (idx + 1) & (s->cap - 1);
 
         if (sedge_secret(s->bkts + next) <= 1) {
             sedge_set_secret(s->bkts + idx, 0);
@@ -708,7 +709,7 @@ UNUSED static void edgeset_remove(EdgeSet* s, i32 idx) {
 
 static i32 count_edges(const Tri* T, i32 Tcount) {
     EdgeSet* edgeset = &(EdgeSet){0};
-    edgeset_init(edgeset, uptopow2(4*Tcount), NULL);
+    edgeset_init(edgeset, uptopow2((i64)4*Tcount), NULL);
 
     i32 Ecount = 0;
 
@@ -774,7 +775,7 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
         }
     }
 
-    for (i32 i=0; i<edgeset0->cap; ++i) {
+    for (i64 i=0; i<edgeset0->cap; ++i) {
         progressbar_update(pb, Tcount + i);
         i32 n, m;
         if (!edgeset_get(edgeset0, i, &n, &m))
@@ -819,16 +820,16 @@ static void neighbours_init(Neighbours* n, i32 cap, i64* rstr out_size) {
 
 static void neighbours_push(Neighbours* n, Vertex* V, i32 v) {
     assert(n->count < n->cap, "full neighbours");
-    if (V[v].in_neighbours)
+    if (V[v].flags & IN_NEIGHBOURS)
         return;
-    V[v].in_neighbours = 1;
+    V[v].flags |= IN_NEIGHBOURS;
     n->v[n->count++] = v;
 }
 
 static i32 neighbours_pop(Neighbours* n, Vertex* V) {
     assert(n->count > 0, "empty neighbours");
     i32 v = n->v[--n->count];
-    V[v].in_neighbours = 0;
+    V[v].flags &= ~IN_NEIGHBOURS;
     return v;
 }
 
@@ -1140,7 +1141,7 @@ UNUSED static i32 heapq_check(const Heapq* h) {
             return -3;
 
         // Check Robin Hood distance.
-        u64 ideal_idx = hindex_hash(n, m) & (h->idxr.cap - 1);
+        i32 ideal_idx = hindex_hash(n, m) & (h->idxr.cap - 1);
         i32 expected_secret = ((i - ideal_idx) & (h->idxr.cap - 1)) + 1;
         if (secret != expected_secret)
             return -4;
@@ -1215,6 +1216,7 @@ static void adj_refresh(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
     for (i32 v=0; v<Vcount + 1; ++v) {
         i32 c = a->off[v]._ + 1;
         a->off[v]._ = total;
+        assert(!add_overflow(total, total, c), "too many triangles");
         total += c;
     }
     if (a->total < 0)
@@ -1356,7 +1358,7 @@ UNUSED static i32 mesh_check(const Vertex* V, const Tri* T, i32 Tcount) {
         i32 c = T[t].c;
         if (a == b || a == c || b == c)
             return -1;
-        if (V[a].dead || V[b].dead || V[c].dead)
+        if ((V[a].flags | V[b].flags | V[c].flags) & DEAD)
             return -2;
     }
     return 0;
@@ -1498,7 +1500,7 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
             i32 v = T[t].i[i];
             if (v == n || v == m)
                 continue;
-            if (!V[v].in_neighbours) // not in n's 1-ring.
+            if (!(V[v].flags & IN_NEIGHBOURS)) // not in n's 1-ring.
                 continue;
 
             // `v` is shared. Verify it is an edge-link vertex.
@@ -1513,7 +1515,7 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
                 safe = 0;
 
             // Manual untag to prevent double-counting.
-            V[v].in_neighbours = 0;
+            V[v].flags &= ~IN_NEIGHBOURS;
         }
     }
 
@@ -1592,7 +1594,7 @@ typedef struct STLTriangle {
 enum { STL_TRI_SIZE = 50 };
 
 static i64 stl_size(i32 Tcount) {
-    return 84 + ((i64)50) * Tcount;
+    return 84 + (i64)50 * Tcount;
 }
 
 static void read_stl(Mesh* m, const char* rstr path) {
@@ -1713,9 +1715,9 @@ static void write_stl(const Mesh* m, const char* rstr path) {
         Vertex* va = m->V + m->T[t].a;
         Vertex* vb = m->V + m->T[t].b;
         Vertex* vc = m->V + m->T[t].c;
-        assert(!va->dead, "dead vertex in alive tri");
-        assert(!vb->dead, "dead vertex in alive tri");
-        assert(!vc->dead, "dead vertex in alive tri");
+        assert(!(va->flags & DEAD), "dead vertex in alive tri");
+        assert(!(vb->flags & DEAD), "dead vertex in alive tri");
+        assert(!(vc->flags & DEAD), "dead vertex in alive tri");
         vec3 a = vec3_from_array(va->v);
         vec3 b = vec3_from_array(vb->v);
         vec3 c = vec3_from_array(vc->v);
@@ -1949,7 +1951,7 @@ i32 main(i32 argc, char** argv) {
             for (i32 i=0; i<numel(Quadric); ++i)
                 V[n].q[i] += V[m].q[i];
 
-            V[m].dead = 1;
+            V[m].flags |= DEAD;
         }
 
         // Kill faces containing both `n` and `m`, and update faces containing
@@ -2025,7 +2027,7 @@ i32 main(i32 argc, char** argv) {
 
     i32 new_Vcount = 0;
     for (i32 v=0; v<Vcount; ++v)
-        new_Vcount += !V[v].dead;
+        new_Vcount += !(V[v].flags & DEAD);
     i32 new_Tcount = active; // we "happened" to already be tracking it.
     printf("\n--- counting edges (output) ---\n");
     i32 new_Ecount = count_edges(T, Tcount);
