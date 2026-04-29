@@ -380,6 +380,9 @@ public class InjectorElement {
     public void voxels(Frame at, out Voxels pos, out Voxels neg) {
         assert(inited);
 
+        float extend_base_by = printable ? 3f : 0f;
+
+
         // Make volume by revolve.
 
         // general fillet divisions.
@@ -391,12 +394,13 @@ public class InjectorElement {
         // Make injector 1.
         assert(nearzero(A1.Y));
         List<Vec2> neg_points1 = [
+            A1*uX2,
             A1,
             B1,
             D1,
             E1,
             F1,
-            // Extend outer inj to plate + extra.
+            // Extend outer inj to plate + extra.x 2
             new(-EXTRA - (printable ? extend_base_by : 0f), F1.Y),
             new(-EXTRA - (printable ? extend_base_by : 0f), 0f),
         ];
@@ -929,7 +933,8 @@ public class Injector : TPIAP.Pea {
 
     protected const float EXTRA = 6f;
 
-    protected float extend_base_by => printable_dmls ? 20f : 0f;
+    protected const float facing_stock = 20f;
+    protected float extend_base_by => printable_dmls ? facing_stock : 0f;
     protected float extend_voids_by => printable_dmls ? 3f : 0f;
     protected float breakout_D => 6f;
     protected float breakout_plate_z => 15f;
@@ -1490,10 +1495,10 @@ public class Injector : TPIAP.Pea {
             $"================================",
             $"",
             $"LOx Manifold Volume:    "
-                + $"{vol_lox_mani*1e-3:F2} mL ({vol_lox_mani:F0} mm³)",
+                + $"{vol_lox_mani*1e-3:F2} mL ({vol_lox_mani:F0} mm^3)",
             $"",
             $"IPA Manifold Volume:    "
-                + $"{vol_ipa_mani*1e-3:F2} mL ({vol_ipa_mani:F0} mm³)",
+                + $"{vol_ipa_mani*1e-3:F2} mL ({vol_ipa_mani:F0} mm^3)",
             $"",
             $"Total Combined Volume:  "
                 + $"{(vol_lox_mani + vol_ipa_mani)*1e-3:F2} mL",
@@ -1501,6 +1506,137 @@ public class Injector : TPIAP.Pea {
         };
 
         string path = fromroot("exports/injector-volumes-report.txt");
+        File.WriteAllLines(path, lines);
+    }
+
+    protected void write_manufacturing_report(ManiVol mani_vol) {
+        float r_LOxinlet = mani_vol.peak.Y * 1.1f;
+        float r_ports    = mani_vol.peak.Y;
+
+        // Use non-printable tappings to report final machined thread specs.
+        Tapping tap_ign  = new(portsize_igniter,  false) { extra_length = 2f };
+        Tapping tap_LOxi = new(portsize_LOxinlet, false) { extra_length = 2f };
+        Tapping tap_LOxp = new(portsize_LOxPT,    false) { extra_length = 2f };
+        Tapping tap_IPAp = new(portsize_IPAPT,    false) { extra_length = 2f };
+        Tapping tap_CCp  = new(portsize_CCPT,     false) { extra_length = 2f };
+        Tapping tap_mnt  = new(boltsize_mount,    false) { extra_length = 3f };
+
+        string mm(float v)   => $"{v:F2} mm";
+        string diam(float v) => $"D{v:F2} mm";
+        string deg(float v)  => $"{v:F1} deg";
+        float todeg(float rad) => rad * 180f / PI;
+
+        // Thread description: strip length override from portsize string.
+        string thread_desc(string portsize, Tapping tap) {
+            string sz = portsize.Split(' ')[0];
+            return $"{sz}  (major D {diam(tap.major_diameter)}, "
+                 + $"bore D {diam(tap.bore_diameter)}, "
+                 + $"depth {mm(tap.straight_length)})";
+        }
+
+        var lines = new List<string>();
+        lines.Add("INJECTOR MANUFACTURING REPORT");
+        lines.Add("=============================");
+        lines.Add("");
+        lines.Add("All dimensions in mm. Angles in degrees, measured CCW from +X.");
+        lines.Add("Datum:  Z = 0  - injector face (nozzle exit plane).");
+        lines.Add("        Z+ direction - into injector manifold.");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- FACING ---");
+        lines.Add($"  Facing stock (build-plate to design face):  {mm(facing_stock)}");
+        lines.Add($"  Remove this material from the build-plate face to reach Z=0.");
+        lines.Add($"");
+        lines.Add($"  LOx inner nozzle depth from face:           {mm(element.F1.X)}");
+        lines.Add($"  (Reference: depth of inner LOx swirl chamber inlet from face)");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- MATING FLANGE BOLT HOLES ---");
+        lines.Add($"  Qty:              {pm.no_bolt}");
+        lines.Add($"  PCD:              {diam(2f * pm.r_bolt)}  (radius {mm(pm.r_bolt)})");
+        lines.Add($"  Bore diameter:    {diam(pm.D_bolt)}  (clearance, through flange)");
+        lines.Add($"  Flange thickness: {mm(pm.flange_thickness_inj)}");
+        lines.Add($"  Angular spacing:  {deg(360f / pm.no_bolt)}");
+        lines.Add($"  Hole positions (X, Y):");
+        for (int i = 0; i < pm.no_bolt; ++i) {
+            float theta = i * TWOPI / pm.no_bolt;
+            float x = pm.r_bolt * cos(theta);
+            float y = pm.r_bolt * sin(theta);
+            lines.Add($"    Bolt {i+1:D2}:  ({x:+0.00;-0.00}, {y:+0.00;-0.00}) mm"
+                    + $"  [{deg(todeg(theta))}]");
+        }
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- THRUST STRUCTURE MOUNT BOLTS ---");
+        lines.Add($"  Thread:       {boltsize_mount}");
+        lines.Add($"  Major D:      {diam(tap_mnt.major_diameter)}");
+        lines.Add($"  Bore D:       {diam(tap_mnt.bore_diameter)}  (printed; tap after facing)");
+        lines.Add($"  Depth:        {mm(tap_mnt.straight_length)}");
+        lines.Add($"  Radius:       {mm(r_mount)}  (from centreline)");
+        lines.Add($"  Z height:     {mm(z_mount)}  (from face)");
+        lines.Add($"  Qty:          {pm.no_bolt / 2}  (every other flange bolt position)");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- EXTERNAL PORTS ---");
+        lines.Add("");
+        lines.Add("  Igniter:");
+        lines.Add($"    Thread:        {thread_desc(portsize_igniter, tap_ign)}");
+        lines.Add($"    Z height:      {mm(z_igniter)}  (from face)");
+        lines.Add($"    XY position:   (0.00, 0.00) mm  [on-axis]");
+        lines.Add($"    Direction:     axial, port opens in +Z");
+        lines.Add($"    Header bore:   {diam(D_igniterh)}");
+        lines.Add($"    Wall thickness:{mm(th_igniterh)}");
+        lines.Add($"    Tube ledge:    1.00 mm  (bore steps to D{D_igniterh - 2f:F2} below ledge)");
+        lines.Add("");
+        lines.Add("  LOx Inlet:");
+        lines.Add($"    Thread:        {thread_desc(portsize_LOxinlet, tap_LOxi)}");
+        lines.Add($"    Z height:      {mm(z_LOxinlet)}  (from face)");
+        lines.Add($"    Radial offset: {mm(r_LOxinlet)}  (from centreline)");
+        lines.Add($"    Direction:     180 deg  (-X direction, port opens radially outward)");
+        lines.Add($"    Header bore:   {diam(D_LOxinleth)}");
+        lines.Add($"    Wall thickness:{mm(th_LOxinleth)}");
+        lines.Add("");
+        lines.Add("  LOx Pressure Transducer (LOxPT):");
+        lines.Add($"    Thread:        {thread_desc(portsize_LOxPT, tap_LOxp)}");
+        lines.Add($"    Z height:      {mm(z_LOxPT)}  (from face)");
+        lines.Add($"    Radial offset: {mm(r_ports)}  (from centreline)");
+        lines.Add($"    Direction:     0 deg  (+X direction, port opens radially outward)");
+        lines.Add($"    Header bore:   {diam(D_LOxPTh)}");
+        lines.Add($"    Wall thickness:{mm(th_LOxPTh)}");
+        lines.Add("");
+        lines.Add("  IPA Pressure Transducer (IPAPT):");
+        lines.Add($"    Thread:        {thread_desc(portsize_IPAPT, tap_IPAp)}");
+        lines.Add($"    Z height:      {mm(z_IPAPT)}  (from face)");
+        lines.Add($"    Radial offset: {mm(r_ports)}  (from centreline)");
+        lines.Add($"    Direction:     90 deg  (+Y direction, port opens radially outward)");
+        lines.Add($"    Header bore:   {diam(D_IPAPTh)}");
+        lines.Add($"    Wall thickness:{mm(th_IPAPTh)}");
+        lines.Add("");
+        lines.Add("  CC Pressure Transducer (CCPT):");
+        lines.Add($"    Thread:        {thread_desc(portsize_CCPT, tap_CCp)}");
+        lines.Add($"    Z height:      {mm(z_CCPT)}  (from face)");
+        lines.Add($"    Radial offset: {mm(r_ports)}  (from centreline)");
+        lines.Add($"    Direction:     270 deg  (-Y direction, port opens radially outward)");
+        lines.Add($"    Header bore:   {diam(D_CCPTh)}");
+        lines.Add($"    Wall thickness:{mm(th_CCPTh)}");
+        lines.Add("");
+        lines.Add("");
+        lines.Add("--- O-RING GROOVES (all post-machined, not printed) ---");
+        lines.Add("");
+        lines.Add("  Inner O-ring  (seals IPA channel, inner boundary):");
+        lines.Add($"    Inner D: {diam(2f * pm.IR_Ioring)}  (radius {mm(pm.IR_Ioring)})");
+        lines.Add($"    Outer D: {diam(2f * pm.OR_Ioring)}  (radius {mm(pm.OR_Ioring)})");
+        lines.Add($"    Width:   {mm(pm.OR_Ioring - pm.IR_Ioring)}");
+        lines.Add($"    Depth:   {mm(pm.Lz_Ioring)}");
+        lines.Add("");
+        lines.Add("  Outer O-ring  (seals IPA channel, outer boundary):");
+        lines.Add($"    Inner D: {diam(2f * pm.IR_Ooring)}  (radius {mm(pm.IR_Ooring)})");
+        lines.Add($"    Outer D: {diam(2f * pm.OR_Ooring)}  (radius {mm(pm.OR_Ooring)})");
+        lines.Add($"    Width:   {mm(pm.OR_Ooring - pm.IR_Ooring)}");
+        lines.Add($"    Depth:   {mm(pm.Lz_Ooring)}");
+        lines.Add("");
+
+        string path = fromroot("exports/injector-manufacturing-report.txt");
         File.WriteAllLines(path, lines);
     }
 
@@ -1983,6 +2119,7 @@ public class Injector : TPIAP.Pea {
 
         // Write volumes report with pre-computed inlet volume
         write_volumes_report(mani_vol, vol_inlet_ports);
+        write_manufacturing_report(mani_vol);
 
         return part.voxels;
     }
