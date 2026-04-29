@@ -136,6 +136,7 @@ typedef struct ZoneCounter {
 enum {
     ZONE_DECIMATE,
     ZONE_PROGRESS_BAR,
+    ZONE_ADJ_REFRESH,
     ZONE_HEAP_POP,
     ZONE_OPTIMAL_COLLAPSE,
     ZONE_COLLAPSE_WOULD_TEAR,
@@ -151,6 +152,7 @@ enum {
 static ZoneCounter telemetry[ZONE_COUNT] = {
     [ZONE_DECIMATE]             = {0.0, 0, "decimate"},
     [ZONE_PROGRESS_BAR]         = {0.0, 0, "  progress bar"},
+    [ZONE_ADJ_REFRESH]          = {0.0, 0, "  adj refresh"},
     [ZONE_HEAP_POP]             = {0.0, 0, "  heap pop"},
     [ZONE_OPTIMAL_COLLAPSE]     = {0.0, 0, "  optimal collapse"},
     [ZONE_COLLAPSE_WOULD_TEAR]  = {0.0, 0, "  collapse would tear"},
@@ -210,14 +212,25 @@ static void print_numba(i64 value, i32 use_binary) {
         val /= base;
         i++;
     }
+
+
+    /*
+       xxxx
+          x.xx kB
+         xx.x  kB
+        xxx.x  kB
+       xxxx.   kB
+     */
     if (i == 0)
-        printf("%lld", value);
+        printf("%4lld", value);
     else if (val < 10.0)
-        printf("  %.2f %s", val, suffixes[i]);
+        printf("   %.2f %s", val, suffixes[i]);
     else if (val < 100.0)
+        printf("  %.1f  %s", val, suffixes[i]);
+    else if (val < 1000.0)
         printf(" %.1f  %s", val, suffixes[i]);
     else
-        printf("%.1f  %s", val, suffixes[i]);
+        printf("%.0f.   %s", val, suffixes[i]);
     if (use_binary)
         printf("B");
 }
@@ -455,6 +468,8 @@ static void compute_quadric(Vertex* V, Tri* t) {
     q[7] = (f64)(n[2]*n[2]);
     q[8] = (f64)(n[2]*d);
 
+    // TODO: address the more general issue of this term being large and
+    // potentially precision-capping the rest.
     q[9] = (f64)(   d*d);
 
     for (i32 i=0; i<numel(Quadric); ++i)
@@ -645,7 +660,7 @@ static i32 edgeset_find(const EdgeSet* s, i32 n, i32 m) {
 }
 
 static void edgeset_add(EdgeSet* s, i32 n, i32 m) {
-    assert(s->count * 8 < s->cap * 7, "too full");
+    assert(s->count * (i64)8 < s->cap * (i64)7, "too full");
     SEdge* bkt = &(SEdge){0};
 
     sedge_set_secret(bkt, 1);
@@ -696,12 +711,17 @@ static i32 count_edges(const Tri* T, i32 Tcount) {
     edgeset_init(edgeset, uptopow2(4*Tcount), NULL);
 
     i32 Ecount = 0;
+
+    ProgressBar* pb = &(ProgressBar){0};
+    progressbar_init(pb, Tcount, 10);
     for (i32 t=0; t<Tcount; ++t) {
+        progressbar_update(pb, t);
         if (T[t].dead)
             continue;
         for (i32 i=0; i<3; ++i) {
-            i32 n = min(T[t].i[i % 3], T[t].i[(i + 1) % 3]);
-            i32 m = max(T[t].i[i % 3], T[t].i[(i + 1) % 3]);
+            i32 j = (i + 1) % 3;
+            i32 n = min(T[t].i[i], T[t].i[j]);
+            i32 m = max(T[t].i[i], T[t].i[j]);
 
             if (edgeset_find(edgeset, n, m) >= 0)
                 continue;
@@ -709,6 +729,7 @@ static i32 count_edges(const Tri* T, i32 Tcount) {
             ++Ecount;
         }
     }
+    progressbar_finish(pb);
 
     edgeset_free(edgeset);
     return Ecount;
@@ -719,18 +740,25 @@ static i32 count_edges(const Tri* T, i32 Tcount) {
 
 
 
-static i32 is_closed_mani(const Tri* T, i32 Tcount, i32 Ecount) {
+static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
+        i32 Ecount) {
+    (void)V;
+
     EdgeSet* edgeset0 = &(EdgeSet){0};
     EdgeSet* edgeset1 = &(EdgeSet){0};
     edgeset_init(edgeset0, uptopow2(Ecount + Ecount/2), NULL);
     edgeset_init(edgeset1, uptopow2(Ecount + Ecount/2), NULL);
 
+    ProgressBar* pb = &(ProgressBar){0};
+    progressbar_init(pb, Tcount + edgeset0->cap, 10);
     for (i32 t=0; t<Tcount; ++t) {
+        progressbar_update(pb, t);
         if (T[t].dead)
             continue;
         for (i32 i=0; i<3; ++i) {
-            i32 n = min(T[t].i[i], T[t].i[(i + 1) % 3]);
-            i32 m = max(T[t].i[i], T[t].i[(i + 1) % 3]);
+            i32 j = (i + 1) % 3;
+            i32 n = min(T[t].i[i], T[t].i[j]);
+            i32 m = max(T[t].i[i], T[t].i[j]);
 
             if (edgeset_find(edgeset0, n, m) < 0) {
                 edgeset_add(edgeset0, n, m);
@@ -747,6 +775,7 @@ static i32 is_closed_mani(const Tri* T, i32 Tcount, i32 Ecount) {
     }
 
     for (i32 i=0; i<edgeset0->cap; ++i) {
+        progressbar_update(pb, Tcount + i);
         i32 n, m;
         if (!edgeset_get(edgeset0, i, &n, &m))
             continue;
@@ -756,6 +785,8 @@ static i32 is_closed_mani(const Tri* T, i32 Tcount, i32 Ecount) {
         edgeset_free(edgeset1);
         return 0; // non-watertight.
     }
+
+    progressbar_finish(pb);
 
     edgeset_free(edgeset0);
     edgeset_free(edgeset1);
@@ -898,7 +929,7 @@ static i32 indexer_find(const HeapqIndexer* i, i32 n, i32 m) {
 }
 
 static i32 indexer_add(HeapqIndexer* i, i32 n, i32 m, i32 index) {
-    assert(i->count * 8 < i->cap * 7, "too full");
+    assert(i->count * (i64)8 < i->cap * (i64)7, "too full");
     HIndex* bkt = &(HIndex){0};
 
     hindex_set_secret(bkt, 1);
@@ -966,7 +997,7 @@ typedef struct Heapq {
 static i32 heapq_parent(i32 i)      { return (i - 1)/2; }
 static i32 heapq_left_child(i32 i)  { return 2*i + 1; }
 static i32 heapq_right_child(i32 i) { return 2*i + 2; }
-static i32 heapq_lt(const HEdge* a, const HEdge* b) {
+static i32 heapq_lt(const HEdge* rstr a, const HEdge* rstr b) {
     return a->cost < b->cost;
 }
 
@@ -1022,7 +1053,7 @@ static void heapq_init(Heapq* h, i32 maxcount, i64* rstr out_heap_size,
         *out_heap_size = size;
 }
 
-static void heapq_push(Heapq* h, const HEdge* edge) {
+static void heapq_push(Heapq* h, const HEdge* rstr edge) {
     // Only update the heap if the edge already exists.
     assert(edge->n < edge->m, "unsorted edge");
 
@@ -1042,7 +1073,7 @@ static void heapq_push(Heapq* h, const HEdge* edge) {
     }
 }
 
-static void heapq_pop(Heapq* h, HEdge* out) {
+static void heapq_pop(Heapq* h, HEdge* rstr out) {
     assert(h->count > 0, "empty heap");
     *out = h->data[0];
 
@@ -1140,6 +1171,7 @@ UNUSED static i32 heapq_check(const Heapq* h) {
 // wrap in structs to prevent compiler thinking they're aliasing.
 typedef struct AdjTri { i32 _; } AdjTri;
 typedef struct AdjOff { i32 _; } AdjOff;
+typedef struct AdjCursor { i32 _; } AdjCursor;
 
 typedef struct Adj {
     // Contiguous array of entries. Each entry is:
@@ -1153,17 +1185,26 @@ typedef struct Adj {
     AdjTri* tri;
     // Maps vertex index into an index into `tri`.
     AdjOff* off;
+    // Temp memory during creation/refresh.
+    AdjCursor* cursor;
+
+    i32 total;
 } Adj;
 
-static void adj_init(Adj* a, const Tri* T, i32 Vcount, i32 Tcount,
-        i64* rstr out_tri_size, i64* rstr out_off_size) {
+static void adj_refresh(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
+        i32 Tcount) {
+    (void)V;
+
     i64 off_size = sizeof(*a->off) * (Vcount + 1);
-    a->off = malloc(off_size);
+    if (!a->off)
+        a->off = malloc(off_size);
     assert(a->off, "allocation failure");
 
     // Take initial adj counts.
     memset(a->off, 0, off_size);
     for (i32 t=0; t<Tcount; ++t) {
+        if (T[t].dead)
+            continue;
         ++a->off[T[t].a]._;
         ++a->off[T[t].b]._;
         ++a->off[T[t].c]._;
@@ -1176,39 +1217,61 @@ static void adj_init(Adj* a, const Tri* T, i32 Vcount, i32 Tcount,
         a->off[v]._ = total;
         total += c;
     }
+    if (a->total < 0)
+        a->total = total;
+    assert(total <= a->total, "edge count increased?");
 
     // Fill out entries.
-    i64 tri_size = sizeof(*a->tri) * total;
-    a->tri = malloc(tri_size);
+    i64 tri_size = sizeof(*a->tri) * a->total;
+    if (!a->tri)
+        a->tri = malloc(tri_size);
     assert(a->tri, "allocation failure");
-    i64 cursor_size = sizeof(i32) * Vcount;
-    i32* cursor = malloc(cursor_size); // current entry sizes.
-    assert(cursor, "allocation failure");
+    i64 cursor_size = sizeof(*a->cursor) * Vcount;
+    if (!a->cursor)
+        a->cursor = malloc(cursor_size);
+    assert(a->cursor, "allocation failure");
 
-    memset(cursor, 0, cursor_size);
+    memset(a->cursor, 0, cursor_size);
 
     for (i32 t=0; t<Tcount; ++t) {
+        if (T[t].dead)
+            continue;
         for (i32 i=0; i<3; ++i) {
             i32 v = T[t].i[i];
-            a->tri[a->off[v]._ + cursor[v]]._ = t;
-            ++cursor[v];
+            a->tri[a->off[v]._ + a->cursor[v]._]._ = t;
+            ++a->cursor[v]._;
         }
     }
-
-    free(cursor);
 
     // Set all `next`s as tails.
     for (i32 v=0; v<Vcount; ++v) {
         i32 entrysize = a->off[v + 1]._ - a->off[v]._;
         a->tri[a->off[v]._ + entrysize - 1]._ = -1;
     }
+}
+
+
+static void adj_init(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
+        i32 Tcount, i64* rstr out_tri_size, i64* rstr out_off_size,
+        i64* rstr out_cursor_size) {
+    a->tri = NULL;
+    a->off = NULL;
+    a->cursor = NULL;
+    a->total = -1;
+    adj_refresh(a, V, T, Vcount, Tcount);
 
     // Out alloc sizes.
+    i64 off_size = sizeof(*a->off) * (Vcount + 1);
+    i64 tri_size = sizeof(*a->tri) * a->total;
+    i64 cursor_size = sizeof(*a->cursor) * Vcount;
     if (out_tri_size)
         *out_tri_size = tri_size;
     if (out_off_size)
         *out_off_size = off_size;
+    if (out_cursor_size)
+        *out_cursor_size = cursor_size;
 }
+
 
 
 static i32 adj_entry_count(const Adj* a, i32 v) {
@@ -1233,20 +1296,24 @@ static void adj_append(Adj* a, i32 add_it_here, i32 add_this) {
 
 
 typedef struct AdjIter {
-    Adj* a;
+    const Adj* a;
     i32 v;
     i32 i;
     i32 count;
 } AdjIter;
 
 #define adj_iter(a, v) ( adj_iter_impl(&(AdjIter){0}, (a), (v)) )
-static AdjIter* adj_iter_impl(AdjIter* i, Adj* a, i32 v) {
+static AdjIter* adj_iter_impl(AdjIter* i, const Adj* a, i32 v) {
     i->a = a;
     i->v = v;
     i->i = 0;
-    i->count = adj_entry_count(a, v);
-    if (i->count <= 0)
-        i->v = -1; // instant end.
+    i->count = adj_entry_count(a, i->v);
+    while (i->count <= 0) {
+        i->v = adj_entry_next(a, i->v);
+        if (i->v < 0)
+            break;
+        i->count = adj_entry_count(a, i->v);
+    }
     return i;
 }
 
@@ -1275,6 +1342,27 @@ static i32 adj_t(AdjIter* i) {
         AdjIter* itervar = adj_iter((adj), (start));    \
         !adj_end(itervar);                              \
         adj_next(itervar)
+
+
+
+
+
+UNUSED static i32 mesh_check(const Vertex* V, const Tri* T, i32 Tcount) {
+    for (i32 t=0; t<Tcount; ++t) {
+        if (T[t].dead)
+            continue;
+        i32 a = T[t].a;
+        i32 b = T[t].b;
+        i32 c = T[t].c;
+        if (a == b || a == c || b == c)
+            return -1;
+        if (V[a].dead || V[b].dead || V[c].dead)
+            return -2;
+    }
+    return 0;
+}
+
+
 
 
 
@@ -1367,8 +1455,6 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
 
         for (i32 i=0; i<3; ++i) {
             i32 v = T[t].i[i];
-            if (V[v].dead)
-                continue;
             if (v == n || v == m)
                 continue;
 
@@ -1410,8 +1496,6 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
 
         for (i32 i=0; i<3; ++i) {
             i32 v = T[t].i[i];
-            if (V[v].dead)
-                continue;
             if (v == n || v == m)
                 continue;
             if (!V[v].in_neighbours) // not in n's 1-ring.
@@ -1440,9 +1524,6 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
 
 
 typedef struct InternedPoint {
-    f32 x;
-    f32 y;
-    f32 z;
     i32 idx; // index into V. <0 if empty.
 } InternedPoint;
 
@@ -1452,7 +1533,7 @@ typedef struct Mesh {
     i32 Vcount;
     i32 Tcount;
     InternedPoint* pset;
-    u64 pset_cap;
+    i64 pset_cap;
 } Mesh;
 
 static f32 point_snap(f32 c) {
@@ -1477,18 +1558,22 @@ static i32 point_intern(Mesh* m, f32 x, f32 y, f32 z) {
     f32 sy = point_snap(y);
     f32 sz = point_snap(z);
     u64 h = point_hash(sx, sy, sz) & (m->pset_cap - 1);
+    i32 idx = m->pset[h].idx;
     // linear probing on collision.
-    while (m->pset[h].idx >= 0) {
+    while (idx >= 0) {
         i32 same = 1;
-        same &= (point_snap(m->pset[h].x) == sx);
-        same &= (point_snap(m->pset[h].y) == sy);
-        same &= (point_snap(m->pset[h].z) == sz);
+        same &= (point_snap(m->V[idx].x) == sx);
+        same &= (point_snap(m->V[idx].y) == sy);
+        same &= (point_snap(m->V[idx].z) == sz);
         if (same)
             return m->pset[h].idx;
         h = (h + 1) & (m->pset_cap - 1);
+        idx = m->pset[h].idx;
     }
-    i32 idx = m->Vcount++;
-    m->pset[h] = (InternedPoint){ x, y, z, idx };
+    idx = m->Vcount++;
+    assert(m->Vcount <= lobits(min(HINDEX_COUNT_N, HINDEX_COUNT_M)),
+            "too many vertices");
+    m->pset[h].idx = idx;
     memset(m->V + idx, 0, sizeof(Vertex));
     m->V[idx].x = x;
     m->V[idx].y = y;
@@ -1517,30 +1602,34 @@ static void read_stl(Mesh* m, const char* rstr path) {
     assert(f, "file open failure");
 
     fseek(f, 80, SEEK_SET); // skip header.
-    fread(&m->Tcount, sizeof(m->Tcount), 1, f);
+    u32 ucount;
+    fread(&ucount, sizeof(ucount), 1, f);
+    assert(ucount <= intmax(i32), "too many triangles");
+    m->Tcount = (i32)ucount;
 
     // Allocate worst case.
-    m->V = malloc(sizeof(Vertex) * 3*m->Tcount);
+    m->V = malloc(sizeof(Vertex) * (i64)3*m->Tcount);
     m->T = malloc(sizeof(Tri) * m->Tcount);
     assert(m->V, "allocation failure");
     assert(m->T, "allocation failure");
     m->pset_cap = 1;
-    while (m->pset_cap < 6*m->Tcount) // worst-case 50% loading.
+    while (m->pset_cap < (i64)6*m->Tcount) // worst-case 50% loading.
         m->pset_cap <<= 1;
     m->pset = malloc(sizeof(InternedPoint) * m->pset_cap);
     assert(m->pset, "allocation failure");
 
     // Initialise vertex set to empty.
-    for (i32 i=0; i<m->pset_cap; ++i)
+    for (i64 i=0; i<m->pset_cap; ++i)
         m->pset[i].idx = -1;
     m->Vcount = 0;
 
     // Read all triangles.
+    i32 degen_triangles = 0;
     STLTriangle tri;
     i32 t = 0;
     ProgressBar* pb = &(ProgressBar){0};
     progressbar_init(pb, m->Tcount, 20);
-    while (t < m->Tcount) {
+    for (i32 i=0; i<m->Tcount; ++i) {
         progressbar_update(pb, t);
         if (fread(&tri, STL_TRI_SIZE, 1, f) < 1)
             break;
@@ -1548,16 +1637,23 @@ static void read_stl(Mesh* m, const char* rstr path) {
         vec3 b = vec3_from_array(tri.b);
         vec3 c = vec3_from_array(tri.c);
         vec3 normal = cross(b - a, c - a); // ccw normal.
-        if (mag(normal) < 1e-7f)
+        f32 nmag = mag(normal);
+        if (nmag == 0.0f) {
+            ++degen_triangles;
             continue;
+        }
+        // let tiny triangles fly bc otherwise it would cause a non-closed
+        // manifold :/.
         vec3 stl_normal = vec3_from_array(tri.normal);
-        if (dot(normal, stl_normal) < 0)
+        if (dot(normal, stl_normal) < 0.0f)
             swap(b, c);
         i32 ia = point_intern(m, a[0], a[1], a[2]);
         i32 ib = point_intern(m, b[0], b[1], b[2]);
         i32 ic = point_intern(m, c[0], c[1], c[2]);
-        if (ia == ib || ia == ic || ib == ic)
+        if (ia == ib || ia == ic || ib == ic) {
+            ++degen_triangles;
             continue;
+        }
         m->T[t].a = ia;
         m->T[t].b = ib;
         m->T[t].c = ic;
@@ -1565,6 +1661,12 @@ static void read_stl(Mesh* m, const char* rstr path) {
         ++t;
     }
     progressbar_finish(pb);
+
+    if (degen_triangles > 0) {
+        printf("warning: input stl had %d degenerate triangle%s\n",
+                degen_triangles, (degen_triangles > 1) ? "s" : "");
+    }
+
     m->Tcount = t;
 
     free(m->pset);
@@ -1586,6 +1688,15 @@ static void write_stl(const Mesh* m, const char* rstr path) {
 
     char header[80];
     memset(header, ' ', sizeof(header));
+    header[0] = 'd';
+    header[1] = 'e';
+    header[2] = 'c';
+    header[3] = 'i';
+    header[5] = '(';
+    header[6] = 's';
+    header[7] = 't';
+    header[8] = 'u';
+    header[9] = ')';
     fwrite(header, sizeof(header), 1, f);
 
     i32 count = 0;
@@ -1664,7 +1775,7 @@ i32 main(i32 argc, char** argv) {
     if (isinf(cutoff_cost)) {
         printf("in         = %s\n", path_in);
         printf("out        = %s\n", path_out);
-        printf("reduction  = %.2f %%\n", 100.0*reduction);
+        printf("reduction  = %.1f%%\n", 100.0*reduction);
     } else {
         printf("in           = %s\n", path_in);
         printf("out          = %s\n", path_out);
@@ -1680,19 +1791,22 @@ i32 main(i32 argc, char** argv) {
     Tri* T = mesh.T;
     i32 Vcount = mesh.Vcount;
     i32 Tcount = mesh.Tcount;
+    printf("\n--- counting edges (input) ---\n");
     i32 Ecount = count_edges(T, Tcount);
-    i32 closed_mani = is_closed_mani(T, Tcount, Ecount);
-
-    assert(closed_mani, "input mesh must be a closed manifold");
+    printf("\n--- analysing topology (input) ---\n");
+    i32 closed_mani = is_closed_mani(V, T, Tcount, Ecount);
 
     printf("\n--- mesh stats (input) ---");
     printf("\nvertex count  = "); print_numba(Vcount, 0);
     printf("\ntri count     = "); print_numba(Tcount, 0);
     printf("\nedge count    = "); print_numba(Ecount, 0);
-    printf("\neuler char.   = %3d", Vcount - Ecount + Tcount);
-    printf("\nclosed mani.  = %3d", closed_mani);
+    printf("\neuler char.   = %4d", Vcount - Ecount + Tcount);
+    printf("\nclosed mani.  = %4d", closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(Tcount), 1);
     printf("\n");
+
+    assert(closed_mani, "input mesh must be a closed manifold");
+
 
     printf("\n--- allocations ---");
     i64 size_vertex = Vcount * sizeof(Vertex);
@@ -1705,16 +1819,19 @@ i32 main(i32 argc, char** argv) {
     Adj* adj = &(Adj){0};
     i64 size_adj_tri;
     i64 size_adj_off;
-    adj_init(adj, T, Vcount, Tcount, &size_adj_tri, &size_adj_off);
+    i64 size_adj_cursor;
+    adj_init(adj, V, T, Vcount, Tcount, &size_adj_tri, &size_adj_off,
+            &size_adj_cursor);
     printf("\nadj tri     = "); print_numba(size_adj_tri, 1);
     printf("\nadj off     = "); print_numba(size_adj_off, 1);
+    printf("\nadj cursor  = "); print_numba(size_adj_cursor, 1);
 
 
     // Setup edge heap.
     Heapq* heap = &(Heapq){0};
     i64 size_heap_bkts;
     i64 size_heap_idxr;
-    heapq_init(heap, min(3*Tcount, 3*Vcount), &size_heap_bkts, &size_heap_idxr);
+    heapq_init(heap, Ecount, &size_heap_bkts, &size_heap_idxr);
     printf("\nheap bkts   = "); print_numba(size_heap_bkts, 1);
     printf("\nheap idxr   = "); print_numba(size_heap_idxr, 1);
 
@@ -1732,7 +1849,7 @@ i32 main(i32 argc, char** argv) {
 
     printf("\nTOTAL       = "); print_numba((i64)0
         + size_vertex + size_index
-        + size_adj_tri + size_adj_off
+        + size_adj_tri + size_adj_off + size_adj_cursor
         + size_heap_bkts + size_heap_idxr
         + size_neighbours
         , 1);
@@ -1756,8 +1873,9 @@ i32 main(i32 argc, char** argv) {
     for (i32 t=0; t<Tcount; ++t) {
         progressbar_update(pb_initial_edge, t);
         for (i32 i=0; i<3; ++i) {
-            i32 n = min(T[t].i[i], T[t].i[(i + 1) % 3]);
-            i32 m = max(T[t].i[i], T[t].i[(i + 1) % 3]);
+            i32 j = (i + 1) % 3;
+            i32 n = min(T[t].i[i], T[t].i[j]);
+            i32 m = max(T[t].i[i], T[t].i[j]);
             f64 cost = optimal_collapse(V, n, m, (f32[3]){0});
             HEdge edge = { cost, n, m };
             heapq_push(heap, &edge);
@@ -1767,8 +1885,9 @@ i32 main(i32 argc, char** argv) {
 
 
     // Pop edges.
-    i32 limit = max(3 /* closed solid */, Tcount * reduction);
+    i32 limit = max(4 /* closed solid */, Tcount * reduction);
     i32 active = Tcount;
+    i32 last_refreshed_adj = active;
     printf("\n--- decimating ---\n");
 
     ProgressBar* pb_deci = &(ProgressBar){0};
@@ -1780,6 +1899,16 @@ i32 main(i32 argc, char** argv) {
     while ((active > limit) && (heap->count > 0)) {
         TIME_ZONE(ZONE_PROGRESS_BAR)
             progressbar_update(pb_deci, Tcount - active);
+
+        // As we kill more triangles, the adjacency list becomes more and more
+        // deadspace and each vertex requires a longer and longer walk. Because
+        // of this, its much faster if we recompute the adj list every so-often.
+        TIME_ZONE(ZONE_ADJ_REFRESH)
+        if (last_refreshed_adj - active > 1000000) {
+            adj_refresh(adj, V, T, Vcount, Tcount);
+            last_refreshed_adj = active;
+        }
+
 
         HEdge edge;
 
@@ -1793,9 +1922,6 @@ i32 main(i32 argc, char** argv) {
             heapq_pop(heap, &edge);
         i32 n = edge.n;
         i32 m = edge.m;
-
-        if (V[n].dead || V[m].dead)
-            goto NEXT;
 
 
         // If this would open the manifold, dont do it.
@@ -1842,19 +1968,19 @@ i32 main(i32 argc, char** argv) {
             // Else point to `n`.
             else {
                 TIME_ZONE(ZONE_TRI_SHIFT)
-                for (i32 j=0; j<3; ++j) {
-                    if (T[t].i[j] == m) {
-                        T[t].i[j] = n;
-                        i32 jj = (j + 1) % 3;
-                        i32 jjj = (j + 2) % 3;
-                        i32 nn = min(m, T[t].i[jj]);
-                        i32 mm = max(m, T[t].i[jj]);
-                        heapq_remove(heap, nn, mm);
-                        nn = min(m, T[t].i[jjj]);
-                        mm = max(m, T[t].i[jjj]);
-                        heapq_remove(heap, nn, mm);
-                        // break;
-                    }
+                for (i32 i=0; i<3; ++i) {
+                    if (T[t].i[i] != m)
+                        continue;
+                    T[t].i[i] = n;
+                    i32 ii = (i + 1) % 3;
+                    i32 iii = (i + 2) % 3;
+                    i32 nn = min(m, T[t].i[ii]);
+                    i32 mm = max(m, T[t].i[ii]);
+                    heapq_remove(heap, nn, mm);
+                    nn = min(m, T[t].i[iii]);
+                    mm = max(m, T[t].i[iii]);
+                    heapq_remove(heap, nn, mm);
+                    break;
                 }
             }
         }
@@ -1871,11 +1997,8 @@ i32 main(i32 argc, char** argv) {
             i32 t = adj_t(it);
             if (T[t].dead)
                 continue;
-
-            for (i32 j=0; j<3; ++j) {
-                i32 v = T[t].i[j];
-                if (V[v].dead)
-                    continue;
+            for (i32 i=0; i<3; ++i) {
+                i32 v = T[t].i[i];
                 if (v == n)
                     continue;
                 neighbours_push(neighbours, V, v);
@@ -1904,18 +2027,20 @@ i32 main(i32 argc, char** argv) {
     for (i32 v=0; v<Vcount; ++v)
         new_Vcount += !V[v].dead;
     i32 new_Tcount = active; // we "happened" to already be tracking it.
+    printf("\n--- counting edges (output) ---\n");
     i32 new_Ecount = count_edges(T, Tcount);
-    i32 new_closed_mani = is_closed_mani(T, Tcount, new_Ecount);
+    printf("\n--- analysing topology (output) ---\n");
+    i32 new_closed_mani = is_closed_mani(V, T, Tcount, new_Ecount);
 
     printf("\n--- mesh stats (output) ---");
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
-    printf("\neuler char.   = %3d", new_Vcount - new_Ecount + new_Tcount);
-    printf("\nclosed mani.  = %3d", new_closed_mani);
+    printf("\neuler char.   = %4d", new_Vcount - new_Ecount + new_Tcount);
+    printf("\nclosed mani.  = %4d", new_closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
-    printf("\n               (%6.2f %% )", file_size_percent);
+    printf("\n               (%7.2f %% )", file_size_percent);
     printf("\n");
 
     return 0;
