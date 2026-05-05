@@ -75,7 +75,7 @@ static void progressbar_update(ProgressBar* pb, i64 curr) {
     assert(curr <= pb->total, "progress bar overflow");
 
     f64 elapsed = timer_now() - pb->start_time;
-    f64 percent = (f64)curr / pb->total;
+    f64 percent = curr / (f64)pb->total;
     i32 pos = (i32)(PROGRESS_BAR_WIDTH * percent);
 
     // Calculate ETA.
@@ -344,7 +344,7 @@ static f64 parse_f64(const char* s) {
 //  [     q4  q5  q6  ]
 //  [         q7  q8  ]
 //  [             q9  ]
-typedef f64 Quadric[10];
+enum { QUADRIC_NUMEL = 10 };
 
 // Is active?
 #define DEAD ((u32)0x1)
@@ -366,7 +366,7 @@ typedef struct __attribute__((__aligned__(16))) Vertex {
     // DEAD and IN_NEIGHBOURS flags.
     u32 flags;
     // Quadric.
-    Quadric q;
+    f64 q[QUADRIC_NUMEL];
 } Vertex;
 
 
@@ -388,43 +388,39 @@ typedef struct __attribute__((__aligned__(16))) Tri {
 
 
 
-typedef f64 mat3[9]; // row-major 3x3 matrix.
-
-static f64 det3(mat3 m) {
+// row-major mat3 determinant.
+static f64 det3(const f64 m[rstr 9]) {
     return m[0] * (m[4]*m[8] - m[5]*m[7])
-         - m[1] * (m[3]*m[8] - m[5]*m[6])
+         + m[1] * (m[5]*m[6] - m[3]*m[8])
          + m[2] * (m[3]*m[7] - m[4]*m[6]);
 }
 
-static void solve3x3(mat3 A, f64 B[rstr 3], f64 out[rstr 3]) {
+static i32 solve3x3(f32 out[rstr 3], const f64 A[rstr 9], const f64 B[rstr 3]) {
     f64 det = det3(A);
-    if (abs(det) < 1e-12) {
-        out[0] = NAN;
-        out[1] = NAN;
-        out[2] = NAN;
-        return;
-    }
-    mat3 Ax = {
+    if (abs(det) < 1e-11)
+        return 0;
+    f64 Ax[9] = {
         B[0], A[1], A[2],
         B[1], A[4], A[5],
         B[2], A[7], A[8],
     };
-    mat3 Ay = {
+    f64 Ay[9] = {
         A[0], B[0], A[2],
         A[3], B[1], A[5],
         A[6], B[2], A[8],
     };
-    mat3 Az = {
+    f64 Az[9] = {
         A[0], A[1], B[0],
         A[3], A[4], B[1],
         A[6], A[7], B[2],
     };
-    out[0] = det3(Ax)/det;
-    out[1] = det3(Ay)/det;
-    out[2] = det3(Az)/det;
+    out[0] = (f32)(det3(Ax)/det);
+    out[1] = (f32)(det3(Ay)/det);
+    out[2] = (f32)(det3(Az)/det);
+    return 1;
 }
 
-static void compute_quadric(Vertex* V, Tri* t) {
+static void compute_quadric(Vertex* V, const Tri* t) {
     f64 a[3] = {
         V[t->a].x,
         V[t->a].y,
@@ -454,34 +450,45 @@ static void compute_quadric(Vertex* V, Tri* t) {
     n[1] /= nmag;
     n[2] /= nmag;
 
-    f64 d = -(n[0]*a[0] + n[1]*a[1] + n[2]*a[2]);
+    // Quadrics are stored in vertex-local frame (centred at the vertex).
+    // Each vertex lies on its incident face planes, so d = 0 in the local frame:
+    //   d = -(n . vertex) + (n . vertex) = 0.
+    // Only A = n*n^T is accumulated; b and c stay zero, eliminating the large
+    // d*d term.
 
-    Quadric q;
-    q[0] = (f64)(n[0]*n[0]);
-    q[1] = (f64)(n[0]*n[1]);
-    q[2] = (f64)(n[0]*n[2]);
-    q[3] = (f64)(n[0]*d);
+    f64 q0 = n[0]*n[0];
+    f64 q1 = n[0]*n[1];
+    f64 q2 = n[0]*n[2];
 
-    q[4] = (f64)(n[1]*n[1]);
-    q[5] = (f64)(n[1]*n[2]);
-    q[6] = (f64)(n[1]*d);
+    f64 q4 = n[1]*n[1];
+    f64 q5 = n[1]*n[2];
 
-    q[7] = (f64)(n[2]*n[2]);
-    q[8] = (f64)(n[2]*d);
+    f64 q7 = n[2]*n[2];
 
-    // TODO: address the more general issue of this term being large and
-    // potentially precision-capping the rest.
-    q[9] = (f64)(   d*d);
+    V[t->a].q[0] += q0;
+    V[t->a].q[1] += q1;
+    V[t->a].q[2] += q2;
+    V[t->a].q[4] += q4;
+    V[t->a].q[5] += q5;
+    V[t->a].q[7] += q7;
 
-    for (i32 i=0; i<numel(Quadric); ++i)
-        V[t->a].q[i] += q[i];
-    for (i32 i=0; i<numel(Quadric); ++i)
-        V[t->b].q[i] += q[i];
-    for (i32 i=0; i<numel(Quadric); ++i)
-        V[t->c].q[i] += q[i];
+    V[t->b].q[0] += q0;
+    V[t->b].q[1] += q1;
+    V[t->b].q[2] += q2;
+    V[t->b].q[4] += q4;
+    V[t->b].q[5] += q5;
+    V[t->b].q[7] += q7;
+
+    V[t->c].q[0] += q0;
+    V[t->c].q[1] += q1;
+    V[t->c].q[2] += q2;
+    V[t->c].q[4] += q4;
+    V[t->c].q[5] += q5;
+    V[t->c].q[7] += q7;
 }
 
-static f64 quadric_cost(Quadric q, f64 v[3]) {
+// = v^T*q*v
+static f64 quadric_cost(const f64 q[rstr QUADRIC_NUMEL], const f32 v[rstr 3]) {
     f64 c = q[0]*v[0]*v[0] + 2*q[1]*v[0]*v[1] + 2*q[2]*v[0]*v[2] + 2*q[3]*v[0]
                            +   q[4]*v[1]*v[1] + 2*q[5]*v[1]*v[2] + 2*q[6]*v[1]
                                               +   q[7]*v[2]*v[2] + 2*q[8]*v[2]
@@ -489,71 +496,101 @@ static f64 quadric_cost(Quadric q, f64 v[3]) {
     return max(0.0, c);
 }
 
-static f64 optimal_collapse(const Vertex* V, i32 n, i32 m, f32 vbar[rstr 3]) {
-    // Find resultant quadric.
-    Quadric q;
-    for (i32 i=0; i<numel(Quadric); ++i)
-        q[i] = V[n].q[i] + V[m].q[i];
-
-    // Build the system and solve for optimal vbar.
-    mat3 A = {
-        q[0], q[1], q[2],
-        q[1], q[4], q[5],
-        q[2], q[5], q[7],
-    };
-    f64 B[3] = {
-        -q[3], -q[6], -q[8],
-    };
-    f64 v[3];
-    solve3x3(A, B, v);
-
-    // If matrix is singular, pick the best of a few options.
-    if (isnan(v[0]) || isnan(v[1]) || isnan(v[2])) {
-        f64 v0[3] = {
-            V[n].x,
-            V[n].y,
-            V[n].z,
-        };
-        f64 v1[3] = {
-            0.5*V[n].x + 0.5*V[m].x,
-            0.5*V[n].y + 0.5*V[m].y,
-            0.5*V[n].z + 0.5*V[m].z,
-        };
-        f64 v2[3] = {
-            V[m].x,
-            V[m].y,
-            V[m].z,
-        };
-        f64 c0 = quadric_cost(q, v0);
-        f64 c1 = quadric_cost(q, v1);
-        f64 c2 = quadric_cost(q, v2);
-        if (c0 < min(c1, c2)) {
-            vbar[0] = v0[0];
-            vbar[1] = v0[1];
-            vbar[2] = v0[2];
-            return c0;
-        }
-        if (c2 < min(c0, c1)) {
-            vbar[0] = v2[0];
-            vbar[1] = v2[1];
-            vbar[2] = v2[2];
-            return c2;
-        }
-        vbar[0] = v1[0];
-        vbar[1] = v1[1];
-        vbar[2] = v1[2];
-        return c1;
-    }
-
-    // Evaluate the quadric error at vbar.
-    vbar[0] = v[0];
-    vbar[1] = v[1];
-    vbar[2] = v[2];
-    f64 c = quadric_cost(q, v);
-    return c;
+// Translate a vertex-local quadric by +delta.
+static void quadric_translate(f64 out[rstr QUADRIC_NUMEL],
+        const f64 q[rstr QUADRIC_NUMEL], const f32 delta[rstr 3]) {
+    // A = n*n^T is invariant under translation.
+    out[0] = q[0];
+    out[1] = q[1];
+    out[2] = q[2];
+    out[4] = q[4];
+    out[5] = q[5];
+    out[7] = q[7];
+    // b_new = b_old + A*delta.
+    out[3] = q[3] + q[0]*delta[0] + q[1]*delta[1] + q[2]*delta[2];
+    out[6] = q[6] + q[1]*delta[0] + q[4]*delta[1] + q[5]*delta[2];
+    out[8] = q[8] + q[2]*delta[0] + q[5]*delta[1] + q[7]*delta[2];
+    // c_new = delta^T*A*delta + 2*b_old^T*delta + c_old = q(delta).
+    out[9] = quadric_cost(q, delta);
 }
 
+static f64 cost_of_collapse(const Vertex* rstr n, const Vertex* rstr m,
+        const f32 v[rstr 3]) {
+    f32 dn[3] = { v[0] - n->v[0], v[1] - n->v[1], v[2] - n->v[2] };
+    f32 dm[3] = { v[0] - m->v[0], v[1] - m->v[1], v[2] - m->v[2] };
+    return quadric_cost(n->q, dn) + quadric_cost(m->q, dm);
+}
 
+static f64 optimal_collapse(f32 vbar[rstr 3], const Vertex* rstr n,
+        const Vertex* rstr m) {
+    const f32* vn = n->v;
+    const f32* vm = m->v;
+    const f64* qn = n->q;
+    const f64* qm = m->q;
+
+    // Minimise Q_n(vbar - vn) + Q_m(vbar - vm).
+    // Setting the gradient to zero gives:
+    //  (A_n + A_m)*vbar = A_n*vn - b_n + A_m*vm - b_m.
+    f64 A[9] = {
+        qn[0] + qm[0],  qn[1] + qm[1],  qn[2] + qm[2],
+        qn[1] + qm[1],  qn[4] + qm[4],  qn[5] + qm[5],
+        qn[2] + qm[2],  qn[5] + qm[5],  qn[7] + qm[7],
+    };
+    f64 B[3] = {
+        qn[0]*vn[0] + qn[1]*vn[1] + qn[2]*vn[2] - qn[3]
+      + qm[0]*vm[0] + qm[1]*vm[1] + qm[2]*vm[2] - qm[3],
+        qn[1]*vn[0] + qn[4]*vn[1] + qn[5]*vn[2] - qn[6]
+      + qm[1]*vm[0] + qm[4]*vm[1] + qm[5]*vm[2] - qm[6],
+        qn[2]*vn[0] + qn[5]*vn[1] + qn[7]*vn[2] - qn[8]
+      + qm[2]*vm[0] + qm[5]*vm[1] + qm[7]*vm[2] - qm[8],
+    };
+
+    if (solve3x3(vbar, A, B)) {
+        // Evaluate the quadric error at vbar.
+        return cost_of_collapse(n, m, vbar);
+    }
+
+    // If matrix is singular, pick the best of a few options.
+    f32 vo[3] = {
+        0.5f*vn[0] + 0.5f*vm[0],
+        0.5f*vn[1] + 0.5f*vm[1],
+        0.5f*vn[2] + 0.5f*vm[2],
+    };
+    f64 cn = cost_of_collapse(n, m, vn);
+    f64 co = cost_of_collapse(n, m, vo);
+    f64 cm = cost_of_collapse(n, m, vm);
+    if (cn < min(co, cm)) {
+        vbar[0] = vn[0];
+        vbar[1] = vn[1];
+        vbar[2] = vn[2];
+        return cn;
+    }
+    if (cm < min(cn, co)) {
+        vbar[0] = vm[0];
+        vbar[1] = vm[1];
+        vbar[2] = vm[2];
+        return cm;
+    }
+    vbar[0] = vo[0];
+    vbar[1] = vo[1];
+    vbar[2] = vo[2];
+    return co;
+}
+
+static void collapse(Vertex* rstr n, Vertex* rstr m, const f32 vbar[rstr 3]) {
+    f32 dn[3] = { vbar[0] - n->v[0], vbar[1] - n->v[1], vbar[2] - n->v[2] };
+    f32 dm[3] = { vbar[0] - m->v[0], vbar[1] - m->v[1], vbar[2] - m->v[2] };
+    f64 qn[QUADRIC_NUMEL];
+    f64 qm[QUADRIC_NUMEL];
+    quadric_translate(qn, n->q, dn);
+    quadric_translate(qm, m->q, dm);
+    for (i32 i=0; i<QUADRIC_NUMEL; ++i)
+        n->q[i] = qn[i] + qm[i];
+    n->v[0] = vbar[0];
+    n->v[1] = vbar[1];
+    n->v[2] = vbar[2];
+    m->flags |= DEAD;
+}
 
 
 
@@ -751,9 +788,9 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
     edgeset_init(edgeset1, uptopow2(Ecount + Ecount/2), NULL);
 
     ProgressBar* pb = &(ProgressBar){0};
-    progressbar_init(pb, Tcount + edgeset0->cap, 10);
+    progressbar_init(pb, 1000, 20);
     for (i32 t=0; t<Tcount; ++t) {
-        progressbar_update(pb, t);
+        progressbar_update(pb, (i64)(5e2 * t / (f64)Tcount));
         if (T[t].dead)
             continue;
         for (i32 i=0; i<3; ++i) {
@@ -776,7 +813,7 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
     }
 
     for (i64 i=0; i<edgeset0->cap; ++i) {
-        progressbar_update(pb, Tcount + i);
+        progressbar_update(pb, 500 + (i64)(5e2 * i / (f64)edgeset0->cap));
         i32 n, m;
         if (!edgeset_get(edgeset0, i, &n, &m))
             continue;
@@ -1074,11 +1111,15 @@ static void heapq_push(Heapq* h, const HEdge* rstr edge) {
     }
 }
 
-static void heapq_pop(Heapq* h, HEdge* rstr out) {
+static void heapq_peep(const Heapq* h, HEdge* rstr out) {
     assert(h->count > 0, "empty heap");
     *out = h->data[0];
+}
 
-    i32 idxr_i = indexer_find(&h->idxr, out->n, out->m);
+static void heapq_pop(Heapq* h) {
+    assert(h->count > 0, "empty heap");
+
+    i32 idxr_i = indexer_find(&h->idxr, h->data[0].n, h->data[0].m);
     indexer_remove(&h->idxr, idxr_i);
 
     h->data[0] = h->data[--h->count];
@@ -1490,7 +1531,6 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
     // Now walk m's 1-ring. Every vertex that appears in both rings (i.e. is
     // tagged) needs to be one of the recorded edge-link vertices.
 
-    i32 safe = 1;
     for (adj_iterate(adj, m, it)) {
         i32 t = adj_t(it);
         if (T[t].dead)
@@ -1511,8 +1551,11 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
                     break;
                 }
             }
-            if (!in_edge_link)
-                safe = 0;
+            if (!in_edge_link) {
+                while (nb->count > 0)
+                    neighbours_pop(nb, V);
+                return 1;
+            }
 
             // Manual untag to prevent double-counting.
             V[v].flags &= ~IN_NEIGHBOURS;
@@ -1521,7 +1564,7 @@ static i32 collapse_would_tear(Vertex* V, const Tri* T, Adj* adj, Neighbours* nb
 
     while (nb->count > 0)
         neighbours_pop(nb, V);
-    return !safe;
+    return 0;
 }
 
 
@@ -1768,8 +1811,8 @@ i32 main(i32 argc, char** argv) {
     const char* path_out = argv[2];
     f64 reduction = parse_f64(argv[3]);
     assert(notnan(reduction), "failed to parse final size");
-    assert(0.0 < reduction && reduction < 1.0, "invalid final size "
-                                               "(must be >0 and <1)");
+    assert(0.0 <= reduction && reduction <= 1.0, "invalid final size "
+                                                 "(must be in 0-1)");
     f64 cutoff_cost = (argc > 4) ? parse_f64(argv[4]) : +INF;
     assert(notnan(cutoff_cost), "failed to parse cutoff cost");
 
@@ -1797,12 +1840,13 @@ i32 main(i32 argc, char** argv) {
     i32 Ecount = count_edges(T, Tcount);
     printf("\n--- analysing topology (input) ---\n");
     i32 closed_mani = is_closed_mani(V, T, Tcount, Ecount);
+    i32 euler_char = Vcount - Ecount + Tcount;
 
     printf("\n--- mesh stats (input) ---");
     printf("\nvertex count  = "); print_numba(Vcount, 0);
     printf("\ntri count     = "); print_numba(Tcount, 0);
     printf("\nedge count    = "); print_numba(Ecount, 0);
-    printf("\neuler char.   = %4d", Vcount - Ecount + Tcount);
+    printf("\neuler char.   = %4d", euler_char);
     printf("\nclosed mani.  = %4d", closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(Tcount), 1);
     printf("\n");
@@ -1878,7 +1922,7 @@ i32 main(i32 argc, char** argv) {
             i32 j = (i + 1) % 3;
             i32 n = min(T[t].i[i], T[t].i[j]);
             i32 m = max(T[t].i[i], T[t].i[j]);
-            f64 cost = optimal_collapse(V, n, m, (f32[3]){0});
+            f64 cost = optimal_collapse((f32[3]){0}, V + n, V + m);
             HEdge edge = { cost, n, m };
             heapq_push(heap, &edge);
         }
@@ -1887,15 +1931,16 @@ i32 main(i32 argc, char** argv) {
 
 
     // Pop edges.
-    i32 limit = max(4 /* closed solid */, Tcount * reduction);
+    i32 limit = max(4 /* closed solid */, (i32)(Tcount * reduction));
     i32 active = Tcount;
     i32 last_refreshed_adj = active;
+    i32 hit_cutoff = 0;
     printf("\n--- decimating ---\n");
 
     ProgressBar* pb_deci = &(ProgressBar){0};
     // https://www.desmos.com/calculator/8xkwvol4j6
-    i32 pb_deci_touchpoints = (i32)(1.0 + 0.2*sqrt((f64)(active - limit)));
-    pb_deci_touchpoints = min(max(pb_deci_touchpoints, 5), 300);
+    i32 pb_deci_touchpoints = (i32)(1.0 + 0.1*sqrt((f64)(active - limit)));
+    pb_deci_touchpoints = min(max(pb_deci_touchpoints, 5), 500);
     progressbar_init(pb_deci, active - limit, pb_deci_touchpoints);
     TIME_ZONE(ZONE_DECIMATE)
     while ((active > limit) && (heap->count > 0)) {
@@ -1912,18 +1957,20 @@ i32 main(i32 argc, char** argv) {
         }
 
 
-        HEdge edge;
+        HEdge* edge = &(HEdge){0};
 
         // Peep first.
-        edge = heap->data[0];
-        if (edge.cost > cutoff_cost)
+        heapq_peep(heap, edge);
+        if (edge->cost > cutoff_cost) {
+            hit_cutoff = 1;
             break;
+        }
 
         // Pop now.
         TIME_ZONE(ZONE_HEAP_POP)
-            heapq_pop(heap, &edge);
-        i32 n = edge.n;
-        i32 m = edge.m;
+            heapq_pop(heap);
+        i32 n = edge->n;
+        i32 m = edge->m;
 
 
         // If this would open the manifold, dont do it.
@@ -1934,7 +1981,7 @@ i32 main(i32 argc, char** argv) {
 
         f32 vbar[3];
         TIME_ZONE(ZONE_OPTIMAL_COLLAPSE)
-            (void)optimal_collapse(V, n, m, vbar);
+            (void)optimal_collapse(vbar, V + n, V + m);
 
 
         // If this would flip a triangle, dont do it.
@@ -1944,15 +1991,8 @@ i32 main(i32 argc, char** argv) {
 
 
         // Overwrite index `n` with the new optimal position and mark `m` dead.
-        TIME_ZONE(ZONE_COLLAPSE) {
-            V[n].x = vbar[0];
-            V[n].y = vbar[1];
-            V[n].z = vbar[2];
-            for (i32 i=0; i<numel(Quadric); ++i)
-                V[n].q[i] += V[m].q[i];
-
-            V[m].flags |= DEAD;
-        }
+        TIME_ZONE(ZONE_COLLAPSE)
+            collapse(V + n, V + m, vbar);
 
         // Kill faces containing both `n` and `m`, and update faces containing
         // `m` to point to `n`.
@@ -1968,22 +2008,20 @@ i32 main(i32 argc, char** argv) {
                 --active;
             }
             // Else point to `n`.
-            else {
-                TIME_ZONE(ZONE_TRI_SHIFT)
-                for (i32 i=0; i<3; ++i) {
-                    if (T[t].i[i] != m)
-                        continue;
-                    T[t].i[i] = n;
-                    i32 ii = (i + 1) % 3;
-                    i32 iii = (i + 2) % 3;
-                    i32 nn = min(m, T[t].i[ii]);
-                    i32 mm = max(m, T[t].i[ii]);
-                    heapq_remove(heap, nn, mm);
-                    nn = min(m, T[t].i[iii]);
-                    mm = max(m, T[t].i[iii]);
-                    heapq_remove(heap, nn, mm);
-                    break;
-                }
+            else TIME_ZONE(ZONE_TRI_SHIFT) {
+                i32 i = (T[t].i[0] == m) ? 0
+                      : (T[t].i[1] == m) ? 1
+                      : 2;
+                assert(T[t].i[i] == m, "tri adj to m doesnt contain m");
+                i32 ii = (i + 1) % 3;
+                i32 iii = (i + 2) % 3;
+                T[t].i[i] = n;
+                i32 nn = min(m, T[t].i[ii]);
+                i32 mm = max(m, T[t].i[ii]);
+                heapq_remove(heap, nn, mm);
+                nn = min(m, T[t].i[iii]);
+                mm = max(m, T[t].i[iii]);
+                heapq_remove(heap, nn, mm);
             }
         }
 
@@ -2012,7 +2050,7 @@ i32 main(i32 argc, char** argv) {
             i32 neighbour = neighbours_pop(neighbours, V);
             i32 nn = min(n, neighbour);
             i32 mm = max(n, neighbour);
-            f64 cost = optimal_collapse(V, nn, mm, (f32[3]){0});
+            f64 cost = optimal_collapse((f32[3]){0}, V + nn, V + mm);
             HEdge edge = { cost, nn, mm };
             heapq_push(heap, &edge);
         }
@@ -2020,6 +2058,8 @@ i32 main(i32 argc, char** argv) {
       NEXT:;
     }
     progressbar_finish(pb_deci);
+    if (hit_cutoff)
+        printf("  (hit cutoff cost.)\n");
 
     report_telemetry();
 
@@ -2033,17 +2073,23 @@ i32 main(i32 argc, char** argv) {
     i32 new_Ecount = count_edges(T, Tcount);
     printf("\n--- analysing topology (output) ---\n");
     i32 new_closed_mani = is_closed_mani(V, T, Tcount, new_Ecount);
+    i32 new_euler_char = new_Vcount - new_Ecount + new_Tcount;
 
     printf("\n--- mesh stats (output) ---");
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
-    printf("\neuler char.   = %4d", new_Vcount - new_Ecount + new_Tcount);
+    printf("\neuler char.   = %4d", new_euler_char);
     printf("\nclosed mani.  = %4d", new_closed_mani);
     printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
     printf("\n               (%7.2f %% )", file_size_percent);
-    printf("\n");
 
+    if (new_euler_char != euler_char)
+        printf("warning: euler characteristic changed from decimation.\n");
+    if (new_closed_mani != closed_mani)
+        printf("warning: closed-manifold-ness changed from decimation.\n");
+
+    printf("\n");
     return 0;
 }
