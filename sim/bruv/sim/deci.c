@@ -1,3 +1,5 @@
+#if defined(DECI) && DECI
+
 #include "br.h"
 
 #include "assertion.h"
@@ -124,8 +126,9 @@ static void progressbar_finish(ProgressBar* pb) {
 }
 
 
-
-#define DECI_DO_TELEMETRY 1
+#ifndef DECI_TELEMETRY
+  #define DECI_TELEMETRY 0
+#endif
 
 typedef struct ZoneCounter {
     f64 total_time;
@@ -147,6 +150,7 @@ enum {
     ZONE_ADJ_APPEND,
     ZONE_NEIGHBOUR_FIND,
     ZONE_NEIGHBOUR_RECOMPUTE,
+    ZONE_NEIGHBOUR_HEAP_PUSH,
     ZONE_COUNT
 };
 static ZoneCounter telemetry[ZONE_COUNT] = {
@@ -154,18 +158,19 @@ static ZoneCounter telemetry[ZONE_COUNT] = {
     [ZONE_PROGRESS_BAR]         = {0.0, 0, "  progress bar"},
     [ZONE_ADJ_REFRESH]          = {0.0, 0, "  adj refresh"},
     [ZONE_HEAP_POP]             = {0.0, 0, "  heap pop"},
-    [ZONE_OPTIMAL_COLLAPSE]     = {0.0, 0, "  optimal collapse"},
-    [ZONE_COLLAPSE_WOULD_TEAR]  = {0.0, 0, "  collapse would tear"},
-    [ZONE_COLLAPSE_WOULD_FLIP]  = {0.0, 0, "  collapse would flip"},
+    [ZONE_OPTIMAL_COLLAPSE]     = {0.0, 0, "  optimal coll."},
+    [ZONE_COLLAPSE_WOULD_TEAR]  = {0.0, 0, "  coll. would tear"},
+    [ZONE_COLLAPSE_WOULD_FLIP]  = {0.0, 0, "  coll. would flip"},
     [ZONE_COLLAPSE]             = {0.0, 0, "  collapse"},
     [ZONE_TRI_UPDATE]           = {0.0, 0, "  tri update"},
     [ZONE_TRI_SHIFT]            = {0.0, 0, "    tri shift"},
     [ZONE_ADJ_APPEND]           = {0.0, 0, "  adj append"},
-    [ZONE_NEIGHBOUR_FIND]       = {0.0, 0, "  neighbour find"},
-    [ZONE_NEIGHBOUR_RECOMPUTE]  = {0.0, 0, "  neighbour recompute"},
+    [ZONE_NEIGHBOUR_FIND]       = {0.0, 0, "  neigh. find"},
+    [ZONE_NEIGHBOUR_RECOMPUTE]  = {0.0, 0, "  neigh. recompute"},
+    [ZONE_NEIGHBOUR_HEAP_PUSH]  = {0.0, 0, "    neigh. heap push"},
 };
 
-#if DECI_DO_TELEMETRY
+#if DECI_TELEMETRY
 #define TIME_ZONE(zone)                                         \
     for (f64 _start=timer_now(), _once = 1;                     \
          _once;                                                 \
@@ -177,13 +182,13 @@ static ZoneCounter telemetry[ZONE_COUNT] = {
 #endif
 
 static void report_telemetry(void) {
-  #if !DECI_DO_TELEMETRY
+  #if !DECI_TELEMETRY
     return;
   #endif
 
     printf("\n--- performance report ---\n");
-    printf("%-22s | %s | %s | %s\n", "zone", "total [s]", "ave. [us]", "share");
-    printf("-------------------------------------------------------\n");
+    printf(" %-20s | %s | %s | %s\n", "zone", "total [s]", "ave. [us]", "share");
+    printf(" -----------------------------------------------------\n");
 
     f64 grand_total = telemetry[ZONE_DECIMATE].total_time;
     for (i32 i=0; i<ZONE_COUNT; ++i) {
@@ -192,10 +197,10 @@ static void report_telemetry(void) {
         f64 share = (z->total_time / grand_total) * 100.0;
 
         if (z->hit_count > 1) {
-            printf("%-22s | %9.4f | %9.4f | %5.1f%%\n", z->label, z->total_time,
+            printf(" %-20s | %9.4f | %9.4f | %5.1f%%\n", z->label, z->total_time,
                     avg_ms, share);
         } else {
-            printf("%-22s | %9.4f |         - | %5.1f%%\n", z->label,
+            printf(" %-20s | %9.4f |         - | %5.1f%%\n", z->label,
                     z->total_time, share);
         }
     }
@@ -2052,7 +2057,8 @@ i32 main(i32 argc, char** argv) {
             i32 mm = max(n, neighbour);
             f64 cost = optimal_collapse((f32[3]){0}, V + nn, V + mm);
             HEdge edge = { cost, nn, mm };
-            heapq_push(heap, &edge);
+            TIME_ZONE(ZONE_NEIGHBOUR_HEAP_PUSH)
+                heapq_push(heap, &edge);
         }
 
       NEXT:;
@@ -2093,3 +2099,5 @@ i32 main(i32 argc, char** argv) {
     printf("\n");
     return 0;
 }
+
+#endif

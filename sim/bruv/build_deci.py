@@ -27,8 +27,11 @@ def build_deci(gcc_extra_args=()):
         "disas": paths.DECI_DISAS,
         "obj": paths.DECI_OBJ,
     }
-    cmd, builds_final, out = build._gcc_cmd(gcc_extra_args, out_paths=out_paths,
-            dynamic_lib=False)
+    cmd, builds_final, out = build._gcc_cmd(
+        ("-DDECI=1", *gcc_extra_args),
+        out_paths=out_paths,
+        dynamic_lib=False
+    )
     print(f">> {' '.join(cmd)}\n")
 
     out.parent.mkdir(parents=True, exist_ok=True)
