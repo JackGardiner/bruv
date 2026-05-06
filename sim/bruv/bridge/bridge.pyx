@@ -239,7 +239,7 @@ cdef class State:
 
     def execute(State self):
         """
-        Executes the sim library on the current state. Returns None on success,
+        Executes the c library on the current state. Returns None on success,
         otherwise a string detailing the error that occurred (the first line of
         this error string will always be the source location).
         """

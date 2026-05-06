@@ -1,5 +1,5 @@
 """
-Compiles the sim library and cythonises the bridge module.
+Compiles the c library and cythonises the bridge module.
 """
 
 import json
@@ -21,18 +21,18 @@ __all__ = ["BuildError", "build"]
 
 
 
-def _save_sim(cmd, deps, gcc_extra_args):
+def _save_c(cmd, deps, gcc_extra_args):
     data = {
         "command": cmd,
         "dependancies": [str(p) for p in deps],
         "gcc_extra_args": gcc_extra_args,
     }
-    with paths.SIM_CACHE.open("w", encoding="utf-8") as f:
+    with paths.C_CACHE.open("w", encoding="utf-8") as f:
         json.dump(data, f)
 
-def _load_sim():
+def _load_c():
     try:
-        with paths.SIM_CACHE.open("r", encoding="utf-8") as f:
+        with paths.C_CACHE.open("r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             raise BuildError()
@@ -77,8 +77,8 @@ def _load_bridge():
 
 
 
-def _needa_sim(deps, built):
-    # Check if sim has already been built and can be reused.
+def _needa_c(deps, built):
+    # Check if c has already been built and can be reused.
 
     # Check existance.
     if not all(p.is_file() for p in built):
@@ -86,7 +86,7 @@ def _needa_sim(deps, built):
 
     # Check that it was compiled in the same manner we intend to (and with the
     # same files).
-    data = _load_sim()
+    data = _load_c()
     if data is None: # missing
         return True
     try:
@@ -108,7 +108,7 @@ def _needa_sim(deps, built):
     return False
 
 
-def _needa_bridge(deps, built): # same deal as _needa_sim
+def _needa_bridge(deps, built): # same deal as _needa_c
     if not all(p.is_file() for p in built):
         return True
     # ensure at least one .pyd exists.
@@ -131,10 +131,10 @@ def _needa_bridge(deps, built): # same deal as _needa_sim
 def _gcc_cmd(extra_args=(), out_paths=None, dynamic_lib=True):
     if out_paths is None:
         out_paths = {
-            "final": paths.SIM_LIB,
-            "prepro": paths.SIM_PREPRO,
-            "disas": paths.SIM_DISAS,
-            "obj": paths.SIM_OBJ,
+            "final": paths.C_LIB,
+            "prepro": paths.C_PREPRO,
+            "disas": paths.C_DISAS,
+            "obj": paths.C_OBJ,
         }
 
     # gcc args used for compiling.
@@ -247,7 +247,7 @@ def _gcc_cmd(extra_args=(), out_paths=None, dynamic_lib=True):
             link_args = [
                 "-shared",
                 # need stubs for dyn linking on windows.
-                f"-Wl,--out-implib,{paths.SIM_STUBS}",
+                f"-Wl,--out-implib,{paths.C_STUBS}",
             ]
         elif sys.platform == "darwin":
             link_args = [
@@ -304,12 +304,12 @@ def _gcc_cmd(extra_args=(), out_paths=None, dynamic_lib=True):
         *extra_args,
     ]
 
-    # Any directive other than none results in no sim lib.
+    # Any directive other than none results in no c lib.
     builds_lib = sum(given_directives.values()) == 0
 
     return cmd, builds_lib, out
 
-def _build_sim(deps, gcc_extra_args=()):
+def _build_c(deps, gcc_extra_args=()):
     cmd, builds_lib, out = _gcc_cmd(gcc_extra_args)
     print(f">> {' '.join(cmd)}\n")
 
@@ -331,22 +331,22 @@ def _build_sim(deps, gcc_extra_args=()):
     srcs = [p for p in deps if p.suffix == ".c"]
     srcs = sorted(srcs) # just arbitrary but consistent ordering.
     if not srcs:
-        print("error: must have at least one source sim (.c) file\n")
+        print("error: must have at least one source c (.c) file\n")
         raise BuildError()
     def to_include(p):
-        path = p.relative_to(paths.SIM).as_posix()
+        path = p.relative_to(paths.C).as_posix()
         path = json.dumps(path)
         return f"#include {path}\n"
     godfile = "".join(to_include(p) for p in srcs)
 
 
     if builds_lib:
-        _save_sim(cmd, deps, gcc_extra_args) # stash me.
+        _save_c(cmd, deps, gcc_extra_args) # stash me.
 
     # Execute gcc (with working dir in the source files (required)).
     proc = subprocess.Popen(
         cmd,
-        bufsize=-1, cwd=paths.SIM, text=True,
+        bufsize=-1, cwd=paths.C, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         stdin=subprocess.PIPE
     )
@@ -409,15 +409,15 @@ def _build_bridge(deps):
                 runtime_library_dirs = {}
             else:
                 runtime_library_dirs = {
-                    "runtime_library_dirs": [str(paths.BIN_SIM)],
+                    "runtime_library_dirs": [str(paths.BIN_C)],
                 }
             ext = setuptools.Extension(
                 paths.BRIDGE_MODULE_NAME,
                 sources=pyxs,
                 include_dirs=[str(paths.BIN_BRIDGE), np.get_include()],
-                libraries=[str(paths.SIM_LIB_NAME)], # points to stub on windows,
-                                                     # shared lib on other.
-                library_dirs=[str(paths.BIN_SIM)],
+                libraries=[str(paths.C_LIB_NAME)], # points to stub on windows,
+                                                   # shared lib on other.
+                library_dirs=[str(paths.BIN_C)],
                 **runtime_library_dirs,
             )
             setuptools.setup(ext_modules=cythonize([ext]))
@@ -454,31 +454,31 @@ def build(gcc_extra_args=(), must=True):
 
 
     # Recompute dependancies and previous build products.
-    sim_deps = paths.sim_deps()
+    c_deps = paths.c_deps()
+    c_built = paths.c_built()
     bridge_deps = paths.bridge_deps()
-    sim_built = paths.sim_built()
     bridge_built = paths.bridge_built()
 
-    # Build sim lib then cythonise bridge. Note both may be able to re-use the
+    # Build c lib then cythonise bridge. Note both may be able to re-use the
     # previous build (cython actually does some caching of its own but we help it
     # out since its still super slow (nevermind we have covered its entire face
     # in wool it has no idea whats going on)).
 
     try:
-        if not must and not _needa_sim(sim_deps, sim_built):
-            print("Using previously built sim library.") # no \n
+        if not must and not _needa_c(c_deps, c_built):
+            print("Using previously built c library.") # no \n
         else:
-            print("Building sim library...\n")
-            if not _build_sim(sim_deps, gcc_extra_args):
+            print("Building c library...\n")
+            if not _build_c(c_deps, gcc_extra_args):
                 # may have been given args which dont build the actual library.
                 print("nevermind that's all folks.")
                 print("  (non-build directive was given to gcc)")
                 return
-            print("Built sim library.\n")
+            print("Built c library.\n")
     except BuildError:
         # dont leak half-baked goods.
         try:
-            paths.wipe(paths.BIN_SIM)
+            paths.wipe(paths.BIN_C)
         except Exception:
             pass
         raise

@@ -22,7 +22,7 @@ def _load_bridge():
     howtobuild = "run 'py -m bruv.build'"
 
     # Check bin dirs exist.
-    if not paths.BIN_SIM.is_dir() or not paths.BIN_BRIDGE.is_dir():
+    if not paths.BIN_C.is_dir() or not paths.BIN_BRIDGE.is_dir():
         raise ImportError(f"bin directories missing, {howtobuild}")
 
     # Find the actual compiled bridge file.
@@ -33,9 +33,9 @@ def _load_bridge():
         raise ImportError(f"multiple cythonised bridges found, {howtobuild}")
     bridge_path = str(bridge_paths[0].resolve())
 
-    # Windows needs sim lib dir added to be able to find dll.
+    # Windows needs c lib dir added to be able to find dll.
     if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
-        os.add_dll_directory(str(paths.BIN_SIM.resolve()))
+        os.add_dll_directory(str(paths.BIN_C.resolve()))
 
     # Do the actual import.
     name = f"bruv.bridge.{paths.BRIDGE_MODULE_NAME}"

@@ -211,32 +211,32 @@ GCC = "gcc"
 
 BRUV = ROOT / "bruv"
 
-SIM = BRUV / "sim"
+C = BRUV / "c"
 
 BRIDGE = BRUV / "bridge"
 
 BIN = ROOT / "bin"
-BIN_SIM = BIN / "sim"
+BIN_C = BIN / "c"
 BIN_BRIDGE = BIN / "bridge"
 BIN_APPROXIMATOR = BIN / "approximator"
 
 OUT = ROOT / "out"
 
-SIM_PREPRO = OUT / "sim.i"
-SIM_DISAS  = OUT / "sim.s"
-SIM_OBJ    = OUT / "sim.o"
+C_PREPRO = OUT / "c.i"
+C_DISAS  = OUT / "c.s"
+C_OBJ    = OUT / "c.o"
 
-SIM_LIB_NAME = "sim"
+C_LIB_NAME = "c"
 if sys.platform == "win32":
-    SIM_LIB = BIN_SIM / f"{SIM_LIB_NAME}.dll"
-    SIM_STUBS = BIN_SIM / f"{SIM_LIB_NAME}.lib"
+    C_LIB = BIN_C / f"{C_LIB_NAME}.dll"
+    C_STUBS = BIN_C / f"{C_LIB_NAME}.lib"
 elif sys.platform == "darwin":
-    SIM_LIB = BIN_SIM / f"lib{SIM_LIB_NAME}.dylib"
-    SIM_STUBS = None
+    C_LIB = BIN_C / f"lib{C_LIB_NAME}.dylib"
+    C_STUBS = None
 else:
-    SIM_LIB = BIN_SIM / f"lib{SIM_LIB_NAME}.so"
-    SIM_STUBS = None
-SIM_CACHE = BIN_SIM / "cache.json"
+    C_LIB = BIN_C / f"lib{C_LIB_NAME}.so"
+    C_STUBS = None
+C_CACHE = BIN_C / "cache.json"
 
 BRIDGE_MODULE_NAME = "bridge_cythonised"
 BRIDGE_CACHE = BIN_BRIDGE / "cache.json"
@@ -256,14 +256,14 @@ BUILD_PY = BRUV / "build.py"
 BRIDGE_H = BRIDGE / "bridge.h"
 
 
-def sim_deps():
-    paths = subfiles(SIM)
+def c_deps():
+    paths = subfiles(C)
     paths.append(BUILD_PY) # always depends on builder.
     paths.append(PATHS_PY) # builder depends on paths.
     paths.append(BRIDGE_H) # depends on bridge.h also.
     for p in paths:
         if not p.is_file():
-            raise FileNotFoundError(f"missing sim dependancy: {shortstr(p)}")
+            raise FileNotFoundError(f"missing c dependancy: {shortstr(p)}")
     return paths
 
 def bridge_deps():
@@ -276,11 +276,11 @@ def bridge_deps():
     return paths
 
 
-def sim_built(): # not necessarily all existent.
-    paths = [SIM_CACHE]
-    paths.append(SIM_LIB)
-    if SIM_STUBS is not None:
-        paths.append(SIM_STUBS)
+def c_built(): # not necessarily all existent.
+    paths = [C_CACHE]
+    paths.append(C_LIB)
+    if C_STUBS is not None:
+        paths.append(C_STUBS)
     return paths
 
 def bridge_built(): # not necessarily all existent.

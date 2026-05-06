@@ -36,20 +36,20 @@ def build_deci(gcc_extra_args=()):
 
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    srcs = [p for p in paths.subfiles(paths.SIM) if p.suffix == ".c"]
+    srcs = [p for p in paths.subfiles(paths.C) if p.suffix == ".c"]
     srcs = sorted(srcs)
     if not srcs:
-        print("error: must have at least one source sim (.c) file\n")
+        print("error: must have at least one source c (.c) file\n")
         raise build.BuildError()
     def to_include(p):
-        path = p.relative_to(paths.SIM).as_posix()
+        path = p.relative_to(paths.C).as_posix()
         path = json.dumps(path)
         return f"#include {path}\n"
     godfile = "".join(to_include(p) for p in srcs)
 
     proc = subprocess.Popen(
         cmd,
-        bufsize=-1, cwd=paths.SIM, text=True,
+        bufsize=-1, cwd=paths.C, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         stdin=subprocess.PIPE
     )

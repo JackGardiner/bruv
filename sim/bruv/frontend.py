@@ -9,6 +9,7 @@ import time
 from contextlib import contextmanager
 
 import numpy as np
+import matplotlib.ticker
 
 from . import bridge
 from . import geez
@@ -379,7 +380,7 @@ def now_this_is_bruv():
     write_ammendments(state)
 
     get_out = lambda s: state[f"out_{s}"].view(state["out_count"])
-    plot_me(get_out)
+    plot_me(state, get_out)
 
     return 0
 
@@ -387,180 +388,242 @@ def now_this_is_bruv():
 
 
 
-def plot_me(get_out):
+def plot_me(state, get_out):
     g = get_out
     z = 1e3*g("z")
 
+    colors = [
+        # Reds / Pinks
+        "crimson", "firebrick", "indianred", "lightcoral", "salmon",
+        "darksalmon", "rosybrown", "palevioletred", "mediumvioletred",
 
-    win = geez.new_window()
+        # Oranges
+        "darkorange", "coral", "tomato", "orangered", "chocolate", "sienna",
 
-    _, axes = win.new_plots(rows=2, cols=3,
+        # Yellows / Golds
+        "gold", "goldenrod", "darkgoldenrod", "khaki", "darkkhaki",
+
+        # Greens
+        "forestgreen", "seagreen", "mediumseagreen", "limegreen",
+        "olivedrab", "olive", "darkolivegreen", "springgreen",
+
+        # Cyans / Teals
+        "teal", "darkcyan", "cadetblue", "lightseagreen", "turquoise",
+        "mediumturquoise", "paleturquoise",
+
+        # Blues
+        "steelblue", "royalblue", "dodgerblue", "deepskyblue",
+        "cornflowerblue", "slateblue", "mediumslateblue", "navy",
+
+        # Purples
+        "mediumpurple", "blueviolet", "darkviolet", "darkorchid",
+        "mediumorchid", "plum", "thistle",
+
+        # Browns / Earth tones
+        "saddlebrown", "peru", "burlywood", "tan", "wheat",
+
+        # Greys / Neutrals
+        "dimgray", "gray", "darkgray", "silver", "lightgray",
+
+        # Extras (still readable)
+        "slategray", "lightslategray", "darkslategray",
+    ]
+
+
+    def graph1(ax, title, ylabel, *label_name_scale_colour_ls):
+        assert len(label_name_scale_colour_ls) % 5 == 0
+        for i in range(len(label_name_scale_colour_ls) // 5):
+            label, name, scale, colour, ls = \
+                label_name_scale_colour_ls[5*i:5*i + 5]
+            ax.plot(z, scale*g(name), color=colour, ls=ls, label=label)
+        ax.set_title(title)
+        ax.set_xlabel("z [mm]")
+        if len(label_name_scale_colour_ls)//5 > 1:
+            colour = "black"
+        ax.set_ylabel(ylabel, color=colour)
+        ax.tick_params(axis="y", which="both", colors=colour, width=1.2)
+        return ax
+
+    def graph2(ax, title, Lylabel, Lname, Lscale, Lcolour, Lls,
+                          Rylabel, Rname, Rscale, Rcolour, Rls):
+        axR = ax.twinx()
+        ax.plot(z, Lscale * g(Lname), color=Lcolour, ls=Lls)
+        axR.plot(z, Rscale * g(Rname), color=Rcolour, ls=Rls)
+        ax.set_title(title)
+        ax.set_xlabel("z [mm]")
+        ax.set_ylabel(Lylabel, color=Lcolour)
+        axR.set_ylabel(Rylabel, color=Rcolour)
+        ax.tick_params(axis="y", which="both", colors=Lcolour, width=1.2)
+        axR.tick_params(axis="y", which="both", colors=Rcolour, width=1.2)
+
+        def align_yaxis_nice(ax1, ax2):
+            """
+            Aligns the right axis (ax2) to the left axis (ax1) grid using "nice"
+            whole numbers for the right axis ticks.
+            """
+            # 1. Get left axis visible ticks and limits.
+            y1_min, y1_max = ax1.get_ylim()
+            y1_ticks = ax1.get_yticks()
+            y1_ticks = y1_ticks[(y1_ticks >= y1_min) & (y1_ticks <= y1_max)]
+
+            n_intervals = len(y1_ticks) - 1
+            if n_intervals <= 0:
+                return
+
+            # 2. Get the fractional position of the first and last left ticks.
+            f0 = (y1_ticks[0] - y1_min) / (y1_max - y1_min)
+            fn = (y1_ticks[-1] - y1_min) / (y1_max - y1_min)
+            df = fn - f0
+
+            # 3. Get right axis data limits.
+            y2_min_data, y2_max_data = ax2.get_ylim()
+            y2_data_range = y2_max_data - y2_min_data
+
+            # 4. Determine a "nice" step size for the right axis.
+            raw_step = (y2_data_range * df) / n_intervals
+            exponent = np.floor(np.log10(raw_step))
+            fraction = raw_step / 10**exponent
+
+            # Round up to the nearest nice fraction.
+            if fraction <= 1:
+                nice_fraction = 1
+            elif fraction <= 1.5:
+                nice_fraction = 1.5
+            elif fraction <= 2:
+                nice_fraction = 2
+            elif fraction <= 2.5:
+                nice_fraction = 2.5
+            elif fraction <= 4:
+                nice_fraction = 4
+            elif fraction <= 5:
+                nice_fraction = 5
+            else:
+                nice_fraction = 10
+
+            S_nice = nice_fraction * 10**exponent
+
+            # 5. Calculate new limits to ensure data fits and ticks perfectly
+            # align.
+            R_range = (n_intervals * S_nice) / df
+
+            # Calculate upper bound for our starting tick to ensure data stays
+            # inside limits.
+            upper_bound = y2_min_data + f0 * R_range
+
+            # Snap the starting tick to the nearest valid multiple of our nice
+            # step.
+            Rt_0 = np.floor(upper_bound / S_nice) * S_nice
+
+            # Calculate final right axis limits.
+            R_min = Rt_0 - f0 * R_range
+            R_max = R_min + R_range
+
+            # Generate the nice major ticks.
+            y2_ticks = Rt_0 + np.arange(n_intervals + 1) * S_nice
+
+            # 6. Apply limits and ticks to ax2.
+            ax2.set_ylim(R_min, R_max)
+            ax2.set_yticks(y2_ticks)
+
+            # 7. Add minor ticks.
+            ax2.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
+        align_yaxis_nice(ax, axR)
+
+        return ax, axR
+
+
+    fig, axes = geez.new_plots("combustion", rows=2, cols=3,
             fig_kw=dict(figsize=(13, 7)))
-    axes[0,0].set_aspect(1.0)
-    axes[0,0].plot(z, get_out("r")*1e3)
-    axes[0,0].set_title("contour [mm]")
-    axes[1,0].plot(z, get_out("M_g"))
-    axes[1,0].set_title("mach number")
-    axes[0,1].plot(z, get_out("T_g"))
-    axes[0,1].set_title("temperature [K]")
-    axes[1,1].plot(z, get_out("P_g")*1e-5)
-    axes[1,1].set_title("pressure [bar]")
-    axes[0,2].plot(z, get_out("rho_g"))
-    axes[0,2].set_title("density [kg/m3]")
-    axes[1,2].plot(z, get_out("gamma_g"))
-    axes[1,2].set_title("gamma")
-
-    _, axes = win.new_plots(rows=2, cols=3,
-            fig_kw=dict(figsize=(13, 7)))
-    axes[0,0].set_aspect(1.0)
-    axes[0,0].plot(z, get_out("r")*1e3)
-    axes[0,0].set_title("contour [mm]")
-    axes[1,0].plot(z, get_out("M_g"))
-    axes[1,0].set_title("mach number")
-    axes[0,1].plot(z, get_out("cp_g"))
-    axes[0,1].set_title("specific heat [J/kg/K]")
-    axes[1,1].plot(z, get_out("mu_g"))
-    axes[1,1].set_title("viscosity [Pa*s]")
-    axes[0,2].plot(z, get_out("Pr_g"))
-    axes[0,2].set_title("prandtl")
-
-    _, axes = win.new_plots(rows=2, cols=3,
-            fig_kw=dict(figsize=(13, 7)))
-    axes[0,0].plot(z, get_out("T_gw"), label="gas-ish")
-    axes[0,0].plot(z, get_out("T_pdms"), "--", label="pdms surface")
-    axes[0,0].plot(z, get_out("T_wg"), label="wall gas-side")
-    axes[0,0].plot(z, get_out("T_wc"), label="wall coolant-side")
-    ax_q = axes[0,0].twinx()
-    ax_q.plot(z, get_out("q")*1e-6, "-.", color="black", label="heat flux")
-    axes[0,0].set_title("temperature / heat flux [K / MW]")
-    axes[1,0].plot(z, get_out("h_g"), label="gas")
-    axes[1,0].plot(z, get_out("h_c"), label="coolant")
-    axes[1,0].set_title("convection coefficients")
-    axes[0,1].plot(z, get_out("Re_c"))
-    axes[0,1].set_title("reynolds number")
-    axes[1,1].plot(z, get_out("SF"))
-    axes[1,1].set_title("SF")
-    axes[0,2].plot(z, get_out("T_c"))
-    axes[0,2].set_title("coolant temperature [K]")
-    axes[1,2].plot(z, get_out("P_c")*1e-5)
-    axes[1,2].set_title("coolant pressure [bar]")
+    ax = graph1(axes[0, 0], "Chamber contour",
+        "r [mm]", None, "r", 1e3, "black", "-",
+    )
+    ax.axhline(0.0, color="grey", ls="--", lw=1.0)
+    ax.plot(z, -1e3*g("r"), color="black", ls="-")
+    ax.plot([0, 0], [-1e3*g("r")[0], 1e3*g("r")[0]], color="black", ls="-")
+    ax.set_ylim([1.5e3*max(g("r")), -1.5e3*max(g("r"))])
+    ax.set_aspect(1.0)
+    graph1(axes[0, 1], "Chamber temperature",
+        "T [K]", None, "T_g", 1, "crimson", "-",
+    )
+    graph1(axes[0, 2], "Chamber pressure",
+        "P [bar]", None, "P_g", 1e-5, "saddlebrown", "-",
+    )
+    graph2(axes[1, 0], "Chamber density & mach number",
+        "ρ [kg m⁻³]", "rho_g", 1, "mediumpurple", "-",
+        "M [-]",      "M_g",   1, "cadetblue",    "-",
+    )
+    graph2(axes[1, 1], "Chamber specific heat & ratio",
+        "cₚ [J kg⁻¹ K⁻¹]", "cp_g",    1, "teal",       "-",
+        "γ [-]",          "gamma_g", 1, "darkorange", "-",
+    )
+    graph2(axes[1, 2], "Chamber viscosity & Prandtl number",
+        "μ [Pa s]", "mu_g", 1, "seagreen",  "-",
+        "Pr [-]",   "Pr_g", 1, "goldenrod", "-",
+    )
 
 
 
     fig, axes = geez.new_plots("thermal", rows=2, cols=3,
             fig_kw=dict(figsize=(13, 7)))
-    ax_Tw, ax_q, ax_h, ax_PT, ax_rv, ax_re = axes.flat
-
-    KW = dict(lw=1.6)
-
-    # ── Re ────────────────────────────────────────────────────────────────────────
-    ax_re.plot(z, g("Re_c"), color="steelblue", **KW)
-    ax_re.set_title("Reynolds number")
-    ax_re.set_xlabel("z [mm]"); ax_re.set_ylabel("Re [-]")
-    ax_re.grid(alpha=0.4)
-
-    # ── T & P  (twin) ─────────────────────────────────────────────────────────────
-    ax_PT2 = ax_PT.twinx()
-    ax_PT.plot(z, g("T_c"),  color="crimson",     label="T_c", **KW)
-    ax_PT2.plot(z, g("P_c")*1e-5, color="saddlebrown", label="P_c", **KW)
-    ax_PT.set_title("Fluid temperature & pressure")
-    ax_PT.set_xlabel("z [mm]"); ax_PT.set_ylabel("T [K]", color="crimson")
-    ax_PT2.set_ylabel("P [bar]", color="saddlebrown")
-    ax_PT.tick_params(axis="y", colors="crimson")
-    ax_PT2.tick_params(axis="y", colors="saddlebrown")
-    lines = ax_PT.get_lines() + ax_PT2.get_lines()
-    ax_PT.legend(lines, [l.get_label() for l in lines], loc="center right")
-    ax_PT.grid(alpha=0.4)
-
-    # ── rho & vel  (twin) ─────────────────────────────────────────────────────────
-    ax_rv2 = ax_rv.twinx()
-    ax_rv.plot(z, g("rho_c"),  color="mediumpurple", label="rho_c", **KW)
-    ax_rv2.plot(z, g("vel_c"), color="seagreen",     label="vel_c", **KW)
-    ax_rv.set_title("Fluid density & velocity")
-    ax_rv.set_xlabel("z [mm]"); ax_rv.set_ylabel("ρ [kg m⁻³]", color="mediumpurple")
-    ax_rv2.set_ylabel("v [m s⁻¹]", color="seagreen")
-    ax_rv.tick_params(axis="y", colors="mediumpurple")
-    ax_rv2.tick_params(axis="y", colors="seagreen")
-    lines = ax_rv.get_lines() + ax_rv2.get_lines()
-    ax_rv.legend(lines, [l.get_label() for l in lines], loc="best")
-    ax_rv.grid(alpha=0.4)
-
-    # ── Wall temperatures ─────────────────────────────────────────────────────────
-    ax_Tw.plot(z, g("T_wg"),   color="tomato",       label="T_wg",   **KW)
-    ax_Tw.plot(z, g("T_wc"),   color="royalblue",    label="T_wc",   **KW)
-    ax_Tw.plot(z, g("T_pdms"), color="mediumorchid", label="T_pdms", **KW)
-    ax_Tw.set_title("Wall & coating temperatures")
-    ax_Tw.set_xlabel("z [mm]"); ax_Tw.set_ylabel("T [K]")
-    ax_Tw.legend(); ax_Tw.grid(alpha=0.4)
-
-    # ── Convection coefficients ───────────────────────────────────────────────────
-    ax_h.plot(z, g("h_g"), color="tomato",    label="h_g", **KW)
-    ax_h.plot(z, g("h_c"), color="royalblue", label="h_c", **KW)
-    ax_h.set_title("Convection coefficients")
-    ax_h.set_xlabel("z [mm]"); ax_h.set_ylabel("h [W m⁻² K⁻¹]")
-    ax_h.legend(); ax_h.grid(alpha=0.4)
-
-    # ── Heat flux ─────────────────────────────────────────────────────────────────
-    ax_q.plot(z, g("q")*1e-6, color="goldenrod", **KW)
-    ax_q.set_title("Heat flux")
-    ax_q.set_xlabel("z [mm]"); ax_q.set_ylabel("q [MW m⁻²]")
-    ax_q.grid(alpha=0.4)
+    graph1(axes[0, 0], "Wall & coating temperatures",
+        "T [K]", "pdms",         "T_pdms", 1, "mediumorchid", "-",
+                 "wall-pdms",    "T_wg",   1, "tomato",    "-",
+                 "wall-coolant", "T_wc",   1, "royalblue", "-",
+    )
+    graph1(axes[0, 1], "Heat flux",
+        "q [MW m⁻²]", None, "q", 1e-6, "goldenrod", "-",
+    )
+    graph1(axes[0, 2], "Convection coefficients",
+        "h [W m⁻² K⁻¹]", "combustion", "h_g", 1, "tomato",    "-",
+                         "coolant",    "h_c", 1, "royalblue", "-",
+    )
+    graph2(axes[1, 0], "Coolant temperature & pressure",
+        "T [K]",   "T_c", 1,    "crimson",     "-",
+        "P [bar]", "P_c", 1e-5, "saddlebrown", "-",
+    )
+    graph2(axes[1, 1], "Coolant density & velocity",
+        "ρ [kg m⁻³]", "rho_c", 1, "mediumpurple", "-",
+        "v [m s⁻¹]",  "vel_c", 1, "seagreen",     "-",
+    )
+    graph1(axes[1, 2], "Coolant Reynolds number",
+        "Re [-]", None, "Re_c", 1, "steelblue", "-",
+    )
 
 
 
-    fig, axes = geez.new_plots("structural", rows=1, cols=3,
-            fig_kw=dict(figsize=(13, 4)))
-    ax_comp, ax_res, ax_SF = axes.flat
+    fig, axes = geez.new_plots("structural", rows=2, cols=3,
+            fig_kw=dict(figsize=(13, 7)))
+    graph1(axes[0, 0], "Hoop stresses", r"$\sigma$ [MPa]",
+        "pressure", "sigmah_pressure", 1e-6, "steelblue",   "-",
+        "thermal",  "sigmah_thermal",  1e-6, "crimson",     "-",
+        "bending",  "sigmah_bending",  1e-6, "forestgreen", "-",
+        "total",    "sigmah",          1e-6, "grey",        "--",
+    )
+    graph1(axes[0, 1], "Net stresses & yeild strength", r"$\sigma$ [MPa]",
+        "hoop",       "sigmah",   1e-6, "darkviolet", "-",
+        "meridional", "sigmam",   1e-6, "seagreen",   "-",
+        "von-mises",  "sigma_vm", 1e-6, "darkorange", "-",
+        "Ys",         "Ys",       1e-6, "black",      "--",
+    )
+    ax = graph1(axes[0, 2], "Safety factor",
+        "SF [-]", None, "SF", 1, "blue", "-",
+    )
+    ax.axhline(1.0, color="red", ls="--", lw=1.2)
 
-    KW = dict(lw=1.6)
+    axes[1, 0].axis("off")
+    axes[1, 0].text(0.5, 0.5,
+        "Start-up transient →\n(only channels pressurised)",
+        ha="center", va="center", transform=axes[1, 0].transAxes
+    )
+    graph1(axes[1, 1], "Start-up stress & yield strength", r"$\sigma$ [MPa]",
+        "stress", "startup_sigma", 1e-6, "darkorange", "-",
+        "Ys",     "startup_Ys",    1e-6, "black",      "--",
+    )
+    ax = graph1(axes[1, 2], "Start-up safety factor",
+        "SF [-]", None, "startup_SF", 1, "blue", "-",
+    )
+    ax.axhline(1.0, color="red", ls="--", lw=1.2)
 
-    # ── Hoop stress components ────────────────────────────────────────────────────
-    ax_comp.plot(z, 1e-6*g("sigmah_pressure"), color="steelblue",  label=r"$\sigma_{h,pressure}$",       **KW)
-    ax_comp.plot(z, 1e-6*g("sigmah_thermal"),  color="crimson",    label=r"$\sigma_{h,thermal}$",       **KW)
-    ax_comp.plot(z, 1e-6*g("sigmah_bending"),  color="darkorange", label=r"$\sigma_{h,bending}$",       **KW)
-    ax_comp.plot(z, 1e-6*g("sigmah"),          color="grey",      label=r"$\sigma_{h,total}$", lw=2, ls="--")
-    ax_comp.set_title("Hoop stress components")
-    ax_comp.set_xlabel("z [mm]"); ax_comp.set_ylabel(r"$\sigma$ [MPa]")
-    ax_comp.legend(); ax_comp.grid(alpha=0.4)
-
-    # ── Resultant stresses + yield strength ───────────────────────────────────────
-    ax_res.plot(z, 1e-6*g("sigmah"),   color="steelblue", label=r"$\sigma_h$",    **KW)
-    ax_res.plot(z, 1e-6*g("sigmam"),   color="seagreen",  label=r"$\sigma_m$",    **KW)
-    ax_res.plot(z, 1e-6*g("sigma_vm"), color="crimson",   label=r"$\sigma_{vm}$", **KW)
-    ax_res.plot(z, 1e-6*g("Ys"),       color="black",     label=r"$Y_s$", lw=2, ls="--")
-    ax_res.set_title(r"Resultant stresses \& yield strength")
-    ax_res.set_xlabel("z [mm]"); ax_res.set_ylabel(r"$\sigma$ [MPa]")
-    ax_res.legend(); ax_res.grid(alpha=0.4)
-
-    # ── Safety factor ─────────────────────────────────────────────────────────────
-    ax_SF.plot(z, g("SF"), color="blue", **KW)
-    ax_SF.axhline(1.0, color="red", lw=1.2, ls="--")
-    ax_SF.set_title("Safety factor")
-    ax_SF.set_xlabel("z [mm]"); ax_SF.set_ylabel("SF [-]")
-    ax_SF.grid(alpha=0.4)
-
-
-
-
-    fig, axes = geez.new_plots("startup_structural", rows=1, cols=2,
-            fig_kw=dict(figsize=(13, 4)))
-    ax_comp, ax_SF = axes.flat
-
-    KW = dict(lw=1.6)
-
-    # ── Hoop stress components ────────────────────────────────────────────────────
-    ax_comp.plot(z, 1e-6*g("startup_sigma"),  color="darkorange", label=r"$\sigma_{h,bending}$",       **KW)
-    ax_comp.plot(z, 1e-6*g("startup_Ys"),             color="black",     label=r"$Y_s$", lw=2, ls="--")
-    ax_comp.set_title("Hoop stress components")
-    ax_comp.set_xlabel("z [mm]"); ax_comp.set_ylabel(r"$\sigma$ [MPa]")
-    ax_comp.legend(); ax_comp.grid(alpha=0.4)
-
-    # ── Safety factor ─────────────────────────────────────────────────────────────
-    ax_SF.plot(z, g("startup_SF"), color="blue", **KW)
-    ax_SF.axhline(1.0, color="red", lw=1.2, ls="--")
-    ax_SF.set_title("Safety factor")
-    ax_SF.set_xlabel("z [mm]"); ax_SF.set_ylabel("SF [-]")
-    ax_SF.grid(alpha=0.4)
 
 
 
