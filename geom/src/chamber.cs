@@ -1546,12 +1546,9 @@ public class Chamber : TPIAP.Pea {
     }
 
     protected void write_manufacturing_report(Frame inlet) {
-        Tapping tap_in = new(portsize_inlet, false) { extra_length = 2f };
-        Tapping tap_tc_ = new(portsize_tc,   false) { extra_length = 2f };
-
-        string mm(float v)   => $"{v:F2} mm";
-        string diam(float v) => $"D{v:F2} mm";
-        string deg(float v)  => $"{v:F1} deg";
+        string mm(float v)   => $"{v:F3} mm";
+        string diam(float v) => $"D{v:F3} mm";
+        string deg(float v)  => $"{v:F2} deg";
         float todeg(float rad) => rad * 180f / PI;
 
         string thread_desc(string portsize, Tapping tap) {
@@ -1605,7 +1602,7 @@ public class Chamber : TPIAP.Pea {
         lines.Add("");
         lines.Add("");
         lines.Add("--- COOLANT INLET PORT ---");
-        lines.Add($"  Thread:           {thread_desc(portsize_inlet, tap_in)}");
+        lines.Add($"  Thread:           {thread_desc(portsize_inlet, tap_inlet)}");
         lines.Add($"  Angular position: {deg(todeg(theta_inlet))}  from +X axis");
         lines.Add($"  Port centre (X, Y, Z): ({inlet.pos.X:+0.00;-0.00}, {inlet.pos.Y:+0.00;-0.00},"
                 + $" {inlet.pos.Z:+0.00;-0.00}) mm");
@@ -1615,7 +1612,7 @@ public class Chamber : TPIAP.Pea {
         lines.Add("");
         lines.Add("");
         lines.Add("--- THERMOCOUPLE PORTS ---");
-        lines.Add($"  Thread:     {thread_desc(portsize_tc, tap_tc_)}");
+        lines.Add($"  Thread:     {thread_desc(portsize_tc, tap_tc)}");
         lines.Add($"  Bore ID:    {diam(D_tc)}  (printed hole)");
         lines.Add($"  Qty:        {no_tc}  (evenly spaced along channel path)");
         lines.Add($"  Wall thickness: {mm(th_tc)}");
@@ -1953,28 +1950,10 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        assert(TPIAP.load_voxels("chamber", out Voxels? cc));
-        assert(cc != null);
-
-        float z0 = 0f;
-        float z1 = z_exit * 1f/3f;
-        float z2 = z_exit * 2f/3f;
-        float z3 = z_exit;
-
-        Voxels? sect = cc!.voxIntersectImplicit(new Space(new(), z0, z1 + 1f));
-        TPIAP.save_mesh_only("chamber_lower", new(sect));
-        sect.Dispose();
-        sect = null;
-
-        sect = cc.voxIntersectImplicit(new Space(new(), z1 - 1f, z2 + 1f));
-        TPIAP.save_mesh_only("chamber_middle", new(sect));
-        sect.Dispose();
-        sect = null;
-
-        sect = cc.voxIntersectImplicit(new Space(new(), z2 - 1f, z3));
-        TPIAP.save_mesh_only("chamber_upper", new(sect));
-        sect.Dispose();
-        sect = null;
+        Voxels v = new Donut(new(), 5f + VOXEL_SIZE, 5f);
+        Mesh m = new(v);
+        Geez.mesh(m);
+        TPIAP.save_mesh_only("test", m);
     }
 
 
