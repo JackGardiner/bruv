@@ -207,7 +207,6 @@ static void report_telemetry(void) {
 }
 
 
-
 static void print_numba(i64 value, i32 use_binary) {
     const char* suffixes[] = {"", "k", "M", "G", "T"};
     f64 base = use_binary ? 1024.0 : 1000.0;
@@ -1216,7 +1215,7 @@ UNUSED static i32 heapq_check(const Heapq* h) {
 
 
 // wrap in structs to prevent compiler thinking they're aliasing.
-typedef struct AdjTri { i32 _; } AdjTri;
+typedef struct AdjEntry { i32 _; } AdjEntry;
 typedef struct AdjOff { i32 _; } AdjOff;
 typedef struct AdjCursor { i32 _; } AdjCursor;
 
@@ -1227,10 +1226,10 @@ typedef struct Adj {
     //   ...
     //   i32 tri_index_n
     //   i32 next
-    // If `next` is >0, it is another index into `off` which is also the adjacent
-    // faces of this vertex.
-    AdjTri* tri;
-    // Maps vertex index into an index into `tri`.
+    // If `next` is >=0, it is another index into `off` which is also the
+    // adjacent faces of this vertex.
+    AdjEntry* entry;
+    // Maps vertex index into an index into `entry`.
     AdjOff* off;
     // Temp memory during creation/refresh.
     AdjCursor* cursor;
@@ -1270,10 +1269,10 @@ static void adj_refresh(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
     assert(total <= a->total, "edge count increased?");
 
     // Fill out entries.
-    i64 tri_size = sizeof(*a->tri) * a->total;
-    if (!a->tri)
-        a->tri = malloc(tri_size);
-    assert(a->tri, "allocation failure");
+    i64 tri_size = sizeof(*a->entry) * a->total;
+    if (!a->entry)
+        a->entry = malloc(tri_size);
+    assert(a->entry, "allocation failure");
     i64 cursor_size = sizeof(*a->cursor) * Vcount;
     if (!a->cursor)
         a->cursor = malloc(cursor_size);
@@ -1286,7 +1285,7 @@ static void adj_refresh(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
             continue;
         for (i32 i=0; i<3; ++i) {
             i32 v = T[t].i[i];
-            a->tri[a->off[v]._ + a->cursor[v]._]._ = t;
+            a->entry[a->off[v]._ + a->cursor[v]._]._ = t;
             ++a->cursor[v]._;
         }
     }
@@ -1294,15 +1293,15 @@ static void adj_refresh(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
     // Set all `next`s as tails.
     for (i32 v=0; v<Vcount; ++v) {
         i32 entrysize = a->off[v + 1]._ - a->off[v]._;
-        a->tri[a->off[v]._ + entrysize - 1]._ = -1;
+        a->entry[a->off[v]._ + entrysize - 1]._ = -1;
     }
 }
 
 
 static void adj_init(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
-        i32 Tcount, i64* rstr out_tri_size, i64* rstr out_off_size,
+        i32 Tcount, i64* rstr out_entry_size, i64* rstr out_off_size,
         i64* rstr out_cursor_size) {
-    a->tri = NULL;
+    a->entry = NULL;
     a->off = NULL;
     a->cursor = NULL;
     a->total = -1;
@@ -1310,10 +1309,10 @@ static void adj_init(Adj* a, const Vertex* V, const Tri* T, i32 Vcount,
 
     // Out alloc sizes.
     i64 off_size = sizeof(*a->off) * (Vcount + 1);
-    i64 tri_size = sizeof(*a->tri) * a->total;
+    i64 entry_size = sizeof(*a->entry) * a->total;
     i64 cursor_size = sizeof(*a->cursor) * Vcount;
-    if (out_tri_size)
-        *out_tri_size = tri_size;
+    if (out_entry_size)
+        *out_entry_size = entry_size;
     if (out_off_size)
         *out_off_size = off_size;
     if (out_cursor_size)
@@ -1326,11 +1325,11 @@ static i32 adj_entry_count(const Adj* a, i32 v) {
     return a->off[v + 1]._ - a->off[v]._ - 1; // dont include next.
 }
 static i32 adj_entry_at(const Adj* a, i32 v, i32 i) {
-    return a->tri[a->off[v]._ + i]._;
+    return a->entry[a->off[v]._ + i]._;
 }
 static i32 adj_entry_next(const Adj* a, i32 v) {
     i32 size = a->off[v + 1]._ - a->off[v]._;
-    return a->tri[a->off[v]._ + size - 1]._;
+    return a->entry[a->off[v]._ + size - 1]._;
 }
 
 static void adj_append(Adj* a, i32 add_it_here, i32 add_this) {
@@ -1339,7 +1338,7 @@ static void adj_append(Adj* a, i32 add_it_here, i32 add_this) {
     while (adj_entry_next(a, v) >= 0)
         v = adj_entry_next(a, v);
     i32 size = a->off[v + 1]._ - a->off[v]._;
-    a->tri[a->off[v]._ + size - 1]._ = add_this;
+    a->entry[a->off[v]._ + size - 1]._ = add_this;
 }
 
 
@@ -1868,12 +1867,12 @@ i32 main(i32 argc, char** argv) {
 
     // Setup adjacency lists.
     Adj* adj = &(Adj){0};
-    i64 size_adj_tri;
+    i64 size_adj_entry;
     i64 size_adj_off;
     i64 size_adj_cursor;
-    adj_init(adj, V, T, Vcount, Tcount, &size_adj_tri, &size_adj_off,
+    adj_init(adj, V, T, Vcount, Tcount, &size_adj_entry, &size_adj_off,
             &size_adj_cursor);
-    printf("\nadj tri     = "); print_numba(size_adj_tri, 1);
+    printf("\nadj entry   = "); print_numba(size_adj_entry, 1);
     printf("\nadj off     = "); print_numba(size_adj_off, 1);
     printf("\nadj cursor  = "); print_numba(size_adj_cursor, 1);
 
@@ -1900,7 +1899,7 @@ i32 main(i32 argc, char** argv) {
 
     printf("\nTOTAL       = "); print_numba((i64)0
         + size_vertex + size_index
-        + size_adj_tri + size_adj_off + size_adj_cursor
+        + size_adj_entry + size_adj_off + size_adj_cursor
         + size_heap_bkts + size_heap_idxr
         + size_neighbours
         , 1);

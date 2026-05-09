@@ -236,7 +236,7 @@ public class Chamber : TPIAP.Pea {
 
     protected const float facing_stock = 20f;
     protected float extend_base_by => printable_dmls ? facing_stock : 0f;
-    protected const float circular_base_z = 5f;
+    protected float circular_base_z => 5f;
 
 
     /*
@@ -1437,6 +1437,7 @@ public class Chamber : TPIAP.Pea {
         key <<= Geez.group(keys);
 
 
+        // Circular interface on breakouts.
         if (extend_base_by > 0f) {
             float max_r = pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt;
             vox.BoolAdd(new Rod(
@@ -1444,6 +1445,7 @@ public class Chamber : TPIAP.Pea {
                 -extend_base_by + circular_base_z,
                 max_r
             ).extended(EXTRA, Extend.DOWN));
+            key.voxels(vox);
         }
 
 

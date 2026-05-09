@@ -318,9 +318,9 @@ def write_ammendments(state):
         psi_chnl = 1e3*get_export("psi_chnl")
         # trim superfluous values.
         mask = np.zeros(len(z), dtype=bool)
-        mask[0] = mask[-1] = True # always keep endpoints
+        mask[0] = True # always keep endpoints
         for Y in (helix_angle, th_chnl, psi_chnl):
-            mask[1:-1] |= (Y[:-2] != Y[2:])
+            mask[1:] |= (Y[:-1] != Y[1:])
         z = z[mask]
         helix_angle = helix_angle[mask]
         th_chnl = th_chnl[mask]
