@@ -53,7 +53,7 @@ public class InjectorElement {
     public Vec2 F2 = NAN2;
 
     public bool printable { get; set; } = false;
-    public float extend_base_by { get; set; } = NAN;
+    public float extend_base_by { get; set; } = 0f;
 
     public required float phi { get; init; }
     /* ^ must be same as LOx/OPA dividing cone */
@@ -380,8 +380,6 @@ public class InjectorElement {
     public void voxels(Frame at, out Voxels pos, out Voxels neg) {
         assert(inited);
 
-        float extend_base_by = printable ? 3f : 0f;
-
 
         // Make volume by revolve.
 
@@ -400,7 +398,7 @@ public class InjectorElement {
             D1,
             E1,
             F1,
-            // Extend outer inj to plate + extra.x 2
+            // Extend outer inj to plate + extra.
             new(-EXTRA - (printable ? extend_base_by : 0f), F1.Y),
             new(-EXTRA - (printable ? extend_base_by : 0f), 0f),
         ];
@@ -564,7 +562,7 @@ public class InjectorElement {
         D /= sqrt(0.75f + 1f/PI);
         // Add the tangential inlets.
         for (int i=0; i<no; ++i) {
-            float theta = i*TWOPI/no;
+            float theta = PI + i*TWOPI/no - PI_2/no;
             Vec3 inlet = fromzr(C, theta);
             // move radially inwards to make tangent outer.
             inlet -= D/2f * fromcyl(1f, theta, 0f);
@@ -939,6 +937,7 @@ public class Injector : TPIAP.Pea {
     protected float breakout_D => 6f;
     protected float breakout_plate_z => 15f;
     protected float breakout_elements_z => 15f;
+    protected float circular_base_z => 5f;
 
 
     protected void voxels_plate(Geez.Cycle key_plate, Geez.Cycle key_breakouts,
@@ -1111,16 +1110,26 @@ public class Injector : TPIAP.Pea {
 
         // Manifold peak.
         float max_r = Or_chnl + (th_plate + pm.max_th_chnl)*tan(phi_mw);
+        float z0_B = z0_dmw + 2f;
         // https://www.desmos.com/calculator/tusqawwtn5
         Vec2 peak = new( /* (z,r) */
-            max_r/2f/tan(phi_mw) + z0_dmw/2f,
-            max_r/2f - z0_dmw/2f*tan(phi_mw)
+            max_r/2f/tan(phi_mw) + z0_B/2f,
+            max_r/2f - z0_B/2f*tan(phi_mw)
         );
 
 
         // Manifold bounding cones.
-        Cone A = Cone.phied(new(), -phi_mw, peak.X, r0: max_r);
-        Cone B = Cone.phied(new(z0_dmw*uZ3), phi_mw, peak.X - z0_dmw + EXTRA);
+        Cone A = Cone.phied(
+            new(),
+            -phi_mw,
+            peak.X,
+            r0: max_r
+            );
+        Cone B = Cone.phied(
+            new(z0_B*uZ3),
+            phi_mw,
+            peak.X - z0_B + EXTRA
+        );
 
 
         // Sneak the enclosing volumes in here (to be modified in the dividing
@@ -1333,6 +1342,18 @@ public class Injector : TPIAP.Pea {
         ).extended(2f*EXTRA + extend_base_by, Extend.UPDOWN));
         key.voxels(vox);
 
+
+        // Circular interface on breakouts.
+        if (extend_base_by > 0f) {
+            float max_r = pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt;
+            vox.BoolAdd(new Rod(
+                new(-circular_base_z*uZ3),
+                -extend_base_by + circular_base_z,
+                max_r
+            ).extended(EXTRA, Extend.DOWN));
+            key.voxels(vox);
+        }
+
         return vox;
     }
 
@@ -1344,7 +1365,8 @@ public class Injector : TPIAP.Pea {
         pos = new();
         List<Geez.Key> keys = new(numel(points_inj));
         foreach (Vec2 p in points_inj) {
-            element.voxels(new(rejxy(p)), out Voxels po, out Voxels ne);
+            Frame frame = Frame.cyl_axial(rejxy(p));
+            element.voxels(frame, out Voxels po, out Voxels ne);
             pos.BoolAdd(po);
             neg.BoolAdd(ne);
             keys.Add(Geez.voxels(ne));
@@ -1444,7 +1466,7 @@ public class Injector : TPIAP.Pea {
                 frame,
                 pm.flange_thickness_inj + EXTRA,
                 pm.D_bolt/2f
-            ).extended(extend_voids_by + (printable_dmls ? 0f : EXTRA),
+            ).extended(circular_base_z + (printable_dmls ? 0f : EXTRA),
                     Extend.DOWN));
             // for washer/nut.
             clearance.BoolAdd(new Rod(
@@ -1641,7 +1663,7 @@ public class Injector : TPIAP.Pea {
     }
 
     protected void voxels_gussets(Geez.Cycle key, in ManiVol mani_vol,
-            out Voxels pos, out Voxels neg) {
+            out Voxels pos, out Voxels neg, out Cone volC) {
         using var __ = key.like();
 
         pos = new();
@@ -1666,7 +1688,7 @@ public class Injector : TPIAP.Pea {
         }
 
         // Trim down all to conical outer boundary.
-        Cone volC = new Cone(
+        volC = new Cone(
             new(pm.flange_thickness_inj*uZ3),
             mani_vol.peak.X + mani_vol.Lz - pm.flange_thickness_inj,
             max_r,
@@ -1828,10 +1850,10 @@ public class Injector : TPIAP.Pea {
             _neg_no_tap.BoolAdd(this_neg_no_tap);
         }
 
-        float r_LOxinlet = mani_vol.peak.Y * 1.1f;
-        float r_LOxPT    = mani_vol.peak.Y;
-        float r_IPAPT    = mani_vol.peak.Y;
-        float r_CCPT     = mani_vol.peak.Y;
+        float r_LOxinlet = mani_vol.peak.Y * 1.2f;
+        float r_LOxPT    = mani_vol.peak.Y * 1.05f;
+        float r_IPAPT    = mani_vol.peak.Y * 1.05f;
+        float r_CCPT     = mani_vol.peak.Y * 1.05f;
 
         Vec3 pos_LOxinlet = new(-r_LOxinlet, 0f, z_LOxinlet);
         Vec3 pos_LOxPT    = new(+r_LOxPT,    0f, z_LOxPT);
@@ -1854,7 +1876,12 @@ public class Injector : TPIAP.Pea {
         Voxels underneath = new Rod(new(), -3f*EXTRA, pm.flange_outer_radius);
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
                 sub_pos: underneath + mani_vol.volume_entire,
-                sub_neg: underneath + mani_vol.volume_only_lower_up);
+                sub_neg: underneath + mani_vol.volume_only_lower_up
+                       + new Rod(
+                            new(),
+                            element.max_z + 2f*VOXEL_SIZE,
+                            pm.flange_outer_radius
+                        ));
         portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh,
                 sub_pos: underneath + mani_vol.volume_entire,
                 sub_neg: underneath + mani_vol.volume_only_lower_up);
@@ -1898,6 +1925,41 @@ public class Injector : TPIAP.Pea {
         }
 
         key <<= Geez.group(keys);
+    }
+
+
+    protected Voxels? voxels_branding(Geez.Cycle key, Cone volC) {
+        using var __ = key.like();
+
+        if (VOXEL_SIZE > 0.5f)
+            return null;
+
+        float th = 0.35f;
+        float inset = 1f;
+
+        ImageSignedDist img = new(fromroot("assets/pingu.tga"), invert: true,
+                flipy: true, rot: ImageSignedDist.CW);
+        Vec3 pos = fromcyl(
+            r_mount,
+            PI_4,
+            lerp(
+                dot(uZ3, volC.bbase * (0f*uZ3)),
+                dot(uZ3, volC.bbase * (volC.Lz*uZ3)),
+                invlerp(volC.r0, volC.r1, r_mount)
+            )
+        );
+        Frame at = Frame.cyl_circum(pos);
+        at = at.transz(-pm.D_washer/2f - 2f);
+        at = at.translate(new(-4.6f, 3.7f, 0f));
+
+        Voxels vox = img.voxels_on_plane(
+            at.transz(inset).flipyz(),
+            th + inset,
+            5f, ImageSignedDist.WhichLength.HEIGHT
+        );
+
+        key.voxels(vox);
+        return vox;
     }
 
 
@@ -1972,12 +2034,23 @@ public class Injector : TPIAP.Pea {
 
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
         voxels_gussets(key_gussets, mani_vol, out Voxels? gussets,
-                out Voxels? neg_mounting);
+                out Voxels? neg_mounting, out Cone volC);
         part.step("created gussets.");
 
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
         voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
                 out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
+
+        Geez.Cycle key_branding = new(colour: COLOUR_CYAN);
+        Voxels? branding = brandingless
+                         ? null
+                         : voxels_branding(key_branding, volC);
+        if (branding != null)
+            part.step("created branding.");
+        else if (brandingless)
+            part.no_step("skipping branding (brandingless requested).");
+        else
+            part.no_step("skipping branding (voxel size too large).");
 
         // Compute inlet manifold volume right after creation, before voxels are
         // modified
@@ -1993,6 +2066,7 @@ public class Injector : TPIAP.Pea {
         part.substep("added manifold walls (1/2).");
 
         part.step("added material.");
+
 
         part.sub(ref neg_bolt_clearance, keepme: true);
         part.substep("subtracted mating bolt clearance (1/2).");
@@ -2043,6 +2117,7 @@ public class Injector : TPIAP.Pea {
 
         part.step("partial clean up");
 
+
         {
             Voxels? inside_mani = new Rod(new(), mani_vol.peak.X, Ir_chnl);
             inside_mani.BoolIntersect(mani_vol.volume_entire);
@@ -2064,8 +2139,17 @@ public class Injector : TPIAP.Pea {
         part.substep("added base plate.");
         part.add(ref supports, key_supports);
         part.substep("added supports.");
+        if (branding != null) {
+            part.add(ref branding, key_branding);
+            part.substep("added branding.");
+        } else {
+            part.substep("no branding to add.");
+        }
+        part.add(ref pos_elements);
+        part.substep("added injector elements.");
 
-        part.step("added plate material.");
+        part.step("added remaining material.");
+
 
         part.sub(ref neg_bolt_hole);
         part.substep("subtracted mating bolt hole.");
@@ -2090,11 +2174,6 @@ public class Injector : TPIAP.Pea {
             part.substep("skipping IPA inlet breakout (machined away).");
         }
 
-        part.step("removed voids.");
-
-
-        part.add(ref pos_elements);
-        part.substep("added injector elements.");
         part.sub(ref neg_elements, key_elements);
         part.substep("subtracted injector element voids.");
 
@@ -2105,13 +2184,13 @@ public class Injector : TPIAP.Pea {
             part.substep("skipping film cooling holes (not printed).");
         }
 
-        part.step("merged injectors + film cooling.");
+        part.step("removed voids.");
 
 
-        part.voxels.BoolSubtract(new Rod(
+        part.voxels.IntersectImplicit(new Space(
             new(-extend_base_by*uZ3),
-            -3f*EXTRA,
-            overall_Lr + EXTRA
+            0f,
+            +INF
         ));
         part.substep("clipped bottom.", view_part: true);
 
@@ -2176,6 +2255,7 @@ public class Injector : TPIAP.Pea {
     public bool minimise_mem     = false;
     public bool take_screenshots = false;
     public bool filletless       = false;
+    public bool brandingless     = false;
     public bool elementless      = false;
     public void set_modifiers(int mods) {
         printable_dmls   = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
@@ -2183,6 +2263,7 @@ public class Injector : TPIAP.Pea {
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         filletless       = popbits(ref mods, TPIAP.FILLETLESS);
+        brandingless     = popbits(ref mods, TPIAP.BRANDINGLESS);
         elementless      = popbits(ref mods, TPIAP.ELEMENTLESS);
         if (mods == 0)
             return;
