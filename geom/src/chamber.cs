@@ -1184,8 +1184,7 @@ public class Chamber : TPIAP.Pea {
                     points[0], points[0] - uX2
                 )
             );
-            Polygon.fillet(points, 2, 7f);
-            // Polygon.fillet(points, 1, 2f);
+            Polygon.fillet(points, 2, 7f, prec: 4f);
             Frame frame = new(
                 ZERO3,
                 uZ3,

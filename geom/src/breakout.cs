@@ -104,9 +104,9 @@ public class Breakout {
         // Extend at both ends.
         F.Insert(0, F[0].transz(straight_for + FR + 2f*VOXEL_SIZE));
         V.InsertRange(0, V[..N]);
-        F.Add(F[^1].transz(-Lx));
+        F.Add(F[^1].transz(min(-VOXEL_SIZE, -Lx + swing_radius)));
         V.AddRange(V[^N..]);
-        Ftear.Add(Ftear[^1].transz(-Lx));
+        Ftear.Add(Ftear[^1].transz(min(-VOXEL_SIZE, -Lx + swing_radius)));
         Vtear.AddRange(Vtear[^N..]);
 
 

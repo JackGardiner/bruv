@@ -186,6 +186,23 @@ public static class Polygon {
         return a0 + t*Da;
     }
 
+    public static void circle_roots(float X, float Y, float R, out float xl,
+            out float xr) {
+        xl = X - sqrt(sqed(R) - sqed(Y));
+        xr = X + sqrt(sqed(R) - sqed(Y));
+    }
+
+    public static void circle_line_intersection(float m, float c, float X,
+            float Y, float R, out Vec2 i0, out Vec2 i1) {
+        float qa = -1f - sqed(m);
+        float qb = -2f*m*(c - Y + m*X);
+        float qc = sqed(R) - sqed(c - Y + m*X);
+        float x0 = X + (-qb + sqrt(sqed(qb) - 4*qa*qc)) / 2f / qa;
+        float x1 = X + (-qb - sqrt(sqed(qb) - 4*qa*qc)) / 2f / qa;
+        i0 = new(x0, m*x0 + c);
+        i1 = new(x1, m*x1 + c);
+    }
+
     public static Vec2 corner_normal(Vec2 a, Vec2 b, Vec2 c, float dist) {
         // a -> b -> c.
         // find the point `dist` away from `b` s.t. it is bisecting the angle

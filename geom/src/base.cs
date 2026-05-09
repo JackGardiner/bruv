@@ -622,6 +622,8 @@ public class Bar : AxialShape<Bar> {
     public const Shift X0_Z1 = X0 | Z1;
     public const Shift X1_Y0 = X1 | Y0;
     public const Shift X1_Y1 = X1 | Y1;
+    public const Shift X1_Z0 = X1 | Z0;
+    public const Shift X1_Z1 = X1 | Z1;
     public const Shift Y0_Z0 = Y0 | Z0;
     public const Shift Y0_Z1 = Y0 | Z1;
     public const Shift Y1_Z0 = Y1 | Z0;

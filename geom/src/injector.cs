@@ -934,8 +934,8 @@ public class Injector : TPIAP.Pea {
     protected const float facing_stock = 20f;
     protected float extend_base_by => printable_dmls ? facing_stock : 0f;
     protected float extend_voids_by => printable_dmls ? 3f : 0f;
-    protected float breakout_D => 6f;
-    protected float breakout_plate_z => 15f;
+    protected float breakout_D => 5f;
+    protected float breakout_plate_z => 10f;
     protected float breakout_elements_z => 15f;
     protected float circular_base_z => 5f;
 
@@ -977,7 +977,8 @@ public class Injector : TPIAP.Pea {
         key_plate.voxels(plate);
 
         breakouts = new();
-        Breakout bo;
+        Breakout bo_inner;
+        Breakout bo_outer;
 
         {
             int N = Breakout.N/2;
@@ -992,11 +993,21 @@ public class Injector : TPIAP.Pea {
                 float theta = lerp(Ltheta/2f, -Ltheta/2f, i, N/2);
                 V0.Add(frompol(Ir_chnl, theta) - pm.Mr_chnl*uX2);
             }
-            bo = new(V0
+            float Lx = 0.5f*(pm.r_bolt - pm.Mr_chnl) + VOXEL_SIZE;
+            bo_inner = new(V0
                 , Lz: breakout_plate_z
-                , Lx: pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
-                    - pm.Mr_chnl + EXTRA
-                , D1: breakout_D
+                , Lx: Lx
+                , D1: 0.75f*breakout_D
+                , FR: filletless ? 0f : 0.5f
+            );
+            bo_outer = new(
+                Polygon.circle(
+                    Polygon.full_res_divs(PI*pm.D_bolt),
+                    0.5f*pm.D_bolt
+                )
+                , Lz: breakout_plate_z
+                , Lx: Lx
+                , D1: 0.75f*breakout_D
                 , FR: filletless ? 0f : 0.5f
             );
         }
@@ -1004,8 +1015,51 @@ public class Injector : TPIAP.Pea {
         int no_breakout = 4;
         for (int i=0; i<no_breakout; ++i) {
             float theta = i*TWOPI/no_breakout;
-            Vec3 p = fromcyl(pm.Mr_chnl, theta, 0f);
-            breakouts.BoolAdd(bo.at(Frame.cyl_axial(p)));
+            Frame f_inner = Frame.cyl_axial(fromcyl(pm.Mr_chnl, theta, 0f));
+            Frame f_outer = Frame.cyl_axial(fromcyl(pm.r_bolt, theta, 0f));
+            Voxels breakout_inner = bo_inner.at(f_inner);
+            Voxels breakout_outer = bo_outer.at(f_outer.rotxy(PI));
+            breakout_inner.BoolSubtract(new Bar(
+                f_inner.transx(bo_inner.Lx).rotzx(PI_2),
+                2f*(bo_inner.Lz + bo_inner.D1),
+                2f*bo_inner.D1,
+                5f*EXTRA
+            ));
+            breakout_outer.BoolSubtract(new Bar(
+                f_outer.transx(-bo_outer.Lx).rotzx(-PI_2),
+                2f*(bo_outer.Lz + bo_outer.D1),
+                2f*bo_outer.D1,
+                5f*EXTRA
+            ));
+            breakout_inner.BoolAdd(breakout_outer);
+            Fillet.concave(breakout_inner, filletless ? 0f : 0.5f,
+                    inplace: true);
+            breakouts.BoolAdd(breakout_inner);
+
+            { // Add tracks to run into the breakouts.
+                int M = Polygon.full_res_divs(pm.Mr_chnl*TWOPI/no_breakout);
+                M += M & 1;
+                List<Vec2> V = new(4*M);
+                float z0 = -extend_voids_by;
+                float z1 = -breakout_plate_z + breakout_D*0.8f;
+                for (int j=0; j<M; ++j) {
+                    float z = (j < M/2)
+                            ? lerp(z0, z1, j, M/2)
+                            : lerp(z1, z0, j - M/2, M/2);
+                    V.AddRange([
+                        new(z0 + 3f*VOXEL_SIZE, Or_chnl),
+                        new(z, Or_chnl),
+                        new(z, Ir_chnl),
+                        new(z0 + 3f*VOXEL_SIZE, Ir_chnl),
+                    ]);
+                }
+
+                float Ltheta = TWOPI/no_breakout + 3f*VOXEL_SIZE / pm.Mr_chnl;
+                Frame F0 = new Frame().rotxy(theta - Ltheta/2f);
+                Mesh m = Polygon.mesh_revolved(F0, V, Ltheta, donut: true,
+                        slicesize: 4);
+                breakouts.BoolAdd(new(m));
+            }
 
             { // Add tracks to run into the breakouts.
                 int M = Polygon.full_res_divs(pm.Mr_chnl*TWOPI/no_breakout);
@@ -1297,15 +1351,29 @@ public class Injector : TPIAP.Pea {
             pm.flange_outer_radius
         ));
 
-        float r = D_igniterh/2f - 1f;
-        Breakout bo = new(Polygon.circle(Polygon.full_res_divs(TWOPI*r), r)
+        float R = D_igniterh/2f - 1f;
+        float Lx = pm.r_bolt/2f;
+        float r1 = pm.r_bolt;
+
+        Voxels breakout = new Breakout(
+            Polygon.circle(Polygon.full_res_divs(TWOPI*R), R)
             , Lz: breakout_elements_z
-            , Lx: pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
-                + EXTRA
+            , Lx: Lx + VOXEL_SIZE
             , D1: breakout_D
             , FR: filletless ? 0f : 0.5f
-        );
-        neg.BoolAdd(bo.at(new Frame().rotxy(PI_4)));
+        ).at(new Frame().rotxy(PI_4));
+        breakout.BoolAdd(new Breakout(
+            Polygon.circle(
+                Polygon.full_res_divs(PI*pm.D_bolt),
+                0.5f*pm.D_bolt
+            )
+            , Lz: breakout_elements_z
+            , Lx: Lx + VOXEL_SIZE
+            , D1: breakout_D
+            , FR: filletless ? 0f : 0.5f
+        ).at(new Frame().rotxy(PI_4).transx(r1).rotxy(PI)));
+
+        neg.BoolAdd(breakout);
     }
 
 
@@ -1396,6 +1464,16 @@ public class Injector : TPIAP.Pea {
             , D1: breakout_D
             , FR: filletless ? 0f : 0.5f
         );
+        Breakout bo_outlet = new(
+            Polygon.circle(
+                Polygon.full_res_divs(PI*breakout_D),
+                0.5f*breakout_D
+            )
+            , Lz: breakout_elements_z - circular_base_z
+            , Lx: 1f // tmp
+            , D1: breakout_D
+            , FR: filletless ? 0f : 0.5f
+        );
 
         Voxels breakouts_inner = new();
         Voxels breakouts_outer = new();
@@ -1405,11 +1483,22 @@ public class Injector : TPIAP.Pea {
                 Frame f = Frame.cyl_axial(rejxy(p));
                 f = f.rotxy(theta0_injbrkg[g]);
 
-                float Lx = pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
-                         - mag(p)
-                         + EXTRA;
-                bo_outer.Lx = Lx;
+                float r1 = ave(
+                    pm.flange_outer_radius,
+                    pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt
+                );
+                Polygon.circle_roots(
+                    X: dot(f / ZERO3, uX3),
+                    Y: dot(f / ZERO3, uY3),
+                    R: r1,
+                    out float _, out float intercept
+                );
+                Vec2 p1 = projxy(f * (intercept * uX3));
+                Frame f1 = new(rejxy(p1, -circular_base_z), f);
+
+                bo_outer.Lx = bo_outlet.Lx = 0.5f*mag(p1 - p) + VOXEL_SIZE;
                 Voxels v_outer = bo_outer.at(f);
+                v_outer.BoolAdd(bo_outlet.at(f1.rotxy(PI)));
                 breakouts_outer.BoolAdd(v_outer);
                 keys.Add(Geez.voxels(v_outer));
 
@@ -1470,8 +1559,7 @@ public class Injector : TPIAP.Pea {
                 frame,
                 pm.flange_thickness_inj + EXTRA,
                 pm.D_bolt/2f
-            ).extended(circular_base_z + (printable_dmls ? 0f : EXTRA),
-                    Extend.DOWN));
+            ).extended(printable_dmls ? 0f : EXTRA, Extend.DOWN));
             // for washer/nut.
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_inj),
@@ -1912,18 +2000,44 @@ public class Injector : TPIAP.Pea {
 
             Vec3 p = pos_CCPT * uXY3;
             Frame at = Frame.cyl_axial(p).rotxy(theta0_CCPTbrk);
-            List<Vec2> V0 = Polygon.circle(
-                Polygon.full_res_divs(TWOPI*0.5f*D_CCPTh),
-                0.5f*D_CCPTh
+
+            float r1 = ave(
+                pm.flange_outer_radius,
+                pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt
             );
-            Breakout bo = new(V0
+            Polygon.circle_roots(
+                X: dot(at / ZERO3, uX3),
+                Y: dot(at / ZERO3, uY3),
+                R: r1,
+                out float _, out float intercept
+            );
+            Vec2 p1 = projxy(at * (intercept * uX3));
+            Frame at1 = new(rejxy(p1, -circular_base_z), at);
+            float Lx = 0.5f*mag(p1 - projxy(p)) + VOXEL_SIZE;
+
+            Breakout bo = new(
+                Polygon.circle(
+                    Polygon.full_res_divs(PI*D_CCPTh),
+                    0.5f*D_CCPTh
+                )
                 , Lz: breakout_elements_z
-                , Lx: pm.r_bolt + pm.D_bolt/2f + pm.thickness_around_bolt
-                    - mag(p) + EXTRA
+                , Lx: Lx
+                , D1: breakout_D
+                , FR: filletless ? 0f : 0.5f
+            );
+            Breakout bo_outlet = new(
+                Polygon.circle(
+                    Polygon.full_res_divs(PI*breakout_D),
+                    0.5f*breakout_D
+                )
+                , Lz: breakout_elements_z - circular_base_z
+                , Lx: Lx
                 , D1: breakout_D
                 , FR: filletless ? 0f : 0.5f
             );
             Voxels breakout = bo.at(at);
+            breakout.BoolAdd(bo_outlet.at(at1.rotxy(PI)));
+
             neg.BoolAdd(breakout);
             neg_no_tap.BoolAdd(breakout);
         }
@@ -1969,6 +2083,7 @@ public class Injector : TPIAP.Pea {
 
 
     public Voxels? voxels() {
+        Geez.bar(new(new(), 1e-3f, 150f), divide_x: 6, divide_y: 6);
 
         // Get overall bounding box to size screenshots.
         float overall_Lr = pm.r_bolt
@@ -2246,9 +2361,11 @@ public class Injector : TPIAP.Pea {
 
 
     public void anything() {
-        element.voxels(new(), out Voxels pos, out Voxels neg);
-        pos.BoolSubtract(neg);
-        Geez.voxels(pos);
+        Polygon.circle_line_intersection(2f, -5.5f, 1f, 9f, 6f, out Vec2 A, out Vec2 B);
+        print(A);
+        print(B);
+        Geez.point(rejxy(A));
+        Geez.point(rejxy(B));
     }
 
 
