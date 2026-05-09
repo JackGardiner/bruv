@@ -1239,8 +1239,8 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected void voxels_igniter(Geez.Cycle key, out Voxels pos, out Voxels neg,
-            out Voxels neg_no_tap) {
+    protected void voxels_igniter(Geez.Cycle key, in ManiVol vol, out Voxels pos,
+            out Voxels neg, out Voxels neg_no_tap) {
 
         // Fluid volume.
         neg = new Rod(
@@ -1259,8 +1259,12 @@ public class Injector : TPIAP.Pea {
         neg.BoolAdd(tap_igniter.at(new(z_igniter*uZ3)));
 
         // Filled pipe.
-        pos = new Flats(tap_igniter, th_igniter)
-                .at(new Frame(z_igniter*uZ3).rotxy(PI_4));
+        pos = new Rod(
+            new(vol.B.tip!.pos),
+            z_igniter - vol.B.tip!.pos.Z,
+            new Flats(tap_igniter, th_igniter).r
+        );
+        pos.BoolIntersect(vol.B);
         pos.BoolAdd(new Rod(
             new(),
             z_igniter,
@@ -2018,7 +2022,7 @@ public class Injector : TPIAP.Pea {
         part.step("created manifold.");
 
         Geez.Cycle key_igniter = new(colour: COLOUR_WHITE);
-        voxels_igniter(key_igniter, out Voxels? pos_igniter,
+        voxels_igniter(key_igniter, mani_vol, out Voxels? pos_igniter,
                 out Voxels? neg_igniter, out Voxels? neg_igniter_no_tap);
         part.step("created igniter port.");
 
