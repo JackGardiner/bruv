@@ -70,6 +70,7 @@ public class Chamber : TPIAP.Pea {
     public float z1_chnl = NAN;
 
     protected void read_chamber() {
+        int N = 10000;
         string path = fromroot("../config/chamber.json");
         var json = File.ReadAllText(path);
         var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -85,9 +86,9 @@ public class Chamber : TPIAP.Pea {
             float[] arr_th = channel_arr("th");
             float[] arr_psi = channel_arr("psi");
             this.no_chnl = channels.GetProperty("no").GetInt32();
-            this.helix_angle = new LUT(z, arr_helix_angle, DIVISIONS);
-            this.th_chnl = new LUT(z, arr_th, DIVISIONS);
-            this.psi_chnl = new LUT(z, arr_psi, DIVISIONS);
+            this.helix_angle = new LUT(z, arr_helix_angle, N);
+            this.th_chnl = new LUT(z, arr_th, N);
+            this.psi_chnl = new LUT(z, arr_psi, N);
         }
 
         {
@@ -99,7 +100,7 @@ public class Chamber : TPIAP.Pea {
                     .ToArray();
             float[] z = inner_wall_arr("z");
             float[] arr_th = inner_wall_arr("th");
-            this.th_iw = new LUT(z, arr_th, DIVISIONS);
+            this.th_iw = new LUT(z, arr_th, N);
         }
     }
 
@@ -235,6 +236,7 @@ public class Chamber : TPIAP.Pea {
 
     protected const float facing_stock = 20f;
     protected float extend_base_by => printable_dmls ? facing_stock : 0f;
+    protected const float circular_base_z = 5f;
 
 
     /*
@@ -1116,7 +1118,7 @@ public class Chamber : TPIAP.Pea {
         key.cycle(Geez.mesh(mesh));
         Voxels vox = new(mesh);
 
-        float zextra = R_exit;
+        float zextra = R_exit/2f;
         vox.BoolAdd(new Rod(
             inlet,
             FR_inlet + EXTRA,
@@ -1434,6 +1436,17 @@ public class Chamber : TPIAP.Pea {
 
         key <<= Geez.group(keys);
 
+
+        if (extend_base_by > 0f) {
+            float max_r = pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt;
+            vox.BoolAdd(new Rod(
+                new(-circular_base_z*uZ3),
+                -extend_base_by + circular_base_z,
+                max_r
+            ).extended(EXTRA, Extend.DOWN));
+        }
+
+
         return vox;
     }
 
@@ -1518,7 +1531,7 @@ public class Chamber : TPIAP.Pea {
                 frame,
                 pm.flange_thickness_cc + EXTRA,
                 pm.D_bolt/2f
-            ).extended(EXTRA + extend_base_by, Extend.DOWN));
+            ).extended(circular_base_z, Extend.DOWN));
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_cc),
                 3f*EXTRA,
@@ -1780,75 +1793,56 @@ public class Chamber : TPIAP.Pea {
     public Voxels? cutaway(in Voxels part) {
 
         // something to look at.
-        Geez.voxels(part);
+        Geez.Cycle key_part = new();
+        key_part <<= Geez.voxels(part);
 
-        float z = cnt_z1;
-        Frame f1 = new(
-            fromcyl(
-                cnt_radius_at(z, th_iw[z] + th_chnl[z] + th_ow + 2f, false),
-                PI_2,
-                z
-            ),
-            uY3,
-            uZ3
+        Voxels scissors = part.voxDuplicate();
+        scissors.BoolSubtract(voxels_cnt_filled(
+            (z) => th_iw[z] + th_chnl[z] - 0.2f*VOXEL_SIZE,
+            widened: true,
+            extra: false
+        ));
+        print("made outer shell.");
+
+        Mesh mesh_cut() {
+            int N = DIVISIONS;
+            int M = 10;
+            List<Vec2> V = new();
+            float theta1 = theta_inlet + 7*TWOPI/no_chnl;
+            float theta0 = theta1 - theta_chnl[z_exit];
+            float max_r = pm.flange_outer_radius + 2f*EXTRA;
+            List<Vec3> v = new();
+            for (int i=0; i<N; ++i) {
+                float z = lerp(0f, z_exit, i, N);
+                float theta = theta0 + theta_chnl[z] - theta_chnl[0f];
+                V.Add(ZERO2);
+                for (int j=0; j<M; ++j)
+                    V.Add(frompol(max_r, lerp(theta0 - 1f, theta, j, M)));
+            }
+            Geez.points(v, r: 0.2f);
+            Frames frames = new FramesLerp(N, new(0f*uZ3), new(z_exit*uZ3));
+            return Polygon.mesh_swept(frames, V);
+        }
+        Voxels paper = new(mesh_cut());
+        Sectioner.pie(
+            theta_inlet - PI/4f + 0.22f,
+            theta_inlet - 3f*PI/4f - 0.1f
+        ).cut(paper, inplace: true);
+        paper.BoolAdd(
+            Sectioner.pie(
+                theta_inlet - 3f*PI/4f,
+                theta_inlet - PI
+            ).cut(new Rod(
+                new(),
+                z_exit,
+                pm.flange_outer_radius + 2f*EXTRA
+            ).extended(EXTRA, Extend.UPDOWN))
         );
-        f1 = f1.rotzx(torad(90f - 14f));
-        f1 = f1.transz(-75f, false);
-        f1 = f1.transy(-5f, false);
-        f1 = f1.transx(50f);
-        f1 = f1.cyclecw();
-        f1 = f1.swing(new (), new (0f, 0f, 1f), PI, false);
-        // f1 = f1.transy(-10f, false);
-
-        Frame f2 = new(fromcyl(pm.r_bolt, 3*TWOPI/pm.no_bolt, 0f));
-        f2 = f2.transx(-f2.pos.X, false);
-        f2 = f2.transz(-EXTRA, false);
-        f2 = f2.cycleccw();
-        f2 = f2.flipyz();
-        f2 = f2.swing(new (), new (0f, 0f, 1f), PI, false);
-        f2 = f2.transy(8f, false);
-        // f2 = f2.rotxy(torad(-15f), false);
-
-        Frame f3 = new(fromcyl(pm.r_bolt, 7*TWOPI/pm.no_bolt, 0f));
-        f3 = f3.rotxy(torad(90f-5f), false);
-        f3 = f3.cycleccw();
-
-        Bar cube1 = new Bar(f1, 100f, 350f, 80f);
-        cube1 = cube1.at_edge(Bar.X1_Y0);
-        Geez.bar(cube1);
-
-        Bar cube2 = new Bar(f2, 50f, 100f, 11f);
-        cube2 = cube2.at_edge(Bar.X1_Y0);
-        Geez.bar(cube2);
-
-        Bar cube3 = new Bar(f3, 80f, 100f, -30f);
-        cube3 = cube3.at_edge(Bar.Y1);
-        Geez.bar(cube3);
-
-        Geez.frame(f1);
-        Geez.frame(f2);
-        Geez.frame(f3, 20f);
-
-        print("created cutting cubes.");
-
-        Voxels inner = voxels_cnt_filled((z) => th_iw[z] + th_chnl[z] -
-                1.2f*VOXEL_SIZE, true, extra: false);
-        print("created filled channels.");
-
-        Voxels outer = part.voxDuplicate();
-        print("duplicated part.");
-
-        outer.BoolSubtract(inner);
-        Voxels tmp = (Voxels)cube1;
-        tmp.BoolAdd(cube2);
-        tmp.BoolAdd(cube3);
-        outer.BoolIntersect(tmp);
-        Geez.voxels(outer);
+        scissors.BoolIntersect(paper);
         print("made scissors.");
 
-        Voxels cutted = part - outer;
-        Geez.voxels(cutted);
-        // Geez.remove(Geez.recent(4, 1));
+        Voxels cutted = part - scissors;
+        key_part <<= Geez.voxels(cutted);
         print("finished.");
         print();
 
@@ -1950,10 +1944,15 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
-        Voxels v = new Donut(new(), 5f + VOXEL_SIZE, 5f);
+        Voxels v = new();
+        for (float x=0f; x<5.01f; x += 1f)
+        for (float y=0f; y<5.01f; y += 1f)
+        for (float z=0f; z<1.01f; z += 0.5f)
+            v.BoolAdd(new Donut(new(new Vec3(x,y,z)), 0.3f, 0.18f));
+
         Mesh m = new(v);
-        Geez.mesh(m);
         TPIAP.save_mesh_only("test", m);
+        Geez.mesh(m);
     }
 
 
