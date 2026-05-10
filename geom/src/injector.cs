@@ -349,8 +349,11 @@ public class InjectorElement {
             $"  -1 Inlet Reynolds number: {Re_il1}",
             $"  -1 A: {A_1}",
             $"  -1 Cd: {Cd_1}",
-            $"  -1 rmbar: {rmbar_1}",
             $"  -1 cspf: {cspf_1}",
+            $"  -1 Rbar_ch: {Rbar_ch1}",
+            $"  -1 Lbar_ch: {Lbar_ch1}",
+            $"  -1 Lbar_nz: {Lbar_nz1}",
+            $"  -1 rmbar: {rmbar_1}",
             $"",
             $"Stage 2 (IPA):",
             $"  -2 Pressure difference: {DP_2*1e-5} bar",
@@ -364,8 +367,11 @@ public class InjectorElement {
             $"  -2 Inlet Reynolds number: {Re_il2}",
             $"  -2 A: {A_2}",
             $"  -2 Cd: {Cd_2}",
-            $"  -2 rmbar: {rmbar_2}",
             $"  -2 cspf: {cspf_2}",
+            $"  -2 Rbar_ch: {Rbar_ch2}",
+            $"  -2 Lbar_ch: N/A",
+            $"  -2 Lbar_nz: {Lbar_nz2}",
+            $"  -2 rmbar: {rmbar_2}",
             $"",
             $"Interactions:",
             $"  - Mixing length: {mixing_length*1e3f} mm",
@@ -1377,56 +1383,53 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    protected Voxels voxels_flange(Geez.Cycle key, ManiVol mani_vol) {
+    protected void voxels_flange(Geez.Cycle key, ManiVol mani_vol,
+            out Voxels flange, out Voxels? ledge) {
         using var __ = key.like();
 
-        Rod flange = new(
+        flange = new Rod(
             new(),
             pm.flange_thickness_inj,
             pm.flange_outer_radius
-        );
-
-        Voxels vox = flange.extended(EXTRA + extend_base_by, Extend.DOWN);
-        key.voxels(vox);
+        ).extended(EXTRA + extend_base_by, Extend.DOWN);
+        key.voxels(flange);
 
         for (int i=0; i<pm.no_bolt; ++i) {
             float theta = i*TWOPI/pm.no_bolt;
-            vox.BoolAdd(new Rod(
+            flange.BoolAdd(new Rod(
                 new(fromcyl(pm.r_bolt, theta, 0f)),
-                flange.Lz,
+                pm.flange_thickness_inj,
                 pm.D_bolt/2f + pm.thickness_around_bolt
             ).extended(EXTRA + extend_base_by, Extend.DOWN));
         }
-        key.voxels(vox);
+        key.voxels(flange);
 
         // Flange extension into cone.
         Voxels extra = new Rod(new(), mani_vol.peak.X, pm.flange_outer_radius);
         extra.BoolIntersect(mani_vol.A.shelled(mani_vol.th/2f).positive
                                       .lengthed(2f*EXTRA + extend_base_by, 0f));
-        vox.BoolAdd(extra);
-        key.voxels(vox);
+        flange.BoolAdd(extra);
+        key.voxels(flange);
 
         // Clip correctly.
-        vox.BoolSubtract(new Rod(
+        flange.BoolSubtract(new Rod(
             new(),
             mani_vol.peak.X,
             Or_chnl
         ).extended(2f*EXTRA + extend_base_by, Extend.UPDOWN));
-        key.voxels(vox);
+        key.voxels(flange);
 
 
         // Circular interface on breakouts.
+        ledge = null;
         if (extend_base_by > 0f) {
             float max_r = pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt;
-            vox.BoolAdd(new Rod(
+            ledge = new Rod(
                 new(-circular_base_z*uZ3),
                 -extend_base_by + circular_base_z,
                 max_r
-            ).extended(EXTRA, Extend.DOWN));
-            key.voxels(vox);
+            ).extended(EXTRA, Extend.DOWN);
         }
-
-        return vox;
     }
 
 
@@ -2174,7 +2177,8 @@ public class Injector : TPIAP.Pea {
         part.substep("created O-rings.");
 
         Geez.Cycle key_flange = new(colour: COLOUR_BLUE);
-        Voxels? flange = voxels_flange(key_flange, mani_vol);
+        voxels_flange(key_flange, mani_vol, out Voxels? flange,
+                out Voxels? ledge);
         part.step("created flange.");
 
         Geez.Cycle key_gussets = new(colour: COLOUR_YELLOW);
@@ -2284,6 +2288,12 @@ public class Injector : TPIAP.Pea {
 
         part.add(ref plate, key_plate);
         part.substep("added base plate.");
+        if (ledge != null) {
+            part.add(ref ledge);
+            part.substep("added ledge.");
+        } else {
+            part.substep("no ledge to add.");
+        }
         part.add(ref supports, key_supports);
         part.substep("added supports.");
         if (branding != null) {
