@@ -1618,8 +1618,9 @@ public class Chamber : TPIAP.Pea {
         lines.Add("--- COOLANT INLET PORT ---");
         lines.Add($"  Thread:           {thread_desc(portsize_inlet, tap_inlet)}");
         lines.Add($"  Angular position: {deg(todeg(theta_inlet))}  from +X axis");
-        lines.Add($"  Port centre (X, Y, Z): ({inlet.pos.X:+0.00;-0.00}, {inlet.pos.Y:+0.00;-0.00},"
-                + $" {inlet.pos.Z:+0.00;-0.00}) mm");
+        Frame inlet_face = inlet.transz(ell_inlet);
+        lines.Add($"  Port centre (X, Y, Z): ({inlet_face.pos.X:+0.00;-0.00}, {inlet_face.pos.Y:+0.00;-0.00},"
+                + $" {inlet_face.pos.Z:+0.00;-0.00}) mm");
         lines.Add($"  Radial offset:    {mm(magxy(inlet.pos))}  (from centreline)");
         lines.Add($"  Port incline:     {deg(todeg(phi_inlet))}  from radial plane");
         lines.Add($"  Wall thickness:   {mm(th_inlet)}");
