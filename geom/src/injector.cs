@@ -1348,7 +1348,8 @@ public class Injector : TPIAP.Pea {
 
 
         // Add breakout.
-        if (!printable_dmls)
+        bool break_me_out_question_mark = false;
+        if (!break_me_out_question_mark || !printable_dmls)
             return;
 
         neg.BoolSubtract(new Rod(
@@ -2014,7 +2015,8 @@ public class Injector : TPIAP.Pea {
         neg_no_tap = _neg_no_tap;
         labels = _labels;
 
-        if (printable_dmls) {
+        bool break_me_out_question_mark = false;
+        if (break_me_out_question_mark && printable_dmls) {
             neg.IntersectImplicit(new Space(
                 new(),
                 0f,
