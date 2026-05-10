@@ -133,7 +133,7 @@
         "portsize_LOxPT": "G1/4 12",
         "portsize_IPAPT": "G1/4 12",
         "portsize_CCPT": "G1/4 12",
-        "z_igniter": 45.0,
+        "z_igniter": 40.0,
         "z_LOxinlet": 63.0,
         "z_LOxPT": 60.0,
         "z_IPAPT": 60.0,

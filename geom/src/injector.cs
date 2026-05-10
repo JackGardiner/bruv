@@ -1883,7 +1883,7 @@ public class Injector : TPIAP.Pea {
             // Bolt hole + clean top.
             top = top.transz(extra_on_mounts);
             neg.BoolAdd(tap_mount.at(top));
-            neg.BoolAdd(new Rod(top, EXTRA, 2f*strut_radius));
+            neg.BoolAdd(new Rod(top, 2f*EXTRA, 2f*strut_radius));
 
             key.voxels(pos);
         }
@@ -1900,17 +1900,21 @@ public class Injector : TPIAP.Pea {
 
 
 
-    protected void voxels_ports(Geez.Cycle key, ManiVol mani_vol,
-            out Voxels pos, out Voxels neg, out Voxels neg_no_tap) {
+    protected void voxels_ports(Geez.Cycle key, Geez.Cycle key_labels,
+            ManiVol mani_vol, out Voxels pos, out Voxels neg,
+            out Voxels neg_no_tap, out Voxels labels) {
 
         // fucking c sharp cannot access out var from local function.
         Voxels _pos = new();
         Voxels _neg = new();
         Voxels _neg_no_tap = new();
+        Voxels _labels = new();
 
         List<Geez.Key> keys = new();
+        List<Geez.Key> keys_labels = new();
         void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
-                in Voxels? sub_pos=null, in Voxels? sub_neg=null) {
+                string img_name, in Voxels? sub_pos=null,
+                in Voxels? sub_neg=null) {
             Flats flats = new Flats(tap, th);
             Voxels this_pos = flats.at(at);
             this_pos.BoolAdd(new Rod(at, -at.pos.Z, flats.r));
@@ -1935,11 +1939,30 @@ public class Injector : TPIAP.Pea {
                 this_neg.BoolSubtract(sub_neg);
                 this_neg_no_tap.BoolSubtract(sub_neg);
             }
+
             using (key.like())
                 keys.Add(Geez.voxels(this_pos));
             _pos.BoolAdd(this_pos);
             _neg.BoolAdd(this_neg);
             _neg_no_tap.BoolAdd(this_neg_no_tap);
+
+            float label_th = 0.5f;
+            float label_inset = 1f;
+            ImageSignedDist img = new(fromroot($"assets/{img_name}.tga"),
+                    flipy: true, rot: ImageSignedDist.CCW);
+            Voxels this_labels = img.voxels_on_cone(
+                new Cone(
+                    at.rotxy(-PI_2).transz(-0.15f*flats.flats_Lz),
+                    -0.45f*flats.flats_Lz,
+                    flats.r,
+                    flats.r
+                ),
+                label_th + label_inset,
+                -label_inset
+            );
+            using (key_labels.like())
+                keys_labels.Add(Geez.voxels(this_labels));
+            _labels.BoolAdd(this_labels);
         }
 
         float r_LOxinlet = mani_vol.peak.Y * 1.2f;
@@ -1967,6 +1990,7 @@ public class Injector : TPIAP.Pea {
 
         Voxels underneath = new Rod(new(), -3f*EXTRA, pm.flange_outer_radius);
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
+                "in-ox",
                 sub_pos: underneath + mani_vol.volume_entire,
                 sub_neg: underneath + mani_vol.volume_only_lower_up
                        + new Rod(
@@ -1974,17 +1998,18 @@ public class Injector : TPIAP.Pea {
                             element.max_z + 2f*VOXEL_SIZE,
                             pm.flange_outer_radius
                         ));
-        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh,
+        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh, "pt-ox",
                 sub_pos: underneath + mani_vol.volume_entire,
                 sub_neg: underneath + mani_vol.volume_only_lower_up);
-        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh,
+        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh, "pt-fu",
                 sub_pos: underneath + mani_vol.volume_only_lower_down,
                 sub_neg: underneath + volume_plate);
-        portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh);
+        portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh, "pt-cc");
 
         pos = _pos;
         neg = _neg;
         neg_no_tap = _neg_no_tap;
+        labels = _labels;
 
         if (printable_dmls) {
             neg.IntersectImplicit(new Space(
@@ -2043,6 +2068,7 @@ public class Injector : TPIAP.Pea {
         }
 
         key <<= Geez.group(keys);
+        key_labels <<= Geez.group(keys_labels);
     }
 
 
@@ -2157,8 +2183,10 @@ public class Injector : TPIAP.Pea {
         part.step("created gussets.");
 
         Geez.Cycle key_ports = new(colour: COLOUR_RED);
-        voxels_ports(key_ports, mani_vol, out Voxels? pos_ports,
-                out Voxels? neg_ports, out Voxels? neg_ports_no_tap);
+        Geez.Cycle key_labels = new(colour: COLOUR_CYAN);
+        voxels_ports(key_ports, key_labels, mani_vol, out Voxels? pos_ports,
+                out Voxels? neg_ports, out Voxels? neg_ports_no_tap,
+                out Voxels? labels);
 
         Geez.Cycle key_branding = new(colour: COLOUR_CYAN);
         Voxels? branding = brandingless
@@ -2264,6 +2292,8 @@ public class Injector : TPIAP.Pea {
         } else {
             part.substep("no branding to add.");
         }
+        part.add(ref labels, key_labels);
+        part.substep("added labels.");
         part.add(ref pos_elements);
         part.substep("added injector elements.");
 
