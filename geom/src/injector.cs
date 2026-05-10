@@ -1915,7 +1915,7 @@ public class Injector : TPIAP.Pea {
         void portme(Tapping tap, Frame at, float th, float D_h, float th_h,
                 string img_name, in Voxels? sub_pos=null,
                 in Voxels? sub_neg=null) {
-            Flats flats = new Flats(tap, th);
+            Flats flats = new(tap, th);
             Voxels this_pos = flats.at(at);
             this_pos.BoolAdd(new Rod(at, -at.pos.Z, flats.r));
             this_pos.BoolSubtract(mani_vol.volume_entire);
@@ -1946,14 +1946,14 @@ public class Injector : TPIAP.Pea {
             _neg.BoolAdd(this_neg);
             _neg_no_tap.BoolAdd(this_neg_no_tap);
 
-            float label_th = 0.5f;
+            float label_th = 0.6f;
             float label_inset = 1f;
             ImageSignedDist img = new(fromroot($"assets/{img_name}.tga"),
                     flipy: true, rot: ImageSignedDist.CCW);
             Voxels this_labels = img.voxels_on_cone(
                 new Cone(
                     at.rotxy(-PI_2).transz(-0.15f*flats.flats_Lz),
-                    -0.45f*flats.flats_Lz,
+                    -4.3f*sqrt(flats.flats_Lz/10f),
                     flats.r,
                     flats.r
                 ),
@@ -1990,7 +1990,7 @@ public class Injector : TPIAP.Pea {
 
         Voxels underneath = new Rod(new(), -3f*EXTRA, pm.flange_outer_radius);
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
-                "in-ox",
+                "in-lox",
                 sub_pos: underneath + mani_vol.volume_entire,
                 sub_neg: underneath + mani_vol.volume_only_lower_up
                        + new Rod(
@@ -1998,10 +1998,10 @@ public class Injector : TPIAP.Pea {
                             element.max_z + 2f*VOXEL_SIZE,
                             pm.flange_outer_radius
                         ));
-        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh, "pt-ox",
+        portme(tap_LOxPT, at_LOxPT, th_LOxPT, D_LOxPTh, th_LOxPTh, "pt-lox",
                 sub_pos: underneath + mani_vol.volume_entire,
                 sub_neg: underneath + mani_vol.volume_only_lower_up);
-        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh, "pt-fu",
+        portme(tap_IPAPT, at_IPAPT, th_IPAPT, D_IPAPTh, th_IPAPTh, "pt-ipa",
                 sub_pos: underneath + mani_vol.volume_only_lower_down,
                 sub_neg: underneath + volume_plate);
         portme(tap_CCPT, at_CCPT, th_CCPT, D_CCPTh, th_CCPTh, "pt-cc");
