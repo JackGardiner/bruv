@@ -1633,9 +1633,15 @@ public class Chamber : TPIAP.Pea {
         lines.Add($"  Port centres (X, Y, Z):");
         for (int i = 0; i < numel(tc_points); ++i) {
             Vec3 p = tc_points[i];
-            float r = magxy(p);
+            // offset along port axis
+            float Dz = cnt_radius_at(p.Z, th_iw[p.Z] + th_chnl[p.Z] + th_ow +
+                    5f + tap_tc.straight_length, true);
+            Dz -= magxy(p);
+            Frame tc_face = Frame.cyl_axial(p).transx(Dz);
             float theta = todeg(argxy(p));
-            lines.Add($"    TC {i+1:D2}:  ({p.X:+0.00;-0.00}, {p.Y:+0.00;-0.00}, {p.Z:+0.00;-0.00}) mm"
+            float r = magxy(tc_face.pos);
+
+            lines.Add($"    TC {i+1:D2}:  ({tc_face.pos.X:+0.00;-0.00}, {tc_face.pos.Y:+0.00;-0.00}, {tc_face.pos.Z:+0.00;-0.00}) mm"
                     + $"  r = {mm(r)}, theta = {deg(theta)}");
         }
         lines.Add("");
