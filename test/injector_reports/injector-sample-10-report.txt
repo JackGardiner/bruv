@@ -7,34 +7,34 @@ Empirical corrections:
   - Additional correction factor: 1
 
 Stage 1 (LOx):
-  - Pressure difference: 8.75 bar
-  - Mass flow rate: 0.10436267 kg/s
-  - Nozzle inner radius: 1.4003913 mm
-  - Nozzle length: 2.8007827 mm
-  - Chamber inner radius: 1.9605479 mm
-  - Chamber length: 7.8421917 mm
-  - Inlet count: 4
-  - Inlet radius: 0.6855488 mm
-  - Inlet Reynolds number: 237534.55
-  - A_1: 1.4604616
-  - Cd_1: 0.29282063
-  - rmbar_1: 0.48715135
-  - cspf_1: 0.7626836
+  -1 Pressure difference: 8.75 bar
+  -1 Mass flow rate: 0.10436267 kg/s
+  -1 Nozzle inner radius: 1.4003913 mm
+  -1 Nozzle length: 2.8007827 mm
+  -1 Chamber inner radius: 1.9605479 mm
+  -1 Chamber length: 7.8421917 mm
+  -1 Inlet count: 4
+  -1 Inlet radius: 0.6855488 mm
+  -1 Inlet Reynolds number: 237534.55
+  -1 A_1: 1.4604616
+  -1 Cd_1: 0.29282063
+  -1 rmbar_1: 0.48715135
+  -1 cspf_1: 0.7626836
 
 Stage 2 (IPA):
-  - Pressure difference: 8.75 bar
-  - Mass flow rate: 0.059178874 kg/s
-  - Nozzle inner radius: 3.24452 mm
-  - Nozzle length: 3.24452 mm
-  - Chamber inner radius: 3.893424 mm
-  - Chamber length: 389.3424 mm
-  - Inlet count: 4
-  - Inlet radius: 0.64281166 mm
-  - Inlet Reynolds number: 10246.301
-  - A_2: 7.6428385
-  - Cd_2: 0.08469895
-  - rmbar_2: 0.77062625
-  - cspf_2: 0.4061352
+  -2 Pressure difference: 8.75 bar
+  -2 Mass flow rate: 0.059178874 kg/s
+  -2 Nozzle inner radius: 3.24452 mm
+  -2 Nozzle length: 3.24452 mm
+  -2 Chamber inner radius: 3.893424 mm
+  -2 Chamber length: 389.3424 mm
+  -2 Inlet count: 4
+  -2 Inlet radius: 0.64281166 mm
+  -2 Inlet Reynolds number: 10246.301
+  -2 A_2: 7.6428385
+  -2 Cd_2: 0.08469895
+  -2 rmbar_2: 0.77062625
+  -2 cspf_2: 0.4061352
 
 Interactions:
   - Mixing length: 1.7580782 mm

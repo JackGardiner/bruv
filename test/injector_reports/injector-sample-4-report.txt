@@ -2,34 +2,34 @@ Injector Element Report
 =======================
 
 Stage 1 (LOx):
-  - Pressure difference: 8.75 bar
-  - Mass flow rate: 0.080000006 kg/s
-  - Nozzle inner radius: 1.3950453 mm
-  - Nozzle length: 2.7900906 mm
-  - Chamber inner radius: 1.9530634 mm
-  - Chamber length: 7.8122535 mm
-  - Inlet count: 5
-  - Inlet radius: 0.61083263 mm
-  - Inlet Reynolds number: 182781.7
-  - A_1: 1.4604616
-  - Cd_1: 0.29282063
-  - rmbar_1: 0.48715135
-  - cspf_1: 0.7626836
+  -1 Pressure difference: 8.75 bar
+  -1 Mass flow rate: 0.080000006 kg/s
+  -1 Nozzle inner radius: 1.3950453 mm
+  -1 Nozzle length: 2.7900906 mm
+  -1 Chamber inner radius: 1.9530634 mm
+  -1 Chamber length: 7.8122535 mm
+  -1 Inlet count: 5
+  -1 Inlet radius: 0.61083263 mm
+  -1 Inlet Reynolds number: 182781.7
+  -1 A_1: 1.4604616
+  -1 Cd_1: 0.29282063
+  -1 rmbar_1: 0.48715135
+  -1 cspf_1: 0.7626836
 
 Stage 2 (IPA):
-  - Pressure difference: 8.75 bar
-  - Mass flow rate: 0.053333335 kg/s
-  - Nozzle inner radius: 3.3534367 mm
-  - Nozzle length: 3.3534367 mm
-  - Chamber inner radius: 4.024124 mm
-  - Chamber length: 402.4124 mm
-  - Inlet count: 5
-  - Inlet radius: 0.66460377 mm
-  - Inlet Reynolds number: 7988.4966
-  - A_2: 6.1103473
-  - Cd_2: 0.10176029
-  - rmbar_2: 0.74407053
-  - cspf_2: 0.44635904
+  -2 Pressure difference: 8.75 bar
+  -2 Mass flow rate: 0.053333335 kg/s
+  -2 Nozzle inner radius: 3.3534367 mm
+  -2 Nozzle length: 3.3534367 mm
+  -2 Chamber inner radius: 4.024124 mm
+  -2 Chamber length: 402.4124 mm
+  -2 Inlet count: 5
+  -2 Inlet radius: 0.66460377 mm
+  -2 Inlet Reynolds number: 7988.4966
+  -2 A_2: 6.1103473
+  -2 Cd_2: 0.10176029
+  -2 rmbar_2: 0.74407053
+  -2 cspf_2: 0.44635904
 
 Interactions:
   - Mixing length: 1.8703161 mm
