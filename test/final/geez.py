@@ -142,6 +142,8 @@ class BrAxes(matplotlib.axes.Axes):
         return lines
 
     def _get_coords_angle(self, X, Y, x=None, y=None, off=0.0):
+        X = np.asarray(X)
+        Y = np.asarray(Y)
         assert len(X) == len(Y)
         assert (x is None) != (y is None)
         assert (x == x) and (y == y)
@@ -160,13 +162,13 @@ class BrAxes(matplotlib.axes.Axes):
             x = y
             y = None
             off = -off
-        mask = (~isnan(X)) & (~isnan(Y))
+        mask = (~np.isnan(X)) & (~np.isnan(Y))
         assert mask.any()
         X = X[mask]
         Y = Y[mask]
         assert (np.diff(X) > 0).all(), "not monotonically increasing"
-        y = interp(x, X, Y)
-        i = idxof(X, x)
+        y = np.interp(x, X, Y)
+        i = np.nanargmin(abs(X - x))
         if (i == 0 and x < X[i]) or (i == len(X)-1 and x > X[i]) or len(X) == 1:
             dy = 1.0 if swap else 0.0
             dx = 0.0 if swap else 1.0
@@ -175,9 +177,9 @@ class BrAxes(matplotlib.axes.Axes):
                 i -= 1
             dy = Y[i + 1] - Y[i]
             dx = X[i + 1] - X[i]
-        x += off * (-aspecty*dy/sqrt(dx**2 + dy**2))
-        y += off * (+aspectx*dx/sqrt(dx**2 + dy**2))
-        angle = atand2(aspecty*dy, aspectx*dx)
+        x += off * (-aspecty*dy/np.sqrt(dx**2 + dy**2))
+        y += off * (+aspectx*dx/np.sqrt(dx**2 + dy**2))
+        angle = np.degrees(np.atan2(aspecty*dy, aspectx*dx))
         if swap:
             x, y = y, x
             angle = 90.0 - angle

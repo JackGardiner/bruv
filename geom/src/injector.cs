@@ -90,7 +90,7 @@ public class InjectorElement {
     public float max_z = NAN;
 
     // JBS testing experimental correction factors.
-    public float Kmdot_extra { get; init; } = 1f; // for sweepin.
+    public float Kmdot_extra { get; set; } = 1f; // for sweepin.
 
     /* round 2 */
     // public float Kmdot_1 { get; init; } = 1.294592f;
@@ -105,8 +105,12 @@ public class InjectorElement {
     // public float Kmdot_2 { get; init; } = 1.460f;
 
     /* final */
-    public float Kmdot_1 { get; init; } = 1.341f;
-    public float Kmdot_2 { get; init; } = 1.518f;
+    // public float Kmdot_1 { get; init; } = 1.341f;
+    // public float Kmdot_2 { get; init; } = 1.518f;
+
+    /* FINAL */
+    public float Kmdot_1 { get; set; } = 1.39f;
+    public float Kmdot_2 { get; set; } = 0.75f;
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
@@ -142,7 +146,7 @@ public class InjectorElement {
 
     private bool inited = false;
     public void initialise() {
-        assert(!inited);
+        // assert(!inited);
 
         // Make "pretend" mass flow rates to design the element around which in
         // reality (from testing) give the desired mfr.
@@ -340,6 +344,7 @@ public class InjectorElement {
             $"Stage 1 (LOx):",
             $"  -1 Pressure difference: {DP_1*1e-5} bar",
             $"  -1 Mass flow rate: {mdot_1} kg/s",
+            $"  -1 A sqrt(DP): {no_il1*PI*sqed(Ir_il1) * sqrt(DP_1)}",
             $"  -1 Nozzle inner radius: {Ir_nz1*1e3f} mm",
             $"  -1 Nozzle length: {L_nz1*1e3f} mm",
             $"  -1 Chamber inner radius: {Ir_ch1*1e3f} mm",
@@ -358,6 +363,7 @@ public class InjectorElement {
             $"Stage 2 (IPA):",
             $"  -2 Pressure difference: {DP_2*1e-5} bar",
             $"  -2 Mass flow rate: {mdot_2} kg/s",
+            $"  -2 A sqrt(DP): {no_il2*PI*sqed(Ir_il2) * sqrt(DP_2)}",
             $"  -2 Nozzle inner radius: {Ir_nz2*1e3f} mm",
             $"  -2 Nozzle length: {L_nz2*1e3f} mm",
             $"  -2 Chamber inner radius: {Ir_ch2*1e3f} mm",
@@ -2403,11 +2409,38 @@ public class Injector : TPIAP.Pea {
 
 
     public void anything() {
-        Polygon.circle_line_intersection(2f, -5.5f, 1f, 9f, 6f, out Vec2 A, out Vec2 B);
-        print(A);
-        print(B);
-        Geez.point(rejxy(A));
-        Geez.point(rejxy(B));
+        string path_lox = fromroot("exports/injector-mdot-lookup-lox.csv");
+        string path_ipa = fromroot("exports/injector-mdot-lookup-ipa.csv");
+
+        element.Kmdot_extra = 1f;
+        element.Kmdot_2 = 1f;
+        using (StreamWriter writer = new(path_lox)) {
+            writer.WriteLine("X,mdot");
+            for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
+                element.Kmdot_1 = kmdot;
+                element.initialise();
+                float X = element.no_il1
+                        * PI/4f * sqed(element.D_il1 * 1e-3f)
+                        * sqrt(element.DP_1);
+                writer.WriteLine($"{X},{element.mdot_1 / kmdot}");
+            }
+        }
+        element.Kmdot_1 = 1f;
+        using (StreamWriter writer = new(path_ipa)) {
+            writer.WriteLine("X,mdot");
+            for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
+                element.Kmdot_2 = kmdot;
+                element.initialise();
+                float X = element.no_il2
+                        * PI/4f * sqed(element.D_il2 * 1e-3f)
+                        * sqrt(element.DP_2);
+                writer.WriteLine($"{X},{element.mdot_2 / kmdot}");
+            }
+        }
+
+        // Note that the x->Kmdot relationship actually cannot be decoupled for
+        // IPA/LOx independantly, but leaving the other side at 1 provides a
+        // close enough fit. smile.
     }
 
 
