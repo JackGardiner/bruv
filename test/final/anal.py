@@ -1,3 +1,4 @@
+import io
 import os
 import re
 from contextlib import contextmanager
@@ -165,16 +166,53 @@ def read(name, csv_name=None):
 
 
 
-def mdot_lookups():
-    path_lox = "../mdot_lookups/injector-mdot-lookup-lox.csv"
-    path_ipa = "../mdot_lookups/injector-mdot-lookup-ipa.csv"
-    lox = pd.read_csv(path_lox)
-    ipa = pd.read_csv(path_ipa)
+def Kmdot_lookups(x_lox, x_ipa):
+    path = "../Kmdot_lookup/injector-Kmdot-lookup.txt"
 
-    X = np.geomspace(lox["X"].min(), lox["X"].max(), 1000)
-    mdot_lox = np.interp(X, lox["X"].to_numpy(), lox["mdot"].to_numpy())
-    mdot_ipa = np.interp(X, ipa["X"].to_numpy(), ipa["mdot"].to_numpy())
-    return X, mdot_lox, mdot_ipa
+    metadata = {}
+    lox_buffer = []
+    ipa_buffer = []
+    current_section = "metadata"
+
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Check for section transitions
+            if line.startswith("lox;"):
+                current_section = "lox"
+                # Grab the header row (everything after the 'lox;')
+                lox_buffer.append(line.split(";")[1])
+                continue
+            elif line.startswith("ipa;"):
+                current_section = "ipa"
+                # Grab the header row (everything after the 'ipa;')
+                ipa_buffer.append(line.split(";")[1])
+                continue
+
+            # Parse based on the current active section
+            if current_section == "metadata":
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    metadata[key.strip()] = float(value.strip())
+
+            elif current_section == "lox":
+                lox_buffer.append(line)
+
+            elif current_section == "ipa":
+                ipa_buffer.append(line)
+
+    lox = pd.read_csv(io.StringIO("\n".join(lox_buffer)))
+    ipa = pd.read_csv(io.StringIO("\n".join(ipa_buffer)))
+
+    assert abs(metadata["mdot_lox"] - MARK_MFR_LOX) < 0.001
+    assert abs(metadata["mdot_ipa"] - MARK_MFR_IPA) < 0.001
+
+    Kmdot_lox = np.interp(x_lox, lox["X"].to_numpy(), lox["Kmdot"].to_numpy())
+    Kmdot_ipa = np.interp(x_ipa, ipa["X"].to_numpy(), ipa["Kmdot"].to_numpy())
+    return float(Kmdot_lox), float(Kmdot_ipa)
 
 
 
@@ -362,31 +400,31 @@ def main():
 
     ax.set_title("CLICK 1: Select a point for LOx", fontsize=14, color="blue",
             fontweight="bold")
+    fig.canvas.draw()
     lox_selection = fig.ginput(1, timeout=0)
     x_lox, y_lox = lox_selection[0]
-    ax.plot(x_lox, y_lox, "bx", markersize=10, mew=2)
+    ax.axvline(x_lox, color="blue", ls="--", lw=2.2)
 
     ax.set_title("CLICK 2: Select a point for IPA", fontsize=14, color="red",
             fontweight="bold")
+    fig.canvas.draw()
     ipa_selection = fig.ginput(1, timeout=0)
     x_ipa, y_ipa = ipa_selection[0]
-    ax.plot(x_ipa, y_ipa, "rx", markersize=10, mew=2)
+    ax.axvline(x_ipa, color="red", ls="--", lw=2.2)
 
     ax.set_title("Selections Captured!", color="green")
+    fig.canvas.draw()
 
-    fig.show()
 
-    X, mdot_lox, mdot_ipa = mdot_lookups()
+    Kmdot_lox, Kmdot_ipa = Kmdot_lookups(x_lox, x_ipa)
 
-    chosen_mdot_lox = float(np.interp(x_lox, X, mdot_lox))
-    chosen_mdot_ipa = float(np.interp(x_ipa, X, mdot_ipa))
     # note that the MARK mfrs must be the design mfrs of the lookup table.
     print(f"For a LOx X of: {x_lox}")
-    print(f"     pick mdot: {chosen_mdot_lox}")
-    print(f"       (Kmdot): {chosen_mdot_lox / MARK_MFR_LOX}")
+    print(f"     pick mdot: {y_lox}")
+    print(f"       (Kmdot): {Kmdot_lox}")
     print(f"For an IPA X of: {x_ipa}")
-    print(f"      pick mdot: {float(np.interp(x_ipa, X, mdot_ipa))}")
-    print(f"        (Kmdot): {chosen_mdot_ipa / MARK_MFR_IPA}")
+    print(f"      pick mdot: {y_ipa}")
+    print(f"        (Kmdot): {Kmdot_ipa}")
 
 
 

@@ -109,7 +109,7 @@ public class InjectorElement {
     // public float Kmdot_2 { get; init; } = 1.518f;
 
     /* FINAL */
-    public float Kmdot_1 { get; set; } = 1.39f;
+    public float Kmdot_1 { get; set; } = 1.28f;
     public float Kmdot_2 { get; set; } = 0.75f;
 
     // Number of tangential inlets.
@@ -2408,39 +2408,46 @@ public class Injector : TPIAP.Pea {
     }
 
 
-    public void anything() {
-        string path_lox = fromroot("exports/injector-mdot-lookup-lox.csv");
-        string path_ipa = fromroot("exports/injector-mdot-lookup-ipa.csv");
+    public void write_Kmdot_lookups() {
+        string path = fromroot("exports/injector-Kmdot-lookup.txt");
+
+        using StreamWriter w = new(path);
+
+        w.WriteLine($"DP_lox:{element.DP_1}");
+        w.WriteLine($"DP_ipa:{element.DP_2}");
+        w.WriteLine($"mdot_lox:{element.mdot_1}");
+        w.WriteLine($"mdot_ipa:{element.mdot_2}");
 
         element.Kmdot_extra = 1f;
         element.Kmdot_2 = 1f;
-        using (StreamWriter writer = new(path_lox)) {
-            writer.WriteLine("X,mdot");
-            for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
-                element.Kmdot_1 = kmdot;
-                element.initialise();
-                float X = element.no_il1
-                        * PI/4f * sqed(element.D_il1 * 1e-3f)
-                        * sqrt(element.DP_1);
-                writer.WriteLine($"{X},{element.mdot_1 / kmdot}");
-            }
+        w.WriteLine("lox;X,Kmdot");
+        for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
+            element.Kmdot_1 = kmdot;
+            element.initialise();
+            float X = element.no_il1
+                    * PI/4f * sqed(element.D_il1 * 1e-3f)
+                    * sqrt(element.DP_1);
+            w.WriteLine($"{X},{kmdot}");
         }
         element.Kmdot_1 = 1f;
-        using (StreamWriter writer = new(path_ipa)) {
-            writer.WriteLine("X,mdot");
-            for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
-                element.Kmdot_2 = kmdot;
-                element.initialise();
-                float X = element.no_il2
-                        * PI/4f * sqed(element.D_il2 * 1e-3f)
-                        * sqrt(element.DP_2);
-                writer.WriteLine($"{X},{element.mdot_2 / kmdot}");
-            }
+        w.WriteLine("ipa;X,Kmdot");
+        for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
+            element.Kmdot_2 = kmdot;
+            element.initialise();
+            float X = element.no_il2
+                    * PI/4f * sqed(element.D_il2 * 1e-3f)
+                    * sqrt(element.DP_2);
+            w.WriteLine($"{X},{kmdot}");
         }
 
         // Note that the x->Kmdot relationship actually cannot be decoupled for
         // IPA/LOx independantly, but leaving the other side at 1 provides a
         // close enough fit. smile.
+    }
+
+
+    public void anything() {
+        write_Kmdot_lookups();
     }
 
 
