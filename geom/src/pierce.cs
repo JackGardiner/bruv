@@ -13,13 +13,19 @@ public class PierceField {
     public FieldInfo field_info { get; }
 
     public PierceField(object obj, string name) {
-        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public
+                           | BindingFlags.Instance;
         this.field_info = obj.GetType().GetField(name, flags)!;
+        if (field_info == null)
+            throw new Exception();
         this.obj = obj;
     }
     public PierceField(Type type, string name) {
-        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public
+                           | BindingFlags.Static;
         this.field_info = type.GetField(name, flags)!;
+        if (field_info == null)
+            throw new Exception();
         this.obj = null;
     }
 

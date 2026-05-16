@@ -166,8 +166,8 @@ def read(name, csv_name=None):
 
 
 
-def Kmdot_lookups(x_lox, x_ipa):
-    path = "../Kmdot_lookup/injector-Kmdot-lookup.txt"
+def Kmdot_lookups(x_lox, x_ipa, use_alt):
+    path = f"../Kmdot_lookup/injector-Kmdot-lookup{"-alt" * bool(use_alt)}.txt"
 
     metadata = {}
     lox_buffer = []
@@ -207,8 +207,10 @@ def Kmdot_lookups(x_lox, x_ipa):
     lox = pd.read_csv(io.StringIO("\n".join(lox_buffer)))
     ipa = pd.read_csv(io.StringIO("\n".join(ipa_buffer)))
 
-    assert abs(metadata["mdot_lox"] - MARK_MFR_LOX) < 0.001
-    assert abs(metadata["mdot_ipa"] - MARK_MFR_IPA) < 0.001
+    assert np.isclose(metadata["mdot_lox"],
+            [MARK_MFR_LOX, MARK_MFR_LOX_ALT][int(use_alt)])
+    assert np.isclose(metadata["mdot_ipa"],
+            [MARK_MFR_IPA, MARK_MFR_IPA_ALT][int(use_alt)])
 
     Kmdot_lox = np.interp(x_lox, lox["X"].to_numpy(), lox["Kmdot"].to_numpy())
     Kmdot_ipa = np.interp(x_ipa, ipa["X"].to_numpy(), ipa["Kmdot"].to_numpy())
@@ -323,7 +325,7 @@ def main():
         if name == "RS21":
             csv_name = r"RS21\.2"
         data = read(name, csv_name=csv_name)
-        # peep(win_peep, data, include_load_cells=True)
+        peep(win_peep, data, include_load_cells=True)
 
         prefix = "R" if name.startswith("RS") else "C"
         names[prefix].append(name)
@@ -403,6 +405,10 @@ def main():
     fig.canvas.draw()
     lox_selection = fig.ginput(1, timeout=0)
     x_lox, y_lox = lox_selection[0]
+    use_alt = np.isclose(y_lox, MARK_MFR_LOX_ALT, 0.02)
+    if not np.isclose(y_lox, [MARK_MFR_LOX, MARK_MFR_LOX_ALT][int(use_alt)],
+            0.02):
+        raise Exception("must choose a point on an mfr mark")
     ax.axvline(x_lox, color="blue", ls="--", lw=2.2)
 
     ax.set_title("CLICK 2: Select a point for IPA", fontsize=14, color="red",
@@ -410,13 +416,16 @@ def main():
     fig.canvas.draw()
     ipa_selection = fig.ginput(1, timeout=0)
     x_ipa, y_ipa = ipa_selection[0]
+    if not np.isclose(y_ipa, [MARK_MFR_IPA, MARK_MFR_IPA_ALT][int(use_alt)],
+            0.02):
+        raise Exception("must choose a point on an mfr mark")
     ax.axvline(x_ipa, color="red", ls="--", lw=2.2)
 
     ax.set_title("Selections Captured!", color="green")
     fig.canvas.draw()
 
 
-    Kmdot_lox, Kmdot_ipa = Kmdot_lookups(x_lox, x_ipa)
+    Kmdot_lox, Kmdot_ipa = Kmdot_lookups(x_lox, x_ipa, use_alt)
 
     # note that the MARK mfrs must be the design mfrs of the lookup table.
     print(f"For a LOx X of: {x_lox}")

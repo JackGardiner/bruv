@@ -90,27 +90,9 @@ public class InjectorElement {
     public float max_z = NAN;
 
     // JBS testing experimental correction factors.
-    public float Kmdot_extra { get; set; } = 1f; // for sweepin.
-
-    /* round 2 */
-    // public float Kmdot_1 { get; init; } = 1.294592f;
-    // public float Kmdot_2 { get; init; } = 2.542903f;
-
-    /* round 3 */
-    // public float Kmdot_1 { get; init; } = 1.302f;
-    // public float Kmdot_2 { get; init; } = 3.277f;
-
-    /* round 4 skull emoji */
-    // public float Kmdot_1 { get; init; } = 1.320f;
-    // public float Kmdot_2 { get; init; } = 1.460f;
-
-    /* final */
-    // public float Kmdot_1 { get; init; } = 1.341f;
-    // public float Kmdot_2 { get; init; } = 1.518f;
-
-    /* FINAL */
-    public float Kmdot_1 { get; set; } = 1.28f;
-    public float Kmdot_2 { get; set; } = 0.75f;
+    public float Kmdot_extra { get; init; } = 1f; // for sweepin.
+    public float Kmdot_1 { get; init; } = 1f;
+    public float Kmdot_2 { get; init; } = 1f;
 
     // Number of tangential inlets.
     public int no_il1 { get; init; } = 4;
@@ -146,7 +128,7 @@ public class InjectorElement {
 
     private bool inited = false;
     public void initialise() {
-        // assert(!inited);
+        assert(!inited);
 
         // Make "pretend" mass flow rates to design the element around which in
         // reality (from testing) give the desired mfr.
@@ -402,10 +384,8 @@ public class InjectorElement {
 
 
         // Make injector 1.
-        assert(nearzero(A1.Y));
         List<Vec2> neg_points1 = [
             A1*uX2,
-            A1,
             B1,
             D1,
             E1,
@@ -441,13 +421,12 @@ public class InjectorElement {
 
         // Make injector 2.
         assert(!nearzero(A2.Y));
-        assert(nearzero(F2.X));
         List<Vec2> neg_points2 = [
             A2,
             B2,
             D2,
             E2,
-            F2,
+            F2*uY2,
             new(-EXTRA - (printable ? extend_base_by : 0f), F2.Y),
             new(-EXTRA - (printable ? extend_base_by : 0f), 0f),
         ];
@@ -2120,7 +2099,6 @@ public class Injector : TPIAP.Pea {
 
 
     public Voxels? voxels() {
-        Geez.bar(new(new(), 1e-3f, 150f), divide_x: 6, divide_y: 6);
 
         // Get overall bounding box to size screenshots.
         float overall_Lr = pm.r_bolt
@@ -2418,25 +2396,33 @@ public class Injector : TPIAP.Pea {
         w.WriteLine($"mdot_lox:{element.mdot_1}");
         w.WriteLine($"mdot_ipa:{element.mdot_2}");
 
-        element.Kmdot_extra = 1f;
-        element.Kmdot_2 = 1f;
+        InjectorElement e = element;
+        Pierce.set(e, "<Kmdot_extra>k__BackingField", 1f);
+        Pierce.set(e, "<Kmdot_1>k__BackingField", 1f);
+        Pierce.set(e, "<Kmdot_2>k__BackingField", 1f);
+
         w.WriteLine("lox;X,Kmdot");
         for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
-            element.Kmdot_1 = kmdot;
-            element.initialise();
-            float X = element.no_il1
-                    * PI/4f * sqed(element.D_il1 * 1e-3f)
-                    * sqrt(element.DP_1);
+            Pierce.set(e, "<Kmdot_1>k__BackingField", kmdot);
+            Pierce.set(e, "inited", false);
+            e.initialise();
+            float X = e.no_il1
+                    * PI/4f * sqed(e.D_il1 * 1e-3f)
+                    * sqrt(e.DP_1);
             w.WriteLine($"{X},{kmdot}");
         }
-        element.Kmdot_1 = 1f;
+
+        Pierce.set(e, "<Kmdot_1>k__BackingField", 1f);
+        Pierce.set(e, "<Kmdot_2>k__BackingField", 1f);
+
         w.WriteLine("ipa;X,Kmdot");
         for (float kmdot=4f; kmdot>0.25f; kmdot-=0.001f) {
-            element.Kmdot_2 = kmdot;
-            element.initialise();
-            float X = element.no_il2
-                    * PI/4f * sqed(element.D_il2 * 1e-3f)
-                    * sqrt(element.DP_2);
+            Pierce.set(e, "<Kmdot_2>k__BackingField", kmdot);
+            Pierce.set(e, "inited", false);
+            e.initialise();
+            float X = e.no_il2
+                    * PI/4f * sqed(e.D_il2 * 1e-3f)
+                    * sqrt(e.DP_2);
             w.WriteLine($"{X},{kmdot}");
         }
 
