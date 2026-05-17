@@ -927,7 +927,7 @@ public class Injector : TPIAP.Pea {
     protected float extend_voids_by => printable_dmls ? 3f : 0f;
     protected float breakout_D0 => 6f;
     protected float breakout_D1 => 10f;
-    protected float breakout_CR => 1f;
+    protected float breakout_CR => 1.5f;
     protected float breakout_plate_z => 10f;
     protected float breakout_elements_z => 15f;
     protected float circular_base_z => 5f;
@@ -2063,6 +2063,14 @@ public class Injector : TPIAP.Pea {
             Voxels breakout = bo.at(at);
             breakout.BoolAdd(bo_outlet.at(at1.rotxy(PI)));
 
+            breakout.BoolAdd(Cone.phied(
+                at1,
+                PI_4,
+                breakout_CR + 2*VOXEL_SIZE,
+                0.5f*breakout_D1 - VOXEL_SIZE
+            ).at_base());
+
+
             neg.BoolAdd(breakout);
             neg_no_tap.BoolAdd(breakout);
         }
@@ -2443,7 +2451,10 @@ public class Injector : TPIAP.Pea {
 
 
     public void anything() {
-        write_Kmdot_lookups();
+        // element.voxels(new(), out Voxels pos, out Voxels neg);
+        // pos.BoolSubtract(neg);
+        // pos.BoolIntersect(new Bar(new(), 50f).at_face(Bar.X1));
+        // Geez.voxels(pos);
     }
 
 

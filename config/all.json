@@ -148,13 +148,16 @@
             "FR_small": 0.3,
             "CR_nz1": 0.25,
             "CR_nz2": 0.25,
-            "Lbar_ch1": 4.2,
 
-            "Kmdot_1": 1.40,
-            "Kmdot_2": 0.73,
+            "Lbar_ch1": 4.4,
+            "Kmdot_1": 1.28,
+            "Kmdot_2": 0.77,
 
+            "Lbar_ch1_tuned_for_lox_0.14_kg/s": 4.4,
             "Kmdot_1_tuned_for_lox_0.14_kg/s": 1.28,
             "Kmdot_2_tuned_for_ipa_0.1_kg/s": 0.77,
+
+            "Lbar_ch1_tuned_for_lox_0.1_kg/s": 5.0,
             "Kmdot_1_tuned_for_lox_0.1_kg/s": 1.40,
             "Kmdot_2_tuned_for_ipa_0.075_kg/s": 0.73
         },
