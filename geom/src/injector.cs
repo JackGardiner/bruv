@@ -925,10 +925,13 @@ public class Injector : TPIAP.Pea {
     protected const float facing_stock = 20f;
     protected float extend_base_by => printable_dmls ? facing_stock : 0f;
     protected float extend_voids_by => printable_dmls ? 3f : 0f;
-    protected float breakout_D => 5f;
+    protected float breakout_D0 => 6f;
+    protected float breakout_D1 => 10f;
+    protected float breakout_CR => 1f;
     protected float breakout_plate_z => 10f;
     protected float breakout_elements_z => 15f;
     protected float circular_base_z => 5f;
+    protected float circular_base_R => pm.flange_outer_radius + 18f;
 
 
     protected void voxels_plate(Geez.Cycle key_plate, Geez.Cycle key_breakouts,
@@ -975,7 +978,7 @@ public class Injector : TPIAP.Pea {
             int N = Breakout.N/2;
             N += N & 1;
             List<Vec2> V0 = new(N);
-            float Ltheta = breakout_D / Or_chnl;
+            float Ltheta = breakout_D0 / Or_chnl;
             for (int i=0; i<N/2; ++i) {
                 float theta = lerp(-Ltheta/2f, Ltheta/2f, i, N/2);
                 V0.Add(frompol(Or_chnl, theta) - pm.Mr_chnl*uX2);
@@ -988,7 +991,7 @@ public class Injector : TPIAP.Pea {
             bo_inner = new(V0
                 , Lz: breakout_plate_z
                 , Lx: Lx
-                , D1: 0.75f*breakout_D
+                , D1: 0.8f*breakout_D0
                 , FR: filletless ? 0f : 0.5f
             );
             bo_outer = new(
@@ -998,7 +1001,7 @@ public class Injector : TPIAP.Pea {
                 )
                 , Lz: breakout_plate_z
                 , Lx: Lx
-                , D1: 0.75f*breakout_D
+                , D1: 0.8f*breakout_D0
                 , FR: filletless ? 0f : 0.5f
             );
         }
@@ -1032,7 +1035,7 @@ public class Injector : TPIAP.Pea {
                 M += M & 1;
                 List<Vec2> V = new(4*M);
                 float z0 = -extend_voids_by;
-                float z1 = -breakout_plate_z + breakout_D*0.8f;
+                float z1 = -breakout_plate_z + pm.D_bolt*0.8f;
                 for (int j=0; j<M; ++j) {
                     float z = (j < M/2)
                             ? lerp(z0, z1, j, M/2)
@@ -1057,7 +1060,7 @@ public class Injector : TPIAP.Pea {
                 M += M & 1;
                 List<Vec2> V = new(4*M);
                 float z0 = -extend_voids_by;
-                float z1 = -breakout_plate_z + breakout_D*0.8f;
+                float z1 = -breakout_plate_z + pm.D_bolt*0.8f;
                 for (int j=0; j<M; ++j) {
                     float z = (j < M/2)
                             ? lerp(z0, z1, j, M/2)
@@ -1333,7 +1336,7 @@ public class Injector : TPIAP.Pea {
 
 
         // Add breakout.
-        bool break_me_out_question_mark = false;
+        bool break_me_out_question_mark = true;
         if (!break_me_out_question_mark || !printable_dmls)
             return;
 
@@ -1351,7 +1354,7 @@ public class Injector : TPIAP.Pea {
             Polygon.circle(Polygon.full_res_divs(TWOPI*R), R)
             , Lz: breakout_elements_z
             , Lx: Lx + VOXEL_SIZE
-            , D1: breakout_D
+            , D1: breakout_D0
             , FR: filletless ? 0f : 0.5f
         ).at(new Frame().rotxy(PI_4));
         breakout.BoolAdd(new Breakout(
@@ -1361,7 +1364,7 @@ public class Injector : TPIAP.Pea {
             )
             , Lz: breakout_elements_z
             , Lx: Lx + VOXEL_SIZE
-            , D1: breakout_D
+            , D1: breakout_D0
             , FR: filletless ? 0f : 0.5f
         ).at(new Frame().rotxy(PI_4).transx(r1).rotxy(PI)));
 
@@ -1409,11 +1412,10 @@ public class Injector : TPIAP.Pea {
         // Circular interface on breakouts.
         ledge = null;
         if (extend_base_by > 0f) {
-            float max_r = pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt;
             ledge = new Rod(
                 new(-circular_base_z*uZ3),
                 -extend_base_by + circular_base_z,
-                max_r
+                circular_base_R
             ).extended(EXTRA, Extend.DOWN);
         }
     }
@@ -1450,17 +1452,17 @@ public class Injector : TPIAP.Pea {
         Breakout bo_outer = new(V0_outer
             , Lz: breakout_elements_z
             , Lx: 1f // tmp
-            , D1: breakout_D
+            , D1: breakout_D0
             , FR: filletless ? 0f : 0.5f
         );
         Breakout bo_outlet = new(
             Polygon.circle(
-                Polygon.full_res_divs(PI*breakout_D),
-                0.5f*breakout_D
+                Polygon.full_res_divs(PI*breakout_D1),
+                0.5f*breakout_D1
             )
             , Lz: breakout_elements_z - circular_base_z
             , Lx: 1f // tmp
-            , D1: breakout_D
+            , D1: breakout_D0
             , FR: filletless ? 0f : 0.5f
         );
 
@@ -1474,7 +1476,7 @@ public class Injector : TPIAP.Pea {
 
                 float r1 = ave(
                     pm.flange_outer_radius,
-                    pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt
+                    circular_base_R
                 );
                 Polygon.circle_roots(
                     X: dot(f / ZERO3, uX3),
@@ -1488,6 +1490,14 @@ public class Injector : TPIAP.Pea {
                 bo_outer.Lx = bo_outlet.Lx = 0.5f*mag(p1 - p) + VOXEL_SIZE;
                 Voxels v_outer = bo_outer.at(f);
                 v_outer.BoolAdd(bo_outlet.at(f1.rotxy(PI)));
+
+                v_outer.BoolAdd(Cone.phied(
+                    f1,
+                    PI_4,
+                    breakout_CR + 2*VOXEL_SIZE,
+                    0.5f*breakout_D1 - VOXEL_SIZE
+                ).at_base());
+
                 breakouts_outer.BoolAdd(v_outer);
                 keys.Add(Geez.voxels(v_outer));
 
@@ -1495,7 +1505,7 @@ public class Injector : TPIAP.Pea {
                     int M = divsof(r_inner/4);
                     M += M & 1;
                     List<Vec2> V = new(4*M);
-                    float z0 = -breakout_elements_z + breakout_D;
+                    float z0 = -breakout_elements_z + breakout_D0;
                     float z1 = z0 + TWOPI*r_inner / 4f;
                     float IR = r_inner - VOXEL_SIZE;
                     float OR = r_inner + element.th_inj1 + VOXEL_SIZE;
@@ -2000,7 +2010,7 @@ public class Injector : TPIAP.Pea {
         neg_no_tap = _neg_no_tap;
         labels = _labels;
 
-        bool break_me_out_question_mark = false;
+        bool break_me_out_question_mark = true;
         if (break_me_out_question_mark && printable_dmls) {
             neg.IntersectImplicit(new Space(
                 new(),
@@ -2018,7 +2028,7 @@ public class Injector : TPIAP.Pea {
 
             float r1 = ave(
                 pm.flange_outer_radius,
-                pm.r_bolt + 0.5f*pm.D_bolt + pm.thickness_around_bolt
+                circular_base_R
             );
             Polygon.circle_roots(
                 X: dot(at / ZERO3, uX3),
@@ -2037,17 +2047,17 @@ public class Injector : TPIAP.Pea {
                 )
                 , Lz: breakout_elements_z
                 , Lx: Lx
-                , D1: breakout_D
+                , D1: breakout_D0
                 , FR: filletless ? 0f : 0.5f
             );
             Breakout bo_outlet = new(
                 Polygon.circle(
-                    Polygon.full_res_divs(PI*breakout_D),
-                    0.5f*breakout_D
+                    Polygon.full_res_divs(PI*breakout_D1),
+                    0.5f*breakout_D1
                 )
                 , Lz: breakout_elements_z - circular_base_z
                 , Lx: Lx
-                , D1: breakout_D
+                , D1: breakout_D0
                 , FR: filletless ? 0f : 0.5f
             );
             Voxels breakout = bo.at(at);
