@@ -22,12 +22,12 @@
         "Mr_chnl": 55.5,
         "max_th_chnl": 3.0,
 
-        "IR_Ioring": 48.0,
-        "OR_Ioring": 51.0,
-        "IR_Ooring": 60.0,
-        "OR_Ooring": 63.0,
-        "Lz_Ioring": 2.0,
-        "Lz_Ooring": 2.0,
+        "IR_Ioring": 47.5,
+        "OR_Ioring": 51.5,
+        "IR_Ooring": 59.5,
+        "OR_Ooring": 63.5,
+        "Lz_Ioring": 2.5,
+        "Lz_Ooring": 2.5,
 
         "no_bolt": 8,
         "r_bolt": 71.0,
@@ -118,8 +118,8 @@
             "theta0_CCPTbrk": 0.4
         },
 
-        "D_fc": 1.0,
-        "no_fcg": [30],
+        "D_fc": 0.507,
+        "no_fcg": [32],
         "r_fcg": [42.0],
         "theta0_fcg": [0.0],
 
@@ -149,9 +149,9 @@
             "CR_nz1": 0.25,
             "CR_nz2": 0.25,
 
-            "Lbar_ch1": 4.4,
-            "Kmdot_1": 1.28,
-            "Kmdot_2": 0.77,
+            "Lbar_ch1": 5.0,
+            "Kmdot_1": 1.40,
+            "Kmdot_2": 0.73,
 
             "Lbar_ch1_tuned_for_lox_0.14_kg/s": 4.4,
             "Kmdot_1_tuned_for_lox_0.14_kg/s": 1.28,

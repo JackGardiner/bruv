@@ -8,18 +8,6 @@
         "mdot_LOx": 1.2556549058269346,
         "mdot_IPA": 0.8968963613049534
     },
-    "part_mating": {
-        "R_cc": 45.0,
-        "IR_Ioring": 48.0,
-        "OR_Ioring": 51.0,
-        "Mr_chnl": 55.5,
-        "max_th_chnl": 3.0,
-        "IR_Ooring": 60.0,
-        "OR_Ooring": 63.0,
-        "r_bolt": 71.0,
-        "D_bolt": 6.3,
-        "flange_outer_radius": 73.0
-    },
     "chamber": {
         "L_cc": 106.66168301624113,
         "AEAT": 5.461837207867982,

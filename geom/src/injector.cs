@@ -928,8 +928,9 @@ public class Injector : TPIAP.Pea {
     protected float breakout_D0 => 6f;
     protected float breakout_D1 => 10f;
     protected float breakout_CR => 1.5f;
+    protected float breakout_bolts_z => 3f;
     protected float breakout_plate_z => 10f;
-    protected float breakout_elements_z => 15f;
+    protected float breakout_elements_z => 16.5f;
     protected float circular_base_z => 5f;
     protected float circular_base_R => pm.flange_outer_radius + 18f;
 
@@ -1487,7 +1488,7 @@ public class Injector : TPIAP.Pea {
                 Vec2 p1 = projxy(f * (intercept * uX3));
                 Frame f1 = new(rejxy(p1, -circular_base_z), f);
 
-                bo_outer.Lx = bo_outlet.Lx = 0.5f*mag(p1 - p) + VOXEL_SIZE;
+                bo_outer.Lx = bo_outlet.Lx = 0.5f*mag(p1 - p) + 1f;
                 Voxels v_outer = bo_outer.at(f);
                 v_outer.BoolAdd(bo_outlet.at(f1.rotxy(PI)));
 
@@ -1558,7 +1559,7 @@ public class Injector : TPIAP.Pea {
                 frame,
                 pm.flange_thickness_inj + EXTRA,
                 pm.D_bolt/2f
-            ).extended(printable_dmls ? 0f : EXTRA, Extend.DOWN));
+            ).extended(printable_dmls ? breakout_bolts_z : EXTRA, Extend.DOWN));
             // for washer/nut.
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_inj),
@@ -2038,7 +2039,7 @@ public class Injector : TPIAP.Pea {
             );
             Vec2 p1 = projxy(at * (intercept * uX3));
             Frame at1 = new(rejxy(p1, -circular_base_z), at);
-            float Lx = 0.5f*mag(p1 - projxy(p)) + VOXEL_SIZE;
+            float Lx = 0.5f*mag(p1 - projxy(p)) + 1f;
 
             Breakout bo = new(
                 Polygon.circle(
@@ -2089,8 +2090,8 @@ public class Injector : TPIAP.Pea {
         float th = 0.35f;
         float inset = 1f;
 
-        ImageSignedDist img = new(fromroot("assets/pingu.tga"), invert: true,
-                flipy: true, rot: ImageSignedDist.CW);
+        ImageSignedDist img = new(fromroot("assets/thicker-pingu.tga"),
+                invert:true, flipy: true, rot: ImageSignedDist.CW);
         Vec3 pos = fromcyl(
             r_mount,
             PI_4,

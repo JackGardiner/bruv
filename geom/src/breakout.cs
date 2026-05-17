@@ -23,7 +23,7 @@ public class Breakout {
     public static int M => max(20, (int)(27f / VOXEL_SIZE));
     private float max_y0;
 
-    public float straight_for => 0.2f*Lz;
+    public float straight_for => 0.35f*Lz;
     public float swing_radius => Lz - straight_for;
 
     public Breakout(Slice<Vec2> V0, float Lz, float Lx, float D1, float FR=0f) {

@@ -274,8 +274,8 @@ def write_ammendments(state):
 
     print(f"film cooling")
     print(f"     mdot: {dm_fc:.4f} kg/s ({int(100*mprop_fc)}%)")
-    print(f"  rho_fu1: {rho_fu1:.1f} kg/m3")
-    print(f"    holes: {no_fc}X {D_fc*1e3:.2f} mm (diam.)")
+    print(f"  rho_fu1: {rho_fu1:.1f} kg/m^3")
+    print(f"    holes: {no_fc}X D{D_fc*1e3:.3f}")
 
     extra = {
         "operating_conditions": {
@@ -287,7 +287,9 @@ def write_ammendments(state):
             "mdot_LOx": state["dm_ox"],
             "mdot_IPA": state["dm_fu"],
         },
-        "part_mating": part_mating(),
+        # "part_mating": part_mating(),
+        # TODO: some geom changed after printing chamber, therefore freeze part
+        #       mating.
         "chamber": {
             "L_cc": state["L_cc"] * 1e3,
             "AEAT": state["AEAT"],
