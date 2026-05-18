@@ -9,6 +9,80 @@
 
 
 
+// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
+// my fav
+
+static const char* ANSI_RESET = "\033[0m";
+
+static const char* ANSI_RED         = "\033[38;5;196m";
+static const char* ANSI_GREEN       = "\033[38;5;46m";
+static const char* ANSI_BLUE        = "\033[38;5;81m";
+static const char* ANSI_YELLOW      = "\033[38;5;220m";
+static const char* ANSI_PALE_RED    = "\033[38;5;210m";
+static const char* ANSI_PALE_GREEN  = "\033[38;5;156m";
+static const char* ANSI_PALE_BLUE   = "\033[38;5;159m";
+static const char* ANSI_PALE_YELLOW = "\033[38;5;227m";
+
+static const char* ANSI_RAINBOW0 = "\033[38;5;196m";
+static const char* ANSI_RAINBOW1 = "\033[38;5;202m";
+static const char* ANSI_RAINBOW2 = "\033[38;5;220m";
+static const char* ANSI_RAINBOW4 = "\033[38;5;190m";
+static const char* ANSI_RAINBOW3 = "\033[38;5;118m";
+static const char* ANSI_RAINBOW5 = "\033[38;5;84m";
+static const char* ANSI_RAINBOW6 = "\033[38;5;51m";
+static const char* ANSI_RAINBOW7 = "\033[38;5;33m";
+static const char* ANSI_RAINBOW8 = "\033[38;5;63m";
+static const char* ANSI_RAINBOW9 = "\033[38;5;93m";
+
+static void disable_ansi_control_codes(void) {
+    ANSI_RESET = "";
+
+    ANSI_RED         = "";
+    ANSI_GREEN       = "";
+    ANSI_BLUE        = "";
+    ANSI_YELLOW      = "";
+    ANSI_PALE_RED    = "";
+    ANSI_PALE_GREEN  = "";
+    ANSI_PALE_BLUE   = "";
+    ANSI_PALE_YELLOW = "";
+
+    ANSI_RAINBOW0 = "";
+    ANSI_RAINBOW1 = "";
+    ANSI_RAINBOW2 = "";
+    ANSI_RAINBOW4 = "";
+    ANSI_RAINBOW3 = "";
+    ANSI_RAINBOW5 = "";
+    ANSI_RAINBOW6 = "";
+    ANSI_RAINBOW7 = "";
+    ANSI_RAINBOW8 = "";
+    ANSI_RAINBOW9 = "";
+}
+#ifndef _WIN32
+static void enable_ansi_control_codes(void) { /* nothing */ }
+#else
+// windows function expose without the import cause fuck that.
+__declspec(dllimport) void* __stdcall GetStdHandle(u32 handle);
+__declspec(dllimport) i32 __stdcall GetConsoleMode(void* hnd, u32* mode);
+__declspec(dllimport) i32 __stdcall SetConsoleMode(void* hnd, u32 mode);
+static void enable_ansi_control_codes(void) {
+    void* hnd = GetStdHandle((u32)(-11) /* stdout */);
+    if (hnd == (void*)((i64)-1) /* INVALID_HANDLE_VALUE */ || hnd == NULL)
+        goto FAILED;
+    u32 mode = 0;
+    if (!GetConsoleMode(hnd, &mode))
+        goto FAILED;
+    mode |= 0x0004; // enable "virtual terminal processing".
+    SetConsoleMode(hnd, mode);
+    return;
+
+  FAILED:;
+    disable_ansi_control_codes();
+}
+#endif
+
+
+
+
 enum { TIMER_STRING_SIZE = 2+1+2+1+2+1+1 };
 static void timer_string(char* rstr buf, f64 seconds) {
     i32 sec = (i32)seconds;
@@ -25,7 +99,7 @@ static void timer_string(char* rstr buf, f64 seconds) {
     sprintf(buf, "%02d:%02d:%02d.%01d", h, m, s, ms / 100);
 }
 
-#ifndef __WIN32__
+#ifndef _WIN32
 static void timer_init(void) { /* nothing */ }
 static f64 timer_now(void) {
     struct timespec ts;
@@ -66,15 +140,17 @@ static void progressbar_init(ProgressBar* pb, i64 total, i64 touchpoints) {
     pb->total = total;
     pb->freq = max(1, (i64)(total / (f64)touchpoints));
     pb->last = -1;
+    putchar('\n');
 }
 
 static void progressbar_update(ProgressBar* pb, i64 curr) {
+    curr = min(curr, pb->total); // prevent overflow.
+
     if ((curr % pb->freq) != 0)
         return;
     if (curr == pb->last)
         return;
     pb->last = curr;
-    assert(curr <= pb->total, "progress bar overflow");
 
     f64 elapsed = timer_now() - pb->start_time;
     f64 percent = curr / (f64)pb->total;
@@ -121,7 +197,6 @@ static void progressbar_finish(ProgressBar* pb) {
     for (i32 i=0; i<TIMER_STRING_SIZE; ++i)
         putchar(' ');
 
-    printf("\n");
     fflush(stdout);
 }
 
@@ -186,9 +261,8 @@ static void report_telemetry(void) {
     return;
   #endif
 
-    printf("\n--- performance report ---\n");
-    printf(" %-20s | %s | %s | %s\n", "zone", "total [s]", "ave. [us]", "share");
-    printf(" -----------------------------------------------------\n");
+    printf("\n %-20s | %s | %s | %s", "zone", "total [s]", "ave. [us]", "share");
+    printf("\n -----------------------------------------------------");
 
     f64 grand_total = telemetry[ZONE_DECIMATE].total_time;
     for (i32 i=0; i<ZONE_COUNT; ++i) {
@@ -197,10 +271,10 @@ static void report_telemetry(void) {
         f64 share = (z->total_time / grand_total) * 100.0;
 
         if (z->hit_count > 1) {
-            printf(" %-20s | %9.4f | %9.4f | %5.1f%%\n", z->label, z->total_time,
+            printf("\n %-20s | %9.4f | %9.4f | %5.1f%%", z->label, z->total_time,
                     avg_ms, share);
         } else {
-            printf(" %-20s | %9.4f |         - | %5.1f%%\n", z->label,
+            printf("\n %-20s | %9.4f |         - | %5.1f%%", z->label,
                     z->total_time, share);
         }
     }
@@ -280,7 +354,7 @@ static const char* subparse_i64(const char* s, i64* out) {
         return NULL;
 
     if (mul_overflow(*out, *out, sign))
-        return 0;
+        return NULL;
     *out *= sign;
 
     return s;
@@ -344,10 +418,10 @@ static f64 parse_f64(const char* s) {
 
 
 // 4x4 symmetric matrix:
-//  [ q0  q1  q2  q3  ]
-//  [     q4  q5  q6  ]
-//  [         q7  q8  ]
-//  [             q9  ]
+//  [ q0  q1  q2  q3 ]
+//  [     q4  q5  q6 ]
+//  [         q7  q8 ]
+//  [             q9 ]
 enum { QUADRIC_NUMEL = 10 };
 
 // Is active?
@@ -748,16 +822,18 @@ UNUSED static void edgeset_remove(EdgeSet* s, i64 idx) {
 
 
 
-static i32 count_edges(const Tri* T, i32 Tcount) {
+static i32 count_edges(const Tri* T, i32 Tcount, ProgressBar* pb, i64 pb_start,
+        i64 pb_end) {
     EdgeSet* edgeset = &(EdgeSet){0};
     edgeset_init(edgeset, uptopow2((i64)4*Tcount), NULL);
 
     i32 Ecount = 0;
-
-    ProgressBar* pb = &(ProgressBar){0};
-    progressbar_init(pb, Tcount, 10);
     for (i32 t=0; t<Tcount; ++t) {
-        progressbar_update(pb, t);
+        if (pb) {
+            f64 p = t / (f64)Tcount;
+            progressbar_update(pb, pb_start + (i64)(p * (pb_end - pb_start)));
+        }
+
         if (T[t].dead)
             continue;
         for (i32 i=0; i<3; ++i) {
@@ -771,7 +847,6 @@ static i32 count_edges(const Tri* T, i32 Tcount) {
             ++Ecount;
         }
     }
-    progressbar_finish(pb);
 
     edgeset_free(edgeset);
     return Ecount;
@@ -783,7 +858,7 @@ static i32 count_edges(const Tri* T, i32 Tcount) {
 
 
 static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
-        i32 Ecount) {
+        i32 Ecount, ProgressBar* pb, i64 pb_start, i64 pb_end) {
     (void)V;
 
     EdgeSet* edgeset0 = &(EdgeSet){0};
@@ -791,10 +866,13 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
     edgeset_init(edgeset0, uptopow2(Ecount + Ecount/2), NULL);
     edgeset_init(edgeset1, uptopow2(Ecount + Ecount/2), NULL);
 
-    ProgressBar* pb = &(ProgressBar){0};
-    progressbar_init(pb, 1000, 20);
     for (i32 t=0; t<Tcount; ++t) {
-        progressbar_update(pb, (i64)(5e2 * t / (f64)Tcount));
+        if (pb) {
+            f64 p = t / (f64)Tcount;
+            p *= 0.5;
+            progressbar_update(pb, pb_start + (i64)(p * (pb_end - pb_start)));
+        }
+
         if (T[t].dead)
             continue;
         for (i32 i=0; i<3; ++i) {
@@ -817,7 +895,13 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
     }
 
     for (i64 i=0; i<edgeset0->cap; ++i) {
-        progressbar_update(pb, 500 + (i64)(5e2 * i / (f64)edgeset0->cap));
+        if (pb) {
+            f64 p = i / (f64)edgeset0->cap;
+            p *= 0.5;
+            p += 0.5;
+            progressbar_update(pb, pb_start + (i64)(p * (pb_end - pb_start)));
+        }
+
         i32 n, m;
         if (!edgeset_get(edgeset0, i, &n, &m))
             continue;
@@ -828,13 +912,24 @@ static i32 is_closed_mani(const Vertex* V, const Tri* T, i32 Tcount,
         return 0; // non-watertight.
     }
 
-    progressbar_finish(pb);
-
     edgeset_free(edgeset0);
     edgeset_free(edgeset1);
     return 1;
 }
 
+
+
+
+static void analyse_topology(const Vertex* V, const Tri* T, i32 Tcount,
+        i32* rstr Ecount, i32* rstr closed_mani) {
+    ProgressBar* pb = &(ProgressBar){0};
+    progressbar_init(pb, 100, 40);
+
+    *Ecount = count_edges(T, Tcount, pb, 0, 25);
+    *closed_mani = is_closed_mani(V, T, Tcount, *Ecount, pb, 25, 100);
+
+    progressbar_finish(pb);
+}
 
 
 
@@ -955,6 +1050,11 @@ static void indexer_init(HeapqIndexer* i, i32 cap, i64* rstr out_size) {
 
     if (out_size)
         *out_size = size;
+}
+
+static void indexer_free(HeapqIndexer* i) {
+    free(i->bkts);
+    i->bkts = NULL;
 }
 
 static i32 indexer_find(const HeapqIndexer* i, i32 n, i32 m) {
@@ -1093,6 +1193,12 @@ static void heapq_init(Heapq* h, i32 maxcount, i64* rstr out_heap_size,
 
     if (out_heap_size)
         *out_heap_size = size;
+}
+
+static void heapq_free(Heapq* h) {
+    free(h->data);
+    h->data = NULL;
+    indexer_free(&h->idxr);
 }
 
 static void heapq_push(Heapq* h, const HEdge* rstr edge) {
@@ -1645,7 +1751,7 @@ static i64 stl_size(i32 Tcount) {
 }
 
 static void read_stl(Mesh* m, const char* rstr path) {
-    printf("\n--- reading stl ---\n");
+    printf("\n\n--- reading stl ---");
 
     FILE* f = fopen(path, "rb");
     assert(f, "file open failure");
@@ -1673,11 +1779,11 @@ static void read_stl(Mesh* m, const char* rstr path) {
     m->Vcount = 0;
 
     // Read all triangles.
-    i32 degen_triangles = 0;
+    i32 degenerate_Tcount = 0;
     STLTriangle tri;
     i32 t = 0;
     ProgressBar* pb = &(ProgressBar){0};
-    progressbar_init(pb, m->Tcount, 20);
+    progressbar_init(pb, m->Tcount, 40);
     for (i32 i=0; i<m->Tcount; ++i) {
         progressbar_update(pb, t);
         if (fread(&tri, STL_TRI_SIZE, 1, f) < 1)
@@ -1685,22 +1791,21 @@ static void read_stl(Mesh* m, const char* rstr path) {
         vec3 a = vec3_from_array(tri.a);
         vec3 b = vec3_from_array(tri.b);
         vec3 c = vec3_from_array(tri.c);
-        vec3 normal = cross(b - a, c - a); // ccw normal.
-        f32 nmag = mag(normal);
-        if (nmag == 0.0f) {
-            ++degen_triangles;
+        if (!isgood(a) || !isgood(b) || !isgood(c)) {
+            ++degenerate_Tcount;
             continue;
         }
-        // let tiny triangles fly bc otherwise it would cause a non-closed
-        // manifold :/.
+        // note we let tiny triangles fly bc without additional (complex)
+        // handling it would cause a non-closed manifold :/.
+        vec3 normal = cross(b - a, c - a); // ccw normal.
         vec3 stl_normal = vec3_from_array(tri.normal);
         if (dot(normal, stl_normal) < 0.0f)
-            swap(b, c);
+            swap(b, c); // ensure a->b->c is ccw.
         i32 ia = point_intern(m, a[0], a[1], a[2]);
         i32 ib = point_intern(m, b[0], b[1], b[2]);
         i32 ic = point_intern(m, c[0], c[1], c[2]);
         if (ia == ib || ia == ic || ib == ic) {
-            ++degen_triangles;
+            ++degenerate_Tcount;
             continue;
         }
         m->T[t].a = ia;
@@ -1711,9 +1816,10 @@ static void read_stl(Mesh* m, const char* rstr path) {
     }
     progressbar_finish(pb);
 
-    if (degen_triangles > 0) {
-        printf("warning: input stl had %d degenerate triangle%s\n",
-                degen_triangles, (degen_triangles > 1) ? "s" : "");
+    if (degenerate_Tcount > 0) {
+        printf("\n%swarning:%s input stl had %d degenerate triangle%s",
+                ANSI_YELLOW, ANSI_RESET, degenerate_Tcount,
+                (degenerate_Tcount > 1) ? "s" : "");
     }
 
     m->Tcount = t;
@@ -1730,7 +1836,7 @@ static void read_stl(Mesh* m, const char* rstr path) {
 
 
 static void write_stl(const Mesh* m, const char* rstr path) {
-    printf("\n--- writing stl ---\n");
+    printf("\n\n--- writing stl ---");
 
     FILE* f = fopen(path, "wb");
     assert(f, "file open failure");
@@ -1754,7 +1860,7 @@ static void write_stl(const Mesh* m, const char* rstr path) {
     fwrite(&count, sizeof(count), 1, f);
 
     ProgressBar* pb = &(ProgressBar){0};
-    progressbar_init(pb, m->Tcount, 20);
+    progressbar_init(pb, m->Tcount, 40);
     for (i32 t=0; t<m->Tcount; ++t) {
         progressbar_update(pb, t);
         if (m->T[t].dead)
@@ -1794,42 +1900,78 @@ static void write_stl(const Mesh* m, const char* rstr path) {
 
 
 
+static void invalid_usage(const char* msg) {
+    if (msg)
+        printf("%serror:%s %s\n", ANSI_RED, ANSI_RESET, msg);
+    printf("%susage:%s deci <input.stl> <output.stl> <final size proportion> "
+            "[max cutoff cost]\n", ANSI_PALE_RED, ANSI_RESET);
+}
 
 __attribute((__hot__))
 i32 main(i32 argc, char** argv);
 i32 main(i32 argc, char** argv) {
+  #if defined(DECI_NO_ANSI_CODES) && DECI_NO_ANSI_CODES
+    disable_ansi_control_codes();
+    (void)enable_ansi_control_codes;
+  #else
+    enable_ansi_control_codes();
+    (void)disable_ansi_control_codes;
+  #endif
+
     if (assertion_has_failed()) {
         const char* msg = assertion_message();
-        msg += numel("ERROR, ") - 1;
-        printf("\nerror: %s\n", msg);
+        msg += numel("error: ") - 1;
+        printf("\n%serror:%s %s\n", ANSI_RED, ANSI_RESET, msg);
         return 1;
     }
 
     timer_init();
 
 
-    assert(argc == 4 || argc == 5,
-            "usage: deci <input.stl> <output.stl> <final size proportion> "
-                        "[max cutoff cost]");
+    if (argc <= 1) {
+        invalid_usage(NULL);
+        return 1;
+    }
+    if (argc == 2) {
+        invalid_usage("missing <output.stl>");
+        return 1;
+    }
+    if (argc == 3) {
+        invalid_usage("missing <final size proportion>");
+        return 1;
+    }
+    if (argc > 5) {
+        invalid_usage("too many arguments");
+        return 1;
+    }
     const char* path_in = argv[1];
     const char* path_out = argv[2];
     f64 reduction = parse_f64(argv[3]);
-    assert(notnan(reduction), "failed to parse final size");
-    assert(0.0 <= reduction && reduction <= 1.0, "invalid final size "
-                                                 "(must be in 0-1)");
+    if (isnan(reduction)) {
+        invalid_usage("invalid <final size proportion> (must be a number)");
+        return 1;
+    }
+    if (!within(reduction, 0.0, 1.0)) {
+        invalid_usage("invalid <final size proportion> (must be in 0-1)");
+        return 1;
+    }
     f64 cutoff_cost = (argc > 4) ? parse_f64(argv[4]) : +INF;
-    assert(notnan(cutoff_cost), "failed to parse cutoff cost");
+    if (isnan(reduction)) {
+        invalid_usage("invalid <max cutoff cost> (must be a number)");
+        return 1;
+    }
 
-    printf("--- DECI ---\n");
+
+    printf("--- deci ---");
     if (isinf(cutoff_cost)) {
-        printf("in         = %s\n", path_in);
-        printf("out        = %s\n", path_out);
-        printf("reduction  = %.1f%%\n", 100.0*reduction);
+        printf("\ninput      = %s", path_in);
+        printf("\noutput     = %s", path_out);
+        printf("\nreduce to  = %.1f%%", 100.0*reduction);
     } else {
-        printf("in           = %s\n", path_in);
-        printf("out          = %s\n", path_out);
-        printf("reduction    = %.2f %%\n", 100.0*reduction);
-        printf("cutoff cost  = %.4g\n", cutoff_cost);
+        printf("\ninput        = %s", path_in);
+        printf("\noutput       = %s", path_out);
+        printf("\nreduce to    = %.1f%%", 100.0*reduction);
+        printf("\ncutoff cost  = %.4g", cutoff_cost);
     }
 
 
@@ -1840,29 +1982,29 @@ i32 main(i32 argc, char** argv) {
     Tri* T = mesh.T;
     i32 Vcount = mesh.Vcount;
     i32 Tcount = mesh.Tcount;
-    printf("\n--- counting edges (input) ---\n");
-    i32 Ecount = count_edges(T, Tcount);
-    printf("\n--- analysing topology (input) ---\n");
-    i32 closed_mani = is_closed_mani(V, T, Tcount, Ecount);
-    i32 euler_char = Vcount - Ecount + Tcount;
 
-    printf("\n--- mesh stats (input) ---");
+    printf("\n\n--- input stats ---");
+    i32 Ecount;
+    i32 closed_mani;
+    analyse_topology(V, T, Tcount, &Ecount, &closed_mani);
+    i32 euler_char = Vcount + Tcount - Ecount;
     printf("\nvertex count  = "); print_numba(Vcount, 0);
     printf("\ntri count     = "); print_numba(Tcount, 0);
     printf("\nedge count    = "); print_numba(Ecount, 0);
     printf("\neuler char.   = %4d", euler_char);
     printf("\nclosed mani.  = %4d", closed_mani);
-    printf("\nfile size     = "); print_numba(stl_size(Tcount), 1);
-    printf("\n");
+    printf("\n%sfile size     = ", ANSI_PALE_BLUE);
+    print_numba(stl_size(Tcount), 1);
+    printf("%s", ANSI_RESET);
 
     assert(closed_mani, "input mesh must be a closed manifold");
 
 
-    printf("\n--- allocations ---");
+    printf("\n\n--- allocations ---");
     i64 size_vertex = Vcount * sizeof(Vertex);
     i64 size_index = Tcount * sizeof(Tri);
-    printf("\nvertex      = "); print_numba(size_vertex, 1);
-    printf("\nindex       = "); print_numba(size_index, 1);
+    printf("\nvertex        = "); print_numba(size_vertex, 1);
+    printf("\nindex         = "); print_numba(size_index, 1);
 
 
     // Setup adjacency lists.
@@ -1872,9 +2014,9 @@ i32 main(i32 argc, char** argv) {
     i64 size_adj_cursor;
     adj_init(adj, V, T, Vcount, Tcount, &size_adj_entry, &size_adj_off,
             &size_adj_cursor);
-    printf("\nadj entry   = "); print_numba(size_adj_entry, 1);
-    printf("\nadj off     = "); print_numba(size_adj_off, 1);
-    printf("\nadj cursor  = "); print_numba(size_adj_cursor, 1);
+    printf("\nadj entry     = "); print_numba(size_adj_entry, 1);
+    printf("\nadj off       = "); print_numba(size_adj_off, 1);
+    printf("\nadj cursor    = "); print_numba(size_adj_cursor, 1);
 
 
     // Setup edge heap.
@@ -1882,8 +2024,8 @@ i32 main(i32 argc, char** argv) {
     i64 size_heap_bkts;
     i64 size_heap_idxr;
     heapq_init(heap, Ecount, &size_heap_bkts, &size_heap_idxr);
-    printf("\nheap bkts   = "); print_numba(size_heap_bkts, 1);
-    printf("\nheap idxr   = "); print_numba(size_heap_idxr, 1);
+    printf("\nheap bkts     = "); print_numba(size_heap_bkts, 1);
+    printf("\nheap idxr     = "); print_numba(size_heap_idxr, 1);
 
 
     // Setup neighbours set.
@@ -1893,35 +2035,31 @@ i32 main(i32 argc, char** argv) {
     // Note this ^ is a huuuuge oversize in everything except the absolute worst-
     // case but its fine since it wont be physically backed (its just contiguous
     // array space) to in reality its dynamically upsized-only by the os.
-    printf("\nneighbours  = "); print_numba(size_neighbours, 1);
+    printf("\nneighbours    = "); print_numba(size_neighbours, 1);
 
 
 
-    printf("\nTOTAL       = "); print_numba((i64)0
+    printf("\n%snet mem req.  = ", ANSI_PALE_RED); print_numba((i64)0
         + size_vertex + size_index
         + size_adj_entry + size_adj_off + size_adj_cursor
         + size_heap_bkts + size_heap_idxr
         + size_neighbours
         , 1);
-    printf("\n");
+    printf("%s", ANSI_RESET);
 
 
-    // Compute initial quadrics.
-    printf("\n--- initial quadrics ---\n");
-    ProgressBar* pb_quadrics = &(ProgressBar){0};
-    progressbar_init(pb_quadrics, Tcount, 10);
+    // Compute initial quadrics and edge costs.
+    printf("\n\n--- initial pass ---");
+    ProgressBar* pb_initial = &(ProgressBar){0};
+    progressbar_init(pb_initial, Tcount + Tcount/8, 40);
+
     for (i32 t=0; t<Tcount; ++t) {
-        progressbar_update(pb_quadrics, t);
+        progressbar_update(pb_initial, t/8);
         compute_quadric(V, T + t);
     }
-    progressbar_finish(pb_quadrics);
 
-    // Find cost of all edges.
-    printf("\n--- initial edge costs ---\n");
-    ProgressBar* pb_initial_edge = &(ProgressBar){0};
-    progressbar_init(pb_initial_edge, Tcount, 30);
     for (i32 t=0; t<Tcount; ++t) {
-        progressbar_update(pb_initial_edge, t);
+        progressbar_update(pb_initial, Tcount/8 + t);
         for (i32 i=0; i<3; ++i) {
             i32 j = (i + 1) % 3;
             i32 n = min(T[t].i[i], T[t].i[j]);
@@ -1931,33 +2069,42 @@ i32 main(i32 argc, char** argv) {
             heapq_push(heap, &edge);
         }
     }
-    progressbar_finish(pb_initial_edge);
+
+    progressbar_finish(pb_initial);
 
 
     // Pop edges.
+    i32 new_Vcount = Vcount;
+    i32 new_Tcount = Tcount;
     i32 limit = max(4 /* closed solid */, (i32)(Tcount * reduction));
-    i32 active = Tcount;
-    i32 last_refreshed_adj = active;
+    i32 last_refreshed_adj = new_Tcount;
     i32 hit_cutoff = 0;
-    printf("\n--- decimating ---\n");
+  #if defined(DECI_RAINBOW) && DECI_RAINBOW
+    printf("\n\n--- %sd%se%sc%si%sm%sa%st%si%sn%sg%s ---",
+            ANSI_RAINBOW0, ANSI_RAINBOW1, ANSI_RAINBOW2, ANSI_RAINBOW4,
+            ANSI_RAINBOW3, ANSI_RAINBOW5, ANSI_RAINBOW6, ANSI_RAINBOW7,
+            ANSI_RAINBOW8, ANSI_RAINBOW9, ANSI_RESET);
+  #else
+    printf("\n\n--- decimating ---");
+  #endif
 
     ProgressBar* pb_deci = &(ProgressBar){0};
     // https://www.desmos.com/calculator/8xkwvol4j6
-    i32 pb_deci_touchpoints = (i32)(1.0 + 0.1*sqrt((f64)(active - limit)));
+    i32 pb_deci_touchpoints = (i32)(1.0 + 0.1*sqrt((f64)(new_Tcount - limit)));
     pb_deci_touchpoints = min(max(pb_deci_touchpoints, 5), 500);
-    progressbar_init(pb_deci, active - limit, pb_deci_touchpoints);
+    progressbar_init(pb_deci, new_Tcount - limit, pb_deci_touchpoints);
     TIME_ZONE(ZONE_DECIMATE)
-    while ((active > limit) && (heap->count > 0)) {
+    while ((new_Tcount > limit) && (heap->count > 0)) {
         TIME_ZONE(ZONE_PROGRESS_BAR)
-            progressbar_update(pb_deci, Tcount - active);
+            progressbar_update(pb_deci, Tcount - new_Tcount);
 
         // As we kill more triangles, the adjacency list becomes more and more
         // deadspace and each vertex requires a longer and longer walk. Because
         // of this, its much faster if we recompute the adj list every so-often.
         TIME_ZONE(ZONE_ADJ_REFRESH)
-        if (last_refreshed_adj - active > 1000000) {
+        if (last_refreshed_adj - new_Tcount > 1000000) {
             adj_refresh(adj, V, T, Vcount, Tcount);
-            last_refreshed_adj = active;
+            last_refreshed_adj = new_Tcount;
         }
 
 
@@ -1997,6 +2144,7 @@ i32 main(i32 argc, char** argv) {
         // Overwrite index `n` with the new optimal position and mark `m` dead.
         TIME_ZONE(ZONE_COLLAPSE)
             collapse(V + n, V + m, vbar);
+        --new_Vcount;
 
         // Kill faces containing both `n` and `m`, and update faces containing
         // `m` to point to `n`.
@@ -2009,7 +2157,7 @@ i32 main(i32 argc, char** argv) {
             // Contains both, kill.
             if (n == T[t].a || n == T[t].b || n == T[t].c) {
                 T[t].dead = 1;
-                --active;
+                --new_Tcount;
             }
             // Else point to `n`.
             else TIME_ZONE(ZONE_TRI_SHIFT) {
@@ -2064,38 +2212,42 @@ i32 main(i32 argc, char** argv) {
     }
     progressbar_finish(pb_deci);
     if (hit_cutoff)
-        printf("  (hit cutoff cost.)\n");
+        printf("\n  (hit cutoff cost.)");
+    else if (heap->count == 0)
+        printf("\n  (no remaining cullable edges)");
+    heapq_free(heap); // big chunk no longer needed.
+
 
     report_telemetry();
 
     write_stl(&mesh, path_out);
 
-    i32 new_Vcount = 0;
-    for (i32 v=0; v<Vcount; ++v)
-        new_Vcount += !(V[v].flags & DEAD);
-    i32 new_Tcount = active; // we "happened" to already be tracking it.
-    printf("\n--- counting edges (output) ---\n");
-    i32 new_Ecount = count_edges(T, Tcount);
-    printf("\n--- analysing topology (output) ---\n");
-    i32 new_closed_mani = is_closed_mani(V, T, Tcount, new_Ecount);
-    i32 new_euler_char = new_Vcount - new_Ecount + new_Tcount;
 
-    printf("\n--- mesh stats (output) ---");
+    printf("\n\n--- output stats ---");
+    i32 new_Ecount;
+    i32 new_closed_mani;
+    analyse_topology(V, T, Tcount, &new_Ecount, &new_closed_mani);
+    i32 new_euler_char = new_Vcount + new_Tcount - new_Ecount;
     printf("\nvertex count  = "); print_numba(new_Vcount, 0);
     printf("\ntri count     = "); print_numba(new_Tcount, 0);
     printf("\nedge count    = "); print_numba(new_Ecount, 0);
     printf("\neuler char.   = %4d", new_euler_char);
     printf("\nclosed mani.  = %4d", new_closed_mani);
-    printf("\nfile size     = "); print_numba(stl_size(new_Tcount), 1);
+    printf("\n%sfile size     = ", ANSI_PALE_GREEN);
+    print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);
     printf("\n               (%7.2f %% )", file_size_percent);
+    printf("%s", ANSI_RESET);
 
     if (new_euler_char != euler_char)
-        printf("warning: euler characteristic changed from decimation.\n");
+        printf("\n%swarning:%s euler characteristic changed from decimation.",
+                ANSI_YELLOW, ANSI_RESET);
     if (new_closed_mani != closed_mani)
-        printf("warning: closed-manifold-ness changed from decimation.\n");
+        printf("\n%swarning:%s closed-manifold-ness changed from decimation.",
+                ANSI_YELLOW, ANSI_RESET);
 
-    printf("\n");
+
+    putchar('\n');
     return 0;
 }
 

@@ -18,7 +18,7 @@ const char* assertion_message(void);
 #define assert(x, fmt_and_args...) do {                                         \
         if (__builtin_expect_with_probability(!(x), 0, 1.0)) {                  \
             int off = snprintf(assert_msg_, numel(assert_msg_),                 \
-                    "ERROR, from \"%s\":%d\n", __FILE__, __LINE__);             \
+                    "error: from \"%s\":%d\n", __FILE__, __LINE__);             \
             if (0 <= off && off <= numel(assert_msg_) - 2) {                    \
                 int off2 = snprintf(assert_msg_ + off, numel(assert_msg_) - off,\
                         fmt_and_args);                                          \
