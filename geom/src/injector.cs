@@ -1838,9 +1838,10 @@ public class Injector : TPIAP.Pea {
             // ^ equal-area, but lets actually just do constant width.
             float strut_radius = semiwi;
 
-            int N = 2*Polygon.full_res_divs(mag(top.pos.Z - bot.pos.Z));
+            int N = 3*Polygon.full_res_divs(mag(top.pos.Z - bot.pos.Z));
             int M = Polygon.full_res_divs(TWOPI*strut_radius);
-            M -= M % 4;
+            M = min(8, M);
+            M -= M % 8;
 
             List<Vec2> V0_rect = [
                 new(+semiwi, +semiwi),

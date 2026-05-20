@@ -392,8 +392,8 @@ public class Frame {
         Vec3 pos = Br.lerp(this.pos, other.pos, t);
         this.get_rotation(out Vec3 this_about, out float this_by);
         other.get_rotation(out Vec3 other_about, out float other_by);
-        Vec3 about = Br.lerpdir(this_about, other_about, t);
-        float by = Br.lerp(this_by, other_by, t);
+        float by = Br.slerp(out Vec3 about, this_about, this_by, other_about,
+                other_by, t);
         return new Frame(pos).rotate(about, by);
     }
 

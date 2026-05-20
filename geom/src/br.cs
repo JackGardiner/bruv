@@ -597,6 +597,55 @@ public static partial class Br {
         return rotate(A, about, by * t);
     }
 
+    public static float slerp(out Vec3 about, Vec3 A, float a, Vec3 B, float b,
+            float t) {
+        assert(nearunit(A));
+        assert(nearunit(B));
+
+        float wA = cos(a*0.5f);
+        float wB = cos(b*0.5f);
+        Vec3 vA = A * sin(a*0.5f);
+        Vec3 vB = B * sin(b*0.5f);
+
+        float cosbeta = wA*wB + dot(vA, vB);
+        if (cosbeta < 0f) {
+            wB = -wB;
+            vB = -vB;
+            cosbeta = -cosbeta;
+        }
+
+        float tA;
+        float tB;
+        if (cosbeta > 0.9995f) {
+            // Normal lerp if very close.
+            tA = 1f - t;
+            tB = t;
+        } else {
+            // Otherwise slerp.
+            cosbeta = min(max(cosbeta, -1), 1);
+            float beta = acos(cosbeta);
+            float sinbeta = sqrt(1 - sqed(cosbeta));
+            tA = sin((1 - t)*beta) / sinbeta;
+            tB = sin(    (t)*beta) / sinbeta;
+        }
+        float wC = tA*wA + tB*wB;
+        Vec3 vC = tA*vA + tB*vB;
+        float magC = sqrt(sqed(wC) + dot(vC, vC));
+        wC /= magC;
+        vC /= magC;
+
+        float coshalf = wC;
+        float sinhalf = mag(vC);
+        if (nearzero(sinhalf)) {
+            about = uZ3;
+            return 0f;
+        }
+        about = vC/sinhalf;
+        if (nearzero(coshalf))
+            return PI;
+        return 2f*atan(sinhalf / coshalf);
+    }
+
     public static Vec2 rot90ccw(Vec2 a) => new(-a.Y, a.X);
     public static Vec2 rot90cw(Vec2 a) => new(a.Y, -a.X);
 
