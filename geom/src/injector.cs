@@ -1136,6 +1136,7 @@ public class Injector : TPIAP.Pea {
         // Note this is shifted up by a voxel (more or less (is it more or
         // less?)).
         public required Voxels volume_entire { get; init; }
+        public required Voxels volume_only_lower { get; init; }
         // Voxel mask for some manifold volume, including:
         // - dividing wall
         // - IPA void
@@ -1144,6 +1145,8 @@ public class Injector : TPIAP.Pea {
         public required Voxels volume_only_lower_up { get; init; }
         // Note this is shifted down by a voxel or so.
         public required Voxels volume_only_lower_down { get; init; }
+
+        public required Voxels dividing_wall { get; init; }
     }
 
     protected Voxels voxels_manifold(Geez.Cycle key, out ManiVol vol) {
@@ -1185,6 +1188,7 @@ public class Injector : TPIAP.Pea {
         // wall creation loop).
         Voxels volume_entire = A.lengthed(EXTRA, 0f).transz(1.5f*VOXEL_SIZE);
         volume_entire.BoolSubtract(B.transz(1.5f*VOXEL_SIZE));
+        Voxels volume_only_lower = volume_entire.voxDuplicate();
         Voxels volume_only_lower_up = volume_entire.voxDuplicate();
         Voxels volume_only_lower_down = volume_entire.voxDuplicate();
 
@@ -1200,6 +1204,7 @@ public class Injector : TPIAP.Pea {
             keys.Add(Geez.mesh(this_pos));
             pos.BoolAdd(new(this_pos));
             neg.BoolAdd((Voxels)this_neg);
+            volume_only_lower.BoolSubtract(this_neg);
             volume_only_lower_up.BoolSubtract(this_neg.transz(1.5f*VOXEL_SIZE));
             volume_only_lower_down.BoolSubtract(this_neg.transz(
                     -1.5f*VOXEL_SIZE));
@@ -1213,30 +1218,33 @@ public class Injector : TPIAP.Pea {
             peak=peak,
             th=th_omw,
             volume_entire=volume_entire,
+            volume_only_lower=volume_only_lower,
             volume_only_lower_up=volume_only_lower_up,
             volume_only_lower_down=volume_only_lower_down,
+            dividing_wall=pos,
         };
 
 
         // Make correct cone-walls.
-        pos.BoolSubtract(neg);
+        vol.dividing_wall.BoolSubtract(neg);
 
 
         // Intersect with internal volume, w safety margin for pos (leaving half
         // of intersection with wall).
-        pos.BoolIntersect(vol.A.transz(vol.Lz/2f));
-        pos.BoolSubtract(vol.B.transz(vol.Lz/2f));
-        key.voxels(pos);
+        vol.dividing_wall.BoolIntersect(vol.A.transz(vol.Lz - VOXEL_SIZE));
+        vol.dividing_wall.BoolSubtract(vol.B.transz(vol.Lz - VOXEL_SIZE));
+        key.voxels(vol.dividing_wall);
 
 
         // Make big roof.
-        pos.BoolAdd(vol.A.lengthed(0f, vol.Lz + 0.5f).shelled(+vol.th));
-        pos.BoolAdd(vol.B.shelled(-vol.th));
-        pos.BoolSubtract(vol.B.transz(vol.Lz));
-        pos.BoolIntersect(vol.A.lengthed(vol.Lz + 0.5f, 0f).transz(vol.Lz));
-        key.voxels(pos);
+        Voxels manifold = vol.dividing_wall.voxDuplicate();
+        manifold.BoolAdd(vol.A.lengthed(0f, vol.Lz + 0.5f).shelled(+vol.th));
+        manifold.BoolAdd(vol.B.shelled(-vol.th));
+        manifold.BoolSubtract(vol.B.transz(vol.Lz));
+        manifold.BoolIntersect(vol.A.lengthed(vol.Lz + 0.5f, 0f).transz(vol.Lz));
 
-        return pos;
+        key.voxels(manifold);
+        return manifold;
     }
 
 
@@ -1992,7 +2000,8 @@ public class Injector : TPIAP.Pea {
         portme(tap_LOxinlet, at_LOxinlet, th_LOxinlet, D_LOxinleth, th_LOxinleth,
                 "in-lox",
                 sub_pos: underneath + mani_vol.volume_entire,
-                sub_neg: underneath + mani_vol.volume_only_lower_up
+                sub_neg: underneath + mani_vol.volume_only_lower
+                       + mani_vol.dividing_wall
                        + new Rod(
                             new(),
                             element.max_z + 2f*VOXEL_SIZE,
@@ -2227,33 +2236,17 @@ public class Injector : TPIAP.Pea {
         part.sub(ref neg_bolt_clearance, keepme: true);
         part.substep("subtracted mating bolt clearance (1/2).");
 
-        part.sub(ref neg_igniter_no_tap, keepme: true);
-        part.substep("subtracted igniter hole (1/2).");
+        part.sub(ref neg_igniter_no_tap);
+        part.substep("subtracted igniter hole.");
 
-        part.sub(ref neg_ports_no_tap, keepme: true);
-        part.substep("subtracted port holes (1/2).");
+        part.sub(ref neg_ports_no_tap);
+        part.substep("subtracted port holes.");
 
-        // Want to fillet the igniter and the ports separately so they dont have
-        // weird interactions with each other. It is a grim double fillet tho.
-        Voxels? part_igniter = part.voxels.voxDuplicate();
-        part_igniter.BoolAdd(pos_igniter);
-        part.key.voxels(part_igniter);
-        part.substep("branched and added igniter (1/2).");
-
-        if (!filletless) {
-            Fillet.both(part_igniter,
-                concave_FR: pm.concave_fillet_radius,
-                convex_FR: pm.convex_fillet_radius,
-                inplace: true
-            );
-            part.substep("filleted branched part (1/2).", view_part: true);
-        } else {
-            part.substep("skipping branched part fillet (1/2) "
-                       + "(filletless requested).");
-        }
+        part.add(ref pos_igniter, key_ports, keepme: true);
+        part.substep("added igniter (1/2).");
 
         part.add(ref pos_ports, key_ports, keepme: true);
-        part.substep("branched and added ports (1/2).");
+        part.substep("added ports (1/2).");
 
         if (!filletless) {
             Fillet.both(part.voxels,
@@ -2266,10 +2259,6 @@ public class Injector : TPIAP.Pea {
             part.substep("skipping branched part fillet (2/2) "
                        + "(filletless requested).");
         }
-
-        part.add(ref part_igniter);
-        part.substep("combined both branches.");
-
 
         part.step("partial clean up");
 
