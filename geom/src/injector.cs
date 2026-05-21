@@ -1840,7 +1840,7 @@ public class Injector : TPIAP.Pea {
 
             int N = 3*Polygon.full_res_divs(mag(top.pos.Z - bot.pos.Z));
             int M = Polygon.full_res_divs(TWOPI*strut_radius);
-            M = min(8, M);
+            M = max(8, M);
             M -= M % 8;
 
             List<Vec2> V0_rect = [
