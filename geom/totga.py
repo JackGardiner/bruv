@@ -47,7 +47,7 @@ def convert(input_path, output_path):
     if img.mode in ("RGBA", "LA"): # picogk cant handle alpha
         img = img.convert("RGB")
     img = img.convert("L") # we only ever want greyscale.
-    img.save(output_path, format="TGA")
+    img.save(output_path, format="TGA", rle=False)
     return True
 
 def main(argv):

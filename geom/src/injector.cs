@@ -2446,6 +2446,51 @@ public class Injector : TPIAP.Pea {
         // pos.BoolSubtract(neg);
         // pos.BoolIntersect(new Bar(new(), 50f).at_face(Bar.X1));
         // Geez.voxels(pos);
+
+        if (false) {
+            Voxels v = new Donut(new(), 9.6f/2f, 2.0f/2f);
+            Mesh m = new(v);
+            Geez.mesh(m);
+            Voxels x = new Rod(new(), -20f, breakout_D1/2f);
+            x.BoolAdd(Cone.phied(
+                    new(),
+                    PI_4,
+                    breakout_CR + 2*VOXEL_SIZE,
+                    0.5f*breakout_D1 - VOXEL_SIZE
+                ).at_base());
+            Geez.voxels(x, COLOUR_BLUE);
+            TPIAP.save_mesh_only("oring", m);
+            return;
+        }
+
+        float[] Ds = [6.3f, 9.156f, 10.0f, 14.9048f];
+        string[] names = ["bolt", "pt", "elem", "inlet"];
+        // print($"IN-LOX {new Tapping(portsize_LOxinlet, true).bore_diameter}");
+        // print($"PT-IPA {new Tapping(portsize_IPAPT, true).bore_diameter}");
+        // print($"PT-LOX {new Tapping(portsize_LOxPT, true).bore_diameter}");
+        // print($"PT-CC {new Tapping(portsize_CCPT, true).bore_diameter}");
+        for (int i=0; i<numel(Ds); ++i) {
+            Vec3 at = 20f*i*uX3;
+            float D = Ds[i];
+            string name = names[i];
+            // float Lz = pow(D, 0.7f)*1.4f;
+            float Lz = pow(D, 0.5f)*2.1f;
+            ImageSignedDist img = new(fromroot($"assets/plug-{name}.tga"),
+                    flipy: true);
+            Voxels v = Cone.phied(new(at), torad(5f), Lz/2f, D/2f)
+                    .lengthed(Lz/2f, 0f);
+            float th = 0.25f;
+            float off = 0.5f;
+            v.BoolSubtract(img.voxels_on_plane(
+                new(at + (Lz/2f - th)*uZ3),
+                th + off,
+                0.6f*D,
+                ImageSignedDist.HEIGHT
+            ));
+            Mesh m = new(v);
+            Geez.mesh(m);
+            TPIAP.save_mesh_only($"plug-{name}", m);
+        }
     }
 
 
