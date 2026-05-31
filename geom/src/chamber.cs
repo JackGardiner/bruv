@@ -218,7 +218,7 @@ public class Chamber : TPIAP.Pea {
     public required float phi_inlet { get; init; }
     public required float th_inlet { get; init; }
     public required float FR_inlet { get; init; }
-    public Tapping tap_inlet => new(portsize_inlet, printable_dmls);
+    public Tapping tap_inlet => new(portsize_inlet, printable_dmlm);
     public float ell_inlet => tap_inlet.straight_length + 0.8f*FR_inlet;
     public required float phi_inletsprt { get; init; }
 
@@ -227,7 +227,7 @@ public class Chamber : TPIAP.Pea {
     public required float th_tc { get; init; }
     public required float phi_tc { get; init; }
     public required float D_tc { get; init; }
-    public Tapping tap_tc => new(portsize_tc, printable_dmls);
+    public Tapping tap_tc => new(portsize_tc, printable_dmlm);
 
 
     protected int DIVISIONS => max(200, (int)(200f / VOXEL_SIZE));
@@ -235,7 +235,7 @@ public class Chamber : TPIAP.Pea {
     protected const float EXTRA = 10f; // trimmed at some point.
 
     protected const float facing_stock = 20f;
-    protected float extend_base_by => printable_dmls ? facing_stock : 0f;
+    protected float extend_base_by => printable_dmlm ? facing_stock : 0f;
     protected float circular_base_z => 5f;
 
 
@@ -884,7 +884,7 @@ public class Chamber : TPIAP.Pea {
             key.voxels(vox);
         }
 
-        if (!printable_dmls)
+        if (!printable_dmlm)
             return vox;
 
         // Cooling channel breakouts.
@@ -1967,13 +1967,13 @@ public class Chamber : TPIAP.Pea {
     public string name => "chamber";
 
 
-    public bool printable_dmls   = false;
+    public bool printable_dmlm   = false;
     public bool minimise_mem     = false;
     public bool take_screenshots = false;
     public bool filletless       = false;
     public bool brandingless     = false;
     public void set_modifiers(int mods) {
-        printable_dmls   = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
+        printable_dmlm   = popbits(ref mods, TPIAP.PRINTABLE_DMLM);
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);

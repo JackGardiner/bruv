@@ -32,7 +32,7 @@ public static class TwoPeasInAPod {
     public const int LOOKSIE         = 0x10;
     public const int LOOKSIE_CUTAWAY = 0x20;
     /* bitwise or (|) ANY/SEVERAL/ALL of these modifiers: */
-    public const int PRINTABLE_DMLS   = 0x01 << BITC_ACTION;
+    public const int PRINTABLE_DMLM   = 0x01 << BITC_ACTION;
     public const int PRINTABLE_SLA    = 0x02 << BITC_ACTION;
     public const int MINIMISE_MEM     = 0x04 << BITC_ACTION;
     public const int TAKE_SCREENSHOTS = 0x08 << BITC_ACTION;
@@ -85,8 +85,8 @@ public static class TwoPeasInAPod {
             throw new Exception("invalid 'make': no pea selected");
 
         // Ensure no mutually exclusive modifiers are set.
-        if (isset(make, PRINTABLE_DMLS) && isset(make, PRINTABLE_SLA))
-            throw new Exception("cannot set both 'PRINTABLE_DMLS' and "
+        if (isset(make, PRINTABLE_DMLM) && isset(make, PRINTABLE_SLA))
+            throw new Exception("cannot set both 'PRINTABLE_DMLM' and "
                               + "'PRINTABLE_SLA'");
 
         // Peep into modifiers and disable rendering if minimising memory.

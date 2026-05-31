@@ -865,13 +865,13 @@ public class Injector : TPIAP.Pea {
     public required string boltsize_mount { get; init; }
     public required float r_mount { get; init; }
     public required float z_mount { get; init; }
-    public float extra_on_mounts => printable_dmls ? 5f : 0f;
-    public Tapping tap_mount => new(boltsize_mount, printable_dmls)
+    public float extra_on_mounts => printable_dmlm ? 5f : 0f;
+    public Tapping tap_mount => new(boltsize_mount, printable_dmlm)
             { extra_length = 3f + extra_on_mounts };
 
     public required InjectorElement element { get; init; }
     protected void initialise_elements() {
-        element.printable = printable_dmls;
+        element.printable = printable_dmlm;
         element.extend_base_by = extend_base_by;
         element.initialise();
     }
@@ -906,15 +906,15 @@ public class Injector : TPIAP.Pea {
     public required float th_LOxPTh { get; init; }
     public required float th_IPAPTh { get; init; }
     public required float th_CCPTh { get; init; }
-    public Tapping tap_igniter => new(portsize_igniter, printable_dmls)
+    public Tapping tap_igniter => new(portsize_igniter, printable_dmlm)
             { extra_length = 2f };
-    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable_dmls)
+    public Tapping tap_LOxinlet => new(portsize_LOxinlet, printable_dmlm)
             { extra_length = 2f };
-    public Tapping tap_LOxPT => new(portsize_LOxPT, printable_dmls)
+    public Tapping tap_LOxPT => new(portsize_LOxPT, printable_dmlm)
             { extra_length = 2f };
-    public Tapping tap_IPAPT => new(portsize_IPAPT, printable_dmls)
+    public Tapping tap_IPAPT => new(portsize_IPAPT, printable_dmlm)
             { extra_length = 2f };
-    public Tapping tap_CCPT => new(portsize_CCPT, printable_dmls)
+    public Tapping tap_CCPT => new(portsize_CCPT, printable_dmlm)
             { extra_length = 2f };
 
     public required float theta0_CCPTbrk { get; init; }
@@ -923,8 +923,8 @@ public class Injector : TPIAP.Pea {
     protected const float EXTRA = 6f;
 
     protected const float facing_stock = 20f;
-    protected float extend_base_by => printable_dmls ? facing_stock : 0f;
-    protected float extend_voids_by => printable_dmls ? 3f : 0f;
+    protected float extend_base_by => printable_dmlm ? facing_stock : 0f;
+    protected float extend_voids_by => printable_dmlm ? 3f : 0f;
     protected float breakout_D0 => 6f;
     protected float breakout_D1 => 10f;
     protected float breakout_CR => 1.5f;
@@ -961,7 +961,7 @@ public class Injector : TPIAP.Pea {
 
 
         breakouts = null;
-        if (!printable_dmls)
+        if (!printable_dmlm)
             return;
 
         plate.BoolAdd(new Rod(
@@ -1086,7 +1086,7 @@ public class Injector : TPIAP.Pea {
     }
 
     protected Voxels? voxels_film_cooling() {
-        if (printable_dmls)
+        if (printable_dmlm)
             return null; // not printed.
 
         Voxels vox = new();
@@ -1346,7 +1346,7 @@ public class Injector : TPIAP.Pea {
 
         // Add breakout.
         bool break_me_out_question_mark = true;
-        if (!break_me_out_question_mark || !printable_dmls)
+        if (!break_me_out_question_mark || !printable_dmlm)
             return;
 
         neg.BoolSubtract(new Rod(
@@ -1448,7 +1448,7 @@ public class Injector : TPIAP.Pea {
         Geez.remove(keys);
         keys = [];
 
-        if (!printable_dmls)
+        if (!printable_dmlm)
             return;
 
         // Add breakouts.
@@ -1567,7 +1567,7 @@ public class Injector : TPIAP.Pea {
                 frame,
                 pm.flange_thickness_inj + EXTRA,
                 pm.D_bolt/2f
-            ).extended(printable_dmls ? breakout_bolts_z : EXTRA, Extend.DOWN));
+            ).extended(printable_dmlm ? breakout_bolts_z : EXTRA, Extend.DOWN));
             // for washer/nut.
             clearance.BoolAdd(new Rod(
                 frame.transz(pm.flange_thickness_inj),
@@ -1580,7 +1580,7 @@ public class Injector : TPIAP.Pea {
 
     protected Voxels? voxels_orings() {
         // No oring groove are printed, all are post machined.
-        if (printable_dmls)
+        if (printable_dmlm)
             return null;
 
         Voxels vox = new Rod(
@@ -2022,7 +2022,7 @@ public class Injector : TPIAP.Pea {
         labels = _labels;
 
         bool break_me_out_question_mark = true;
-        if (break_me_out_question_mark && printable_dmls) {
+        if (break_me_out_question_mark && printable_dmlm) {
             neg.IntersectImplicit(new Space(
                 new(),
                 0f,
@@ -2497,14 +2497,14 @@ public class Injector : TPIAP.Pea {
     public string name => "injector";
 
 
-    public bool printable_dmls   = false;
+    public bool printable_dmlm   = false;
     public bool minimise_mem     = false;
     public bool take_screenshots = false;
     public bool filletless       = false;
     public bool brandingless     = false;
     public bool elementless      = false;
     public void set_modifiers(int mods) {
-        printable_dmls   = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
+        printable_dmlm   = popbits(ref mods, TPIAP.PRINTABLE_DMLM);
         minimise_mem     = popbits(ref mods, TPIAP.MINIMISE_MEM);
         take_screenshots = popbits(ref mods, TPIAP.TAKE_SCREENSHOTS);
         _                = popbits(ref mods, TPIAP.LOOKIN_FANCY);

@@ -19,10 +19,10 @@ public class InjectorSample : TPIAP.Pea {
     public void drawings(in Voxels part)
         => throw new NotImplementedException();
 
-    public bool printable_dmls = false;
+    public bool printable_dmlm = false;
     public bool printable_sla  = false;
     public void set_modifiers(int mods) {
-        printable_dmls = popbits(ref mods, TPIAP.PRINTABLE_DMLS);
+        printable_dmlm = popbits(ref mods, TPIAP.PRINTABLE_DMLM);
         printable_sla  = popbits(ref mods, TPIAP.PRINTABLE_SLA);
         _              = popbits(ref mods, TPIAP.MINIMISE_MEM);
         _              = popbits(ref mods, TPIAP.LOOKIN_FANCY);
@@ -36,7 +36,7 @@ public class InjectorSample : TPIAP.Pea {
 
     public void initialise() {
         for (int i=0; i<N; ++i) {
-            elements[i].printable = printable_dmls;
+            elements[i].printable = printable_dmlm;
             elements[i].initialise();
             File.Move(
                 InjectorElement.REPORT_PATH,
@@ -54,7 +54,7 @@ public class InjectorSample : TPIAP.Pea {
 
         float EXTRA = 30f;
         float th_datum = 3f;
-        float extend_base_by = printable_dmls ? 3f : 0f;
+        float extend_base_by = printable_dmlm ? 3f : 0f;
         float th_outer = printable_sla ? 5f : 3f;
 
         // position inlets s.t. port isnt straight on one.
@@ -167,7 +167,7 @@ public class InjectorSample : TPIAP.Pea {
 
         /* PORTS */
         float L_port = 14f;
-        Tapping tap = new("Rc1/8", printable_dmls);
+        Tapping tap = new("Rc1/8", printable_dmlm);
         // Drill thru in resin.
         if (printable_sla)
             tap.extra_length = L_port - tap.straight_length + 4f;
@@ -229,7 +229,7 @@ public class InjectorSample : TPIAP.Pea {
 
 
         /* Nozzle extension. */
-        if (printable_dmls) {
+        if (printable_dmlm) {
             vox.BoolAdd(new Rod(
                 at,
                 3*VOXEL_SIZE,
@@ -243,7 +243,7 @@ public class InjectorSample : TPIAP.Pea {
 
     public Voxels? voxels() {
         Bar buildplate = new(new(), 0.01f, 100f);
-        if (printable_dmls)
+        if (printable_dmlm)
             Geez.bar(buildplate);
 
         Vec2[] corrections = [
@@ -269,7 +269,7 @@ public class InjectorSample : TPIAP.Pea {
         ];
         Frame get_at(int i) {
             return new((i*60*uX3));
-            // if (!printable_dmls)
+            // if (!printable_dmlm)
             //     return new(i*60*uX3);
             // // or try to stack nicely:
             // assert(N == 8);
