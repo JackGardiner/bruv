@@ -603,7 +603,7 @@ def plot_me(state, get_out):
         "bending",  "sigmah_bending",  1e-6, "forestgreen", "-",
         "total",    "sigmah",          1e-6, "grey",        "--",
     )
-    graph1(axes[0, 1], "Net stresses & yeild strength", r"$\sigma$ [MPa]",
+    graph1(axes[0, 1], "Net stresses & yield strength", r"$\sigma$ [MPa]",
         "hoop",       "sigmah",   1e-6, "darkviolet", "-",
         "meridional", "sigmam",   1e-6, "seagreen",   "-",
         "von-mises",  "sigma_vm", 1e-6, "darkorange", "-",
