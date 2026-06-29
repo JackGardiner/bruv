@@ -2141,6 +2141,7 @@ public class Injector : TPIAP.Pea {
         using PartMaker part = new(overall_Lz, overall_Lr, overall_Mz);
         if (!take_screenshots)
             part.screenshotta = null;
+        part.density = 8.9e3f;
 
 
         // Create the part.
