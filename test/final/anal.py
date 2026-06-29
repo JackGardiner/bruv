@@ -94,8 +94,8 @@ def read(name, csv_name=None):
     ))
 
     data.name = name
-    data.number = int(name[2:].split("-", 2)[0] if name.startswith("RS")
-                      else name[1:].split("-", 2)[0])
+    data.number = int(name[1:].split("-", 2)[0] if name.startswith("S")
+                      else name[2:].split("-", 2)[0])
 
     data.t = csv["timestamp"]
     data.t = pd.to_datetime(data.t, format="%H:%M:%S.%f")
@@ -281,20 +281,23 @@ def peep_sweep(ax, data, col_lox, col_lox_alt, col_ipa, col_ipa_alt, label=True)
         ax.set_xlabel("A sqrt(DP) [m^2 Pa^0.5]")
 
 
-
 def sweeps(win_peep):
     s26 = read("S26-sweep")
     s26_lox = read("S26-lox-sweep")
     s26_ipa = read("S26-ipa-sweep")
+    real26 = read("IE12-SWEEP")
 
     peep(win_peep, s26, include_load_cells=True)
     peep(win_peep, s26_lox, include_load_cells=True)
     peep(win_peep, s26_ipa, include_load_cells=True)
+    peep(win_peep, real26, include_load_cells=True)
 
     _, ax = geez.new_plots()
-    peep_sweep(ax, s26, C_BLUE_0, C_BLUE_1, C_RED_0, C_RED_1)
-    peep_sweep(ax, s26_lox, C_CYAN_0, C_CYAN_1, None, None, False)
-    peep_sweep(ax, s26_ipa, None, None, C_PURPLE_0, C_PURPLE_1, False)
+    # peep_sweep(ax, s26, C_BLUE_0, C_BLUE_1, C_RED_0, C_RED_1)
+    # peep_sweep(ax, s26_lox, C_CYAN_0, C_CYAN_1, None, None, False)
+    # peep_sweep(ax, s26_ipa, None, None, C_PURPLE_0, C_PURPLE_1, False)
+    peep_sweep(ax, s26, C_CYAN_0, C_CYAN_1, C_PURPLE_0, C_PURPLE_1)
+    peep_sweep(ax, real26, C_BLUE_0, C_BLUE_1, C_RED_0, C_RED_1)
 
 
 
@@ -315,19 +318,26 @@ def main():
     all_names.append("S26")
     all_names.append("S26-ipa")
     all_names.append("S26-lox")
+    for num in range(1, 12 + 1):
+        all_names.append(f"IE{100 + num}")
 
 
-    names = {"R": [], "C": []}
-    op_lox = {"R": [], "C": []}
-    op_ipa = {"R": [], "C": []}
+    names = {"R": [], "C": [], "I": []}
+    op_lox = {"R": [], "C": [], "I": []}
+    op_ipa = {"R": [], "C": [], "I": []}
     for name in all_names:
         csv_name = None
         if name == "RS21":
             csv_name = r"RS21\.2"
+        elif name.startswith("IE"):
+            # remove the 1 from 100
+            csv_name = name[:2] + name[3:]
+            if csv_name[2] == "0":
+                csv_name = csv_name[:2] + csv_name[3:]
         data = read(name, csv_name=csv_name)
         peep(win_peep, data, include_load_cells=True)
 
-        prefix = "R" if name.startswith("RS") else "C"
+        prefix = "C" if name.startswith("S") else name[0]
         names[prefix].append(name)
         if not name.endswith("-ipa"):
             x_lox = data.A_lox * np.sqrt(np.maximum(0.0, data.DP_lox.mean()))
@@ -347,6 +357,8 @@ def main():
     op_ipa["R"] = np.array(op_ipa["R"]).T
     op_lox["C"] = np.array(op_lox["C"]).T
     op_ipa["C"] = np.array(op_ipa["C"]).T
+    op_lox["I"] = np.array(op_lox["I"]).T
+    op_ipa["I"] = np.array(op_ipa["I"]).T
 
     fig = plt.figure()
     ax = fig.add_subplot(axes_class=geez.BrAxes)
@@ -358,6 +370,10 @@ def main():
             alpha=0.7, label="copper LOx", edgecolors="#FF950A")
     ax.scatter(op_ipa["C"][0], op_ipa["C"][1], zorder=3, color=C_PURPLE_0,
             alpha=0.7, label="copper IPA", edgecolors="#FF950A")
+    ax.scatter(op_lox["I"][0], op_lox["I"][1], zorder=3, color=C_BLUE_0,
+            alpha=0.7, label="final LOx", edgecolors="#000000")
+    ax.scatter(op_ipa["I"][0], op_ipa["I"][1], zorder=3, color=C_RED_0,
+            alpha=0.7, label="final IPA", edgecolors="#000000")
     plot_linfit(ax, op_lox["R"][0], op_lox["R"][1], C_BLUE_1)
     plot_linfit(ax, op_ipa["R"][0], op_ipa["R"][1], C_RED_1)
     plot_linfit(ax, op_lox["C"][0], op_lox["C"][1], C_CYAN_1)
@@ -399,6 +415,7 @@ def main():
     labels(ax, op_ipa["C"], names["C"], +1.0e-3, -0.08, C_PURPLE_0, "#B59F82")
 
     fig.show()
+    return
 
     ax.set_title("CLICK 1: Select a point for LOx", fontsize=14, color="blue",
             fontweight="bold")
