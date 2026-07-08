@@ -90,42 +90,31 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     assert(s->ofr > 0.0, "invalid input: ofr=%g", s->ofr);
     assert(s->dm_cc > 0.0, "invalid input: dm_cc=%g", s->dm_cc);
-    assert(s->P_exit > 0.0, "invalid input: P_exit=%g", s->P_exit);
-    assert(s->P0_cc > 0.0, "invalid input: P0_cc=%g", s->P0_cc);
+    assert(s->P_atmos > 0.0, "invalid input: P_atmos=%g", s->P_atmos);
 
     // Our CEA approximations assume ideally expanded at sea level.
-    assert(nearto(s->P_exit, 101325.0), "invalid input: exit pressure must be "
-            "sea-level atmospheric, got %g", s->P_exit);
+    assert(nearto(s->P_atmos, 101325.0), "invalid input: exit pressure must be "
+            "sea-level atmospheric, got %g", s->P_atmos);
 
+    // TODO: A_tht/AEAT/P0_cc validation
 
     /* Combustion */
 
-    s->T0_cc = cea_T0_cc(s->P0_cc, s->ofr);
-    s->rho0_cc = cea_rho0_cc(s->P0_cc, s->ofr);
-
-    s->gamma_tht = cea_gamma_tht(s->P0_cc, s->ofr);
-    s->Mw_tht = cea_Mw_tht(s->P0_cc, s->ofr);
-    SpecificHeatRatio* shr_tht = get_shr(s->gamma_tht);
-
-    s->M_exit = isentropic_M_from_P_on_P0(s->P_exit / s->P0_cc, shr_tht);
-    f64 P_exit = s->P0_cc * isentropic_P_on_P0(s->M_exit, shr_tht);
-    assert(nearto(P_exit, s->P_exit),
-            "failed to find perfectly expanded nozzle?");
-    s->gamma_exit = cea_gamma_exit(s->P0_cc, s->ofr);
-
-    s->A_tht = s->dm_cc / s->P0_cc
-             * sqrt(s->T0_cc * GAS_CONSTANT / s->Mw_tht / shr_tht->y)
-             * pow(0.5*(shr_tht->y + 1.0), shr_tht->n);
-    // TODO: ^ move to relations.
-
-    s->AEAT = isentropic_A_on_Astar(s->M_exit, shr_tht);
-    // TODO: ^ fixed point iterate
+    if (s->fixed_geom) {
+        s->P0_cc = P0_cc_for_A_tht(s->ofr, s->A_tht, s->dm_cc);
+    } else {
+        f64 rho_tht = cea_rho(s->P0_cc, s->ofr, CEA_AR_tht);
+        f64 a_tht = cea_a(s->P0_cc, s->ofr, CEA_AR_tht);
+        s->A_tht = s->dm_cc / rho_tht / a_tht;
+        s->AEAT = cea_perfexp_AEAT(s->P0_cc, s->ofr);
+    }
 
     s->dm_fu = s->dm_cc / (s->ofr + 1.0);
     s->dm_ox = s->dm_cc - s->dm_fu;
 
-    s->Isp = cea_Isp(s->P0_cc, s->ofr);
-    s->Thrust = s->Isp * s->dm_cc * STANDARD_GRAVITY;
+    f64 Ivac = cea_Ivac(s->P0_cc, s->ofr, s->AEAT);
+    s->Thrust = Ivac * s->dm_cc * STANDARD_GRAVITY
+              - s->P_atmos * s->A_tht * s->AEAT;
 
 
     /* Geometry */
@@ -163,8 +152,11 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
 
     s->efficiency = cos(s->phi_exit) // divergent exhaust.
                   * 0.9; // estimated viscous+combustion losses.
-    s->Isp *= s->efficiency;
     s->Thrust *= s->efficiency;
+
+    s->Isp = s->Thrust / STANDARD_GRAVITY
+           / (s->dm_ox + (1.0 + s->prop_fc)*s->dm_fu);
+
 
 
     /* Thermals. */
@@ -227,6 +219,7 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
     assert(s->out_cp_g, "null output array: out_cp_g");
     assert(s->out_mu_g, "null output array: out_mu_g");
     assert(s->out_Pr_g, "null output array: out_Pr_g");
+    assert(s->out_a_g, "null output array: out_a_g");
     assert(s->out_T_c, "null output array: out_T_c");
     assert(s->out_P_c, "null output array: out_P_c");
     assert(s->out_T_gw, "null output array: out_T_gw");
@@ -264,31 +257,19 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
     assert(s->export_th_iw, "null export array: export_th_iw");
 
 
-    ceaFit* fit_gamma = &(ceaFit){0};
-    ceaFit* fit_cp = &(ceaFit){0};
-    ceaFit* fit_mu = &(ceaFit){0};
-    ceaFit* fit_Pr = &(ceaFit){0};
-    cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_cp(fit_cp, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_mu(fit_mu, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, s->M_exit);
-
     for (i64 i=0; i<s->out_count; ++i) {
         f64 z = lerpidx(0.0, cnt->z_exit, i, s->out_count);
         f64 r = cnt_r(cnt, z);
-        f64 A_on_Astar = sqed(r) / sqed(cnt->R_tht);
-        SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
-        f64 M_g;
-        isentropic_shr_M(shr_g, &M_g, z < cnt->z_tht, A_on_Astar, fit_gamma,
-                s->gamma_tht /* good guess */);
-        f64 y1M22 = get_y1M22(M_g, shr_g);
-        f64 T_g = s->T0_cc * isentropicx_T_on_T0(y1M22, shr_g);
-        f64 P_g = s->P0_cc * isentropicx_P_on_P0(y1M22, shr_g);
-        f64 rho_g = s->rho0_cc * isentropicx_rho_on_rho0(y1M22, shr_g);
-        f64 cp_g = cea_sample(fit_cp, M_g);
-        f64 mu_g = cea_sample(fit_mu, M_g);
-        f64 Pr_g = cea_sample(fit_Pr, M_g);
-
+        f64 AR = cnt_AR(cnt, z);
+        f64 T_g = cea_T(s->P0_cc, s->ofr, AR);
+        f64 P_g = cea_P(s->P0_cc, s->ofr, AR);
+        f64 rho_g = cea_rho(s->P0_cc, s->ofr, AR);
+        f64 M_g = cea_M(s->P0_cc, s->ofr, AR);
+        f64 a_g = cea_a(s->P0_cc, s->ofr, AR);
+        f64 gamma_g = cea_gamma(s->P0_cc, s->ofr, AR);
+        f64 cp_g = cea_cp(s->P0_cc, s->ofr, AR);
+        f64 mu_g = cea_mu(s->P0_cc, s->ofr, AR);
+        f64 Pr_g = cea_Pr(s->P0_cc, s->ofr, AR);
 
         s->out_z[i] = z;
         s->out_r[i] = r;
@@ -296,10 +277,11 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
         s->out_T_g[i] = T_g;
         s->out_P_g[i] = P_g;
         s->out_rho_g[i] = rho_g;
-        s->out_gamma_g[i] = shr_g->y;
+        s->out_gamma_g[i] = gamma_g;
         s->out_cp_g[i] = cp_g;
         s->out_mu_g[i] = mu_g;
         s->out_Pr_g[i] = Pr_g;
+        s->out_a_g[i] = a_g;
         {
             f64 t = z / cnt->z_exit;
             t *= thermal_N - 1;

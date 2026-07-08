@@ -413,6 +413,19 @@ static f64 parse_f64(const char* s) {
     return value;
 }
 
+static i32 is_arg_string(const char* arg, const char* s) {
+    while (is_space(*arg))
+        ++arg;
+    while (*arg && *s) {
+        if (*arg++ != *s++)
+            return 0;
+    }
+    while (is_space(*arg))
+        ++arg;
+    return (*arg == *s);
+}
+
+
 
 
 
@@ -1749,6 +1762,9 @@ enum { STL_TRI_SIZE = 50 };
 static i64 stl_size(i32 Tcount) {
     return 84 + (i64)50 * Tcount;
 }
+static i32 stl_invsize(i64 bytesize) {
+    return (bytesize - 84) / 50;
+}
 
 static void read_stl(Mesh* m, const char* rstr path) {
     printf("\n\n--- reading stl ---");
@@ -1903,8 +1919,9 @@ static void write_stl(const Mesh* m, const char* rstr path) {
 static void invalid_usage(const char* msg) {
     if (msg)
         printf("%serror:%s %s\n", ANSI_RED, ANSI_RESET, msg);
-    printf("%susage:%s deci <input.stl> <output.stl> <final size proportion> "
-            "[max cutoff cost]\n", ANSI_PALE_RED, ANSI_RESET);
+    printf("%susage:%s deci <input.stl> <output.stl> [-B] "
+            "<final size proportion> [max cutoff cost] [-v|--verbose]\n",
+            ANSI_PALE_RED, ANSI_RESET);
 }
 
 __attribute((__hot__))
@@ -1940,37 +1957,75 @@ i32 main(i32 argc, char** argv) {
         invalid_usage("missing <final size proportion>");
         return 1;
     }
-    if (argc > 5) {
+    if (argc > 6) {
         invalid_usage("too many arguments");
         return 1;
     }
-    const char* path_in = argv[1];
-    const char* path_out = argv[2];
-    f64 reduction = parse_f64(argv[3]);
+    i32 argi = 1;
+    const char* path_in = argv[argi++];
+    const char* path_out = argv[argi++];
+    i32 reduction_is_bytes = 0;
+    if (is_arg_string(argv[argi], "-B")) {
+        reduction_is_bytes = 1;
+        ++argi;
+    }
+    f64 reduction = parse_f64(argv[argi++]);
     if (isnan(reduction)) {
         invalid_usage("invalid <final size proportion> (must be a number)");
         return 1;
     }
-    if (!within(reduction, 0.0, 1.0)) {
-        invalid_usage("invalid <final size proportion> (must be in 0-1)");
-        return 1;
+    if (!reduction_is_bytes) {
+        if (!within(reduction, 0.0, 1.0)) {
+            invalid_usage("invalid <final size proportion> (must be in 0-1)");
+            return 1;
+        }
+    } else {
+        if (reduction != (i64)reduction) {
+            invalid_usage("invalid <final size proportion> (must be an "
+                    "integer)");
+            return 1;
+        }
     }
-    f64 cutoff_cost = (argc > 4) ? parse_f64(argv[4]) : +INF;
-    if (isnan(reduction)) {
-        invalid_usage("invalid <max cutoff cost> (must be a number)");
-        return 1;
+    f64 cutoff_cost = NAN;
+    i32 verbose = 0;
+    for(; argi<argc; ++argi) {
+        const char* s = argv[argi];
+        if (is_arg_string(s, "-v")) {
+            verbose = 1;
+            continue;
+        }
+        if (is_arg_string(s, "--verbose")) {
+            verbose = 1;
+            continue;
+        }
+        if (isnan(cutoff_cost)) {
+            invalid_usage("too many arguments");
+            return 1;
+        }
+        cutoff_cost = parse_f64(s);
+        if (isnan(cutoff_cost)) {
+            invalid_usage("invalid <max cutoff cost> (must be a number)");
+            return 1;
+        }
     }
+    cutoff_cost = ifnan(cutoff_cost, +INF);
 
 
     printf("--- deci ---");
     if (isinf(cutoff_cost)) {
         printf("\ninput      = %s", path_in);
         printf("\noutput     = %s", path_out);
-        printf("\nreduce to  = %.1f%%", 100.0*reduction);
+        if (reduction_is_bytes)
+            printf("\nreduce to  = %.0f B", reduction);
+        else
+            printf("\nreduce to  = %.1f%%", 100.0*reduction);
     } else {
         printf("\ninput        = %s", path_in);
         printf("\noutput       = %s", path_out);
-        printf("\nreduce to    = %.1f%%", 100.0*reduction);
+        if (reduction_is_bytes)
+            printf("\nreduce to  = %.0f B", reduction);
+        else
+            printf("\nreduce to  = %.1f%%", 100.0*reduction);
         printf("\ncutoff cost  = %.4g", cutoff_cost);
     }
 
@@ -1988,11 +2043,13 @@ i32 main(i32 argc, char** argv) {
     i32 closed_mani;
     analyse_topology(V, T, Tcount, &Ecount, &closed_mani);
     i32 euler_char = Vcount + Tcount - Ecount;
-    printf("\nvertex count  = "); print_numba(Vcount, 0);
-    printf("\ntri count     = "); print_numba(Tcount, 0);
-    printf("\nedge count    = "); print_numba(Ecount, 0);
-    printf("\neuler char.   = %4d", euler_char);
-    printf("\nclosed mani.  = %4d", closed_mani);
+    if (verbose) {
+        printf("\nvertex count  = "); print_numba(Vcount, 0);
+        printf("\ntri count     = "); print_numba(Tcount, 0);
+        printf("\nedge count    = "); print_numba(Ecount, 0);
+        printf("\neuler char.   = %4d", euler_char);
+        printf("\nclosed mani.  = %4d", closed_mani);
+    }
     printf("\n%sfile size     = ", ANSI_PALE_BLUE);
     print_numba(stl_size(Tcount), 1);
     printf("%s", ANSI_RESET);
@@ -2003,8 +2060,10 @@ i32 main(i32 argc, char** argv) {
     printf("\n\n--- allocations ---");
     i64 size_vertex = Vcount * sizeof(Vertex);
     i64 size_index = Tcount * sizeof(Tri);
-    printf("\nvertex        = "); print_numba(size_vertex, 1);
-    printf("\nindex         = "); print_numba(size_index, 1);
+    if (verbose) {
+        printf("\nvertex        = "); print_numba(size_vertex, 1);
+        printf("\nindex         = "); print_numba(size_index, 1);
+    }
 
 
     // Setup adjacency lists.
@@ -2014,9 +2073,11 @@ i32 main(i32 argc, char** argv) {
     i64 size_adj_cursor;
     adj_init(adj, V, T, Vcount, Tcount, &size_adj_entry, &size_adj_off,
             &size_adj_cursor);
-    printf("\nadj entry     = "); print_numba(size_adj_entry, 1);
-    printf("\nadj off       = "); print_numba(size_adj_off, 1);
-    printf("\nadj cursor    = "); print_numba(size_adj_cursor, 1);
+    if (verbose) {
+        printf("\nadj entry     = "); print_numba(size_adj_entry, 1);
+        printf("\nadj off       = "); print_numba(size_adj_off, 1);
+        printf("\nadj cursor    = "); print_numba(size_adj_cursor, 1);
+    }
 
 
     // Setup edge heap.
@@ -2024,8 +2085,10 @@ i32 main(i32 argc, char** argv) {
     i64 size_heap_bkts;
     i64 size_heap_idxr;
     heapq_init(heap, Ecount, &size_heap_bkts, &size_heap_idxr);
-    printf("\nheap bkts     = "); print_numba(size_heap_bkts, 1);
-    printf("\nheap idxr     = "); print_numba(size_heap_idxr, 1);
+    if (verbose) {
+        printf("\nheap bkts     = "); print_numba(size_heap_bkts, 1);
+        printf("\nheap idxr     = "); print_numba(size_heap_idxr, 1);
+    }
 
 
     // Setup neighbours set.
@@ -2035,7 +2098,9 @@ i32 main(i32 argc, char** argv) {
     // Note this ^ is a huuuuge oversize in everything except the absolute worst-
     // case but its fine since it wont be physically backed (its just contiguous
     // array space) to in reality its dynamically upsized-only by the os.
-    printf("\nneighbours    = "); print_numba(size_neighbours, 1);
+    if (verbose) {
+        printf("\nneighbours    = "); print_numba(size_neighbours, 1);
+    }
 
 
 
@@ -2076,7 +2141,10 @@ i32 main(i32 argc, char** argv) {
     // Pop edges.
     i32 new_Vcount = Vcount;
     i32 new_Tcount = Tcount;
-    i32 limit = max(4 /* closed solid */, (i32)(Tcount * reduction));
+    i32 limit = (reduction_is_bytes)
+              ? stl_invsize((i64)reduction)
+              : (i32)(Tcount * reduction);
+    limit = max(4 /* closed solid */, limit);
     i32 last_refreshed_adj = new_Tcount;
     i32 hit_cutoff = 0;
   #if defined(DECI_RAINBOW) && DECI_RAINBOW
@@ -2228,11 +2296,13 @@ i32 main(i32 argc, char** argv) {
     i32 new_closed_mani;
     analyse_topology(V, T, Tcount, &new_Ecount, &new_closed_mani);
     i32 new_euler_char = new_Vcount + new_Tcount - new_Ecount;
-    printf("\nvertex count  = "); print_numba(new_Vcount, 0);
-    printf("\ntri count     = "); print_numba(new_Tcount, 0);
-    printf("\nedge count    = "); print_numba(new_Ecount, 0);
-    printf("\neuler char.   = %4d", new_euler_char);
-    printf("\nclosed mani.  = %4d", new_closed_mani);
+    if (verbose) {
+        printf("\nvertex count  = "); print_numba(new_Vcount, 0);
+        printf("\ntri count     = "); print_numba(new_Tcount, 0);
+        printf("\nedge count    = "); print_numba(new_Ecount, 0);
+        printf("\neuler char.   = %4d", new_euler_char);
+        printf("\nclosed mani.  = %4d", new_closed_mani);
+    }
     printf("\n%sfile size     = ", ANSI_PALE_GREEN);
     print_numba(stl_size(new_Tcount), 1);
     f64 file_size_percent = stl_size(new_Tcount) * 100.0 / stl_size(Tcount);

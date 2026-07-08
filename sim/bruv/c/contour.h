@@ -54,6 +54,7 @@ Contour* init_cnt(Contour* cnt, f64 R_cc, f64 L_cc, f64 A_tht, f64 AEAT, f64 NLF
 void cnt_change_length(Contour* cnt, f64 DL_cc);
 
 f64 cnt_r(const Contour* cnt, f64 z);
+f64 cnt_AR(const Contour* cnt, f64 z);
 f64 cnt_th_iw(const Contour* cnt, f64 z);
 f64 cnt_helix_angle(const Contour* cnt, f64 z);
 f64 cnt_th_chnl(const Contour* cnt, f64 z);

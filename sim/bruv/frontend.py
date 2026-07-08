@@ -23,6 +23,8 @@ def get_interpretation():
     IN = interp.INPUT
     OUT = interp.OUTPUT
 
+    interp.append("fixed_geom", interp.I64, IN)
+
     interp.append("Lstar", interp.F64, IN)
     interp.append("R_cc", interp.F64, IN)
     interp.append("L_cc", interp.F64, OUT)
@@ -30,8 +32,8 @@ def get_interpretation():
     interp.append("R_exit", interp.F64, OUT)
     interp.append("z_tht", interp.F64, OUT)
     interp.append("z_exit", interp.F64, OUT)
-    interp.append("A_tht", interp.F64, OUT)
-    interp.append("AEAT", interp.F64, OUT)
+    interp.append("A_tht", interp.F64, IN | OUT)
+    interp.append("AEAT", interp.F64, IN | OUT)
     interp.append("NLF", interp.F64, IN)
     interp.append("phi_conv", interp.F64, IN)
     interp.append("phi_div", interp.F64, OUT)
@@ -56,18 +58,12 @@ def get_interpretation():
     interp.append("T_fu1", interp.F64, OUT)
     interp.append("P_fu1", interp.F64, OUT)
 
+    interp.append("P0_cc", interp.F64, IN | OUT)
     interp.append("ofr", interp.F64, IN | OUT)
     interp.append("dm_cc", interp.F64, IN | OUT)
     interp.append("dm_ox", interp.F64, OUT)
     interp.append("dm_fu", interp.F64, OUT)
-    interp.append("P_exit", interp.F64, IN)
-    interp.append("M_exit", interp.F64, OUT)
-    interp.append("gamma_exit", interp.F64, OUT)
-    interp.append("P0_cc", interp.F64, IN)
-    interp.append("T0_cc", interp.F64, OUT)
-    interp.append("rho0_cc", interp.F64, OUT)
-    interp.append("gamma_tht", interp.F64, OUT)
-    interp.append("Mw_tht", interp.F64, OUT)
+    interp.append("P_atmos", interp.F64, IN)
     interp.append("Isp", interp.F64, OUT)
     interp.append("Thrust", interp.F64, OUT)
     interp.append("efficiency", interp.F64, OUT)
@@ -86,6 +82,7 @@ def get_interpretation():
     interp.append("out_cp_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_mu_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_Pr_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_a_g", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_P_c", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_T_gw", interp.PTR_F64, IN | interp.OUTPUT_DATA)
@@ -156,10 +153,17 @@ def get_state(interp):
     state["Pr_fu"] = config["operating_conditions"]["Pr_IPA"]
     state["T_fu0"] = config["operating_conditions"]["T_IPA"]
 
+    # state["fixed_geom"] = 0
+    # state["P0_cc"] = config["operating_conditions"]["P_cc"]
+    # state["A_tht"] = float("nan")
+    # state["AEAT"] = float("nan")
+    state["fixed_geom"] = 1
+    state["P0_cc"] = float("nan")
+    state["A_tht"] = 0.001060237982126994
+    state["AEAT"] = 5.461837207867982
     state["ofr"] = 1.4
     state["dm_cc"] = 2.152551267131888
-    state["P_exit"] = config["operating_conditions"]["P_exit"]
-    state["P0_cc"] = config["operating_conditions"]["P_cc"]
+    state["P_atmos"] = config["operating_conditions"]["P_exit"]
 
     state["out_count"] = 1000
     new_out = lambda: np.empty(shape=(state["out_count"],), dtype=np.float64)
@@ -173,6 +177,7 @@ def get_state(interp):
     state["out_cp_g"] = new_out()
     state["out_mu_g"] = new_out()
     state["out_Pr_g"] = new_out()
+    state["out_a_g"] = new_out()
     state["out_T_c"] = new_out()
     state["out_P_c"] = new_out()
     state["out_T_gw"] = new_out()
@@ -281,7 +286,7 @@ def write_ammendments(state):
         "operating_conditions": {
             "Thrust": state["Thrust"],
             "P_cc": state["P0_cc"],
-            "P_exit": state["P_exit"],
+            "P_exit": state["P_atmos"],
             "Pr_IPA": state["Pr_fu"],
             "T_IPA": state["T_fu0"],
             "mdot_LOx": state["dm_ox"],

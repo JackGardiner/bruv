@@ -15,17 +15,6 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
 
     i32 possible_system = 1;
 
-    ceaFit* fit_gamma = &(ceaFit){0};
-    ceaFit* fit_cp = &(ceaFit){0};
-    ceaFit* fit_mu = &(ceaFit){0};
-    ceaFit* fit_Pr = &(ceaFit){0};
-    cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_cp(fit_cp, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_mu(fit_mu, s->P0_cc, s->ofr, s->M_exit);
-    cea_fit_Pr(fit_Pr, s->P0_cc, s->ofr, s->M_exit);
-
-    SpecificHeatRatio* shr_exit = get_shr(s->gamma_exit);
-
     f64 ell = 0.0;
     for (i32 i=0; i<1000; ++i) {
         f64 zA = cnt->z_exit * (i/(f64)(1000));
@@ -45,30 +34,29 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
         .T_c = s->T_fu0,
         .P_c = s->P_fu0,
     };
+    f64 T0_g = cea_T(s->P0_cc, s->ofr, CEA_AR_stag);
+    f64 T_exit = cea_T(s->P0_cc, s->ofr, s->AEAT);
+
     // March from nozzle exit to injector face.
     for (i32 i=N - 1; i>-1; --i) {
         f64 zA = cnt->z_exit * (i/(f64)(N - 1));
         f64 zB = cnt->z_exit * ((i - 1)/(f64)(N - 1));
         f64 rA = cnt_r(cnt, zA);
         f64 rB = cnt_r(cnt, zB);
+        f64 AR = cnt_AR(cnt, zA);
 
         // Combustion gas properties:
         f64 dm_g = s->dm_cc;
-        f64 T0_g = s->T0_cc;
         f64 A_g = PI*sqed(rA);
-        SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
-        f64 M_g;
-        isentropic_shr_M(shr_g, &M_g, zA < cnt->z_tht, A_g/s->A_tht, fit_gamma,
-                s->gamma_tht /* good guess */);
-        f64 y1M22_g = get_y1M22(M_g, shr_g);
-        f64 T_g = s->T0_cc * isentropicx_T_on_T0(y1M22_g, shr_g);
-        f64 cp_g = cea_sample(fit_cp, M_g);
-        f64 mu_g = cea_sample(fit_mu, M_g);
-        f64 Pr_g = cea_sample(fit_Pr, M_g);
+        f64 M_g = cea_M(s->P0_cc, s->ofr, AR);
+        f64 gamma_g = cea_gamma(s->P0_cc, s->ofr, AR);
+        f64 T_g = cea_T(s->P0_cc, s->ofr, AR);
+        f64 cp_g = cea_cp(s->P0_cc, s->ofr, AR);
+        f64 Pr_g = cea_Pr(s->P0_cc, s->ofr, AR);
         assert(cp_g > 0.0, "nonphysical property, cp_g: %g", cp_g);
-        assert(mu_g > 0.0, "nonphysical property, mu_g: %g", mu_g);
         assert(Pr_g > 0.0, "nonphysical property, Pr_g: %g", Pr_g);
         f64 cbrt_Pr_g = cbrt(Pr_g);
+        f64 y1M22_g = get_y1M22(M_g, get_shr(gamma_g));
 
         // Coolant properties:
         f64 T_c = stns[i].T_c;
@@ -235,17 +223,15 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
             {
                 // Use properties evauluated at the eckert temperature.
                 f64 T_gw = 0.5*T_pdms + 0.28*T0_g + 0.22*adiabatic_T_wg;
-                f64 min_T = T0_g * isentropic_T_on_T0(s->M_exit, shr_exit);
-                T_gw = min(max(T_gw, min_T), T0_g);
-                f64 M_gw = mach_for_temperature(T_gw / T0_g, fit_gamma);
-                assert(M_gw >= 0.0, "nonphysical property: M_gw=%g", M_gw);
+                T_gw = min(max(T_gw, T_exit), T0_g);
+                f64 AR_gw = AR_for_temperature(s->P0_cc, s->ofr, T_gw);
                 // M_gw = min(M_gw, s->M_exit);
                 // upstream curvature?
                 f64 Rcurvature_tht = 1.5*cnt->R_tht;
-                f64 bartz_gamma_g = cea_sample(fit_gamma, M_gw);
-                f64 bartz_cp_g = cea_sample(fit_cp, M_gw);
-                f64 bartz_mu_g = cea_sample(fit_mu, M_gw);
-                f64 bartz_Pr_g = cea_sample(fit_Pr, M_gw);
+                f64 bartz_gamma_g = cea_gamma(s->P0_cc, s->ofr, AR_gw);
+                f64 bartz_cp_g = cea_cp(s->P0_cc, s->ofr, AR_gw);
+                f64 bartz_mu_g = cea_mu(s->P0_cc, s->ofr, AR_gw);
+                f64 bartz_Pr_g = cea_Pr(s->P0_cc, s->ofr, AR_gw);
                 f64 bartz_y1M22_g = 0.5*(bartz_gamma_g - 1.0)*sqed(M_g);
                 assert(bartz_mu_g > 0.0, "nonphysical property, bartz_mu_g: %g",
                         bartz_mu_g);

@@ -288,6 +288,11 @@ f64 cnt_r(const Contour* cnt, f64 z) {
     return cnt->r6;
 }
 
+f64 cnt_AR(const Contour* cnt, f64 z) {
+    f64 r = cnt_r(cnt, z);
+    return (z < cnt->z_tht) ? sqed(cnt->R_tht/r) : sqed(r/cnt->R_tht);
+}
+
 f64 cnt_th_iw(const Contour* cnt, f64 z) {
     f64 prop = 1.0;
     if (z > cnt->z_tht)
@@ -326,7 +331,6 @@ f64 cnt_wi_chnl(const Contour* cnt, f64 z) {
 f64 cnt_psi_chnl(const Contour* cnt, f64 z) {
     return cnt_wi_chnl(cnt, z) * cos(cnt_helix_angle(cnt, z));
 }
-
 
 f64 cnt_V_subsonic(const Contour* cnt) {
     f64 V = 0.0;

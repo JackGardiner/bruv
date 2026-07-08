@@ -65,32 +65,52 @@ class Masker:
 
 
 class Evenspace:
-    def __init__(self, xlo, xhi, ylo=None, yhi=None):
+    def __init__(self, xlo, xhi, ylo=None, yhi=None, zlo=None, zhi=None):
         assert (ylo is None) == (yhi is None)
-        self.ndim = 1 if yhi is None else 2
+        assert (zlo is None) == (zhi is None)
+        self.ndim = 1 if yhi is None else 2 if zhi is None else 3
         self.xlo = float(xlo)
         self.xhi = float(xhi)
         self.ylo = float(ylo) if ylo is not None else None
         self.yhi = float(yhi) if yhi is not None else None
+        self.zlo = float(zlo) if zlo is not None else None
+        self.zhi = float(zhi) if zhi is not None else None
+
+    def setf(self, f):
+        self.f = f
+        self.masker = None
+        return self
 
     def points(self, N, flatten=True):
         if self.ndim == 1:
             return np.linspace(self.xlo, self.xhi, N)
-        n = np.sqrt(N)
+        threed = self.zhi is not None
+        n = np.cbrt(N) if threed else np.sqrt(N)
         assert np.allclose(n, int(n))
         X = np.linspace(self.xlo, self.xhi, int(n))
         Y = np.linspace(self.ylo, self.yhi, int(n))
-        X, Y = np.meshgrid(X, Y)
+        if threed:
+            Z = np.linspace(self.zlo, self.zhi, int(n))
+            X, Y, Z = np.meshgrid(X, Y, Z, indexing="xy")
+        else:
+            X, Y = np.meshgrid(X, Y, indexing="xy")
         if flatten:
             X = X.ravel()
             Y = Y.ravel()
+            if threed:
+                Z = Z.ravel()
+        if threed:
+            return X, Y, Z
         return X, Y
 
     def bounds(self):
         b = (self.xlo, self.xhi)
         if self.ndim == 1:
             return b
-        return b + (self.ylo, self.yhi)
+        b += (self.ylo, self.yhi)
+        if self.ndim == 2:
+            return b
+        return b + (self.zlo, self.zhi)
 
 
 class Surfspace:

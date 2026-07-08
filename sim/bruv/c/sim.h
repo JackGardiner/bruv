@@ -6,6 +6,8 @@
 
 // Canonical interpretation of the state array.
 #define SIM_INTERPRETATION                                      \
+    X(fixed_geom, i64, C_INPUT)                                 \
+                                                                \
     X(Lstar, f64, C_INPUT)                                      \
     X(R_cc, f64, C_INPUT)                                       \
     X(L_cc, f64, C_OUTPUT)                                      \
@@ -13,8 +15,8 @@
     X(R_exit, f64, C_OUTPUT)                                    \
     X(z_tht, f64, C_OUTPUT)                                     \
     X(z_exit, f64, C_OUTPUT)                                    \
-    X(A_tht, f64, C_OUTPUT)                                     \
-    X(AEAT, f64, C_OUTPUT)                                      \
+    X(A_tht, f64, C_INPUT | C_OUTPUT)                           \
+    X(AEAT, f64, C_INPUT | C_OUTPUT)                            \
     X(NLF, f64, C_INPUT)                                        \
     X(phi_conv, f64, C_INPUT)                                   \
     X(phi_div, f64, C_OUTPUT)                                   \
@@ -39,18 +41,12 @@
     X(T_fu1, f64, C_OUTPUT)                                     \
     X(P_fu1, f64, C_OUTPUT)                                     \
                                                                 \
+    X(P0_cc, f64, C_INPUT | C_OUTPUT)                           \
     X(ofr, f64, C_INPUT | C_OUTPUT)                             \
     X(dm_cc, f64, C_INPUT | C_OUTPUT)                           \
     X(dm_ox, f64, C_OUTPUT)                                     \
     X(dm_fu, f64, C_OUTPUT)                                     \
-    X(P_exit, f64, C_INPUT)                                     \
-    X(M_exit, f64, C_OUTPUT)                                    \
-    X(gamma_exit, f64, C_OUTPUT)                                \
-    X(P0_cc, f64, C_INPUT)                                      \
-    X(T0_cc, f64, C_OUTPUT)                                     \
-    X(rho0_cc, f64, C_OUTPUT)                                   \
-    X(gamma_tht, f64, C_OUTPUT)                                 \
-    X(Mw_tht, f64, C_OUTPUT)                                    \
+    X(P_atmos, f64, C_INPUT)                                    \
     X(Isp, f64, C_OUTPUT)                                       \
     X(Thrust, f64, C_OUTPUT)                                    \
     X(efficiency, f64, C_OUTPUT)                                \
@@ -69,6 +65,7 @@
     X(out_cp_g, f64*, C_INPUT | C_OUTPUT_DATA)                  \
     X(out_mu_g, f64*, C_INPUT | C_OUTPUT_DATA)                  \
     X(out_Pr_g, f64*, C_INPUT | C_OUTPUT_DATA)                  \
+    X(out_a_g, f64*, C_INPUT | C_OUTPUT_DATA)                   \
     X(out_T_c, f64*, C_INPUT | C_OUTPUT_DATA)                   \
     X(out_P_c, f64*, C_INPUT | C_OUTPUT_DATA)                   \
     X(out_T_gw, f64*, C_INPUT | C_OUTPUT_DATA)                  \

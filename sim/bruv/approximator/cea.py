@@ -130,7 +130,10 @@ def CEA(oxid, fuel):
     def f(P, ofr, AEAT):
         problem.set_pressure(P * 10) # mpa -> bar
         problem.set_o_f(ofr)
-        problem.set_ae_at(AEAT)
+        if AEAT >= 1:
+            problem.set_sup(AEAT)
+        else:
+            problem.set_sub(1 / AEAT)
         cea = problem.run()
         return CEA_Result.from_obj(cea)
 

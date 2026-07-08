@@ -27,7 +27,7 @@ f64 isentropic_sub_M(f64 A_on_Astar, const SpecificHeatRatio* shr);
 f64 isentropic_M(i32 subsonic, f64 A_on_Astar, const SpecificHeatRatio* shr);
 
 void isentropic_shr_M(SpecificHeatRatio* shr, f64* rstr M, i32 subsonic,
-        f64 A_on_Astar, const ceaFit* fit_gamma, f64 seed_gamma);
+        f64 A_on_Astar, f64 P0_cc, f64 ofr, f64 gamma_cc, f64 gamma_tht);
 
 f64 isentropic_A_on_Astar(f64 M, const SpecificHeatRatio* shr);
 
@@ -56,4 +56,5 @@ f64 nusselt_dittus_boelter(f64 Re, f64 Pr, i32 is_heating);
 f64 nusselt_sieder_tate(f64 Re, f64 Pr, f64 mu_bulk, f64 mu_wall);
 
 
-f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma);
+f64 AR_for_temperature(f64 P0_cc, f64 ofr, f64 T);
+f64 P0_cc_for_A_tht(f64 ofr, f64 A_tht, f64 dm_cc);

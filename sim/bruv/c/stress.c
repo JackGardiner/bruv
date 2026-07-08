@@ -11,55 +11,12 @@ void stress_sim(const simState* s, const Contour* cnt,
         const thermalStation* thermal_stns, i32 thermal_N, stressStation* stns,
         i32 N) {
 
-    ceaFit* fit_gamma = &(ceaFit){0};
-    cea_fit_gamma(fit_gamma, s->P0_cc, s->ofr, s->M_exit);
-
     for (i32 i=0; i<N; ++i) {
         f64 z = cnt->z_exit * (i/(f64)(N - 1));
         f64 r = cnt_r(cnt, z);
+        f64 AR = cnt_AR(cnt, z);
 
-        f64 drdz;
-        f64 d2rdz; {
-            // A B C D E
-            //     ^ we r here smile.
-            if (i == 0) {
-                // Forward difference at the start.
-                f64 zD = cnt->z_exit * ((i + 1)/(f64)(N - 1));
-                f64 zE = cnt->z_exit * ((i + 2)/(f64)(N - 1));
-                f64 rD = cnt_r(cnt, zD);
-                f64 rE = cnt_r(cnt, zE);
-                drdz = (rD - r) / (zD - z);
-                d2rdz = (rE - 2.0*rD + r) / (zE - zD) / (zD - z);
-            } else if (i == N - 1) {
-                // Backward difference at the end.
-                f64 zB = cnt->z_exit * ((i - 1)/(f64)(N - 1));
-                f64 zA = cnt->z_exit * ((i - 2)/(f64)(N - 1));
-                f64 rB = cnt_r(cnt, zB);
-                f64 rA = cnt_r(cnt, zA);
-                drdz = (r - rB) / (z - zB);
-                d2rdz = (r - 2.0*rB + rA) / (z - zB) / (zB - zA);
-            } else {
-                // Central difference for the rest.
-                f64 zB = cnt->z_exit * ((i - 1)/(f64)(N - 1));
-                f64 zD = cnt->z_exit * ((i + 1)/(f64)(N - 1));
-                f64 rB = cnt_r(cnt, zB);
-                f64 rD = cnt_r(cnt, zD);
-                drdz = (rD - rB) / (zD - zB);
-                d2rdz = (rD - 2.0*r + rB) / (zD - z) / (z - zB);
-            }
-        }
-        // goated.
-        f64 Rm = r;
-        f64 Rh = (nearzero(d2rdz)) ? INF
-               : cbed(sqrt(1.0 + sqed(drdz))) / abs(d2rdz);
-        (void)Rm;
-        (void)Rh;
-
-        SpecificHeatRatio* shr_g = &(SpecificHeatRatio){0};
-        f64 M_g;
-        isentropic_shr_M(shr_g, &M_g, z < cnt->z_tht, sqed(r/cnt->R_tht),
-                fit_gamma, s->gamma_tht /* good guess */);
-        f64 P_g = s->P0_cc * isentropic_P_on_P0(M_g, shr_g);
+        f64 P_g = cea_P(s->P0_cc, s->ofr, AR);
 
         f64 P_c;
         f64 T_wg;

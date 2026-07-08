@@ -70,15 +70,16 @@ f64 isentropic_M(i32 subsonic, f64 A_on_Astar,
 
 
 void isentropic_shr_M(SpecificHeatRatio* shr, f64* rstr M, i32 subsonic,
-        f64 A_on_Astar, const ceaFit* fit_gamma, f64 seed_gamma) {
+        f64 A_on_Astar, f64 P0_cc, f64 ofr, f64 gamma_cc, f64 gamma_tht) {
     // gamma and mach are dep. on each other, simple fixed-point iteration to
-    // numerically solve. Guess initial seed (throat is a good guess).
-    init_shr(shr, seed_gamma);
+    // numerically solve. gamma at the throat is a good initial guess.
+    init_shr(shr, gamma_tht);
     *M = isentropic_M(subsonic, A_on_Astar, shr);
     for (i32 iter=0; /* true */; ++iter) {
         enum { MAX_ITERS = 100 };
 
-        f64 gamma = cea_sample(fit_gamma, *M);
+        f64 gamma = (*M < 1) ? lerp(gamma_cc, gamma_tht, *M)
+                             : cea_gamma(P0_cc, ofr, A_on_Astar);
         init_shr(shr, gamma);
         f64 new_M = isentropic_M(subsonic, A_on_Astar, shr);
         if (iterstep(M, new_M) < 1e-8)
@@ -135,7 +136,8 @@ f64 friction_factor_haaland(f64 Re, f64 D, f64 eps) {
 f64 friction_factor_colebrook(f64 Re, f64 D, f64 eps) {
     if (eps == 0.0)
         return 1.0/sqed(1.82*LOG10TWO*log2(Re) - 1.64);
-    assert(Re > 2300.0, "non-turbulent flow: Re=%g", Re);
+    // assert(Re > 2300.0, "non-turbulent flow: Re=%g", Re);
+    Re = max(Re, 2300.0);
     f64 ff = friction_factor_haaland(Re, D, eps); // guess.
     for (i32 iter=0; /* true */; ++iter) {
         enum { MAX_ITERS = 1000 };
@@ -163,22 +165,76 @@ f64 nusselt_sieder_tate(f64 Re, f64 Pr, f64 mu_bulk, f64 mu_wall) {
 }
 
 
-f64 mach_for_temperature(f64 T_on_T0, const ceaFit* fit_gamma) {
-    // Find M s.t.:
-    //  T_on_T0 = 1 / (1 + (gamma - 1)/2 * M^2)
-    // However gamma is non-constant. Rearrange for M:
-    //  M = sqrt(2/(gamma - 1) * (1/T_on_T0 - 1))
-    // A classic for fixed point iteration.
-    assert(0.0 <= T_on_T0 && T_on_T0 <= 1.0, "invalid input: T_on_T0=%g",
-            T_on_T0);
-    f64 M = 1.0; // guess.
+f64 AR_for_temperature(f64 P0_cc, f64 ofr, f64 T) {
+    // secant+bisection iteration.
+
+    f64 a = CEA_AR_stag;
+    f64 b = CEA_AR_max;
+    f64 x0 = 1.0;
+    f64 x1 = 1.05;
+    f64 f0 = cea_T(P0_cc, ofr, x0) - T;
+    f64 f1 = cea_T(P0_cc, ofr, x1) - T;
+
     for (i32 iter=0; /* true */; ++iter) {
-        enum { MAX_ITERS = 100 };
-        f64 gamma = cea_sample(fit_gamma, M);
-        f64 new_M = sqrt(2.0 / (gamma - 1.0) * (1.0/T_on_T0 - 1.0));
-        if (iterstep(&M, new_M) < 1e-5)
-            break;
+        enum { MAX_ITERS = 40 };
+
+        f64 x2 = 0.0;
+        if (abs(f1 - f0) > 1e-15)
+            x2 = x1 - f1 * (x1 - x0) / (f1 - f0);
+        if (!within(x2, a, b))
+            x2 = 0.5*(a + b);
+
+        f64 f2 = cea_T(P0_cc, ofr, x2) - T;
+
+        if (f2 > 0.0) a = x2;
+        else          b = x2;
+
+        if (abs(a - b) < 1e-9 || abs(f2) < 1e-7)
+            return x2;
         assert(iter < MAX_ITERS, "failed to converge");
+
+        x0 = x1; f0 = f1;
+        x1 = x2; f1 = f2;
     }
-    return M;
+    assert(0, "unreachable");
+}
+
+static f64 get_A_tht(f64 P0_cc, f64 ofr, f64 dm_cc) {
+    f64 rho_tht = cea_rho(P0_cc, ofr, CEA_AR_tht);
+    f64 a_tht = cea_a(P0_cc, ofr, CEA_AR_tht);
+    return dm_cc / rho_tht / a_tht;
+}
+
+f64 P0_cc_for_A_tht(f64 ofr, f64 A_tht, f64 dm_cc) {
+    // secant+bisection iteration.
+
+    f64 a = 1e6;
+    f64 b = 6e6;
+    f64 x0 = 2.0e6;
+    f64 x1 = 2.1e6;
+    f64 f0 = get_A_tht(x0, ofr, dm_cc) - A_tht;
+    f64 f1 = get_A_tht(x1, ofr, dm_cc) - A_tht;
+
+    for (i32 iter=0; /* true */; ++iter) {
+        enum { MAX_ITERS = 40 };
+
+        f64 x2 = 0.0;
+        if (abs(f1 - f0) > 1e-20)
+            x2 = x1 - f1 * (x1 - x0) / (f1 - f0);
+        if (!within(x2, a, b))
+            x2 = 0.5*(a + b);
+
+        f64 f2 = get_A_tht(x2, ofr, dm_cc) - A_tht;
+
+        if (f2 > 0.0) a = x2;
+        else          b = x2;
+
+        if (abs(a - b) < 1e-4 || abs(f2) < 1e-10)
+            return x2;
+        assert(iter < MAX_ITERS, "failed to converge");
+
+        x0 = x1; f0 = f1;
+        x1 = x2; f1 = f2;
+    }
+    assert(0, "unreachable");
 }
