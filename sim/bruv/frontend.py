@@ -388,6 +388,18 @@ def now_this_is_bruv():
     print(state)
     write_ammendments(state)
 
+    print()
+    print("=== SUMMARY ===")
+    print(f"possible?: {state["possible_system"]}")
+    print(f"thrust: {state["Thrust"]*1e-3:.3f} kN")
+    print(f"isp: {state["Isp"]:.2f} s")
+    print(f"cc P: {state["P0_cc"]*1e-5:.2f} bar")
+    print(f"lox mfr: {state["dm_ox"]:.3f} kg/s")
+    print(f"ipa mfr: {state["dm_fu"] * (1 + state["prop_fc"]):.3f} kg/s")
+    print(f"lox P: {1.2*state["P0_cc"]*1e-5:.2f} bar")
+    print(f"ipa P: {state["P_fu0"]*1e-5:.2f} bar")
+    # print(state["A_tht"]*state["P0_cc"]/(state["dm_ox"]+state["dm_fu"] * (1 + state["prop_fc"])))
+
     get_out = lambda s: state[f"out_{s}"].view(state["out_count"])
     plot_me(state, get_out)
 

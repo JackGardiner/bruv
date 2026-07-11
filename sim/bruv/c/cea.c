@@ -94,130 +94,347 @@ f64 cea_Ivac(f64 P0_cc, f64 ofr, f64 AR) {
     CEA_3DLOOKUP();
 }
 f64 cea_T(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_T.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc T.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+            YLEN = 30,
+            ZLEN = 50, };
+        #include "tbl/cea_sup T.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_T.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_P(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_P.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc P.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup P.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_P.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_rho(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_rho.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc rho.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup rho.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_rho.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_M(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_M.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        return 0.0;
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup M.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_M.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_a(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_a.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc a.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup a.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_a.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_gamma(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_gamma.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc gamma.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup gamma.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_gamma.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_cp(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_cp.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc cp.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup cp.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_cp.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_mu(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_mu.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc mu.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup mu.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_mu.i"
+        CEA_3DLOOKUP();
+    }
 }
 f64 cea_Pr(f64 P0_cc, f64 ofr, f64 AR) {
-    /* evenly-spaced flattened (C-ordered) 3D LUT */
-    const f64 XLO = 1.0;
-    const f64 XHI = 6.0;
-    const f64 YLO = 0.5;
-    const f64 YHI = 3.0;
-    const f64 ZLO = 0.02;
-    const f64 ZHI = 10.0;
-    enum { XLEN = 30,
-           YLEN = 30,
-           ZLEN = 50, };
-    #include "tbl/cea_Pr.i"
-    CEA_3DLOOKUP();
+    if (AR == 0.0) {
+        /* evenly-spaced flattened (C-ordered) 2D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        enum { XLEN = 80,
+               YLEN = 80, };
+        #include "tbl/cea_cc Pr.i"
+        CEA_2DLOOKUP();
+    } else if (AR >= 1.0) {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 1.0;
+        const f64 ZHI = 10.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 50, };
+        #include "tbl/cea_sup Pr.i"
+        CEA_3DLOOKUP();
+    } else {
+        /* evenly-spaced flattened (C-ordered) 3D LUT */
+        const f64 XLO = 1.0;
+        const f64 XHI = 6.0;
+        const f64 YLO = 0.5;
+        const f64 YHI = 3.0;
+        const f64 ZLO = 0.1;
+        const f64 ZHI = 1.0;
+        enum { XLEN = 30,
+               YLEN = 30,
+               ZLEN = 30, };
+        #include "tbl/cea_Pr.i"
+        CEA_3DLOOKUP();
+    }
 }
 
 

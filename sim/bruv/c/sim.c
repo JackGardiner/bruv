@@ -101,7 +101,8 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     /* Combustion */
 
     if (s->fixed_geom) {
-        s->P0_cc = P0_cc_for_A_tht(s->ofr, s->A_tht, s->dm_cc);
+        s->P0_cc = P0_cc_for_A_tht(s->ofr, s->A_tht, s->dm_cc)
+                 * (28.6/35.0); /* HOTFIRE1 correction */
     } else {
         f64 rho_tht = cea_rho(s->P0_cc, s->ofr, CEA_AR_tht);
         f64 a_tht = cea_a(s->P0_cc, s->ofr, CEA_AR_tht);
@@ -151,7 +152,8 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     /* Post-construction tweaks. */
 
     s->efficiency = cos(s->phi_exit) // divergent exhaust.
-                  * 0.9; // estimated viscous+combustion losses.
+                  * 0.9 // estimated viscous+combustion losses.
+                  * (4.4/5.0); /* HOTFIRE0 correction */
     s->Thrust *= s->efficiency;
 
     s->Isp = s->Thrust / STANDARD_GRAVITY

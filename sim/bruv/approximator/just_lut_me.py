@@ -421,15 +421,19 @@ def find_approximation(get_surf, type_name, var_name, size, extra_reqs=()):
 
 SIZE2 = (80, 80)
 SIZE3 = (30, 30, 50)
+SIZE3_SUB = (30, 30, 30)
 
 def cea_approximation2(our_name, cea_name, size=SIZE2, **kwargs):
     f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
     surf = lambda: Evenspace(1.0, 6.0, 0.5, 3.0).setf(f)
     return find_approximation(surf, "CEA", our_name, size, **kwargs)
 
-def cea_approximation3(our_name, cea_name, size=SIZE3, inc_sub=True, **kwargs):
+def cea_approximation3(our_name, cea_name, size=SIZE3, only="sup", **kwargs):
     f = lambda P, ofr, AEAT: CEA[cea_name](P, ofr, AEAT)
-    surf = lambda: Evenspace(1.0, 6.0, 0.5, 3.0, 0.02 if inc_sub else 1.0, 10.0).setf(f)
+    surf = lambda: Evenspace(1.0, 6.0, 0.5, 3.0,
+            0.1 if only=="sub" else 1.0,
+            1.0 if only=="sub" else 10.0,
+        ).setf(f)
     return find_approximation(surf, "CEA", our_name, size, **kwargs)
 
 find_cea_perfexp_AEAT = find_approximation(
@@ -439,16 +443,36 @@ find_cea_perfexp_AEAT = find_approximation(
         SIZE2
     )
 
-find_cea_Ivac = cea_approximation3("Ivac", "ivac", inc_sub=False)
-find_cea_T = cea_approximation3("T", "t")
-find_cea_P = cea_approximation3("P", "p")
-find_cea_rho = cea_approximation3("rho", "rho")
-find_cea_M = cea_approximation3("M", "mach")
-find_cea_a = cea_approximation3("a", "son")
-find_cea_gamma = cea_approximation3("gamma", "gamma")
-find_cea_cp = cea_approximation3("cp", "cp")
-find_cea_mu = cea_approximation3("mu", "visc")
-find_cea_Pr = cea_approximation3("Pr", "pran")
+find_cea_Ivac = cea_approximation3("Ivac", "ivac", only="sup")
+
+find_cea_T = cea_approximation3("sup T", "t", only="sup")
+find_cea_P = cea_approximation3("sup P", "p", only="sup")
+find_cea_rho = cea_approximation3("sup rho", "rho", only="sup")
+find_cea_M = cea_approximation3("sup M", "mach", only="sup")
+find_cea_a = cea_approximation3("sup a", "son", only="sup")
+find_cea_gamma = cea_approximation3("sup gamma", "gamma", only="sup")
+find_cea_cp = cea_approximation3("sup cp", "cp", only="sup")
+find_cea_mu = cea_approximation3("sup mu", "visc", only="sup")
+find_cea_Pr = cea_approximation3("sup Pr", "pran", only="sup")
+
+find_cea_sub_T = cea_approximation3("T", "t", SIZE3_SUB, only="sub")
+find_cea_sub_P = cea_approximation3("P", "p", SIZE3_SUB, only="sub")
+find_cea_sub_rho = cea_approximation3("rho", "rho", SIZE3_SUB, only="sub")
+find_cea_sub_M = cea_approximation3("M", "mach", SIZE3_SUB, only="sub")
+find_cea_sub_a = cea_approximation3("a", "son", SIZE3_SUB, only="sub")
+find_cea_sub_gamma = cea_approximation3("gamma", "gamma", SIZE3_SUB, only="sub")
+find_cea_sub_cp = cea_approximation3("cp", "cp", SIZE3_SUB, only="sub")
+find_cea_sub_mu = cea_approximation3("mu", "visc", SIZE3_SUB, only="sub")
+find_cea_sub_Pr = cea_approximation3("Pr", "pran", SIZE3_SUB, only="sub")
+
+find_cea_cc_T = cea_approximation2("cc T", "c_t")
+find_cea_cc_P = cea_approximation2("cc P", "c_p")
+find_cea_cc_rho = cea_approximation2("cc rho", "c_rho")
+find_cea_cc_a = cea_approximation2("cc a", "c_son")
+find_cea_cc_gamma = cea_approximation2("cc gamma", "c_gamma")
+find_cea_cc_cp = cea_approximation2("cc cp", "c_cp")
+find_cea_cc_mu = cea_approximation2("cc mu", "c_visc")
+find_cea_cc_Pr = cea_approximation2("cc Pr", "c_pran")
 
 
 
@@ -490,17 +514,38 @@ def _run():
     # with timer("T", count=prod(SIZE3)):
     #     find_cea_T(what="approximate")
 
-    find_cea_perfexp_AEAT(what="approximate")
-    find_cea_Ivac(what="approximate")
-    find_cea_T(what="approximate")
-    find_cea_P(what="approximate")
-    find_cea_rho(what="approximate")
-    find_cea_M(what="approximate")
-    find_cea_a(what="approximate")
-    find_cea_gamma(what="approximate")
-    find_cea_cp(what="approximate")
-    find_cea_mu(what="approximate")
-    find_cea_Pr(what="approximate")
+    # find_cea_perfexp_AEAT(what="approximate")
+
+    # find_cea_Ivac(what="approximate")
+
+    # find_cea_T(what="approximate")
+    # find_cea_P(what="approximate")
+    # find_cea_rho(what="approximate")
+    # find_cea_M(what="approximate")
+    # find_cea_a(what="approximate")
+    # find_cea_gamma(what="approximate")
+    # find_cea_cp(what="approximate")
+    # find_cea_mu(what="approximate")
+    # find_cea_Pr(what="approximate")
+
+    find_cea_sub_T(what="approximate")
+    find_cea_sub_P(what="approximate")
+    find_cea_sub_rho(what="approximate")
+    find_cea_sub_M(what="approximate")
+    find_cea_sub_a(what="approximate")
+    find_cea_sub_gamma(what="approximate")
+    find_cea_sub_cp(what="approximate")
+    find_cea_sub_mu(what="approximate")
+    find_cea_sub_Pr(what="approximate")
+
+    # find_cea_cc_T(what="approximate")
+    # find_cea_cc_P(what="approximate")
+    # find_cea_cc_rho(what="approximate")
+    # find_cea_cc_a(what="approximate")
+    # find_cea_cc_gamma(what="approximate")
+    # find_cea_cc_cp(what="approximate")
+    # find_cea_cc_mu(what="approximate")
+    # find_cea_cc_Pr(what="approximate")
 
 
 

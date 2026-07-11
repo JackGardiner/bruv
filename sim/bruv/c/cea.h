@@ -3,8 +3,9 @@
 
 // NASA-CEA approximations.
 
-#define CEA_AR_stag (0.02)
+#define CEA_AR_stag (0.0)
 #define CEA_AR_tht (1.0)
+#define CEA_AR_min (0.02)
 #define CEA_AR_max (10.0)
 
 f64 cea_perfexp_AEAT(f64 P0_cc, f64 ofr);

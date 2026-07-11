@@ -47,9 +47,11 @@
     X(dm_ox, f64, C_OUTPUT)                                     \
     X(dm_fu, f64, C_OUTPUT)                                     \
     X(P_atmos, f64, C_INPUT)                                    \
-    X(Isp, f64, C_OUTPUT)                                       \
     X(Thrust, f64, C_OUTPUT)                                    \
-    X(efficiency, f64, C_OUTPUT)                                \
+    X(Isp, f64, C_OUTPUT)                                       \
+    X(Cstar, f64, C_OUTPUT)                                     \
+    X(Cf, f64, C_OUTPUT)                                        \
+    X(etaIsp, f64, C_OUTPUT)                                    \
                                                                 \
     X(min_SF, f64, C_OUTPUT)                                    \
     X(possible_system, i64, C_OUTPUT)                           \
