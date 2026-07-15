@@ -23,8 +23,6 @@ def get_interpretation():
     IN = interp.INPUT
     OUT = interp.OUTPUT
 
-    interp.append("fixed_geom", interp.I64, IN)
-
     interp.append("Lstar", interp.F64, IN)
     interp.append("R_cc", interp.F64, IN)
     interp.append("L_cc", interp.F64, OUT)
@@ -58,15 +56,19 @@ def get_interpretation():
     interp.append("T_fu1", interp.F64, OUT)
     interp.append("P_fu1", interp.F64, OUT)
 
+    interp.append("fixed_geom", interp.I64, IN)
     interp.append("P0_cc", interp.F64, IN | OUT)
     interp.append("ofr", interp.F64, IN | OUT)
     interp.append("dm_cc", interp.F64, IN | OUT)
     interp.append("dm_ox", interp.F64, OUT)
     interp.append("dm_fu", interp.F64, OUT)
     interp.append("P_atmos", interp.F64, IN)
-    interp.append("Isp", interp.F64, OUT)
+    interp.append("etaCstar", interp.F64, IN)
+    interp.append("etaCf", interp.F64, IN)
     interp.append("Thrust", interp.F64, OUT)
-    interp.append("efficiency", interp.F64, OUT)
+    interp.append("Cstar", interp.F64, OUT)
+    interp.append("Cf", interp.F64, OUT)
+    interp.append("Isp", interp.F64, OUT)
 
     interp.append("min_SF", interp.F64, OUT)
     interp.append("possible_system", interp.I64, OUT)
@@ -140,7 +142,7 @@ def get_state(interp):
     state["NLF"] = config["chamber"]["NLF"]
     state["phi_conv"] = config["chamber"]["phi_conv"]
 
-    state["prop_fc"] = 0.15
+    state["prop_fc"] = 1 - 1/1.15
     state["helix_angle"] = math.radians(30)
     state["th_pdms"] = 30e-6
     state["k_pdms"] = 1.3
@@ -161,9 +163,11 @@ def get_state(interp):
     state["P0_cc"] = float("nan")
     state["A_tht"] = 0.001060237982126994
     state["AEAT"] = 5.461837207867982
-    state["ofr"] = 1.4
-    state["dm_cc"] = 2.152551267131888
+    state["ofr"] = 1.259 / (0.897 * 1.15)
+    state["dm_cc"] = 1.259 + (0.897 * 1.15)
     state["P_atmos"] = config["operating_conditions"]["P_exit"]
+    state["etaCstar"] = 0.825
+    state["etaCf"] = 0.92
 
     state["out_count"] = 1000
     new_out = lambda: np.empty(shape=(state["out_count"],), dtype=np.float64)
@@ -395,10 +399,9 @@ def now_this_is_bruv():
     print(f"isp: {state["Isp"]:.2f} s")
     print(f"cc P: {state["P0_cc"]*1e-5:.2f} bar")
     print(f"lox mfr: {state["dm_ox"]:.3f} kg/s")
-    print(f"ipa mfr: {state["dm_fu"] * (1 + state["prop_fc"]):.3f} kg/s")
+    print(f"ipa mfr: {state["dm_fu"]:.3f} kg/s")
     print(f"lox P: {1.2*state["P0_cc"]*1e-5:.2f} bar")
     print(f"ipa P: {state["P_fu0"]*1e-5:.2f} bar")
-    # print(state["A_tht"]*state["P0_cc"]/(state["dm_ox"]+state["dm_fu"] * (1 + state["prop_fc"])))
 
     get_out = lambda s: state[f"out_{s}"].view(state["out_count"])
     plot_me(state, get_out)

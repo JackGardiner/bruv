@@ -96,26 +96,36 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     assert(nearto(s->P_atmos, 101325.0), "invalid input: exit pressure must be "
             "sea-level atmospheric, got %g", s->P_atmos);
 
-    // TODO: A_tht/AEAT/P0_cc validation
+    // TODO: A_tht/AEAT/P0_cc/etaCstar/etaCf validation
 
-    /* Combustion */
-
-    if (s->fixed_geom) {
-        s->P0_cc = P0_cc_for_A_tht(s->ofr, s->A_tht, s->dm_cc)
-                 * (28.6/35.0); /* HOTFIRE1 correction */
-    } else {
-        f64 rho_tht = cea_rho(s->P0_cc, s->ofr, CEA_AR_tht);
-        f64 a_tht = cea_a(s->P0_cc, s->ofr, CEA_AR_tht);
-        s->A_tht = s->dm_cc / rho_tht / a_tht;
-        s->AEAT = cea_perfexp_AEAT(s->P0_cc, s->ofr);
-    }
 
     s->dm_fu = s->dm_cc / (s->ofr + 1.0);
     s->dm_ox = s->dm_cc - s->dm_fu;
 
+
+    /* Combustion */
+
+    if (s->fixed_geom) {
+        s->P0_cc = P0_cc_for_A_tht(s->ofr, s->A_tht, s->dm_cc);
+        s->P0_cc *= s->etaCstar;
+    } else {
+        f64 rho_tht = cea_rho(s->P0_cc, s->ofr, CEA_AR_tht);
+        f64 a_tht = cea_a(s->P0_cc, s->ofr, CEA_AR_tht);
+        s->A_tht = s->dm_cc / rho_tht / a_tht;
+        s->A_tht *= s->etaCstar;
+        s->AEAT = cea_perfexp_AEAT(s->P0_cc, s->ofr);
+    }
+
+    // Calculate thrust.
     f64 Ivac = cea_Ivac(s->P0_cc, s->ofr, s->AEAT);
+    Ivac *= s->etaCstar * s->etaCf;
     s->Thrust = Ivac * s->dm_cc * STANDARD_GRAVITY
               - s->P_atmos * s->A_tht * s->AEAT;
+
+    // Characteristics.
+    s->Cstar = s->P0_cc * s->A_tht / s->dm_cc;
+    s->Cf = s->Thrust / s->A_tht / s->P0_cc;
+    s->Isp = s->Thrust / s->dm_cc / STANDARD_GRAVITY;
 
 
     /* Geometry */
@@ -147,17 +157,6 @@ static void sim_ulate(simState* rstr s, i32 full_output) {
     s->wi_web = cnt_wi_web(cnt, cnt->z_tht);
     s->wi_chnl = cnt_wi_chnl(cnt, cnt->z_tht);
     s->psi_chnl = cnt_psi_chnl(cnt, cnt->z_tht);
-
-
-    /* Post-construction tweaks. */
-
-    s->efficiency = cos(s->phi_exit) // divergent exhaust.
-                  * 0.9 // estimated viscous+combustion losses.
-                  * (4.4/5.0); /* HOTFIRE0 correction */
-    s->Thrust *= s->efficiency;
-
-    s->Isp = s->Thrust / STANDARD_GRAVITY
-           / (s->dm_ox + (1.0 + s->prop_fc)*s->dm_fu);
 
 
 

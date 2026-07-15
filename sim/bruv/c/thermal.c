@@ -82,7 +82,7 @@ i32 thermal_sim(const simState* s, const Contour* cnt, thermalStation* stns,
         assert(cp_c > 0.0, "nonphysical property, cp_c: %g", cp_c);
         assert(mu_c > 0.0, "nonphysical property, mu_c: %g", mu_c);
         assert(k_c > 0.0, "nonphysical property, k_c: %g", k_c);
-        f64 dm_c = s->dm_fu * (1.0 + s->prop_fc);
+        f64 dm_c = s->dm_fu;
         f64 G_c = dm_c/A_c;
         f64 vel_c = G_c/rho_c;
         f64 Re_c = G_c*HD_c/mu_c;
