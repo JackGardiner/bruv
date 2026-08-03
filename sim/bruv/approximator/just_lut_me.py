@@ -198,12 +198,6 @@ class JustGimmeATable:
             lines.append(f"    /* also requires: */")
             for x in extra_reqs:
                 lines.append(f"    /*   {x} */")
-        lines.append(f"    const f64 XLO = {xlo};")
-        lines.append(f"    const f64 XHI = {xhi};")
-        lines.append(f"    const f64 YLO = {ylo};")
-        lines.append(f"    const f64 YHI = {yhi};")
-        lines.append(f"    enum {{ XLEN = {rows},")
-        lines.append(f"           YLEN = {cols}, }};")
         lines.append(f"    #include \"tbl/{self.name}.i\"")
         lines.append(f"")
 
@@ -211,7 +205,13 @@ class JustGimmeATable:
 
         # now write the table tile.
         lines = [
-            f"/* LUT for {self.name} */"
+            f"/* LUT for {self.name} */",
+            f"const f64 XLO = {xlo};",
+            f"const f64 XHI = {xhi};",
+            f"const f64 YLO = {ylo};",
+            f"const f64 YHI = {yhi};",
+            f"enum {{ XLEN = {rows},",
+            f"       YLEN = {cols}, }};",
         ]
         lines.append(f"static const f32 tbl[{rows * cols}] = {{")
 
@@ -349,15 +349,6 @@ class JustGimmeATable3D:
             lines.append(f"    /* also requires: */")
             for x in extra_reqs:
                 lines.append(f"    /*   {x} */")
-        lines.append(f"    const f64 XLO = {xlo};")
-        lines.append(f"    const f64 XHI = {xhi};")
-        lines.append(f"    const f64 YLO = {ylo};")
-        lines.append(f"    const f64 YHI = {yhi};")
-        lines.append(f"    const f64 ZLO = {zlo};")
-        lines.append(f"    const f64 ZHI = {zhi};")
-        lines.append(f"    enum {{ XLEN = {self.shape[0]},")
-        lines.append(f"           YLEN = {self.shape[1]},")
-        lines.append(f"           ZLEN = {self.shape[2]}, }};")
         lines.append(f"    #include \"tbl/{self.name}.i\"")
         lines.append(f"")
 
@@ -365,7 +356,16 @@ class JustGimmeATable3D:
 
         # now write the table tile.
         lines = [
-            f"/* LUT for {self.name} */"
+            f"/* LUT for {self.name} */",
+            f"const f64 XLO = {xlo};",
+            f"const f64 XHI = {xhi};",
+            f"const f64 YLO = {ylo};",
+            f"const f64 YHI = {yhi};",
+            f"const f64 ZLO = {zlo};",
+            f"const f64 ZHI = {zhi};",
+            f"enum {{ XLEN = {self.shape[0]},",
+            f"       YLEN = {self.shape[1]},",
+            f"       ZLEN = {self.shape[2]}, }};",
         ]
         lines.append(f"static const f32 tbl[{self.shape[0]*self.shape[1]*self.shape[2]}] = {{")
 
@@ -419,16 +419,17 @@ def find_approximation(get_surf, type_name, var_name, size, extra_reqs=()):
 
 
 
-SIZE2 = (80, 80)
-SIZE3 = (30, 30, 50)
-SIZE3_SUB = (30, 30, 30)
+SIZE2 = (100, 100)
+SIZE3_SUP = (60, 60, 100)
+SIZE3_SUB = (60, 60, 100)
 
-def cea_approximation2(our_name, cea_name, size=SIZE2, **kwargs):
-    f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
+def cea_approximation2(our_name, cea_name, size=SIZE2, f=None, **kwargs):
+    if f is None:
+        f = lambda P, ofr: CEA[cea_name](P, ofr, 1.0)
     surf = lambda: Evenspace(1.0, 6.0, 0.5, 3.0).setf(f)
     return find_approximation(surf, "CEA", our_name, size, **kwargs)
 
-def cea_approximation3(our_name, cea_name, size=SIZE3, only="sup", **kwargs):
+def cea_approximation3(our_name, cea_name, size=SIZE3_SUP, only="sup", **kwargs):
     f = lambda P, ofr, AEAT: CEA[cea_name](P, ofr, AEAT)
     surf = lambda: Evenspace(1.0, 6.0, 0.5, 3.0,
             0.1 if only=="sub" else 1.0,
@@ -436,43 +437,39 @@ def cea_approximation3(our_name, cea_name, size=SIZE3, only="sup", **kwargs):
         ).setf(f)
     return find_approximation(surf, "CEA", our_name, size, **kwargs)
 
-find_cea_perfexp_AEAT = find_approximation(
-        lambda: Evenspace(1.0, 6.0, 0.5, 3.0).setf(AEAT_perfexp),
-        "CEA",
-        "perfexp_AEAT",
-        SIZE2
-    )
+find_cea_perfexp_AEAT = cea_approximation2("perfexp_AEAT", "perfexp_AEAT",
+        f=AEAT_perfexp)
 
 find_cea_Ivac = cea_approximation3("Ivac", "ivac", only="sup")
 
-find_cea_T = cea_approximation3("sup T", "t", only="sup")
-find_cea_P = cea_approximation3("sup P", "p", only="sup")
-find_cea_rho = cea_approximation3("sup rho", "rho", only="sup")
-find_cea_M = cea_approximation3("sup M", "mach", only="sup")
-find_cea_a = cea_approximation3("sup a", "son", only="sup")
-find_cea_gamma = cea_approximation3("sup gamma", "gamma", only="sup")
-find_cea_cp = cea_approximation3("sup cp", "cp", only="sup")
-find_cea_mu = cea_approximation3("sup mu", "visc", only="sup")
-find_cea_Pr = cea_approximation3("sup Pr", "pran", only="sup")
+find_cea_sup_T = cea_approximation3("sup_T", "t", SIZE3_SUP, only="sup")
+find_cea_sup_P = cea_approximation3("sup_P", "p", SIZE3_SUP, only="sup")
+find_cea_sup_rho = cea_approximation3("sup_rho", "rho", SIZE3_SUP, only="sup")
+find_cea_sup_M = cea_approximation3("sup_M", "mach", SIZE3_SUP, only="sup")
+find_cea_sup_a = cea_approximation3("sup_a", "son", SIZE3_SUP, only="sup")
+find_cea_sup_gamma = cea_approximation3("sup_gamma", "gamma", SIZE3_SUP, only="sup")
+find_cea_sup_cp = cea_approximation3("sup_cp", "cp", SIZE3_SUP, only="sup")
+find_cea_sup_mu = cea_approximation3("sup_mu", "visc", SIZE3_SUP, only="sup")
+find_cea_sup_Pr = cea_approximation3("sup_Pr", "pran", SIZE3_SUP, only="sup")
 
-find_cea_sub_T = cea_approximation3("T", "t", SIZE3_SUB, only="sub")
-find_cea_sub_P = cea_approximation3("P", "p", SIZE3_SUB, only="sub")
-find_cea_sub_rho = cea_approximation3("rho", "rho", SIZE3_SUB, only="sub")
-find_cea_sub_M = cea_approximation3("M", "mach", SIZE3_SUB, only="sub")
-find_cea_sub_a = cea_approximation3("a", "son", SIZE3_SUB, only="sub")
-find_cea_sub_gamma = cea_approximation3("gamma", "gamma", SIZE3_SUB, only="sub")
-find_cea_sub_cp = cea_approximation3("cp", "cp", SIZE3_SUB, only="sub")
-find_cea_sub_mu = cea_approximation3("mu", "visc", SIZE3_SUB, only="sub")
-find_cea_sub_Pr = cea_approximation3("Pr", "pran", SIZE3_SUB, only="sub")
+find_cea_sub_T = cea_approximation3("sub_T", "t", SIZE3_SUB, only="sub")
+find_cea_sub_P = cea_approximation3("sub_P", "p", SIZE3_SUB, only="sub")
+find_cea_sub_rho = cea_approximation3("sub_rho", "rho", SIZE3_SUB, only="sub")
+find_cea_sub_M = cea_approximation3("sub_M", "mach", SIZE3_SUB, only="sub")
+find_cea_sub_a = cea_approximation3("sub_a", "son", SIZE3_SUB, only="sub")
+find_cea_sub_gamma = cea_approximation3("sub_gamma", "gamma", SIZE3_SUB, only="sub")
+find_cea_sub_cp = cea_approximation3("sub_cp", "cp", SIZE3_SUB, only="sub")
+find_cea_sub_mu = cea_approximation3("sub_mu", "visc", SIZE3_SUB, only="sub")
+find_cea_sub_Pr = cea_approximation3("sub_Pr", "pran", SIZE3_SUB, only="sub")
 
-find_cea_cc_T = cea_approximation2("cc T", "c_t")
-find_cea_cc_P = cea_approximation2("cc P", "c_p")
-find_cea_cc_rho = cea_approximation2("cc rho", "c_rho")
-find_cea_cc_a = cea_approximation2("cc a", "c_son")
-find_cea_cc_gamma = cea_approximation2("cc gamma", "c_gamma")
-find_cea_cc_cp = cea_approximation2("cc cp", "c_cp")
-find_cea_cc_mu = cea_approximation2("cc mu", "c_visc")
-find_cea_cc_Pr = cea_approximation2("cc Pr", "c_pran")
+find_cea_cc_T = cea_approximation2("cc_T", "c_t")
+find_cea_cc_P = cea_approximation2("cc_P", "c_p")
+find_cea_cc_rho = cea_approximation2("cc_rho", "c_rho")
+find_cea_cc_a = cea_approximation2("cc_a", "c_son")
+find_cea_cc_gamma = cea_approximation2("cc_gamma", "c_gamma")
+find_cea_cc_cp = cea_approximation2("cc_cp", "c_cp")
+find_cea_cc_mu = cea_approximation2("cc_mu", "c_visc")
+find_cea_cc_Pr = cea_approximation2("cc_Pr", "c_pran")
 
 
 
@@ -509,43 +506,47 @@ def _run():
 
     # with timer("AEAT", count=prod(SIZE2)):
     #     find_cea_perfexp_AEAT(what="approximate")
-    # with timer("Ivac", count=prod(SIZE3)):
+    # with timer("Ivac", count=prod(SIZE3_SUP)):
     #     find_cea_Ivac(what="approximate")
-    # with timer("T", count=prod(SIZE3)):
+    # with timer("T", count=prod(SIZE3_SUP)):
     #     find_cea_T(what="approximate")
 
-    # find_cea_perfexp_AEAT(what="approximate")
+    with timer("AEAT"):
+        find_cea_perfexp_AEAT(what="approximate")
 
-    # find_cea_Ivac(what="approximate")
+    with timer("SUPER"):
+        find_cea_Ivac(what="approximate")
 
-    # find_cea_T(what="approximate")
-    # find_cea_P(what="approximate")
-    # find_cea_rho(what="approximate")
-    # find_cea_M(what="approximate")
-    # find_cea_a(what="approximate")
-    # find_cea_gamma(what="approximate")
-    # find_cea_cp(what="approximate")
-    # find_cea_mu(what="approximate")
-    # find_cea_Pr(what="approximate")
+        find_cea_sup_T(what="approximate")
+        find_cea_sup_P(what="approximate")
+        find_cea_sup_rho(what="approximate")
+        find_cea_sup_M(what="approximate")
+        find_cea_sup_a(what="approximate")
+        find_cea_sup_gamma(what="approximate")
+        find_cea_sup_cp(what="approximate")
+        find_cea_sup_mu(what="approximate")
+        find_cea_sup_Pr(what="approximate")
 
-    find_cea_sub_T(what="approximate")
-    find_cea_sub_P(what="approximate")
-    find_cea_sub_rho(what="approximate")
-    find_cea_sub_M(what="approximate")
-    find_cea_sub_a(what="approximate")
-    find_cea_sub_gamma(what="approximate")
-    find_cea_sub_cp(what="approximate")
-    find_cea_sub_mu(what="approximate")
-    find_cea_sub_Pr(what="approximate")
+    with timer("SUB"):
+        find_cea_sub_T(what="approximate")
+        find_cea_sub_P(what="approximate")
+        find_cea_sub_rho(what="approximate")
+        find_cea_sub_M(what="approximate")
+        find_cea_sub_a(what="approximate")
+        find_cea_sub_gamma(what="approximate")
+        find_cea_sub_cp(what="approximate")
+        find_cea_sub_mu(what="approximate")
+        find_cea_sub_Pr(what="approximate")
 
-    # find_cea_cc_T(what="approximate")
-    # find_cea_cc_P(what="approximate")
-    # find_cea_cc_rho(what="approximate")
-    # find_cea_cc_a(what="approximate")
-    # find_cea_cc_gamma(what="approximate")
-    # find_cea_cc_cp(what="approximate")
-    # find_cea_cc_mu(what="approximate")
-    # find_cea_cc_Pr(what="approximate")
+    with timer("CC"):
+        find_cea_cc_T(what="approximate")
+        find_cea_cc_P(what="approximate")
+        find_cea_cc_rho(what="approximate")
+        find_cea_cc_a(what="approximate")
+        find_cea_cc_gamma(what="approximate")
+        find_cea_cc_cp(what="approximate")
+        find_cea_cc_mu(what="approximate")
+        find_cea_cc_Pr(what="approximate")
 
 
 
