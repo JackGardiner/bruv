@@ -1046,8 +1046,9 @@ public class Chamber : TPIAP.Pea {
                 only_this_vertex: true);
 
         // Place the inlet s.t. its top point coincides with c.
-        float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
-        inlet = c + normalise(b - c)*Dell;
+        // float Dell = new Flats(tap_inlet, th_inlet).r - th_omani;
+        // inlet = c + normalise(b - c)*Dell;
+        inlet = c - 5*uY2;
     }
 
     protected void points_mani(float theta, out List<Vec2> neg,
@@ -1470,7 +1471,7 @@ public class Chamber : TPIAP.Pea {
             if (unimelb)
                 img.fix_unimelb_lmao();
 
-            float th = 0.5f;
+            float th = 1f;
             float inset = 1f;
             float th0 = th_iw[z0] + th_chnl[z0] + th_ow;
             float th1 = th_iw[z1] + th_chnl[z1] + th_ow;
@@ -1492,14 +1493,14 @@ public class Chamber : TPIAP.Pea {
             keys.Add(Geez.voxels(vox));
         }
 
-        add(fromroot("assets/jbs_pirate.tga"), invert: true, flipy: true,
-                rot: ImageSignedDist.CCW,
-                z0: cnt_wid_z2, z1: cnt_wid_z3 - 3f, theta0: PI_2 + PI/8f
-                        - 0.43f*PI/16f);
-        add(fromroot("assets/cherry.tga"), invert: true, flipy: true,
-                rot: ImageSignedDist.CCW,
-                z0: cnt_wid_z2, z1: cnt_wid_z3 - 3f, theta0: PI_2 + PI/8f
-                        + 0.78f*PI/16f);
+        // add(fromroot("assets/jbs_pirate.tga"), invert: true, flipy: true,
+        //         rot: ImageSignedDist.CCW,
+        //         z0: cnt_wid_z2, z1: cnt_wid_z3 - 3f, theta0: PI_2 + PI/8f
+        //                 - 0.43f*PI/16f);
+        // add(fromroot("assets/cherry.tga"), invert: true, flipy: true,
+        //         rot: ImageSignedDist.CCW,
+        //         z0: cnt_wid_z2, z1: cnt_wid_z3 - 3f, theta0: PI_2 + PI/8f
+        //                 + 0.78f*PI/16f);
 
         add(fromroot("assets/slinky.tga"), invert: true, flipx: true,
                 z0: cnt_z1 - 58f, z1: cnt_z1 - 9f, extra: 0.1f,
@@ -1799,11 +1800,72 @@ public class Chamber : TPIAP.Pea {
     }
 
 
+    public void dualmat(ref Voxels part, bool copper) {
+        float th_cu = 0.7f * 2;
+        Voxels scissors = voxels_cnt_filled(
+            (z) => th_iw[z] + th_chnl[z] + th_cu,
+            widened: true,
+            extra: true
+        );
+        if (copper)
+            part.BoolIntersect(scissors);
+        else
+            part.BoolSubtract(scissors);
+    }
+
+    public Geez.Key dualmat_looksie(in Voxels copper, in Voxels steel) {
+        Geez.Key key_copper = Geez.voxels(copper);
+        Geez.Key key_steel;
+        // using (Geez.like(sectioner: Sectioner.pie(0f, PI)))
+            key_steel = Geez.voxels(steel, new("#808080"));
+        return Geez.group(key_copper, key_steel);
+    }
+
     public Voxels? cutaway(in Voxels part) {
 
         // something to look at.
         Geez.Cycle key_part = new();
         key_part <<= Geez.voxels(part);
+
+        Voxels copper = part;
+        Voxels steel = part.voxDuplicate();
+        dualmat(ref copper, true);
+        dualmat(ref steel, false);
+        TPIAP.save_voxels("cc-copper", copper);
+        TPIAP.save_voxels("cc-steel", steel);
+
+        key_part <<= dualmat_looksie(copper, steel);
+
+        Voxels inner = copper & voxels_cnt_filled(
+            (z) => th_iw[z] + th_chnl[z] - 0.1f*VOXEL_SIZE,
+            widened: true,
+            extra: true
+        );
+
+        // float theta = 0f;
+        // Ball cut_copper = new Ball(fromcyl(50f, theta, 290f), new Vec3(110f, 110f, 350f)/2f);
+        // Geez.bar(new Bar(new(fromcyl(50f, theta, 290f)), 110f, 110f, 350f).at_base());
+        // Ball cut_steel  = new Ball(fromcyl(50f, theta, 290f), new Vec3(120f, 120f, 360f)/2f);
+
+        // float theta = 0f;
+        // Ball cut_inner  = new(fromcyl(60f, theta, 275f), new Vec3(110f, 110f, 300f)/2f);
+        // Ball cut_copper = new(fromcyl(60f, theta, 275f), new Vec3(130f, 130f, 320f)/2f);
+        // Ball cut_steel  = new(fromcyl(60f, theta, 275f), new Vec3(140f, 140f, 327f)/2f);
+
+        float theta = -PI_2;
+        Ball cut_inner  = new(fromcyl(60f, theta, 275f), new Vec3(110f, 110f, 300f)/2f);
+        Ball cut_copper = new(fromcyl(60f, theta, 295f), new Vec3(130f, 130f, 420f)/2f);
+        Ball cut_steel  = new(fromcyl(60f, theta, 295f), new Vec3(140f, 140f, 430f)/2f);
+
+        inner.BoolSubtract(cut_inner);
+        copper.BoolSubtract(cut_copper);
+        steel.BoolSubtract(cut_steel);
+        copper.BoolAdd(inner);
+        TPIAP.save_voxels("cc-copper-cutaway", copper);
+        TPIAP.save_voxels("cc-steel-cutaway", steel);
+        key_part <<= dualmat_looksie(copper, steel);
+
+        return null;
 
         Voxels scissors = part.voxDuplicate();
         scissors.BoolSubtract(voxels_cnt_filled(
@@ -1953,6 +2015,11 @@ public class Chamber : TPIAP.Pea {
 
 
     public void anything() {
+        Ball b = new(ZERO3, new Vec3(1f, 2f, 3f)/2f);
+        Geez.voxels(b);
+        Geez.bar(new Bar(new(), 1f, 2f, 3f).at_base());
+        return;
+
         Voxels v = new();
         for (float x=0f; x<5.01f; x += 1f)
         for (float y=0f; y<5.01f; y += 1f)

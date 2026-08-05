@@ -327,11 +327,15 @@ public class Sectioner {
 public class Ball : ShellableShape<Ball> {
     public override Frame centre { get; } // rotation irrevelant.
     public override BBox3 bounds { get; }
-    public float inner_r { get; } // >0, or =-inf
-    public float outer_r { get; } // >0
+    public Vec3 inner_r { get; } // >0, or =-inf
+    public Vec3 outer_r { get; } // >0
 
     public Vec3 pos => centre.pos;
-    public float r { get { assert(isfilled); return outer_r; } }
+    public float r { get {
+        assert(isfilled);
+        assert(outer_r.X == outer_r.Y && outer_r.X == outer_r.Z);
+        return outer_r.X;
+    } }
 
     public Ball(float outer_r)
         : this(-INF, outer_r) {}
@@ -343,12 +347,21 @@ public class Ball : ShellableShape<Ball> {
         : this(centre, -INF, outer_r) {}
     public Ball(in Vec3 centre, float inner_r, float outer_r)
         : this(new Frame(centre), inner_r, outer_r) {}
-    public Ball(in Frame centre, float inner_r, float outer_r) {
-        assert(isgood(inner_r) || inner_r == -INF, $"inner_r={inner_r}");
+    public Ball(in Frame centre, float inner_r, float outer_r)
+        : this(centre, ONE3*inner_r, ONE3*outer_r) {}
+    public Ball(in Vec3 centre, Vec3 outer_r)
+        : this(new Frame(centre), outer_r) {}
+    public Ball(in Frame centre, Vec3 outer_r)
+        : this(centre, -INF3, ONE3*outer_r) {}
+    public Ball(in Frame centre, Vec3 inner_r, Vec3 outer_r) {
+        assert(isgood(inner_r) || inner_r == -INF3, $"inner_r={inner_r}");
         assert(isgood(outer_r), $"outer_r={outer_r}");
-        assert(inner_r > 0f || inner_r == -INF, $"inner_r={inner_r}");
-        assert(outer_r > 0f, $"outer_r={outer_r}");
-        assert(outer_r > inner_r, $"inner_r={inner_r}, outer_r={outer_r}");
+        assert((inner_r.X > 0f && inner_r.Y > 0f && inner_r.Z > 0f)
+                || inner_r == -INF3, $"inner_r={inner_r}");
+        assert(outer_r.X > 0f && outer_r.Y > 0f && outer_r.Z > 0f,
+                $"outer_r={outer_r}");
+        assert(outer_r.X > inner_r.X && outer_r.Y > inner_r.Y &&
+                outer_r.Z > inner_r.Z, $"inner_r={inner_r}, outer_r={outer_r}");
         this.centre = centre;
         this.inner_r = inner_r;
         this.outer_r = outer_r;
@@ -356,25 +369,131 @@ public class Ball : ShellableShape<Ball> {
     }
 
 
+    protected float ellipsoid_sdf(in Vec3 p, in Vec3 r) {
+        // Symmetry: solve in the first octant.
+        Vec3 e = abs(r);
+        Vec3 y = abs(p);
+
+        if (e[0] <= 0.0 || e[1] <= 0.0 || e[2] <= 0.0)
+            return float.NaN; // flat ellipsoid, not handled
+
+        float k = 0f;
+        for (int i=0; i<3; ++i) {
+            float a = y[i] / e[i];
+            k += a * a;
+        }
+        float sign = (k < 1f) ? -1f : 1f;
+
+        float emin = min(e[0], min(e[1], e[2]));
+        float em2  = emin * emin;
+        float tol  = 1e-7f * emin;
+
+        // Substitute u = t + emin^2 so denominators are (d_i + u) with d_i >= 0.
+        // This removes the catastrophic cancellation of evaluating e_i^2 + t
+        // when t sits right on top of the pole.
+        Vec3 n = new();
+        Vec3 d = new();
+        float nlen2 = 0f;
+        for (int i=0; i<3; ++i) {
+            n[i]   = e[i] * y[i];
+            d[i]   = e[i] * e[i] - em2;   // exactly 0 on the shortest axes
+            nlen2 += n[i] * n[i];
+        }
+
+        // F(u) = sum (n_i / (d_i + u))^2 - 1, strictly decreasing for u > 0.
+        float F(float u) {
+            float s = -1f;
+            for (int i=0; i<3; ++i) {
+                float a = n[i] / (d[i] + u);
+                s += a * a;
+            }
+            return s;
+        }
+
+        // A root in u > 0 exists iff F blows up at the pole (some shortest axis
+        // has a nonzero component) or F(0) is still positive.
+        bool has_root = false;
+        for (int i=0; i<3; ++i) {
+            if (d[i] <= 0.0 && y[i] > tol)
+                has_root = true;
+        }
+
+        if (!has_root) {
+            float s = -1f;
+            for (int i=0; i<3; ++i) {
+                if (d[i] > 0.0) {
+                    float a = n[i] / d[i];
+                    s += a * a;
+                }
+            }
+            has_root = (s > 0f);
+        }
+
+        float dist2;
+        if (has_root) {
+            float lo = 0f;
+            float hi = sqrt(nlen2) + em2;   // guaranteed F(hi) <= 0
+            for (int it=0; it<120; ++it) {
+                float mid = 0.5f * (lo + hi);
+                if (mid <= lo || mid >= hi)
+                    break; // bracket is machine-adjacent
+                if (F(mid) > 0.0) lo = mid;
+                else              hi = mid;
+            }
+            float u = 0.5f * (lo + hi);
+
+            dist2 = 0f;
+            for (int i=0; i<3; ++i) {
+                float c    = e[i] * n[i] / (d[i] + u); // closest point component
+                float diff = y[i] - c;
+                dist2 += diff * diff;
+            }
+        } else {
+            // Degenerate case: point lies on (or near) the shortest axis, inside
+            // the evolute. The minimiser sits at u = 0; the short-axis component
+            // of the closest point is fixed by the ellipsoid equation, not by
+            // the root-finding formula.
+            float sumsq = 0f, acc = 0f, ysub2 = 0f;
+            for (int i=0; i<3; ++i) {
+                if (d[i] > 0.0) {
+                    float c    = e[i] * n[i] / d[i];
+                    float diff = y[i] - c;
+                    acc  += diff * diff;
+                    float a = c / e[i];
+                    sumsq += a * a;
+                } else
+                    ysub2 += y[i] * y[i]; // ~0 by construction
+            }
+            float rem = max(0f, 1f - sumsq);
+            float t   = emin * sqrt(rem) - sqrt(ysub2);
+            dist2 = acc + t * t;
+        }
+
+        return sign * sqrt(dist2);
+    }
     public override float fSignedDistance(in Vec3 p) {
-        float r = mag(p - centre.pos);
-        return max(inner_r - r, r - outer_r);
+        Vec3 q = centre / p;
+        if (inner_r != -INF3) {
+            return max(ellipsoid_sdf(q, outer_r),
+                      -ellipsoid_sdf(q, inner_r));
+        }
+        return ellipsoid_sdf(q, outer_r);
     }
 
     public override Ball with_centre(in Frame newcentre)
         => new(newcentre, inner_r, outer_r);
 
-    public override bool isfilled => inner_r == -INF;
+    public override bool isfilled => inner_r == -INF3;
     public override Ball _shelled(float th)
         => (th >= 0f)
-         ? new(centre, outer_r, outer_r + th)
-         : new(centre, outer_r + th, outer_r);
-    public override Ball _negative() => new(centre, -INF, inner_r);
-    public override Ball _positive() => new(centre, -INF, outer_r);
+         ? new(centre, outer_r, outer_r + th*ONE3)
+         : new(centre, outer_r + th*ONE3, outer_r);
+    public override Ball _negative() => new(centre, -INF3, inner_r);
+    public override Ball _positive() => new(centre, -INF3, outer_r);
     public override Ball hollowed(float inner_length)
-        => new(centre, inner_length, outer_r);
+        => new(centre, inner_length*ONE3, outer_r);
     public override Ball girthed(float outer_length)
-        => new(centre, inner_r, outer_length);
+        => new(centre, inner_r, outer_length*ONE3);
 }
 
 

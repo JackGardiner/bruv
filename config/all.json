@@ -57,24 +57,25 @@
 
         "FR_chnl": 0.2,
 
-        "th_imani": 1.5,
+        "th_imani": 2.8,
         "th_omani": 3.5,
         "phi_mani": 0.6981317007977318,
 
         "no_fixt": 4,
         "wi_fixt": 10.0,
 
-        "portsize_inlet": "G1/2 15",
+        "portsize_inlet": "G1/2 10",
         "theta_inlet": 1.5707963267948966,
         "th_inlet": 4.5,
         "FR_inlet": 5.0,
-        "phi_inlet": 2.2689280275926285,
-        "phi_inletsprt": 0.6981317007977318,
+        "phi_inlet": 1.5707963267948966,
+        "phi_inletsprt": 0.7853981633974483,
 
         "no_tc": 6,
-        "portsize_tc": "G1/8",
+        "portsize_tc": "G1/8 7",
         "th_tc": 3.5,
-        "D_tc": 1.5
+        "D_tc": 1.6,
+        "phi_tc": 0.7853981633974483
     },
     "injector": {
         "no_injg": [
