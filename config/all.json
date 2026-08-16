@@ -188,6 +188,29 @@
         "th_IPAPTh": 2.5,
         "th_CCPTh": 1.5
     },
+    "grain": {
+        "D_grain": 95.0,
+        "D_port": 59.0,
+        "L_puck": 96.25,
+        "L_trim": 3.75,
+        "th_skin": 1.0,
+
+        "th_gyr": 1.86,
+        "L_cell": 24.0,
+        "Lz_cell": 32.0833333,
+        "x0_gyr": -6.0,
+        "y0_gyr": 0.0,
+        "z0_gyr": 0.0,
+
+        "no_chim": 3,
+        "D_chim": 10.0,
+        "r_chim": 38.0,
+        "theta0_chim": 0.0,
+
+        "th_shelf": 5.0,
+
+        "rho": 1040.0
+    },
     "printer": {
         "name": "Nikon SLM280 2.0",
         "max_print_angle": 0.6981317007977318,

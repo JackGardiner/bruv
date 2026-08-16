@@ -1187,21 +1187,29 @@ public class Cone : AxialShape<Cone> {
 public class Gyroid : FramedShape<Gyroid>, IImplicit {
     public override Frame centre { get; }
     public float th { get; } // >0
-    public float period { get; } // >0
+    public float period { get; } // >0, along x and y.
+    public float period_z { get; } // >0, =period when isotropic.
     public float frequency { get; } // =TWOPI/period
+    public float frequency_z { get; } // =TWOPI/period_z
 
-    public Gyroid(Frame centre, float th, float period) {
+    public Gyroid(Frame centre, float th, float period)
+        : this(centre, th, period, period) {}
+    public Gyroid(Frame centre, float th, float period, float period_z) {
         assert(th > 0f, $"th={th}");
         assert(period > 0f, $"period={period}");
+        assert(period_z > 0f, $"period_z={period_z}");
         assert(period > th, $"period={period}, th={th}");
+        assert(period_z > th, $"period_z={period_z}, th={th}");
         this.centre = centre;
         this.th = th;
         this.period = period;
+        this.period_z = period_z;
         this.frequency = TWOPI/period;
+        this.frequency_z = TWOPI/period_z;
     }
 
     public override Gyroid with_centre(in Frame newcentre)
-        => new(newcentre, th, period);
+        => new(newcentre, th, period, period_z);
 
     public float distance_to_gyroid(in Vec3 p) {
         Vec3 q = centre / p;
@@ -1209,7 +1217,7 @@ public class Gyroid : FramedShape<Gyroid>, IImplicit {
         static Vec3 yzx(Vec3 v) => new(v.Y, v.Z, v.X);
         static Vec3 zxy(Vec3 v) => new(v.Z, v.X, v.Y);
 
-        float w = frequency;
+        Vec3 w = new(frequency, frequency, frequency_z);
         Vec3 s = sin(w*q);
         Vec3 c = cos(w*q);
 

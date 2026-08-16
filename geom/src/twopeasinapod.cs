@@ -44,6 +44,7 @@ public static class TwoPeasInAPod {
     public const int CHAMBER         = 1 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR        = 2 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_SAMPLE = 3 << (BITC_ACTION + BITC_MODIFIER);
+    public const int GRAIN           = 4 << (BITC_ACTION + BITC_MODIFIER);
     /* theres lowk more than 2 peas in this pod. */
     /* THATS ALL FOLKS */
 
@@ -213,6 +214,11 @@ public static class TwoPeasInAPod {
 
                 pea = config.deserialise<InjectorSample>("sample");
             }
+          } break;
+
+          case GRAIN: {
+            // Construct the fuel grain scaffold object.
+            pea = config.deserialise<Grain>("grain");
           } break;
 
           default:
