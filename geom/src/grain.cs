@@ -37,6 +37,13 @@ public class Grain : TPIAP.Pea {
     public required float y0_gyr { get; init; } // phase of the cell pattern
     public required float z0_gyr { get; init; } // relative to the puck.
 
+    // sheet grading. th_anchor = 0 for a constant th_gyr.
+    public required float th_anchor { get; init; }
+    public required float ramp_gyr { get; init; }
+
+    // fillet where the lattice meets the annulus. 0 for a hard edge.
+    public required float blend_gyr { get; init; }
+
     /* FEED CHIMNEYS */
     public required int no_chim { get; init; } // 0 for none.
     public required float D_chim { get; init; }
@@ -80,6 +87,11 @@ public class Grain : TPIAP.Pea {
         assert(L_puck > 0f, $"L_puck={L_puck}");
         assert(L_trim >= 0f, $"L_trim={L_trim}");
         assert(th_gyr > 0f, $"th_gyr={th_gyr}");
+        assert(th_anchor >= 0f, $"th_anchor={th_anchor}");
+        assert(ramp_gyr >= 0f, $"ramp_gyr={ramp_gyr}");
+        if (th_anchor > 0f)
+            assert(ramp_gyr > 0f, "th_anchor set but ramp_gyr is 0");
+        assert(blend_gyr >= 0f, $"blend_gyr={blend_gyr}");
         assert(th_shelf >= 0f && th_shelf < L_puck, $"th_shelf={th_shelf}");
         assert(no_chim >= 0, $"no_chim={no_chim}");
 
@@ -124,9 +136,15 @@ public class Grain : TPIAP.Pea {
     }
 
 
-    protected Gyroid gyroid()
-        => new(new Frame(new Vec3(x0_gyr, y0_gyr, z0_gyr)),
+    protected IImplicit gyroid() {
+        Gyroid lattice = new(new Frame(new Vec3(x0_gyr, y0_gyr, z0_gyr)),
                 th_gyr, L_cell, Lz_cell);
+        if (th_anchor <= 0f || ramp_gyr <= 0f)
+            return lattice;
+        // anchor on the skin and end faces, not the port.
+        Rod anchor = new(new(), L_print, R_skin);
+        return new GradedGyroid(lattice, anchor, th_gyr, th_anchor, ramp_gyr);
+    }
 
     protected Frame chimney(int i) {
         float theta = theta0_chim + i*TWOPI/no_chim;
@@ -139,8 +157,15 @@ public class Grain : TPIAP.Pea {
     public void make(bool based, PartMaker part) {
         float z0 = based ? th_shelf : 0f;
 
-        part.voxels = (Voxels)new Rod(new(), L_print, R_port, R_grain);
-        part.voxels.IntersectImplicit(gyroid());
+        Rod annulus = new(new(), L_print, R_port, R_grain);
+        if (blend_gyr <= 0f) {
+            part.voxels = (Voxels)annulus;
+            part.voxels.IntersectImplicit(gyroid());
+        } else {
+            part.voxels = _SDF.voxels(
+                    new SmoothIntersect(annulus, gyroid(), blend_gyr),
+                    annulus.bounds);
+        }
         part.substep("intersected gyroid with the annulus.", view_part: true);
         part.step("created scaffold.");
 
@@ -260,6 +285,9 @@ public class Grain : TPIAP.Pea {
             ["x0_gyr"] = x0_gyr,
             ["y0_gyr"] = y0_gyr,
             ["z0_gyr"] = z0_gyr,
+            ["th_anchor"] = th_anchor,
+            ["ramp_gyr"] = ramp_gyr,
+            ["blend_gyr"] = blend_gyr,
             ["no_chim"] = no_chim,
             ["D_chim"] = D_chim,
             ["r_chim"] = r_chim,

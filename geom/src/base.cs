@@ -1272,6 +1272,63 @@ public class Gyroid : FramedShape<Gyroid>, IImplicit {
 }
 
 
+/* Gyroid whose thickness ramps from th_anchor at the anchor surface to
+   th_deep over `ramp` mm inside it. */
+public class GradedGyroid : IImplicit {
+    public Gyroid lattice { get; }
+    public IImplicit anchor { get; }
+    public float th_deep { get; } // >0, thickness away from the anchor.
+    public float th_anchor { get; } // >0, thickness at the anchor surface.
+    public float ramp { get; } // >0, blend distance.
+
+    public GradedGyroid(Gyroid lattice, IImplicit anchor,
+            float th_deep, float th_anchor, float ramp) {
+        assert(th_deep > 0f, $"th_deep={th_deep}");
+        assert(th_anchor > 0f, $"th_anchor={th_anchor}");
+        assert(ramp > 0f, $"ramp={ramp}");
+        this.lattice = lattice;
+        this.anchor = anchor;
+        this.th_deep = th_deep;
+        this.th_anchor = th_anchor;
+        this.ramp = ramp;
+    }
+
+    // depth inside the anchor as a fraction of the ramp.
+    public float thickness_at(in Vec3 p) {
+        float depth = -anchor.fSignedDistance(p);
+        float f = clamp(depth/ramp, 0f, 1f);
+        return th_anchor + (th_deep - th_anchor)*f;
+    }
+
+    public float fSignedDistance(in Vec3 p)
+        => abs(lattice.distance_to_gyroid(p)) - 0.5f*thickness_at(p);
+}
+
+
+/* Smooth intersection, polynomial smooth-max with blend radius k (mm). It
+   only removes material, so it chamfers. k <= 0 is a hard intersection. */
+public class SmoothIntersect : IImplicit {
+    public IImplicit a { get; }
+    public IImplicit b { get; }
+    public float k { get; } // >=0, blend radius.
+
+    public SmoothIntersect(IImplicit a, IImplicit b, float k) {
+        assert(k >= 0f, $"k={k}");
+        this.a = a;
+        this.b = b;
+        this.k = k;
+    }
+
+    public float fSignedDistance(in Vec3 p) {
+        float da = a.fSignedDistance(p);
+        float db = b.fSignedDistance(p);
+        if (k <= 0f)
+            return max(da, db);
+        float h = clamp(0.5f - 0.5f*(da - db)/k, 0f, 1f);
+        // lerp(da, db, h), plus the polynomial blend term.
+        return da + (db - da)*h + k*h*(1f - h);
+    }
+}
 
 
 

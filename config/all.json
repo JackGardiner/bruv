@@ -201,6 +201,9 @@
         "x0_gyr": -6.0,
         "y0_gyr": 0.0,
         "z0_gyr": 0.0,
+        "th_anchor": 0.0,
+        "ramp_gyr": 0.0,
+        "blend_gyr": 0.0,
 
         "no_chim": 3,
         "D_chim": 10.0,
