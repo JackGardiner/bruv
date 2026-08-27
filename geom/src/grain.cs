@@ -17,7 +17,7 @@ using Mesh = PicoGK.Mesh;
 using IImplicit = PicoGK.IImplicit;
 using BBox3 = PicoGK.BBox3;
 
-public class Grain : TPIAP.Pea {
+public partial class Grain : TPIAP.Pea {
 
     public string name => "grain";
 
@@ -103,6 +103,8 @@ public class Grain : TPIAP.Pea {
             assert(Or_chim < R_skin, $"Or_chim={Or_chim}, R_skin={R_skin}");
         }
 
+        assert_slits();
+
         // whole number of cells over the finished length.
         float no_cells = L_puck/Lz_cell;
         if (!nearto(no_cells, round(no_cells), rtol: 1e-3f)) {
@@ -182,6 +184,15 @@ public class Grain : TPIAP.Pea {
             part.step($"subtracted {no_chim} feed chimneys, {D_chim}mm.");
         } else {
             part.no_step("skipping feed chimneys (no_chim=0).");
+        }
+
+        Voxels? perf = slits();
+        if (perf is not null) {
+            part.sub(ref perf);
+            part.step($"subtracted {no_perf} vent slits, {W_perf}mm wide "
+                    + $"({frac_perf:P2} of skin).");
+        } else {
+            part.no_step("skipping vent slits (W_perf=0).");
         }
 
         if (based) {
@@ -288,6 +299,12 @@ public class Grain : TPIAP.Pea {
             ["th_anchor"] = th_anchor,
             ["ramp_gyr"] = ramp_gyr,
             ["blend_gyr"] = blend_gyr,
+            ["no_perf"] = no_perf,
+            ["W_perf"] = W_perf,
+            ["z0_perf"] = z0_perf,
+            ["z1_perf"] = z1_perf,
+            ["theta0_perf"] = theta0_perf,
+            ["frac_perf"] = (W_perf > 0f) ? frac_perf : 0f,
             ["no_chim"] = no_chim,
             ["D_chim"] = D_chim,
             ["r_chim"] = r_chim,

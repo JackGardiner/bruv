@@ -205,6 +205,12 @@
         "ramp_gyr": 0.0,
         "blend_gyr": 0.0,
 
+        "no_perf": 4,
+        "W_perf": 0.0,
+        "z0_perf": 0.0,
+        "z1_perf": 0.0,
+        "theta0_perf": 0.0,
+
         "no_chim": 3,
         "D_chim": 10.0,
         "r_chim": 38.0,
