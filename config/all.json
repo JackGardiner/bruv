@@ -211,10 +211,10 @@
         "z1_perf": 0.0,
         "theta0_perf": 0.0,
 
-        "no_chim": 3,
+        "no_chim": 4,
         "D_chim": 10.0,
         "r_chim": 38.0,
-        "theta0_chim": 0.0,
+        "theta0_chim": 0.3490658504,
 
         "th_shelf": 5.0,
 

@@ -48,7 +48,10 @@ public partial class Grain : TPIAP.Pea {
     public required int no_chim { get; init; } // 0 for none.
     public required float D_chim { get; init; }
     public required float r_chim { get; init; } // centres, from the axis.
-    public required float theta0_chim { get; init; } // first chimney, from +x.
+
+    // first chimney from +x. Off multiples of 90 deg, where the bore is
+    // tangent to the sheet and the mesher leaves non-manifold edges.
+    public required float theta0_chim { get; init; }
 
     /* BASE VARIANT */
     public required float th_shelf { get; init; }
@@ -101,6 +104,14 @@ public partial class Grain : TPIAP.Pea {
             float Or_chim = r_chim + 0.5f*D_chim;
             assert(Ir_chim > R_port, $"Ir_chim={Ir_chim}, R_port={R_port}");
             assert(Or_chim < R_skin, $"Or_chim={Or_chim}, R_skin={R_skin}");
+
+            // only 2 and 4 put every bore on the same lattice cross section.
+            if (no_chim != 2 && no_chim != 4) {
+                print($"WARNING: no_chim={no_chim} is not 2 or 4, so the bores");
+                print( "         do not sit on equivalent lattice sections and");
+                print( "         some will be noticeably more obstructed.");
+                print();
+            }
         }
 
         assert_slits();
