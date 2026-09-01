@@ -38,7 +38,7 @@ public partial class Grain {
                 $"z1_perf={z1_perf}, z0_perf={z0_perf}");
         assert(z1_perf_or_top <= L_print, $"z1_perf={z1_perf}");
 
-        // Measured: clear of the sheet up to 2.5mm, grazing by 3.0mm.
+        // measured clear up to 2.5mm at R_skin, optimistic at the cut radius.
         if (W_perf > 2.5f) {
             print($"WARNING: W_perf={W_perf}mm exceeds the 2.5mm that was");
             print( "         measured clear of the sheet. It will bite into");

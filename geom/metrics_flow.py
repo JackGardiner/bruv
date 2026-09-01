@@ -72,14 +72,16 @@ def orientation_fractions(d, h, angles=(20, 30, 45), eps=None):
     shell = np.abs(d) < eps
     down = shell & (nz < 0)
     n_down = int(down.sum())
-    out = {"total_down_cm2": n_down * h**3 / (2.0 * eps) / 100.0}
+    cell_to_cm2 = h**3 / (2.0 * eps) / 100.0
+    # a mid-surface only sees one of the sheet's two faces, so double it
+    out = {"total_down_cm2": 2.0 * n_down * cell_to_cm2}
     if n_down == 0:
         for a in angles:
             out[f"within_{a}_frac"] = 0.0
         return out
-    nzd = np.abs(nz[down])
+    beta = np.degrees(np.arccos(np.clip(np.abs(nz[down]), 0.0, 1.0)))
     for a in angles:
-        out[f"within_{a}_frac"] = float((nzd < np.sin(np.radians(a))).mean())
+        out[f"within_{a}_frac"] = float((beta < a).mean())
     return out
 
 

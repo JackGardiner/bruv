@@ -33,6 +33,7 @@ def fill_fractions(field):
     chim = 0.0
     if p.no_chim > 0 and p.D_chim > 0:
         chim = p.no_chim * np.pi * (0.5 * p.D_chim) ** 2 * p.L_print
+    # analytic skin, so cut slits read as lattice. fine while W_perf = 0
     sheet = solid_mm3 - skin
     return {
         "whole_part": solid_mm3 / env,

@@ -76,10 +76,11 @@ class GrainParams:
 def load_record(variant):
     """Most recent emitted parameter record for a variant."""
     d = os.path.join(ROOT, "config", "grain")
-    names = sorted(n for n in os.listdir(d)
-                   if n.startswith(f"grain-{variant}-") and n.endswith(".json"))
+    names = [n for n in os.listdir(d)
+              if n.startswith(f"grain-{variant}-") and n.endswith(".json")]
     if not names:
         raise FileNotFoundError(f"no grain-{variant}-*.json in {d}")
+    names.sort(key=lambda n: os.path.getmtime(os.path.join(d, n)))
     with open(os.path.join(d, names[-1])) as fh:
         return json.load(fh)
 
@@ -159,7 +160,8 @@ def sample(p, h, based=False):
             solid &= ~bore
 
     if p.W_perf > 0 and p.no_perf > 0:
-        z1 = p.z1_perf if p.z1_perf > 0 else p.L_print
+        # full height is L_puck, same as grain_slits.cs
+        z1 = p.z1_perf if p.z1_perf > 0 else p.L_puck
         band = (Z >= p.z0_perf) & (Z <= z1)
         half = 0.5 * p.W_perf
         for i in range(p.no_perf):

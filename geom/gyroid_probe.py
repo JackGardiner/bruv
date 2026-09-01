@@ -68,15 +68,18 @@ def probe_accounting():
     gyr_env = np.pi * (R_SKIN**2 - R_PORT**2) * L_PUCK
     chim = G["no_chim"] * np.pi * (0.5 * G["D_chim"]) ** 2 * L_PUCK
 
+    # newest by mtime, not filename (filenames are hashes)
     rec = None
     cfgdir = os.path.join(ROOT, "config", "grain")
     if os.path.isdir(cfgdir):
-        for name in sorted(os.listdir(cfgdir)):
-            if name.startswith("grain-std-"):
-                with open(os.path.join(cfgdir, name)) as f:
-                    rec = json.load(f)
-                print(f"  using emitted record {name}")
-                break
+        names = [n for n in os.listdir(cfgdir)
+                  if n.startswith("grain-std-") and n.endswith(".json")]
+        if names:
+            names.sort(key=lambda n: os.path.getmtime(os.path.join(cfgdir, n)))
+            name = names[-1]
+            with open(os.path.join(cfgdir, name)) as f:
+                rec = json.load(f)
+            print(f"  using emitted record {name} (newest by mtime)")
     if rec is None:
         print("  no grain-std record in config/grain -- skipping")
         return

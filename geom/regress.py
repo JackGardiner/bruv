@@ -52,15 +52,25 @@ def capture():
               f"fill {rec['out_fill']:.4%}, mass {rec['out_mass_g']:.2f} g")
 
 
-def check():
-    if not os.path.exists(BASELINE):
-        print(f"No baseline at {BASELINE}; run --capture first.")
+def check(baseline_path=None, record_dir=None):
+    baseline_path = baseline_path or BASELINE
+    if not os.path.exists(baseline_path):
+        print(f"No baseline at {baseline_path}; run --capture first.")
         return 1
-    with open(BASELINE) as fh:
+    with open(baseline_path) as fh:
         base = json.load(fh)
     fails = 0
     for variant, ref in base.items():
-        rec = newest(variant)
+        rec = newest(variant, record_dir=record_dir)
+        # drift is meaningless across voxel sizes, so that's its own failure
+        ref_vox, rec_vox = ref.get("voxel_size"), rec.get("voxel_size")
+        if ref_vox != rec_vox:
+            fails += 1
+            print(f"  FAIL {variant:5s} voxel_size MISMATCH: baseline "
+                  f"{ref_vox} mm vs this run {rec_vox} mm -- NOT COMPARABLE. "
+                  "Regenerate the baseline (--capture) at this voxel size, "
+                  "or re-run the generator at the baseline's voxel size, "
+                  "before trusting any drift number below.")
         for key in WATCH:
             a, b = ref[key], rec[key]
             drift = _drift(a, b)
