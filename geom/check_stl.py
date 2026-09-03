@@ -151,6 +151,33 @@ def chimney_open(tris, r, theta0, n_chim, d_chim, samples=64, seed=0,
     return out
 
 
+def check_slits(tris, n_expected, width, r_grain, tol=0.15):
+    """Count the angular gaps in the OD surface and measure their width."""
+    cen = tris.mean(axis=1)
+    r = np.hypot(cen[:, 0], cen[:, 1])
+    on_od = np.abs(r - r_grain) < 0.5
+    if not on_od.any():
+        return False, "no triangles found on the OD surface"
+    th = np.degrees(np.arctan2(cen[on_od, 1], cen[on_od, 0])) % 360.0
+    hist, edges = np.histogram(th, bins=720, range=(0, 360))
+    empty = hist == 0
+    # count runs of empty bins
+    runs, in_run, this = [], False, 0
+    for e in np.concatenate([empty, [False]]):
+        if e:
+            in_run, this = True, this + 1
+        elif in_run:
+            runs.append(this)
+            in_run, this = False, 0
+    n_found = len(runs)
+    if n_found != int(n_expected):
+        return False, f"found {n_found} slits, expected {int(n_expected)}"
+    got_w = np.mean(runs) * (360.0 / 720) * np.radians(1.0) * r_grain
+    if abs(got_w / width - 1) > tol:
+        return False, f"slit width {got_w:.2f} mm, expected {width:.2f} mm"
+    return True, f"{n_found} slits, mean width {got_w:.2f} mm"
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -177,6 +204,9 @@ def main():
     p.add_argument("--shelf-tol", type=float, default=0.5,
                    help="ignore crossings within this of the shelf top face, "
                         "which is the shelf itself rather than a blockage")
+    p.add_argument("--slits", nargs=2, type=float, metavar=("N", "W"),
+                   default=None,
+                   help="expect N slits of width W mm through the OD skin")
     args = p.parse_args()
 
     tris = read_stl(args.stl)
@@ -244,6 +274,13 @@ def main():
             for i, o in enumerate(opens):
                 check(o > 0.98, f"chimney {i} continuous {span}",
                       f"{o * 100:.0f}% of bore clear")
+
+    if args.slits:
+        print("\nslits")
+        n_exp, width = args.slits
+        ok, detail = check_slits(tris, n_exp, width, args.od / 2.0)
+        check(ok, f"{int(n_exp)} slits of width {width:.2f} mm through the OD",
+              detail)
 
     print("\noverhang (downward-facing surface, area-weighted)")
     oh = overhang(tris)
