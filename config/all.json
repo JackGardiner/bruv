@@ -195,26 +195,27 @@
         "L_trim": 3.75,
         "th_skin": 1.0,
 
-        "th_gyr": 1.86,
-        "L_cell": 24.0,
+        "th_gyr": 1.00,
+        "L_cell": 20.0,
         "Lz_cell": 32.0833333,
-        "x0_gyr": -6.0,
+        "x0_gyr": -5.0,
         "y0_gyr": 0.0,
         "z0_gyr": 0.0,
         "th_anchor": 0.0,
         "ramp_gyr": 0.0,
         "blend_gyr": 0.0,
+        "fillet_skin": 0.0,
 
         "no_perf": 4,
         "W_perf": 0.0,
         "z0_perf": 0.0,
         "z1_perf": 0.0,
-        "theta0_perf": 0.0,
+        "theta0_perf": 0.4625122518,
 
         "no_chim": 4,
         "D_chim": 10.0,
         "r_chim": 38.0,
-        "theta0_chim": 0.3490658504,
+        "theta0_chim": 0.6108652382,
 
         "th_shelf": 5.0,
 

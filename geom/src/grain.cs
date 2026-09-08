@@ -44,6 +44,9 @@ public partial class Grain : TPIAP.Pea {
     // fillet where the lattice meets the annulus. 0 for a hard edge.
     public required float blend_gyr { get; init; }
 
+    // fillet where the skin meets the lattice. 0 for none.
+    public required float fillet_skin { get; init; }
+
     /* FEED CHIMNEYS */
     public required int no_chim { get; init; } // 0 for none.
     public required float D_chim { get; init; }
@@ -95,6 +98,7 @@ public partial class Grain : TPIAP.Pea {
         if (th_anchor > 0f)
             assert(ramp_gyr > 0f, "th_anchor set but ramp_gyr is 0");
         assert(blend_gyr >= 0f, $"blend_gyr={blend_gyr}");
+        assert(fillet_skin >= 0f, $"fillet_skin={fillet_skin}");
         assert(th_shelf >= 0f && th_shelf < L_puck, $"th_shelf={th_shelf}");
         assert(no_chim >= 0, $"no_chim={no_chim}");
 
@@ -182,9 +186,20 @@ public partial class Grain : TPIAP.Pea {
         part.substep("intersected gyroid with the annulus.", view_part: true);
         part.step("created scaffold.");
 
-        Voxels? skin = new Rod(new(), L_print, R_grain).shelled(-th_skin);
-        part.add(ref skin);
-        part.step("added OD skin.");
+        if (fillet_skin <= 0f) {
+            Voxels? skin = new Rod(new(), L_print, R_grain).shelled(-th_skin);
+            part.add(ref skin);
+            part.step("added OD skin.");
+        } else {
+            // smooth union, for the seam SmoothIntersect can't reach.
+            Rod skin_shape = new Rod(new(), L_print, R_grain).shelled(-th_skin);
+            Voxels? skin = _SDF.voxels(
+                    new SmoothUnion(gyroid(), skin_shape, fillet_skin),
+                    annulus.bounds);
+            skin.IntersectImplicit(annulus);
+            part.add(ref skin);
+            part.step($"added OD skin with a {fillet_skin}mm fillet.");
+        }
 
         if (no_chim > 0) {
             Voxels? chim = new();
@@ -310,6 +325,7 @@ public partial class Grain : TPIAP.Pea {
             ["th_anchor"] = th_anchor,
             ["ramp_gyr"] = ramp_gyr,
             ["blend_gyr"] = blend_gyr,
+            ["fillet_skin"] = fillet_skin,
             ["no_perf"] = no_perf,
             ["W_perf"] = W_perf,
             ["z0_perf"] = z0_perf,

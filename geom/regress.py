@@ -6,7 +6,8 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASELINE = os.path.join(ROOT, "config", "grain", "baseline-0.5mm.json")
+BASELINE_DIR = os.path.join(ROOT, "config", "grain")
+BASELINE = os.path.join(BASELINE_DIR, "baseline-0.5mm.json")  # fast-gate default
 TOL = 0.005
 
 WATCH = ("out_volume_mL", "fin_volume_mL", "out_fill", "fin_fill",
@@ -42,18 +43,30 @@ def _fmt(v):
     return f"{v:.5f}"
 
 
-def capture():
-    data = {v: newest(v) for v in ("std", "base")}
-    with open(BASELINE, "w") as fh:
+def resolve_baseline(name_or_path):
+    """Resolve a --baseline argument to a baseline file path."""
+    if name_or_path is None:
+        return BASELINE
+    looks_like_a_path = (os.sep in name_or_path
+                         or name_or_path.endswith(".json"))
+    if looks_like_a_path:
+        return name_or_path
+    return os.path.join(BASELINE_DIR, f"baseline-{name_or_path}.json")
+
+
+def capture(baseline_path=None, record_dir=None):
+    path = resolve_baseline(baseline_path)
+    data = {v: newest(v, record_dir=record_dir) for v in ("std", "base")}
+    with open(path, "w") as fh:
         json.dump(data, fh, indent=2)
-    print(f"Baseline written to {BASELINE}")
+    print(f"Baseline written to {path}")
     for v, rec in data.items():
         print(f"  {v}: {rec['out_volume_mL']:.3f} mL, "
               f"fill {rec['out_fill']:.4%}, mass {rec['out_mass_g']:.2f} g")
 
 
 def check(baseline_path=None, record_dir=None):
-    baseline_path = baseline_path or BASELINE
+    baseline_path = resolve_baseline(baseline_path)
     if not os.path.exists(baseline_path):
         print(f"No baseline at {baseline_path}; run --capture first.")
         return 1
@@ -87,8 +100,13 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--capture", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--baseline", default=None, metavar="TAG_OR_PATH",
+                     help="Which baseline to capture to / check against: a "
+                          "resolution tag matching config/grain/baseline-"
+                          "<tag>.json (e.g. 0.25mm), or an explicit path. "
+                          "Defaults to the 0.5 mm fast-gate baseline.")
     args = ap.parse_args()
     if args.capture:
-        capture()
+        capture(baseline_path=args.baseline)
         sys.exit(0)
-    sys.exit(check())
+    sys.exit(check(baseline_path=args.baseline))

@@ -1331,6 +1331,31 @@ public class SmoothIntersect : IImplicit {
 }
 
 
+/* Smooth union, the dual of SmoothIntersect. It only adds material, so it
+   fillets concave seams. k <= 0 is a hard union. */
+public class SmoothUnion : IImplicit {
+    public IImplicit a { get; }
+    public IImplicit b { get; }
+    public float k { get; } // >=0, blend radius.
+
+    public SmoothUnion(IImplicit a, IImplicit b, float k) {
+        assert(k >= 0f, $"k={k}");
+        this.a = a;
+        this.b = b;
+        this.k = k;
+    }
+
+    public float fSignedDistance(in Vec3 p) {
+        float da = a.fSignedDistance(p);
+        float db = b.fSignedDistance(p);
+        if (k <= 0f)
+            return min(da, db);
+        float h = clamp(0.5f + 0.5f*(da - db)/k, 0f, 1f);
+        return lerp(da, db, h) - k*h*(1f - h);
+    }
+}
+
+
 
 
 

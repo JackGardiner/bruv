@@ -38,11 +38,10 @@ public partial class Grain {
                 $"z1_perf={z1_perf}, z0_perf={z0_perf}");
         assert(z1_perf_or_top <= L_print, $"z1_perf={z1_perf}");
 
-        // measured clear up to 2.5mm at R_skin, optimistic at the cut radius.
-        if (W_perf > 2.5f) {
-            print($"WARNING: W_perf={W_perf}mm exceeds the 2.5mm that was");
-            print( "         measured clear of the sheet. It will bite into");
-            print( "         the lattice.");
+        if (W_perf > 2.0f) {
+            print($"WARNING: W_perf={W_perf}mm exceeds the 2.0mm that was");
+            print( "         measured clear of the sheet at the cut radius.");
+            print( "         It will bite into the lattice.");
             print();
         }
 

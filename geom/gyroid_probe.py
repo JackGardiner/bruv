@@ -111,8 +111,9 @@ def probe_density():
     rule("DENSITY -- phi vs t/L, and the error in the 3.09 coefficient (2.3)")
     n = 220
     u = (np.arange(n) + 0.5) / n
-    print(f"  {'Lz/L':>6} {'t=1.00':>9} {'t=1.86':>9} {'t=2.50':>9}   "
-          f"(values are phi/(t/L))")
+    # middle column follows the config's th_gyr
+    print(f"  {'Lz/L':>6} {'t=1.00':>9} {f't={TH_GYR:.2f}':>9} {'t=2.50':>9}"
+          f"   (values are phi/(t/L))")
     for k in (1.0, LZ_CELL / L_CELL, 1.5, 2.0):
         L = L_CELL
         Lz = L * k
