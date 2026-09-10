@@ -155,9 +155,19 @@ def check_slits(tris, n_expected, width, r_grain, tol=0.15):
     """Count the angular gaps in the OD surface and measure their width."""
     cen = tris.mean(axis=1)
     r = np.hypot(cen[:, 0], cen[:, 1])
-    on_od = np.abs(r - r_grain) < 0.5
+    nrm = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    nrm = nrm / np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+    outward = (nrm[:, 0] * cen[:, 0] + nrm[:, 1] * cen[:, 1]) / np.maximum(r, 1e-9)
+
+    z = cen[:, 2]
+    zlo, zhi = z.min(), z.max()
+    mid_lo = zlo + 0.25 * (zhi - zlo)
+    mid_hi = zlo + 0.75 * (zhi - zlo)
+
+    on_od = ((np.abs(r - r_grain) < 0.5) & (outward > 0.8)
+             & (z > mid_lo) & (z < mid_hi))
     if not on_od.any():
-        return False, "no triangles found on the OD surface"
+        return False, "no outward-facing OD surface found in the mid-height band"
     th = np.degrees(np.arctan2(cen[on_od, 1], cen[on_od, 0])) % 360.0
     hist, edges = np.histogram(th, bins=720, range=(0, 360))
     empty = hist == 0
@@ -169,6 +179,10 @@ def check_slits(tris, n_expected, width, r_grain, tol=0.15):
         elif in_run:
             runs.append(this)
             in_run, this = False, 0
+    # a slit centred on 0 deg is split across the wrap, appearing as one run at
+    # each end of the histogram -- rejoin them before counting
+    if len(runs) > 1 and empty[0] and empty[-1]:
+        runs[0] += runs.pop()
     n_found = len(runs)
     if n_found != int(n_expected):
         return False, f"found {n_found} slits, expected {int(n_expected)}"

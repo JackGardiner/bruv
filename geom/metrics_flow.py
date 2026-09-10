@@ -202,18 +202,21 @@ def solidification_modulus(field):
 
 
 def feed_demand(field, beta):
-    """F4. Shrinkage volume against the reservoir that has to supply it."""
+    """F4. How much wax the riser has to push in, and how wide the path is."""
     p = field.params
     cell = field.h**3
     wax_mm3 = float(field.void.sum()) * cell
-    shrink = beta * wax_mm3
-    chim = 0.0
+    bore_area = 0.0
+    bore_vol = 0.0
     if p.no_chim > 0 and p.D_chim > 0:
-        chim = p.no_chim * np.pi * (0.5 * p.D_chim) ** 2 * p.L_print
+        bore_area = p.no_chim * np.pi * (0.5 * p.D_chim) ** 2
+        bore_vol = bore_area * p.L_print
     return {
         "wax_mL": wax_mm3 * 1e-3,
-        "shrink_mL": shrink * 1e-3,
-        "reservoir_mL": chim * 1e-3,
-        "margin": (chim / shrink) if shrink > 0 else float("inf"),
+        # what the riser above this puck must supply, the actionable number
+        "shrink_mL": beta * wax_mm3 * 1e-3,
+        # conduit, not reservoir
+        "bore_volume_mL": bore_vol * 1e-3,
+        "bore_area_mm2": bore_area,
         "beta": beta,
     }
