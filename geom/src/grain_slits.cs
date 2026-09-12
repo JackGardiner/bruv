@@ -28,10 +28,14 @@ public partial class Grain {
         if (W_perf <= 0f || no_perf <= 0)
             return;
 
-        // Only 2- and 4-fold survive the lattice's screw symmetry.
-        assert(no_perf == 2 || no_perf == 4,
-                $"no_perf={no_perf}: only 2 or 4 stay equivalent under the "
-                + "lattice's 4_1 screw symmetry");
+        // only 2 and 4 put every slot in a lattice channel.
+        if (no_perf != 2 && no_perf != 4) {
+            print($"WARNING: no_perf={no_perf} is not 2 or 4, so the slots do");
+            print( "         not all land in a lattice channel. Some will");
+            print( "         interrupt the sheet-to-skin attachment (about");
+            print( "         1.9-2.4% of it at 8 slits). No sheet is severed.");
+            print();
+        }
 
         assert(z0_perf >= 0f, $"z0_perf={z0_perf}");
         assert(z1_perf_or_top > z0_perf,

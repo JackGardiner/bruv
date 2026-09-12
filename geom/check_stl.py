@@ -151,6 +151,20 @@ def chimney_open(tris, r, theta0, n_chim, d_chim, samples=64, seed=0,
     return out
 
 
+def _empty_runs(empty):
+    """Lengths of the runs of True in a circular boolean array."""
+    runs, in_run, this = [], False, 0
+    for e in np.concatenate([empty, [False]]):
+        if e:
+            in_run, this = True, this + 1
+        elif in_run:
+            runs.append(this)
+            in_run, this = False, 0
+    if len(runs) > 1 and empty[0] and empty[-1]:
+        runs[0] += runs.pop()
+    return runs
+
+
 def check_slits(tris, n_expected, width, r_grain, tol=0.15):
     """Count the angular gaps in the OD surface and measure their width."""
     cen = tris.mean(axis=1)
@@ -169,24 +183,25 @@ def check_slits(tris, n_expected, width, r_grain, tol=0.15):
     if not on_od.any():
         return False, "no outward-facing OD surface found in the mid-height band"
     th = np.degrees(np.arctan2(cen[on_od, 1], cen[on_od, 0])) % 360.0
-    hist, edges = np.histogram(th, bins=720, range=(0, 360))
-    empty = hist == 0
-    # count runs of empty bins
-    runs, in_run, this = [], False, 0
-    for e in np.concatenate([empty, [False]]):
-        if e:
-            in_run, this = True, this + 1
-        elif in_run:
-            runs.append(this)
-            in_run, this = False, 0
-    # a slit centred on 0 deg is split across the wrap, appearing as one run at
-    # each end of the histogram -- rejoin them before counting
-    if len(runs) > 1 and empty[0] and empty[-1]:
-        runs[0] += runs.pop()
+
+    # try bin widths coarse to fine, keep the finest that finds the right count
+    best = None
+    for bins in (360, 720, 1440, 2880):
+        hist, _ = np.histogram(th, bins=bins, range=(0, 360))
+        runs = _empty_runs(hist == 0)
+        if len(runs) == int(n_expected):
+            best = (bins, hist, runs)
+    if best is None:
+        # fall back to the coarsest so the count error is reported honestly
+        bins = 720
+        hist, _ = np.histogram(th, bins=bins, range=(0, 360))
+    else:
+        bins, hist, _ = best
+    runs = _empty_runs(hist == 0)
     n_found = len(runs)
     if n_found != int(n_expected):
         return False, f"found {n_found} slits, expected {int(n_expected)}"
-    got_w = np.mean(runs) * (360.0 / 720) * np.radians(1.0) * r_grain
+    got_w = np.mean(runs) * (360.0 / bins) * np.radians(1.0) * r_grain
     if abs(got_w / width - 1) > tol:
         return False, f"slit width {got_w:.2f} mm, expected {width:.2f} mm"
     return True, f"{n_found} slits, mean width {got_w:.2f} mm"
