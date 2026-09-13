@@ -45,6 +45,7 @@ public static class TwoPeasInAPod {
     public const int INJECTOR        = 2 << (BITC_ACTION + BITC_MODIFIER);
     public const int INJECTOR_SAMPLE = 3 << (BITC_ACTION + BITC_MODIFIER);
     public const int CAPLUGS         = 4 << (BITC_ACTION + BITC_MODIFIER);
+    public const int FUEL_GRAIN      = 5 << (BITC_ACTION + BITC_MODIFIER);
     /* theres lowk more than 2 peas in this pod. */
     /* THATS ALL FOLKS */
 
@@ -218,6 +219,9 @@ public static class TwoPeasInAPod {
 
           case CAPLUGS: {
             pea = new Caplugs();
+          } break;
+          case FUEL_GRAIN: {
+            pea = new FuelGrain();
           } break;
 
           default:

@@ -1223,11 +1223,11 @@ public class Gyroid : FramedShape<Gyroid>, IImplicit {
         float mag2G = max(1e-6f, mag2(G));
 
         // Less agressive steps to prevent instability.
-        float lambda = 0.25f;
+        float lambda = 0.22f;
 
         // Iteratively find the closest point on the gyroid surface.
         Vec3 r = q - f/mag2G * G;
-        for (int i=0; i<1000; ++i) {
+        for (int i=0; i<10000; ++i) {
             Vec3 old_r = r;
 
             Vec3 sr = sin(w*r);
@@ -1251,7 +1251,7 @@ public class Gyroid : FramedShape<Gyroid>, IImplicit {
 
             // Update things.
             f = sgnf * mag(r - q);
-            if (abs(mag(old_r - r)) < 1e-3f)
+            if (abs(mag(old_r - r)) < 5e-5f)
                 break;
         }
 
