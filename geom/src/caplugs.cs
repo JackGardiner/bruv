@@ -21,15 +21,13 @@ public class Caplugs : TPIAP.Pea {
         _ = popbits(ref mods, TPIAP.LOOKIN_FANCY);
         assert(mods == 0, $"disallowed modifiers: 0x{mods:X}");
     }
-    public void anything() {
-        throw new NotImplementedException();
-    }
-    public Voxels? cutaway(in Voxels part) {
-        throw new NotImplementedException();
-    }
-    public void drawings(in Voxels part) {
-        throw new NotImplementedException();
-    }
+
+    public void anything()
+        => throw new NotImplementedException();
+    public Voxels? cutaway(in Voxels part)
+        => throw new NotImplementedException();
+    public void drawings(in Voxels part)
+        => throw new NotImplementedException();
 
 
     public Voxels? voxels() {
@@ -50,7 +48,7 @@ public class Caplugs : TPIAP.Pea {
         plug("BSPP-1/2");
         plug("AN-6");
         plug("UNF-9/16");
-        cover("CAP-THRU-3/8", 3f/8f*25.4f - 0.2f, 9f);
+        cover("THRU-3/8", 3f/8f*25.4f - 0.18f, 9f);
 
         return null; // not really a single-voxels pea.
     }
@@ -352,8 +350,8 @@ public class Caplugs : TPIAP.Pea {
                                               theta + Ltheta/2f).cut(prong);
             female.BoolSubtract(this_prong);
             Voxels this_support = Sectioner.pie(
-                    theta + PI/prongs - (TWOPI/prongs - Ltheta)*0.55f/2f,
-                    theta + PI/prongs + (TWOPI/prongs - Ltheta)*0.55f/2f)
+                    theta + PI/prongs - (TWOPI/prongs - Ltheta)*0.68f/2f,
+                    theta + PI/prongs + (TWOPI/prongs - Ltheta)*0.68f/2f)
                 .cut(support);
             female.BoolSubtract(this_support);
         }
@@ -391,7 +389,7 @@ public class Caplugs : TPIAP.Pea {
 
         Mesh m = new(v);
         Geez.mesh(m);
-        TPIAP.save_mesh_only($"{name.Replace("/", "_")}", m);
+        TPIAP.save_mesh_only($"COVER-{name.Replace("/", "_")}", m);
         place_at = place_at.transx(40f);
     }
 
