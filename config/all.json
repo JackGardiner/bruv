@@ -128,7 +128,7 @@
         "th_dmw": 3.0,
         "th_omw": 4.0,
 
-        "boltsize_mount": "M6",
+        "boltsize_mount": "M6x1.00",
         "r_mount": 50.0,
         "z_mount": 43.0,
 

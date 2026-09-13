@@ -38,42 +38,80 @@ public class Threads {
     public Threads(string size) {
         Dictionary<string, List<float>> lookup = new([
 // Cheeky indentation cut.
-/*                  major    minor                  gauge          */
-/*         size     diam.    diam.   pitch  taper  length  length  */
-new(      "M1", [    1.0f,  0.729f,  0.25f,    0f,     0f,   1.5f ] ),
-new(      "M2", [    2.0f,  1.567f,  0.40f,    0f,     0f,   3.2f ] ),
-new(      "M3", [    3.0f,  2.459f,  0.50f,    0f,     0f,   5.0f ] ),
-new(      "M4", [    4.0f,  3.242f,  0.70f,    0f,     0f,   7.0f ] ),
-new(      "M5", [    5.0f,  4.134f,  0.80f,    0f,     0f,   8.0f ] ),
-new(      "M6", [    6.0f,  4.917f,  1.00f,    0f,     0f,  10.0f ] ),
-new(      "M8", [    8.0f,  6.647f,  1.25f,    0f,     0f,  12.5f ] ),
-new(     "M10", [   10.0f,  8.376f,  1.50f,    0f,     0f,  15.0f ] ),
-new(     "M12", [   12.0f, 10.106f,  1.75f,    0f,     0f,  17.5f ] ),
-new(     "M14", [   14.0f, 11.835f,  2.00f,    0f,     0f,  20.0f ] ),
-new(     "M16", [   16.0f, 13.835f,  2.00f,    0f,     0f,  20.0f ] ),
+/*                    major    minor                  gauge          */
+/*          size      diam.    diam.   pitch  taper  length  length  */
+new(    "M1x0.25", [    1.0f,  0.729f,  0.25f,    0f,     0f,   1.5f ] ),
+new(    "M2x0.40", [    2.0f,  1.567f,  0.40f,    0f,     0f,   3.2f ] ),
+new(    "M3x0.50", [    3.0f,  2.459f,  0.50f,    0f,     0f,   5.0f ] ),
+new(    "M4x0.70", [    4.0f,  3.242f,  0.70f,    0f,     0f,   7.0f ] ),
+new(    "M5x0.80", [    5.0f,  4.134f,  0.80f,    0f,     0f,   8.0f ] ),
+new(    "M6x1.00", [    6.0f,  4.917f,  1.00f,    0f,     0f,  10.0f ] ),
+new(    "M8x1.25", [    8.0f,  6.647f,  1.25f,    0f,     0f,  12.5f ] ),
+new(   "M10x1.50", [   10.0f,  8.376f,  1.50f,    0f,     0f,  15.0f ] ),
+new(   "M12x1.75", [   12.0f, 10.106f,  1.75f,    0f,     0f,  17.5f ] ),
+new(   "M14x2.00", [   14.0f, 11.835f,  2.00f,    0f,     0f,  20.0f ] ),
+new(   "M16x2.00", [   16.0f, 13.835f,  2.00f,    0f,     0f,  20.0f ] ),
 
-new(   "G1/16", [  7.723f,  6.561f, 0.907f,    0f,     0f,   9.1f ] ),
-new(    "G1/8", [  9.728f,  8.566f, 0.907f,    0f,     0f,   9.1f ] ),
-new(    "G1/4", [ 13.157f, 11.445f, 1.337f,    0f,     0f,  14.7f ] ),
-new(    "G3/8", [ 16.662f, 14.950f, 1.337f,    0f,     0f,  16.0f ] ),
-new(    "G1/2", [ 20.955f, 18.631f, 1.814f,    0f,     0f,  21.8f ] ),
-new(    "G5/8", [ 22.911f, 20.587f, 1.814f,    0f,     0f,  23.6f ] ),
-new(    "G3/4", [ 26.441f, 24.117f, 1.814f,    0f,     0f,  23.6f ] ),
-new(    "G7/8", [ 30.201f, 27.877f, 1.814f,    0f,     0f,  25.4f ] ),
-new(      "G1", [ 33.249f, 30.291f, 2.309f,    0f,     0f,  32.3f ] ),
-new(  "G1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,     0f,  34.6f ] ),
-new(  "G1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,     0f,  34.6f ] ),
-new(  "G1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,     0f,  36.9f ] ),
+new(  "BSPP-1/16", [  7.723f,  6.561f, 0.907f,    0f,     0f,   9.1f ] ),
+new(   "BSPP-1/8", [  9.728f,  8.566f, 0.907f,    0f,     0f,   9.1f ] ),
+new(   "BSPP-1/4", [ 13.157f, 11.445f, 1.337f,    0f,     0f,  14.7f ] ),
+new(   "BSPP-3/8", [ 16.662f, 14.950f, 1.337f,    0f,     0f,  16.0f ] ),
+new(   "BSPP-1/2", [ 20.955f, 18.631f, 1.814f,    0f,     0f,  21.8f ] ),
+new(   "BSPP-5/8", [ 22.911f, 20.587f, 1.814f,    0f,     0f,  23.6f ] ),
+new(   "BSPP-3/4", [ 26.441f, 24.117f, 1.814f,    0f,     0f,  23.6f ] ),
+new(   "BSPP-7/8", [ 30.201f, 27.877f, 1.814f,    0f,     0f,  25.4f ] ),
+new(     "BSPP-1", [ 33.249f, 30.291f, 2.309f,    0f,     0f,  32.3f ] ),
+new( "BSPP-1-1/8", [ 37.897f, 34.939f, 2.309f,    0f,     0f,  34.6f ] ),
+new( "BSPP-1-1/4", [ 41.910f, 38.952f, 2.309f,    0f,     0f,  34.6f ] ),
+new( "BSPP-1-1/2", [ 47.803f, 44.845f, 2.309f,    0f,     0f,  36.9f ] ),
 
-new(  "Rc1/16", [  7.723f,  6.561f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
-new(   "Rc1/8", [  9.728f,  8.566f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
-new(   "Rc1/4", [ 13.157f, 11.445f, 1.337f, 1f/16,   6.0f,   9.7f ] ),
-new(   "Rc3/8", [ 16.662f, 14.950f, 1.337f, 1f/16,   6.4f,  10.1f ] ),
-new(   "Rc1/2", [ 20.955f, 18.631f, 1.814f, 1f/16,   8.2f,  13.2f ] ),
-new(   "Rc3/4", [ 26.441f, 24.117f, 1.814f, 1f/16,   9.5f,  14.5f ] ),
-new(     "Rc1", [ 33.249f, 30.291f, 2.309f, 1f/16,  10.4f,  16.8f ] ),
-new( "Rc1-1/4", [ 41.910f, 38.952f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
-new( "Rc1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
+new(  "BSPT-1/16", [  7.723f,  6.561f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
+new(   "BSPT-1/8", [  9.728f,  8.566f, 0.907f, 1f/16,   4.0f,   6.5f ] ),
+new(   "BSPT-1/4", [ 13.157f, 11.445f, 1.337f, 1f/16,   6.0f,   9.7f ] ),
+new(   "BSPT-3/8", [ 16.662f, 14.950f, 1.337f, 1f/16,   6.4f,  10.1f ] ),
+new(   "BSPT-1/2", [ 20.955f, 18.631f, 1.814f, 1f/16,   8.2f,  13.2f ] ),
+new(   "BSPT-3/4", [ 26.441f, 24.117f, 1.814f, 1f/16,   9.5f,  14.5f ] ),
+new(     "BSPT-1", [ 33.249f, 30.291f, 2.309f, 1f/16,  10.4f,  16.8f ] ),
+new( "BSPT-1-1/4", [ 41.910f, 38.952f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
+new( "BSPT-1-1/2", [ 47.803f, 44.845f, 2.309f, 1f/16,  12.7f,  19.1f ] ),
+
+new(   "NPT-1/16", [  7.640f,  6.134f, 0.941f, 1f/16,  4.06f,  6.63f ] ),
+new(    "NPT-1/8", [  9.986f,  8.480f, 0.941f, 1f/16,  4.10f,  6.70f ] ),
+new(    "NPT-1/4", [ 13.255f, 10.997f, 1.411f, 1f/16,  5.79f, 10.21f ] ),
+new(    "NPT-3/8", [ 16.674f, 14.416f, 1.411f, 1f/16,  6.10f, 10.36f ] ),
+new(    "NPT-1/2", [ 20.715f, 17.813f, 1.814f, 1f/16,  8.13f, 13.56f ] ),
+new(    "NPT-3/4", [ 26.030f, 23.128f, 1.814f, 1f/16,  8.61f, 13.86f ] ),
+new(      "NPT-1", [ 32.593f, 29.059f, 2.209f, 1f/16, 10.16f, 17.34f ] ),
+
+new(       "AN-2", [  7.938f,  6.792f, 1.058f,    0f,     0f,   9.5f ] ),
+new(       "AN-3", [  9.525f,  8.379f, 1.058f,    0f,     0f,  11.0f ] ),
+new(       "AN-4", [ 11.113f,  9.738f, 1.270f,    0f,     0f,  12.5f ] ),
+new(       "AN-5", [ 12.700f, 11.325f, 1.270f,    0f,     0f,  14.0f ] ),
+new(       "AN-6", [ 14.288f, 12.760f, 1.411f,    0f,     0f,  16.0f ] ),
+new(       "AN-8", [ 19.050f, 17.332f, 1.588f,    0f,     0f,  20.0f ] ),
+new(      "AN-10", [ 22.225f, 20.261f, 1.814f,    0f,     0f,  23.0f ] ),
+new(      "AN-12", [ 26.988f, 24.696f, 2.117f,    0f,     0f,  27.0f ] ),
+new(      "AN-16", [ 33.338f, 31.046f, 2.117f,    0f,     0f,  33.0f ] ),
+new(      "AN-20", [ 41.275f, 38.984f, 2.117f,    0f,     0f,  41.0f ] ),
+new(      "AN-24", [ 47.625f, 45.334f, 2.117f,    0f,     0f,  48.0f ] ),
+new(      "AN-32", [ 63.500f, 61.209f, 2.117f,    0f,     0f,  64.0f ] ),
+
+new(   "SWG-1/16", [  4.763f,  3.903f, 0.794f,    0f,     0f,   4.0f ] ),
+new(    "SWG-1/8", [  7.938f,  6.563f, 1.270f,    0f,     0f,   5.1f ] ),
+new(   "SWG-3/16", [  9.525f,  8.150f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-1/4", [ 11.113f,  9.738f, 1.270f,    0f,     0f,   5.1f ] ),
+new(   "SWG-5/16", [ 12.700f, 11.325f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-3/8", [ 14.288f, 12.913f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-1/2", [ 19.050f, 17.675f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-5/8", [ 22.225f, 20.850f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-3/4", [ 25.400f, 24.025f, 1.270f,    0f,     0f,   5.1f ] ),
+new(    "SWG-7/8", [ 28.575f, 27.200f, 1.270f,    0f,     0f,   5.1f ] ),
+new(      "SWG-1", [ 33.338f, 31.963f, 1.270f,    0f,     0f,   5.1f ] ),
+new(  "SWG-1-1/4", [ 41.275f, 39.900f, 1.270f,    0f,     0f,   5.1f ] ),
+new(  "SWG-1-1/2", [ 49.213f, 47.838f, 1.270f,    0f,     0f,   5.1f ] ),
+new(      "SWG-2", [ 66.675f, 65.300f, 1.270f,    0f,     0f,   5.1f ] ),
+
+new(   "UNF-9/16", [ 14.288f, 12.760f, 1.411f,    0f,     0f,   8.0f ] ),
         ]);
         List<float> entry = lookup[size];
 
@@ -215,6 +253,8 @@ public class Tapping : Threads {
 
     public float bore_radius => 0.5f*bore_diameter;
 
+    public float unprintable_entrance_CR;
+
     public Tapping(string size, bool printable=false)
             : base(size.Split(" ", 2)[0]) {
         // note that `size` is allowed to specify a threaded length after the
@@ -223,6 +263,7 @@ public class Tapping : Threads {
 
         incomplete_lower_length = 2f*pitch;
         inner_thread_truncation = 0.15f*thread_depth;
+        unprintable_entrance_CR = 2.0f*thread_depth;
 
         // Add safety factor to gauge length.
         if (gauge_length != 0f) {
@@ -248,7 +289,7 @@ public class Tapping : Threads {
         if (!printable) {
             // Hole will look like the threads, with a conical tip, a small
             // chamfer at the leading edge, and a small round slug at the top.
-            float CR = 2.0f*thread_depth;
+            float CR = unprintable_entrance_CR;
             Voxels vox = threads(face_out);
             List<Vec2> zr = [
                 new(A.X + extra, 0f),
@@ -269,8 +310,8 @@ public class Tapping : Threads {
         // Simple bore cylinder w cone tip.
         if (nearvert(face_out.Z)) {
             List<Vec2> zr = [
-                new(extra,           0f),
-                new(extra,           bore_radius),
+                new(extra,            0f),
+                new(extra,            bore_radius),
                 new(-straight_length, bore_radius),
                 new(-straight_length - tip_length_ratio*bore_radius, 0f),
             ];
@@ -341,12 +382,16 @@ public class Tapping : Threads {
 
 
 public class Studding : Threads {
+
+    public float unprintable_ending_CR;
+
     public Studding(string size)
-            : base(size) {
+            : base(size.Split(" ", 2)[0]) {
 
         incomplete_upper_length = 1f*pitch;
         incomplete_lower_length = 2f*pitch;
         outer_thread_truncation = 0.15f*thread_depth;
+        unprintable_ending_CR = 1.5f*thread_depth;
 
         // Add safety factor to gauge length.
         if (gauge_length != 0f) {
@@ -355,6 +400,13 @@ public class Studding : Threads {
             threaded_length += 2.0f*pitch;
         }
         tip_length_ratio = 0f; // circumcise.
+
+        string[] parts = size.Split(" ");
+        if (numel(parts) > 1) {
+            threaded_length = float.Parse(parts[1],
+                    System.Globalization.CultureInfo.InvariantCulture);
+        }
+        assert(numel(parts) <= 2, "unrecognised sizing string");
     }
 
 
@@ -384,7 +436,7 @@ public class Studding : Threads {
         Polygon.cull_adjacent_duplicates(zr);
         vox.BoolAdd(new(Polygon.mesh_revolved(face_out, zr)));
 
-        float CR = 1.5f*thread_depth;
+        float CR = unprintable_ending_CR;
         Vec2 chamfer_corner = B + new Vec2(CR, 0.5f*taper*CR);
         vox.BoolIntersect(Cone.phied(
             face_out.transz(chamfer_corner.X),
