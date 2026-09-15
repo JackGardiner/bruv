@@ -206,8 +206,8 @@
         "blend_gyr": 0.0,
         "fillet_skin": 0.0,
 
-        "no_perf": 8,
-        "W_perf": 2.0,
+        "no_perf": 4,
+        "W_perf": 0.0,
         "z0_perf": 0.0,
         "z1_perf": 0.0,
         "theta0_perf": 0.0,

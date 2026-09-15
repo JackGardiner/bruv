@@ -37,6 +37,52 @@ def reachable_monotone(void, openings):
     return out
 
 
+def geodesic2d(mask, seed, maxit=10000):
+    """Unit-cost geodesic distance within `mask` from a seeded array."""
+    d = np.where(mask, seed, np.inf)
+    for _ in range(maxit):
+        nd = d.copy()
+        nd[1:, :] = np.minimum(nd[1:, :], d[:-1, :] + 1.0)
+        nd[:-1, :] = np.minimum(nd[:-1, :], d[1:, :] + 1.0)
+        nd[:, 1:] = np.minimum(nd[:, 1:], d[:, :-1] + 1.0)
+        nd[:, :-1] = np.minimum(nd[:, :-1], d[:, 1:] + 1.0)
+        nd = np.where(mask, nd, np.inf)
+        if np.array_equal(nd, d):
+            return d
+        d = nd
+    return d
+
+
+def escape_path(field, openings=None):
+    """V4. Distance (mm) a bubble travels to an opening without going down."""
+    void = field.void
+    op = openings_of(field) if openings is None else openings
+    nz = void.shape[2]
+    dist = np.full(void.shape, np.inf)
+    prev = None
+    for k in range(nz - 1, -1, -1):
+        v = void[:, :, k]
+        seed = np.where(op[:, :, k] & v, 0.0, np.inf)
+        if prev is not None:
+            seed = np.minimum(seed, np.where(v, prev + 1.0, np.inf))
+        dist[:, :, k] = geodesic2d(v, seed)
+        prev = dist[:, :, k]
+
+    reached = void & np.isfinite(dist)
+    n_void = int(void.sum())
+    if not reached.any():
+        return {"mean_mm": 0.0, "p50_mm": 0.0, "p95_mm": 0.0, "max_mm": 0.0,
+                "unreachable_frac": 1.0 if n_void else 0.0}
+    mm = dist[reached] * field.h
+    return {
+        "mean_mm": float(mm.mean()),
+        "p50_mm": float(np.percentile(mm, 50)),
+        "p95_mm": float(np.percentile(mm, 95)),
+        "max_mm": float(mm.max()),
+        "unreachable_frac": float((void & ~reached).sum()) / max(n_void, 1),
+    }
+
+
 def erode(mask, radius, h):
     """Shrink `mask` by `radius`. Used to drop throats a bubble cannot pass."""
     n = int(round(radius / h))
@@ -63,23 +109,35 @@ def level_set_area(d, h, eps=None):
     return float((np.abs(d) < eps).sum()) * h**3 / (2.0 * eps)
 
 
-def orientation_fractions(d, h, angles=(20, 30, 45), eps=None):
-    """Fraction of downward-facing area within each angle of horizontal."""
-    eps = eps if eps is not None else AREA_EPS_MULT * h
+def down_tilts(d, h, eps):
+    """Tilt from horizontal (deg) of each downward-facing cell of {d = 0}."""
     gx, gy, gz = np.gradient(d, h)
     mag = np.maximum(np.sqrt(gx * gx + gy * gy + gz * gz), 1e-9)
-    nz = (gz / mag)
-    shell = np.abs(d) < eps
-    down = shell & (nz < 0)
-    n_down = int(down.sum())
+    nz = gz / mag
+    down = (np.abs(d) < eps) & (nz < 0)
+    return np.degrees(np.arccos(np.clip(np.abs(nz[down]), 0.0, 1.0)))
+
+
+def solid_faces(field):
+    """The sheet's two bounding surfaces, as two SEPARATE level sets."""
+    half = 0.5 * field.thickness
+    return field.dist - half, field.dist + half
+
+
+def orientation_fractions(d, h, angles=(20, 30, 45), eps=None,
+                          mid_surface=True):
+    """Fraction of downward-facing area within each angle of horizontal."""
+    eps = eps if eps is not None else AREA_EPS_MULT * h
+    beta = down_tilts(d, h, eps)
+    n_down = len(beta)
     cell_to_cm2 = h**3 / (2.0 * eps) / 100.0
     # a mid-surface only sees one of the sheet's two faces, so double it
-    out = {"total_down_cm2": 2.0 * n_down * cell_to_cm2}
+    scale = 2.0 if mid_surface else 1.0
+    out = {"total_down_cm2": scale * n_down * cell_to_cm2}
     if n_down == 0:
         for a in angles:
             out[f"within_{a}_frac"] = 0.0
         return out
-    beta = np.degrees(np.arccos(np.clip(np.abs(nz[down]), 0.0, 1.0)))
     for a in angles:
         out[f"within_{a}_frac"] = float((beta < a).mean())
     return out
@@ -120,14 +178,37 @@ def venting(field, throat_r=0.0):
     }
 
 
-def ceiling_area(field, angles=(20, 30, 45)):
-    """V3. Restricted to the lattice, so the OD skin does not swamp it."""
+def _lattice_only(d, field):
+    """Push everything that isn't lattice out of the shell."""
     p = field.params
-    d = field.dist.copy()
-    outside = (field.r >= p.R_skin) | (field.r <= p.R_port)
-    d[outside] = 1e3                       # push non-lattice out of the shell
+    d = d.copy()
+    d[(field.r >= p.R_skin) | (field.r <= p.R_port)] = 1e3
+    return d
+
+
+def ceiling_area(field, angles=(20, 30, 45)):
+    """V3, on the sheet MID-SURFACE."""
+    d = _lattice_only(field.dist, field)
     out = orientation_fractions(d, field.h, angles)
     out["area_cm2"] = level_set_area(d, field.h) / 100.0
+    return out
+
+
+def ceiling_area_solid(field, angles=(20, 30, 45)):
+    """V3 on the SOLID BOUNDARY -- the thickness-aware version."""
+    h = field.h
+    eps = AREA_EPS_MULT * h
+    betas, area = [], 0.0
+    for face in solid_faces(field):
+        d = _lattice_only(face, field)
+        betas.append(down_tilts(d, h, eps))
+        area += level_set_area(d, h)
+    beta = np.concatenate(betas)
+    cell_to_cm2 = h**3 / (2.0 * eps) / 100.0
+    out = {"total_down_cm2": len(beta) * cell_to_cm2,
+           "area_cm2": area / 100.0}
+    for a in angles:
+        out[f"within_{a}_frac"] = float((beta < a).mean()) if len(beta) else 0.0
     return out
 
 

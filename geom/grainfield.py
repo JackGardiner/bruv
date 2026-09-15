@@ -25,9 +25,13 @@ class GrainParams:
     x0_gyr: float
     y0_gyr: float
     z0_gyr: float
-    # grading -- defaults reproduce a constant-thickness sheet.
-    th_anchor: float = 0.0     # 0 => same as th_gyr, i.e. no grading
+    # axial grading towards the end faces, 0 for none
+    th_anchor: float = 0.0     # 0 => no axial grading
     ramp_gyr: float = 0.0
+    # radial taper, thin at the ID, thick at the OD. 0 uses th_gyr at that end
+    th_id: float = 0.0
+    th_od: float = 0.0
+    expo_gyr: float = 1.0
     # carried for the record only, tier 1 doesn't model these
     blend_gyr: float = 0.0
     # chimneys
@@ -95,6 +99,19 @@ class Field:
     z: np.ndarray
     h: float
     params: GrainParams
+    # local sheet thickness, same grid as dist
+    t: np.ndarray = None
+
+    @property
+    def thickness(self):
+        if self.t is not None:
+            return self.t
+        return thickness_at(self.params, self.r, self.z).astype(np.float32)
+
+    @property
+    def dist_solid(self):
+        """Signed distance to the SOLID boundary, not the sheet mid-surface."""
+        return np.abs(self.dist) - 0.5 * self.thickness
 
     @property
     def void(self):
@@ -104,18 +121,26 @@ class Field:
         return env & ~self.solid
 
 
+def radial_thickness(p, r):
+    """Sheet thickness as a function of radius alone -- the taper."""
+    if p.th_id <= 0.0 and p.th_od <= 0.0:
+        return np.full(np.shape(r), p.th_gyr, dtype=np.float64)
+    t_id = p.th_id if p.th_id > 0.0 else p.th_gyr
+    t_od = p.th_od if p.th_od > 0.0 else p.th_gyr
+    span = max(p.R_skin - p.R_port, 1e-9)
+    u = np.clip((np.asarray(r, dtype=np.float64) - p.R_port) / span, 0.0, 1.0)
+    return t_id + (t_od - t_id) * u ** p.expo_gyr
+
+
 def thickness_at(p, r, z):
-    """Sheet thickness, thickened towards the skin and end faces."""
-    t_mid = np.full(np.broadcast(r, z).shape, p.th_gyr, dtype=np.float64)
-    if p.th_anchor <= 0.0:
-        return t_mid
-    frac = np.ones_like(t_mid)
-    if p.ramp_gyr > 0:
-        frac = np.minimum(frac, np.clip((p.R_skin - r) / p.ramp_gyr, 0.0, 1.0))
-        frac = np.minimum(frac, np.clip(z / p.ramp_gyr, 0.0, 1.0))
-        frac = np.minimum(
-            frac, np.clip((p.L_print - z) / p.ramp_gyr, 0.0, 1.0))
-    return p.th_anchor + (p.th_gyr - p.th_anchor) * frac
+    """Sheet thickness field: the radial taper, then the axial anchor."""
+    shape = np.broadcast(r, z).shape
+    t = np.broadcast_to(radial_thickness(p, r), shape).astype(np.float64)
+    if p.th_anchor <= 0.0 or p.ramp_gyr <= 0.0:
+        return t
+    depth = np.minimum(np.asarray(z, dtype=np.float64), p.L_print - z)
+    frac = np.clip(depth / p.ramp_gyr, 0.0, 1.0)
+    return p.th_anchor + (t - p.th_anchor) * frac
 
 
 def gyroid_distance(p, x, y, z):
@@ -176,4 +201,5 @@ def sample(p, h, based=False):
         solid |= in_env & (Z < p.th_shelf)
 
     solid &= in_env
-    return Field(solid=solid, dist=d, r=r, x=ax, y=ax, z=az, h=h, params=p)
+    return Field(solid=solid, dist=d, t=t, r=r, x=ax, y=ax, z=az, h=h,
+                 params=p)

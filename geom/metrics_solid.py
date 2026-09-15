@@ -11,6 +11,11 @@ BISIN_E_MPA = (16.0, 26.0)
 BISIN_RF = (2.23, 1.75)
 BARE_WAX_RF = 1.21          # W1, no armour
 EXTRUSION_WIDTH = 0.2       # mm
+MIN_PERIMETERS = 2          # printable floor: two perimeters of extrusion
+
+# phi where the linear r_f fit through Bisin's two points crosses zero
+RF_ZERO_PHI = BISIN_PHI[0] + BISIN_RF[0] * (BISIN_PHI[1] - BISIN_PHI[0]) / (
+    BISIN_RF[0] - BISIN_RF[1])
 
 
 def cells_across(p):
@@ -80,8 +85,70 @@ def _lattice_distance(field):
 
 
 def interface_area(field):
-    """S4. Gyroid-paraffin contact area in cm2."""
+    """S4, interface area on the mid-surface. Thickness-blind."""
     return mf.level_set_area(_lattice_distance(field), field.h) / 100.0
+
+
+def interface_area_solid(field):
+    """S4 on the SOLID BOUNDARY -- the area the paraffin actually wets."""
+    return sum(mf.level_set_area(mf._lattice_only(face, field), field.h)
+               for face in mf.solid_faces(field)) / 100.0
+
+
+# ------------------------------------------------ radial profiles (graded)
+
+def phi_profile(field, nbins=10):
+    """Fill fraction of the LATTICE per annular bin, ID to OD."""
+    p = field.params
+    edges = np.linspace(p.R_port, p.R_skin, int(nbins) + 1)
+    lattice = field.solid & (field.r < p.R_skin) & (field.r >= p.R_port)
+    phi, centres = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        shell = (field.r >= a) & (field.r < b)
+        n = int(shell.sum())
+        phi.append(float(lattice[shell].sum()) / n if n else 0.0)
+        centres.append(0.5 * (a + b))
+    return {"r_mm": np.array(centres), "phi": np.array(phi),
+            "edges_mm": edges}
+
+
+def regression_schedule(field, nbins=10):
+    """Ballistics as the burn front sweeps outward: r_f at each radius."""
+    prof = phi_profile(field, nbins)
+    over = prof["phi"] >= RF_ZERO_PHI
+    if over.any():
+        bad = ", ".join(f"r={r:.1f}mm phi={v:.3f}"
+                        for r, v in zip(prof["r_mm"][over], prof["phi"][over]))
+        raise ValueError(
+            "regression_schedule is undefined at these radii: the linear fit "
+            f"through Bisin's two points crosses zero at phi={RF_ZERO_PHI:.3f} "
+            f"and returns a negative regression rate beyond it. Got {bad}. "
+            "Thin the sheet at the OD or score ballistics some other way.")
+    rf = np.array([regression_rate(v)["r_f_mm_s"] for v in prof["phi"]])
+    inband = [(BISIN_PHI[0] <= v <= BISIN_PHI[1]) for v in prof["phi"]]
+    return {
+        "r_mm": prof["r_mm"],
+        "phi": prof["phi"],
+        "r_f_mm_s": rf,
+        "spread_mm_s": float(rf.max() - rf.min()),
+        "in_band_frac": float(np.mean(inband)),
+        "caveat": "linear extrapolation past Bisin's tested 10-15% range",
+    }
+
+
+def stiffness_profile(field, nbins=10):
+    """S2 per annular bin, for a graded sheet."""
+    prof = phi_profile(field, nbins)
+    E = np.array([stiffness(v)["E_MPa"] for v in prof["phi"]])
+    inband = [(BISIN_PHI[0] <= v <= BISIN_PHI[1]) for v in prof["phi"]]
+    return {
+        "r_mm": prof["r_mm"],
+        "phi": prof["phi"],
+        "E_MPa": E,
+        "ratio_od_to_id": float(E[-1] / max(E[0], 1e-9)),
+        "in_band_frac": float(np.mean(inband)),
+        "basis": "Bisin EUCASS 2022 Table 3, gyroid alone, 2 points",
+    }
 
 
 def directional_area(field):
@@ -103,10 +170,11 @@ def free_edge_length(field):
     lat = field.solid & (field.r < p.R_skin)
     out = {}
 
+    t_local = field.thickness
+
     def edge_len(mask):
         """Edge cells form a t x h tube along the cut, so L = count*h**2/t."""
-        t = max(p.th_gyr, 1e-9)
-        return float(mask.sum()) * h**2 / t
+        return float((h**2 / np.maximum(t_local[mask], 1e-9)).sum())
 
     id_edge = lat & (field.r <= p.R_port + h)
     out["id_mm"] = edge_len(id_edge)
@@ -138,13 +206,23 @@ def printability(field, ew=EXTRUSION_WIDTH):
     p = field.params
     d = _lattice_distance(field)
     over = mf.orientation_fractions(d, field.h, angles=(20, 30, 45))
-    n_ew = p.th_gyr / ew
+    lattice = field.solid & (field.r < p.R_skin) & (field.r >= p.R_port)
+    th = field.thickness
+    if lattice.any():
+        t_min = float(th[lattice].min())
+        t_max = float(th[lattice].max())
+    else:
+        t_min = t_max = float(p.th_gyr)
+    n_ew = t_min / ew
     out = {
-        "wall_mm": p.th_gyr,
+        "wall_mm": t_min,
+        "wall_min_mm": t_min,
+        "wall_max_mm": t_max,
+        "wall_graded": bool(t_max - t_min > 1e-6),
         "wall_in_ew": float(n_ew),
         "wall_is_integer": bool(abs(n_ew - round(n_ew)) < 0.02),
-        "wall_below_two_perimeters": bool(p.th_gyr < 2 * ew),
-        "min_feature_mm": float(min(p.th_gyr, p.th_skin)),
+        "wall_below_two_perimeters": bool(t_min < MIN_PERIMETERS * ew),
+        "min_feature_mm": float(min(t_min, p.th_skin)),
     }
     out.update(over)
     return out

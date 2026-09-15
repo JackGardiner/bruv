@@ -13,7 +13,7 @@ import metrics_solid as ms
 TOL = 0.03          # fill fraction, relative
 ANGLES = (45, 30, 20)
 # overhang tolerance is absolute, percentage points of downward area
-OH_TOL = 0.05
+OH_TOL = 0.03
 
 
 def _volume_from_tris(tris):
@@ -45,7 +45,8 @@ def compare(stl_path, params, h=0.4):
     fill_pass = bool(abs(fill_drift) < TOL)
 
     tier2_oh = check_stl.overhang(tris)
-    tier1_oh = mf.ceiling_area(field, angles=ANGLES)
+    # solid boundary, since tier 2 reads the printed surface
+    tier1_oh = mf.ceiling_area_solid(field, angles=ANGLES)
     overhang_drift_pp = {
         a: tier1_oh[f"within_{a}_frac"] - tier2_oh[f"frac_below_{a}deg"]
         for a in ANGLES
