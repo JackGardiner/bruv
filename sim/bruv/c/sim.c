@@ -247,6 +247,13 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
     assert(s->out_Ys, "null output array: out_Ys");
     assert(s->out_SF, "null output array: out_SF");
     assert(s->out_xtra, "null output array: out_xtra");
+    assert(s->out_helix_angle, "null output array: out_helix_angle");
+    assert(s->out_th_chnl, "null output array: out_th_chnl");
+    assert(s->out_Lr_chnl, "null output array: out_Lr_chnl");
+    assert(s->out_psi_chnl, "null output array: out_psi_chnl");
+    assert(s->out_wi_chnl, "null output array: out_wi_chnl");
+    assert(s->out_th_iw, "null output array: out_th_iw");
+    assert(s->out_Lr_iw, "null output array: out_Lr_iw");
 
 
     assert(s->export_count > 20, "export array is too small (%lld)",
@@ -367,6 +374,13 @@ static void sim_full_outputs(simState* rstr s, const Contour* cnt,
                     t
                 );
         }
+        s->out_helix_angle[i] = cnt_helix_angle(cnt, z);
+        s->out_th_chnl[i] = cnt_th_chnl(cnt, z);
+        // s->out_Lr_chnl[i] = cnt_Lr_chnl(cnt, z);
+        s->out_psi_chnl[i] = cnt_psi_chnl(cnt, z);
+        // s->out_wi_chnl[i] = cnt_wi_chnl(cnt, z);
+        s->out_th_iw[i] = cnt_th_iw(cnt, z);
+        // s->out_Lr_iw[i] = cnt_Lr_iw(cnt, z);
     }
 
 

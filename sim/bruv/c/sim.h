@@ -94,6 +94,13 @@
     X(out_Ys, f64*, C_INPUT | C_OUTPUT_DATA)                    \
     X(out_SF, f64*, C_INPUT | C_OUTPUT_DATA)                    \
     X(out_xtra, f64*, C_INPUT | C_OUTPUT_DATA)                  \
+    X(out_helix_angle, f64*, C_INPUT | C_OUTPUT_DATA)           \
+    X(out_th_chnl, f64*, C_INPUT | C_OUTPUT_DATA)               \
+    X(out_Lr_chnl, f64*, C_INPUT | C_OUTPUT_DATA)               \
+    X(out_psi_chnl, f64*, C_INPUT | C_OUTPUT_DATA)              \
+    X(out_wi_chnl, f64*, C_INPUT | C_OUTPUT_DATA)               \
+    X(out_th_iw, f64*, C_INPUT | C_OUTPUT_DATA)                 \
+    X(out_Lr_iw, f64*, C_INPUT | C_OUTPUT_DATA)                 \
                                                                 \
     X(export_count, i64, C_INPUT)                               \
     X(export_z, f64*, C_INPUT | C_OUTPUT_DATA)                  \
