@@ -378,10 +378,11 @@ def main():
     plot_linfit(ax, op_ipa["R"][0], op_ipa["R"][1], C_RED_1)
     plot_linfit(ax, op_lox["C"][0], op_lox["C"][1], C_CYAN_1)
     plot_linfit(ax, op_ipa["C"][0], op_ipa["C"][1], C_PURPLE_1)
-    ax.axhline(MARK_MFR_LOX,     color=C_BLUE_0, ls="--")
-    ax.axhline(MARK_MFR_LOX_ALT, color=C_BLUE_1, ls="-.")
-    ax.axhline(MARK_MFR_IPA,     color=C_RED_0, ls="--")
-    ax.axhline(MARK_MFR_IPA_ALT, color=C_RED_1, ls="-.")
+    # ax.axhline(MARK_MFR_LOX,     color=C_BLUE_0, ls="--")
+    # ax.axhline(MARK_MFR_LOX_ALT, color=C_BLUE_1, ls="-.")
+    # ax.axhline(MARK_MFR_IPA,     color=C_RED_0, ls="--")
+    # ax.axhline(MARK_MFR_IPA_ALT, color=C_RED_1, ls="-.")
+    ax.set_title("Cd linear fit")
     ax.set_xlabel("A sqrt(DP) [m^2 Pa^0.5]")
     ax.set_ylabel("mfr [kg/s]")
 
@@ -409,10 +410,10 @@ def main():
             )
             ax.plot([x0, x1], [y0, y1], color=lcol, lw=1.0)
 
-    labels(ax, op_lox["R"], names["R"], -1.2e-3, +0.08, C_BLUE_0, "gray")
-    labels(ax, op_lox["C"], names["C"], -1.2e-3, +0.08, C_CYAN_0, "#B59F82")
-    labels(ax, op_ipa["R"], names["R"], +1.0e-3, -0.08, C_RED_0, "gray")
-    labels(ax, op_ipa["C"], names["C"], +1.0e-3, -0.08, C_PURPLE_0, "#B59F82")
+    # labels(ax, op_lox["R"], names["R"], -1.2e-3, +0.08, C_BLUE_0, "gray")
+    # labels(ax, op_lox["C"], names["C"], -1.2e-3, +0.08, C_CYAN_0, "#B59F82")
+    # labels(ax, op_ipa["R"], names["R"], +1.0e-3, -0.08, C_RED_0, "gray")
+    # labels(ax, op_ipa["C"], names["C"], +1.0e-3, -0.08, C_PURPLE_0, "#B59F82")
 
     fig.show()
     return
