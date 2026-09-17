@@ -41,6 +41,48 @@ def pick_wall(phi, L, Lz, L_puck):
     }
 
 
+# ------------------------------------------------------------ graded sheet
+
+def taper_fill(base, t_id, t_od, expo, h, basis):
+    """Measured fill for one taper. Sampled, not derived from a coefficient."""
+    p = base.replace(th_id=t_id, th_od=t_od, expo_gyr=expo, W_perf=0.0)
+    return ms.fill_fractions(grainfield.sample(p, h=h))[basis]
+
+
+def pick_taper(phi, ratio, expo=1.0, base=None, h=0.6, basis="whole_part",
+               tol=5e-5, maxit=12):
+    """Solve a radial taper for a target fill fraction."""
+    base = base or grainfield.GrainParams.from_config()
+    assert ratio > 0, f"ratio={ratio}"
+
+    # seed from the flat solution, the secant does the real work
+    coeff = sweep.calibrate_coefficient(base.L_cell, base.Lz_cell, H_PROBE)
+    t_flat = max(phi * base.L_cell / coeff, 2 * EW)
+    s0 = t_flat / (0.5 * (1.0 + ratio))
+    s1 = s0 * 1.15
+
+    f0 = taper_fill(base, s0, s0 * ratio, expo, h, basis) - phi
+    for _ in range(maxit):
+        f1 = taper_fill(base, s1, s1 * ratio, expo, h, basis) - phi
+        if abs(f1) < tol:
+            break
+        if abs(f1 - f0) < 1e-12:
+            break
+        s2 = s1 - f1 * (s1 - s0) / (f1 - f0)
+        s0, f0, s1 = s1, f1, max(s2, 1e-3)
+    else:
+        f1 = taper_fill(base, s1, s1 * ratio, expo, h, basis) - phi
+
+    t_id, t_od = s1, s1 * ratio
+    return {
+        "phi_target": phi, "phi_got": f1 + phi, "basis": basis, "h": h,
+        "ratio": ratio, "expo": expo,
+        "th_id_mm": t_id, "th_od_mm": t_od,
+        "th_id_ew": t_id / EW, "th_od_ew": t_od / EW,
+        "below_two_perimeters": bool(t_id < ms.MIN_PERIMETERS * EW),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -58,7 +100,39 @@ def main():
     ap.add_argument("--puck-length", type=float, default=None,
                      help="finished puck length mm "
                           "(default: config/all.json's L_puck)")
+    ap.add_argument("--taper", type=float, default=None, metavar="RATIO",
+                     help="solve a radial taper of this th_od/th_id ratio for "
+                          "--phi instead of a flat wall")
+    ap.add_argument("--expo", type=float, default=1.0,
+                     help="taper exponent (1 linear, >1 thickens later)")
+    ap.add_argument("--basis", default="whole_part",
+                     choices=("whole_part", "gyroid_only_chim_in",
+                              "gyroid_only_chim_out"),
+                     help="which fill fraction --taper targets")
+    ap.add_argument("--h", type=float, default=0.6,
+                     help="sampling spacing for --taper, mm")
     args = ap.parse_args()
+
+    if args.taper is not None:
+        r = pick_taper(args.phi, args.taper, expo=args.expo, h=args.h,
+                       basis=args.basis)
+        rule("PICK TAPER -- th_id/th_od for a target fill")
+        print(f"  target {r['basis']} fill = {r['phi_target']:.4f}"
+              f"   (solved to {r['phi_got']:.4f}, h={r['h']}mm)")
+        print(f"  shape: th_od/th_id = {r['ratio']:.2f}, "
+              f"exponent {r['expo']:.2f}")
+        print()
+        print(f"  th_id = {r['th_id_mm']:.4f} mm  "
+              f"({r['th_id_ew']:.2f} extrusion widths)")
+        print(f"  th_od = {r['th_od_mm']:.4f} mm  "
+              f"({r['th_od_ew']:.2f} extrusion widths)")
+        if r["below_two_perimeters"]:
+            print()
+            print(f"  WARNING: th_id is below the {ms.MIN_PERIMETERS}-perimeter "
+                  f"floor ({ms.MIN_PERIMETERS * EW}mm). The slicer cannot")
+            print("           print that wall; the taper is too aggressive.")
+        print()
+        return
 
     base = grainfield.GrainParams.from_config()
     L = args.L if args.L is not None else base.L_cell
