@@ -195,7 +195,7 @@
         "L_trim": 3.75,
         "th_skin": 1.0,
 
-        "th_gyr": 2.00,
+        "th_gyr": 1.20,
         "L_cell": 24.0,
         "Lz_cell": 32.0833333,
         "x0_gyr": -6.0,
@@ -211,6 +211,12 @@
         "z0_perf": 0.0,
         "z1_perf": 0.0,
         "theta0_perf": 0.0,
+
+        "perf_mode": "holes",
+        "D_hole": 4.0,
+        "no_hole_ring": 22,
+        "theta0_hole": 0.0,
+        "edge_hole": 3.0,
 
         "no_chim": 4,
         "D_chim": 12.0,

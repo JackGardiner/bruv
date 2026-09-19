@@ -45,6 +45,13 @@ class GrainParams:
     z0_perf: float = 0.0
     z1_perf: float = 0.0       # 0 => full height
     theta0_perf: float = 0.0
+    # "slits" or "holes", only that one is cut
+    perf_mode: str = "slits"
+    # holes, D_hole = 0 for none
+    D_hole: float = 0.0        # circle diameter; >= MIN_D_HOLE when on
+    no_hole_ring: int = 22     # holes per ring; == 2 mod 4, see hole_grid()
+    theta0_hole: float = 0.0   # grid phase, rad
+    edge_hole: float = 3.0     # min distance from a hole to either puck end
     # base variant
     th_shelf: float = 0.0
     rho: float = 1040.0
@@ -157,6 +164,77 @@ def gyroid_distance(p, x, y, z):
     return f / np.maximum(np.sqrt(gx * gx + gy * gy + gz * gz), 1e-9)
 
 
+# ------------------------------------------------------------- OD holes
+
+MIN_D_HOLE = 4.0                  # mm, owner's floor -- bubbles must pass
+SQRT2 = np.sqrt(2.0)
+
+
+def teardrop_inside(u, v, a):
+    """Circle of radius a plus a 45 degree pointed cap on top."""
+    circle = u * u + v * v <= a * a
+    kite = (np.abs(u) <= v) & (np.abs(u) + v <= a * SQRT2)
+    return circle | kite
+
+
+def teardrop_area(a):
+    """Circle + kite - overlap."""
+    return a * a * (0.75 * np.pi + 1.0)
+
+
+def hole_row_pitch(p):
+    """Rows are a quarter cell apart, the z half of the lattice's screw."""
+    return 0.25 * p.Lz_cell
+
+
+def hole_grid(p):
+    """Every hole centre, (theta, z)."""
+    if p.D_hole < MIN_D_HOLE:
+        raise ValueError(f"D_hole={p.D_hole}mm is below the {MIN_D_HOLE}mm "
+                         "floor (grain_holes.cs asserts the same)")
+    a = 0.5 * p.D_hole
+    n_t = int(p.no_hole_ring)
+    dth = TWOPI / n_t
+    pitch = hole_row_pitch(p)
+    z_lo = p.edge_hole + a
+    z_hi = p.L_puck - p.edge_hole - a * SQRT2
+    if z_hi < z_lo:
+        return np.zeros(0), np.zeros(0)
+    n_z = int(np.floor((z_hi - z_lo) / pitch)) + 1
+    z_first = z_lo + 0.5 * ((z_hi - z_lo) - (n_z - 1) * pitch)
+    th, zc = [], []
+    for k in range(n_z):
+        off = 0.5 * dth if k % 2 else 0.0
+        for j in range(n_t):
+            th.append(p.theta0_hole + j * dth + off)
+            zc.append(z_first + k * pitch)
+    return np.array(th), np.array(zc)
+
+
+def hole_sites(p):
+    """The holes actually cut -- every point of the grid."""
+    return hole_grid(p)
+
+
+def holes_on(p):
+    return p.perf_mode == "holes" and p.D_hole > 0
+
+
+def slits_on(p):
+    return p.perf_mode == "slits" and p.W_perf > 0 and p.no_perf > 0
+
+
+def frac_perf(p):
+    """Open fraction of the skin over the finished length, either mode."""
+    A_skin = TWOPI * p.R_grain * p.L_puck
+    if holes_on(p):
+        return len(hole_sites(p)[0]) * teardrop_area(0.5 * p.D_hole) / A_skin
+    if slits_on(p):
+        z1 = p.z1_perf if p.z1_perf > 0 else p.L_puck
+        return p.no_perf * p.W_perf * (z1 - p.z0_perf) / A_skin
+    return 0.0
+
+
 def sample(p, h, based=False):
     """Sample the whole part on a regular grid of spacing h."""
     R = p.R_grain
@@ -184,7 +262,7 @@ def sample(p, h, based=False):
                     < (0.5 * p.D_chim) ** 2) & (Z >= z_floor)
             solid &= ~bore
 
-    if p.W_perf > 0 and p.no_perf > 0:
+    if slits_on(p):
         # full height is L_puck, same as grain_slits.cs
         z1 = p.z1_perf if p.z1_perf > 0 else p.L_puck
         band = (Z >= p.z0_perf) & (Z <= z1)
@@ -196,6 +274,27 @@ def sample(p, h, based=False):
             v = -X * np.sin(th) + Y * np.cos(th)
             slot = (np.abs(v) < half) & (u > 0) & (r >= p.R_skin) & band
             solid &= ~slot
+
+    if holes_on(p):
+        # skin only, and only the bounding box round each hole
+        a = 0.5 * p.D_hole
+        n_xy, n_z = X.shape[0], X.shape[2]
+        for th, zc in zip(*hole_sites(p)):
+            c, s_ = np.cos(th), np.sin(th)
+            cx, cy = p.R_grain * c, p.R_grain * s_
+            reach = a * SQRT2 + p.th_skin + 2 * h
+            ix = slice(max(0, int((cx - reach + R) / h)),
+                       min(n_xy, int((cx + reach + R) / h) + 2))
+            iy = slice(max(0, int((cy - reach + R) / h)),
+                       min(n_xy, int((cy + reach + R) / h) + 2))
+            iz = slice(max(0, int((zc - a) / h) - 1),
+                       min(n_z, int((zc + a * SQRT2) / h) + 2))
+            xs, ys, zs = X[ix, iy, iz], Y[ix, iy, iz], Z[ix, iy, iz]
+            u = -xs * s_ + ys * c
+            rad = xs * c + ys * s_
+            cut = (teardrop_inside(u, zs - zc, a) & (rad > 0)
+                   & (r[ix, iy, iz] >= p.R_skin))
+            solid[ix, iy, iz] &= ~cut
 
     if based and p.th_shelf > 0:
         solid |= in_env & (Z < p.th_shelf)

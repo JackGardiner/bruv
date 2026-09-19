@@ -119,6 +119,7 @@ public partial class Grain : TPIAP.Pea {
         }
 
         assert_slits();
+        assert_holes();
 
         // whole number of cells over the finished length.
         float no_cells = L_puck/Lz_cell;
@@ -212,13 +213,19 @@ public partial class Grain : TPIAP.Pea {
             part.no_step("skipping feed chimneys (no_chim=0).");
         }
 
-        Voxels? perf = slits();
-        if (perf is not null) {
+        // One OD perforation or the other, chosen by perf_mode.
+        Voxels? perf = slits_on ? slits() : holes();
+        if (perf is null) {
+            part.no_step($"skipping OD perforation (perf_mode={perf_mode}, "
+                    + "switched off).");
+        } else if (slits_on) {
             part.sub(ref perf);
             part.step($"subtracted {no_perf} vent slits, {W_perf}mm wide "
-                    + $"({frac_perf:P2} of skin).");
+                    + $"({frac_open:P2} of skin).");
         } else {
-            part.no_step("skipping vent slits (W_perf=0).");
+            part.sub(ref perf);
+            part.step($"subtracted {no_hole} teardrop vent holes, "
+                    + $"{D_hole}mm ({frac_open:P2} of skin).");
         }
 
         if (based) {
@@ -331,7 +338,14 @@ public partial class Grain : TPIAP.Pea {
             ["z0_perf"] = z0_perf,
             ["z1_perf"] = z1_perf,
             ["theta0_perf"] = theta0_perf,
-            ["frac_perf"] = (W_perf > 0f) ? frac_perf : 0f,
+            ["perf_mode"] = perf_mode,
+            ["D_hole"] = D_hole,
+            ["no_hole_ring"] = no_hole_ring,
+            ["theta0_hole"] = theta0_hole,
+            ["edge_hole"] = edge_hole,
+            // derived, but belongs in the hash.
+            ["no_hole"] = holes_on ? no_hole : 0,
+            ["frac_perf"] = frac_open,
             ["no_chim"] = no_chim,
             ["D_chim"] = D_chim,
             ["r_chim"] = r_chim,

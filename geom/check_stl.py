@@ -209,6 +209,73 @@ def check_slits(tris, n_expected, width, r_grain, tol=0.15):
 
 # ------------------------------------------------------------------ main
 
+def check_holes(tris, n_expected, d_hole, r_grain, tol=0.15):
+    """Count the openings in the OD skin and measure their mean area."""
+    a = 0.5 * d_hole
+    A_want = a * a * (0.75 * np.pi + 1.0)
+    cen = tris.mean(axis=1)
+    r = np.hypot(cen[:, 0], cen[:, 1])
+    nrm_raw = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    nrm = nrm_raw / np.maximum(
+        np.linalg.norm(nrm_raw, axis=1, keepdims=True), 1e-12)
+    outward = (nrm[:, 0] * cen[:, 0] + nrm[:, 1] * cen[:, 1]) / np.maximum(r, 1e-9)
+    z = cen[:, 2]
+    zlo, zhi = z.min() + 1.0, z.max() - 1.0
+    on_od = (np.abs(r - r_grain) < 0.5) & (outward > 0.8) & (z > zlo) & (z < zhi)
+    if not on_od.any():
+        return False, "no outward-facing OD surface found"
+
+    t = tris[on_od]
+    # area counts every OD triangle by how much it faces outward, rims included
+    band = (np.abs(r - r_grain) < 0.5) & (z > zlo) & (z < zhi)
+    tri_area = 0.5 * np.linalg.norm(nrm_raw[band], axis=1)
+    covered_mm2 = float((tri_area * np.clip(outward[band], 0.0, None)).sum())
+    open_mm2 = 2 * np.pi * r_grain * (zhi - zlo) - covered_mm2
+    edge = np.median(np.linalg.norm(t[:, 1] - t[:, 0], axis=1))
+    b = 2.0 * edge
+    # decimated meshes are too coarse to count holes, so check total open area
+    if b > 0.5 * a:
+        want = n_expected * A_want
+        ok = abs(open_mm2 / want - 1) <= tol
+        return ok, (f"mesh too coarse to count holes ({edge:.2f} mm edges, "
+                    f"decimated?); open area {open_mm2:.0f} mm2 vs "
+                    f"{want:.0f} mm2 for {int(n_expected)} holes -- count "
+                    "them on the source STL")
+    arc = (np.arctan2(cen[on_od, 1], cen[on_od, 0]) % (2 * np.pi)) * r_grain
+    n_s = int(np.ceil(2 * np.pi * r_grain / b))
+    n_z = int(np.ceil((zhi - zlo) / b))
+    covered = np.zeros((n_s, n_z), bool)
+    covered[np.minimum((arc / b).astype(int), n_s - 1),
+            np.minimum(((z[on_od] - zlo) / b).astype(int), n_z - 1)] = True
+
+    # connected empty regions, 4-connected, wrapping round the circumference
+    label = np.zeros(covered.shape, int)
+    sizes = []
+    for i0, j0 in zip(*np.nonzero(~covered)):
+        if label[i0, j0]:
+            continue
+        sizes.append(0)
+        stack = [(i0, j0)]
+        label[i0, j0] = len(sizes)
+        while stack:
+            i, j = stack.pop()
+            sizes[-1] += 1
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                ii, jj = (i + di) % n_s, j + dj
+                if 0 <= jj < n_z and not covered[ii, jj] and not label[ii, jj]:
+                    label[ii, jj] = len(sizes)
+                    stack.append((ii, jj))
+    areas = np.array(sizes, float) * b * b
+    n_found = int((areas >= A_want / 3.0).sum())
+    if n_found != int(n_expected):
+        return False, f"found {n_found} holes, expected {int(n_expected)}"
+    mean = open_mm2 / n_found if n_found else 0.0
+    if n_found and abs(mean / A_want - 1) > tol:
+        return False, (f"mean hole area {mean:.1f} mm2, expected "
+                       f"{A_want:.1f} mm2")
+    return True, f"{n_found} holes, mean area {mean:.1f} mm2 ({A_want:.1f} nominal)"
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -236,6 +303,10 @@ def main():
     p.add_argument("--slits", nargs=2, type=float, metavar=("N", "W"),
                    default=None,
                    help="expect N slits of width W mm through the OD skin")
+    p.add_argument("--holes", nargs=2, type=float, metavar=("N", "D"),
+                   default=None,
+                   help="expect N teardrop holes of diameter D mm through the "
+                        "OD skin (N is `no_hole` in the part's record)")
     args = p.parse_args()
 
     tris = read_stl(args.stl)
@@ -310,6 +381,13 @@ def main():
         ok, detail = check_slits(tris, n_exp, width, args.od / 2.0)
         check(ok, f"{int(n_exp)} slits of width {width:.2f} mm through the OD",
               detail)
+
+    if args.holes:
+        print("\nholes")
+        n_exp, d_hole = args.holes
+        ok, detail = check_holes(tris, n_exp, d_hole, args.od / 2.0)
+        check(ok, f"{int(n_exp)} teardrop holes of {d_hole:.1f} mm through "
+              "the OD", detail)
 
     print("\noverhang (downward-facing surface, area-weighted)")
     oh = overhang(tris)

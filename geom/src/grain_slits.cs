@@ -25,7 +25,7 @@ public partial class Grain {
     protected void assert_slits() {
         assert(no_perf >= 0, $"no_perf={no_perf}");
         assert(W_perf >= 0f, $"W_perf={W_perf}");
-        if (W_perf <= 0f || no_perf <= 0)
+        if (!slits_on)
             return;
 
         // only 2 and 4 put every slot in a lattice channel.
@@ -58,7 +58,7 @@ public partial class Grain {
     }
 
     protected Voxels? slits() {
-        if (W_perf <= 0f || no_perf <= 0)
+        if (!slits_on)
             return null;
 
         float z0 = z0_perf;

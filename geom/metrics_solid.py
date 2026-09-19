@@ -33,18 +33,19 @@ def fill_fractions(field):
     cell = field.h**3
     solid_mm3 = float(field.solid.sum()) * cell
     env = np.pi * (p.R_grain**2 - p.R_port**2) * p.L_print
-    skin = np.pi * (p.R_grain**2 - p.R_skin**2) * p.L_print
+    skin_env = np.pi * (p.R_grain**2 - p.R_skin**2) * p.L_print
     gyr_env = np.pi * (p.R_skin**2 - p.R_port**2) * p.L_print
     chim = 0.0
     if p.no_chim > 0 and p.D_chim > 0:
         chim = p.no_chim * np.pi * (0.5 * p.D_chim) ** 2 * p.L_print
-    # analytic skin, so cut slits read as lattice. fine while W_perf = 0
+    # skin is measured, so perforations aren't charged to the lattice
+    skin = float((field.solid & (field.r >= p.R_skin)).sum()) * cell
     sheet = solid_mm3 - skin
     return {
         "whole_part": solid_mm3 / env,
         "gyroid_only_chim_in": sheet / gyr_env,
         "gyroid_only_chim_out": sheet / max(gyr_env - chim, 1e-9),
-        "skin_frac": skin / env,
+        "skin_frac": skin_env / env,
         "solid_mL": solid_mm3 * 1e-3,
         "mass_g": solid_mm3 * 1e-6 * p.rho,
     }
