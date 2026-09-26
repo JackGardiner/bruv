@@ -39,16 +39,21 @@ public class Caplugs : TPIAP.Pea {
         cap("BSPP-1/4");
         cap("BSPP-1/2");
         cap("AN-6");
-        plug("SWG-1/4", 1f/4f*25.4f + 1.3f);
-        plug("SWG-3/8", 3f/8f*25.4f + 1.35f);
-        plug("SWG-1/2", 1f/2f*25.4f + 2.00f);
-        plug("SWG-3/4", 3f/4f*25.4f + 2.32f);
+        cap("UNF-9/16", threads: 7.0f); // FILL.
+        cap("UNF-1-1/16", threads: 7.0f); // MOL.
+        cap("UNS-1-1/16", threads: 7.0f); // RS.
+        plug("SWG-1/4", pipe_diam: 1f/4f*25.4f + 1.3f);
+        plug("SWG-3/8", pipe_diam: 3f/8f*25.4f + 1.35f);
+        plug("SWG-1/2", pipe_diam: 1f/2f*25.4f + 2.00f);
+        plug("SWG-3/4", pipe_diam: 3f/4f*25.4f + 2.32f);
         plug("BSPP-1/8");
         plug("BSPP-1/4");
         plug("BSPP-1/2");
         plug("AN-6");
-        plug("UNF-9/16");
-        cover("THRU-3/8", 3f/8f*25.4f - 0.18f, 9f);
+        plug("UNF-9/16", OD_head: 25.0f); // FILL.
+        plug("UNF-1-1/16", OD_head: 37.5f); // MOL.
+        plug("UNS-1-1/16", OD_head: 39.0f); // RS.
+        // cover("THRU-3/8", 3f/8f*25.4f - 0.2f, 9f);
 
         return null; // not really a single-voxels pea.
     }
@@ -119,17 +124,19 @@ public class Caplugs : TPIAP.Pea {
     }
 
 
-    protected Studding plug(string size, float pipe_diam=NAN) {
+    protected Studding plug(string size, float pipe_diam=NAN,
+            float threads=4.0f, float OD_head=NAN) {
         Studding stud = new(size);
         stud.major_diameter -= 2f*(radial_slop - axial_slop);
         stud.minor_diameter -= 2f*(radial_slop - axial_slop);
-        stud.threaded_length = 4.0f*stud.pitch + stud.pitch /* buried */;
+        stud.threaded_length = threads*stud.pitch + stud.pitch /* buried */;
         stud.extra_length = 0f;
         stud.incomplete_lower_length = 0.5f*stud.pitch;
         stud.incomplete_upper_length = 0f;
         stud.unprintable_ending_CR = 1.0f*stud.thread_depth;
 
-        float r = stud.major_radius + stud.taper_offset(0f) + 4f;
+        float r = ifnan(OD_head/2f,
+                stud.major_radius + stud.taper_offset(0f) + 4f);
         Voxels v = knurling(r, chamfer_top: true);
 
         Voxels male = stud.at(place_at.transz(-stud.pitch).flipzx(),
@@ -170,7 +177,7 @@ public class Caplugs : TPIAP.Pea {
         v.BoolSubtract(hole);
 
         if (early_cutoff > 0f) {
-            float FR = 0.4f;
+            float FR = 0.2f;
             float top_r = r_outer;
             Voxels fillet = new Rod(
                 place_at.transz(z + Lz),
@@ -186,12 +193,16 @@ public class Caplugs : TPIAP.Pea {
             v.BoolSubtract(fillet);
         }
 
-        ImageSignedDist img = new($".labels/{size.Replace("/", "_")}.tga",
+        ImageSignedDist img = new($"labels/{size.Replace("/", "_")}.tga",
                 scale: 1);
-        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 13f));
+        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 5.5f,
+                ImageSignedDist.HEIGHT));
 
         Mesh m = new(v);
-        Geez.mesh(m);
+        if ((Geez.sectioner ?? Geez.dflt_sectioner).has_cuts())
+            Geez.voxels(v);
+        else
+            Geez.mesh(m);
         TPIAP.save_mesh_only($"PLUG-{size.Replace("/", "_")}", m);
         place_at = place_at.transx(40f);
 
@@ -199,31 +210,33 @@ public class Caplugs : TPIAP.Pea {
     }
 
 
-    protected Tapping cap(string size) {
+    protected Tapping cap(string size, float threads=12.0f) {
         Tapping tap = new(size);
         tap.major_diameter += 2f*(radial_slop - axial_slop);
         tap.minor_diameter += 2f*(radial_slop - axial_slop);
-        tap.threaded_length = 12.0f*tap.pitch;
+        tap.threaded_length = threads*tap.pitch;
         tap.extra_length = 0f;
         tap.incomplete_lower_length = 0.5f*tap.pitch;
         tap.incomplete_upper_length = 0f;
-        tap.unprintable_entrance_CR = 2.0f*tap.thread_depth;
+        tap.unprintable_entrance_CR = 0f;
 
         float r = max(tap.major_radius + tap.taper_offset(0f) + 4f,
                       (tap.major_radius + tap.taper_offset(0f)) * 1.42f);
         Voxels v = knurling(r, chamfer_top: true);
 
+        float FR = 0.2f;
         float CR = min(0.9f, 0.11f*tap.minor_radius);
+        float CR_thread = 1.65f*tap.thread_depth;
         float Lr = (tap.major_radius + tap.taper_offset(0f)) * 1.18f;
         float r_outer = tap.minor_radius
                       + tap.inner_thread_truncation
                       + tap.taper_offset(-tap.incomplete_upper_length)
-                      + tap.unprintable_entrance_CR
-                      + axial_slop*tan(torad(22.5f));
+                      + axial_slop*tan(torad(22.5f))
+                      + CR_thread;
         float r_inner = Lr - CR;
         float early_cutoff = max(r_outer - r_inner, 0f);
-        float z = tap.straight_length - 3.7f;
-        float Lz = tap.straight_length;
+        float z = tap.straight_length - 3.7f + early_cutoff;
+        float Lz = tap.straight_length + early_cutoff;
         Voxels rod = new Rod(place_at.transz(z), -Lz, Lr)
                 .extended(VOXEL_SIZE, Extend.DOWN);
         rod.BoolIntersect(Cone.phied(
@@ -237,40 +250,43 @@ public class Caplugs : TPIAP.Pea {
             -PI_4,
             Lz: CR,
             r0: Lr + CR
-        ).lengthed(VOXEL_SIZE, VOXEL_SIZE));
+        ).lengthed(10f, VOXEL_SIZE));
+        rod.BoolSubtract(Cone.phied(
+            place_at.transz(z).flipzx(),
+            -PI_4,
+            Lz: 0.1f,
+            r0: tap.minor_radius
+              + tap.inner_thread_truncation
+              + tap.taper_offset(-tap.incomplete_upper_length)
+              + axial_slop*tan(torad(22.5f))
+              + CR_thread
+        ).upto_tip()
+         .lengthed(VOXEL_SIZE, 0f));
+        Fillet.both(rod, FR, inplace: true);
+        rod.BoolIntersect(new Rod(place_at, z + 20f, Lr + 20f)
+                .extended(VOXEL_SIZE, Extend.DOWN));
         v.BoolAdd(rod);
 
-        Voxels female = tap.at(place_at.transz(z + early_cutoff),
+        Voxels female = tap.at(place_at.transz(z - early_cutoff),
                 extra: 2f*VOXEL_SIZE);
         female.Offset(axial_slop);
-        female.BoolIntersect(new Rod(place_at.transz(z - Lz - 1f), Lz + 1f, Lr)
-                .extended(VOXEL_SIZE, Extend.UPDOWN));
+        female.BoolIntersect(new Rod(
+            place_at.transz(z - Lz - 1f),
+            Lz - early_cutoff + 1f,
+            Lr
+        ).extended(VOXEL_SIZE, Extend.UPDOWN));
         v.BoolSubtract(female);
 
-        if (early_cutoff > 0f) {
-            float FR = 0.4f;
-            float top_r = ave(r_inner, r_outer);
-            float Dz = 0.5f*(r_outer - r_inner);
-            Voxels fillet = new Rod(
-                place_at.transz(z - Dz),
-                -FR*SQRT2,
-                top_r - FR/SQRT2,
-                top_r + FR/SQRT2
-            ).extended(VOXEL_SIZE, Extend.UP);
-            fillet.BoolSubtract(new Donut(
-                place_at.transz(z - Dz - FR*SQRT2),
-                top_r,
-                FR
-            ));
-            v.BoolSubtract(fillet);
-        }
-
-        ImageSignedDist img = new($".labels/{size.Replace("/", "_")}.tga",
+        ImageSignedDist img = new($"labels/{size.Replace("/", "_")}.tga",
                 scale: 1);
-        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 13f));
+        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 5.5f,
+                ImageSignedDist.HEIGHT));
 
         Mesh m = new(v);
-        Geez.mesh(m);
+        if ((Geez.sectioner ?? Geez.dflt_sectioner).has_cuts())
+            Geez.voxels(v);
+        else
+            Geez.mesh(m);
         TPIAP.save_mesh_only($"CAP-{size.Replace("/", "_")}", m);
         place_at = place_at.transx(40f);
 
@@ -283,8 +299,8 @@ public class Caplugs : TPIAP.Pea {
                       bore_diameter/2f * 1.42f);
         Voxels v = knurling(r, chamfer_top: true);
 
-        float CR = min(0.9f, 0.13f*bore_diameter/2f);
-        float Lr = bore_diameter/2f * 1.4f;
+        float CR = min(0.48f, 0.13f*bore_diameter/2f);
+        float Lr = bore_diameter/2f * 1.55f;
         float z = bore_length - 4.7f;
         float Lz = bore_length;
         Voxels rod = new Rod(place_at.transz(z), -Lz, Lr)
@@ -304,44 +320,44 @@ public class Caplugs : TPIAP.Pea {
         v.BoolAdd(rod);
 
         int prongs = 8;
-        float Lr_prong = 0.45f;
+        float Lr_prong = 0.9f;
         Voxels female = new Rod(
             place_at.transz(z),
             -bore_length,
-            bore_diameter/2f + 2.35f*Lr_prong
+            bore_diameter/2f + 2.0f*Lr_prong
         ).extended(VOXEL_SIZE, Extend.UP);
 
         Voxels prong = new Cone(
             place_at.transz(z - bore_length),
             bore_length/2f,
-            (bore_diameter/2f + Lr_prong) * 1.05f,
+            (bore_diameter/2f + Lr_prong) * 1.08f,
             bore_diameter/2f + Lr_prong
-        ).lengthed(0f, VOXEL_SIZE);
+        ).lengthed(2f*VOXEL_SIZE, 2f*VOXEL_SIZE);
         prong.BoolAdd(new Cone(
             place_at.transz(z - bore_length/2f),
             bore_length/2f,
             bore_diameter/2f + Lr_prong,
-            (bore_diameter/2f + Lr_prong) * 1.05f
-        ).lengthed(VOXEL_SIZE, VOXEL_SIZE));
+            (bore_diameter/2f + Lr_prong) * 1.08f
+        ).lengthed(2f*VOXEL_SIZE, 2f*VOXEL_SIZE));
         prong.BoolSubtract(new Cone(
             place_at.transz(z - bore_length),
             bore_length/2f,
-            bore_diameter/2f * 1.05f,
+            bore_diameter/2f * 1.08f,
             bore_diameter/2f
-        ).lengthed(VOXEL_SIZE, VOXEL_SIZE));
+        ).lengthed(2f*VOXEL_SIZE, 2f*VOXEL_SIZE));
         prong.BoolSubtract(new Cone(
             place_at.transz(z - bore_length/2f),
             bore_length/2f,
             bore_diameter/2f,
-            bore_diameter/2f * 1.05f
-        ).lengthed(VOXEL_SIZE, VOXEL_SIZE));
+            bore_diameter/2f * 1.08f
+        ).lengthed(2f*VOXEL_SIZE, 2f*VOXEL_SIZE));
 
         Voxels support = new Rod(
             place_at.transz(z),
             -bore_length,
-            bore_diameter/2f * 1.045f,
-            bore_diameter/2f + 3f*Lr_prong
-        ).extended(VOXEL_SIZE, Extend.UP);
+            bore_diameter/2f * 1.08f,
+            bore_diameter/2f + 2.7f*Lr_prong
+        ).extended(2f*VOXEL_SIZE, Extend.UPDOWN);
 
         for (int i=0; i<prongs; ++i) {
             float theta = i*TWOPI/prongs;
@@ -383,12 +399,16 @@ public class Caplugs : TPIAP.Pea {
             v.BoolSubtract(fillet);
         }
 
-        ImageSignedDist img = new($".labels/{name.Replace("/", "_")}.tga",
+        ImageSignedDist img = new($"labels/{name.Replace("/", "_")}.tga",
                 scale: 1);
-        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 13f));
+        v.BoolSubtract(img.voxels_on_plane(place_at.transz(-8f), 0.5f, 5.5f,
+                ImageSignedDist.HEIGHT));
 
         Mesh m = new(v);
-        Geez.mesh(m);
+        if ((Geez.sectioner ?? Geez.dflt_sectioner).has_cuts())
+            Geez.voxels(v);
+        else
+            Geez.mesh(m);
         TPIAP.save_mesh_only($"COVER-{name.Replace("/", "_")}", m);
         place_at = place_at.transx(40f);
     }
