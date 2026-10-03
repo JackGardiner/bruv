@@ -111,6 +111,13 @@ def get_interpretation():
     interp.append("out_Ys", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_SF", interp.PTR_F64, IN | interp.OUTPUT_DATA)
     interp.append("out_xtra", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_helix_angle", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_th_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Lr_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_psi_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_wi_chnl", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_th_iw", interp.PTR_F64, IN | interp.OUTPUT_DATA)
+    interp.append("out_Lr_iw", interp.PTR_F64, IN | interp.OUTPUT_DATA)
 
     interp.append("export_count", interp.I64, IN)
     interp.append("export_z", interp.PTR_F64, IN | interp.OUTPUT_DATA)
@@ -208,6 +215,13 @@ def get_state(interp):
     state["out_Ys"] = new_out()
     state["out_SF"] = new_out()
     state["out_xtra"] = new_out()
+    state["out_helix_angle"] = new_out()
+    state["out_th_chnl"] = new_out()
+    state["out_Lr_chnl"] = new_out()
+    state["out_psi_chnl"] = new_out()
+    state["out_wi_chnl"] = new_out()
+    state["out_th_iw"] = new_out()
+    state["out_Lr_iw"] = new_out()
 
     state["export_count"] = 3000
     new_export = lambda: np.empty(shape=(state["export_count"],),
@@ -648,6 +662,18 @@ def plot_me(state, get_out):
     )
     ax.axhline(1.0, color="red", ls="--", lw=1.2)
 
+
+    fig, axes = geez.new_plots("channels", rows=1, cols=3,
+            fig_kw=dict(figsize=(13, 4)))
+    graph1(axes[0], "Inner wall thickness",
+        "[mm]", None, "th_iw", 1e3, "blue", "-",
+    )
+    graph1(axes[1], "Channel height",
+        "[mm]", None, "th_chnl", 1e3, "blue", "-",
+    )
+    graph1(axes[2], "Channel width",
+        "[mm]", None, "psi_chnl", 1e3, "blue", "-",
+    )
 
 
 

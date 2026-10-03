@@ -258,7 +258,7 @@ def tile_numbers(ax, d, mask, perf):
         # ("C*",     f'{perf["cstar"]:.0f} m/s',   "C5"),
         ("LOx stiffness", f'{perf["stiff_lox"]*100:.0f}%', PALETTE["blue"]),
         ("IPA stiffness", f'{perf["stiff_ipa"]*100:.0f}%', PALETTE["red"]),
-        ("FC (IPA)", "15%", "C5"),
+        # ("FC (IPA)", "15%", "C5"),
     ]
     # patch coords are axes fractions, and this axes is ~12x wider than tall,
     # so isotropic (round-in-pixels) corners need mutation_aspect = w/h
@@ -337,7 +337,8 @@ def plot_hotfire(d, name, title, tstart_ss, tend_ss):
 def main():
     data = [read(f"data/{1 + i}.h5", *RANGES[i]) for i in range(len(NAMING))]
 
-    plot_hotfire(data[1], "2-nominal", "Nominal", 1.6, 6.4)
+    plot_hotfire(data[0], "1-short", "Design point (short dur.)", 2.2, 2.5)
+    plot_hotfire(data[1], "2-nominal", "Design point (steady state)", 1.6, 6.4)
     plot_hotfire(data[2], "3-TL20", "Thrust sweep (±20%)", 6.1, 7.9)
     plot_hotfire(data[3], "4-OF", "O/F sweep (+0.15)", 6.1, 7.9)
     plot_hotfire(data[4], "5-TL25", "Thrust sweep (±25%)", 6.1, 7.9)

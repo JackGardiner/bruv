@@ -2,6 +2,7 @@
 /obj/
 /bin/
 /tmp/
+/labels/*.png
 
 !/.editorconfig
 /__pycache__/
