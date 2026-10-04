@@ -375,7 +375,7 @@ public partial class Grain : TPIAP.Pea {
         // hash the inputs only.
         Dictionary<string, object> inputs = new();
         foreach (var (key, value) in record) {
-            if (key.StartsWith("out_"))
+            if (key.StartsWith("out_") || key.StartsWith("fin_"))
                 continue;
             inputs[key] = value;
         }
