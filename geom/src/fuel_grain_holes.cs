@@ -9,7 +9,7 @@ using br;
 using Vec3 = System.Numerics.Vector3;
 using Voxels = PicoGK.Voxels;
 
-public partial class Grain {
+public partial class FuelGrain {
 
     /* HOLES */
     public required string perf_mode { get; init; } // "slits" or "holes".

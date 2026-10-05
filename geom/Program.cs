@@ -6,7 +6,7 @@ using TPIAP = TwoPeasInAPod;
 
 /* Boot up options: */
 
-int make = TPIAP.GRAIN | TPIAP.ANYTHING | TPIAP.MINIMISE_MEM;
+int make = TPIAP.FUEL_GRAIN | TPIAP.ANYTHING | TPIAP.MINIMISE_MEM;
 // See TPIAP for construction guide of `make`.
 
 float voxel_size_mm = 0.5f;

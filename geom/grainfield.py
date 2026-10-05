@@ -191,7 +191,7 @@ def hole_grid(p):
     """Every hole centre, (theta, z)."""
     if p.D_hole < MIN_D_HOLE:
         raise ValueError(f"D_hole={p.D_hole}mm is below the {MIN_D_HOLE}mm "
-                         "floor (grain_holes.cs asserts the same)")
+                         "floor (fuel_grain_holes.cs asserts the same)")
     a = 0.5 * p.D_hole
     n_t = int(p.no_hole_ring)
     dth = TWOPI / n_t
@@ -263,7 +263,7 @@ def sample(p, h, based=False):
             solid &= ~bore
 
     if slits_on(p):
-        # full height is L_puck, same as grain_slits.cs
+        # full height is L_puck, same as fuel_grain_slits.cs
         z1 = p.z1_perf if p.z1_perf > 0 else p.L_puck
         band = (Z >= p.z0_perf) & (Z <= z1)
         half = 0.5 * p.W_perf

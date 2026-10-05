@@ -7,7 +7,7 @@ using br;
 using Vec3 = System.Numerics.Vector3;
 using Voxels = PicoGK.Voxels;
 
-public partial class Grain {
+public partial class FuelGrain {
 
     /* SLITS */
     public required int no_perf { get; init; } // 2 or 4.
