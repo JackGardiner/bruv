@@ -13,6 +13,26 @@ public static class Scoped {
     }
     public static IDisposable on_leave(Action action) => new OnLeave(action);
 
+    // Temporary write to a value.
+    public static IDisposable set<T>(Func<T> getter, Action<T> setter, T val) {
+        T previous = getter();
+        setter(val);
+        return on_leave(() => setter(previous));
+    }
+
+    public class Combined : IDisposable {
+        public IDisposable[] disposables { get; }
+        public Combined(IDisposable[] disposables) {
+            this.disposables = disposables;
+        }
+        public void Dispose() {
+            for (int i=numel(disposables)-1; i>-1; --i)
+                disposables[i].Dispose();
+        }
+    }
+    public static IDisposable combine(params IDisposable[] disposables)
+        => new Combined(disposables);
+
     public sealed class DoNothing : IDisposable {
         public DoNothing() {}
         public void Dispose() {}
