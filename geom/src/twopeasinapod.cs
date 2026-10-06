@@ -221,7 +221,8 @@ public static class TwoPeasInAPod {
             pea = new Caplugs();
           } break;
           case FUEL_GRAIN: {
-            pea = new FuelGrain();
+            // Construct the fuel grain scaffold object.
+            pea = config.deserialise<FuelGrain>("grain");
           } break;
 
           default:

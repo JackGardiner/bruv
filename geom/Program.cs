@@ -6,11 +6,11 @@ using TPIAP = TwoPeasInAPod;
 
 /* Boot up options: */
 
-int make = TPIAP.INJECTOR | TPIAP.VOXELS | TPIAP.PRINTABLE_DMLM | TPIAP.LOOKSIE | TPIAP.MINIMISE_MEM;
+int make = TPIAP.FUEL_GRAIN | TPIAP.ANYTHING | TPIAP.MINIMISE_MEM;
 // See TPIAP for construction guide of `make`.
 
-float voxel_size_mm = 0.09f;
-bool leave_viewer_open = yeah;
+float voxel_size_mm = 0.5f;
+bool leave_viewer_open = nah;
 Sectioner sectioner = new();
 
 
