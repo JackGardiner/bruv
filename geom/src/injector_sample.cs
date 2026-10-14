@@ -167,7 +167,7 @@ public class InjectorSample : TPIAP.Pea {
 
         /* PORTS */
         float L_port = 14f;
-        Tapping tap = new("Rc1/8", printable_dmlm);
+        Tapping tap = new("BSPT-1/8", printable_dmlm);
         // Drill thru in resin.
         if (printable_sla)
             tap.extra_length = L_port - tap.straight_length + 4f;

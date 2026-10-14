@@ -64,7 +64,7 @@
         "no_fixt": 4,
         "wi_fixt": 10.0,
 
-        "portsize_inlet": "G1/2 15",
+        "portsize_inlet": "BSPP-1/2 15",
         "theta_inlet": 1.5707963267948966,
         "th_inlet": 4.5,
         "FR_inlet": 5.0,
@@ -72,7 +72,7 @@
         "phi_inletsprt": 0.6981317007977318,
 
         "no_tc": 6,
-        "portsize_tc": "G1/8",
+        "portsize_tc": "BSPP-1/8",
         "th_tc": 3.5,
         "D_tc": 1.5
     },
@@ -162,11 +162,11 @@
             "Kmdot_2_tuned_for_ipa_0.075_kg/s": 0.73
         },
 
-        "portsize_igniter": "G1/4 12",
-        "portsize_LOxinlet": "G1/2 15",
-        "portsize_LOxPT": "G1/4 12",
-        "portsize_IPAPT": "G1/4 12",
-        "portsize_CCPT": "G1/4 12",
+        "portsize_igniter": "BSPP-1/4 12",
+        "portsize_LOxinlet": "BSPP-1/2 15",
+        "portsize_LOxPT": "BSPP-1/4 12",
+        "portsize_IPAPT": "BSPP-1/4 12",
+        "portsize_CCPT": "BSPP-1/4 12",
         "z_igniter": 40.0,
         "z_LOxinlet": 63.0,
         "z_LOxPT": 60.0,
